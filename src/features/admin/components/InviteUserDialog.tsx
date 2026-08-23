@@ -26,6 +26,10 @@ interface InviteUserDialogProps {
   /** Cria o convite via invoke('invite-user'); true = sucesso. Erros honestos
    *  (duplicado 409, não-admin 403) são exibidos via toast pelo chamador. */
   onInvite: (payload: InviteUserPayload) => Promise<boolean>;
+  /** `{path: message}` do 422 canônico (Bloco 7, etapa 76/81) — quando
+   *  `fieldErrors.email` está presente, substitui o erro genérico inline
+   *  pelo motivo real do servidor. */
+  fieldErrors?: Record<string, string>;
 }
 
 const roleOptions = [
@@ -35,7 +39,12 @@ const roleOptions = [
 ] as const;
 
 /** Invite User Dialog — convite por email (Etapa 57.5). */
-export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDialogProps) {
+export function InviteUserDialog({
+  open,
+  onOpenChange,
+  onInvite,
+  fieldErrors,
+}: InviteUserDialogProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'agent' | 'supervisor' | 'admin'>('agent');
   const [message, setMessage] = useState('');
@@ -131,9 +140,9 @@ export function InviteUserDialog({ open, onOpenChange, onInvite }: InviteUserDia
             />
           </div>
 
-          {errorMsg && (
+          {(fieldErrors?.email || errorMsg) && (
             <p role="alert" className="text-sm text-destructive">
-              {errorMsg}
+              {fieldErrors?.email || errorMsg}
             </p>
           )}
         </div>
