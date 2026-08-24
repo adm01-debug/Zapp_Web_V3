@@ -745,10 +745,16 @@ export function useRealtimeMessages() {
                 handleMessageUpdateRef.current(p)
             )(adaptEvoPayload(payload as RealtimePostgresChangesPayload<Record<string, unknown>>));
           // QA12-GAP1 + RCA 2026-08-20: direcionada + coalescida (ver INSERT).
+          // shouldInvalidateOnUpdate: garante que só invalidamos se o payload
+          // realmente carrega contact_id (não é ruído do cron de TTL).
           if (active) {
-            scheduleConversationCacheInvalidation(
-              (payload.new as { contact_id?: string | null } | null)?.contact_id
-            );
+            const updContactId = (payload.new as { contact_id?: string | null } | null)?.contact_id;
+            if (updContactId && shouldInvalidateOnUpdate(
+              payload as Parameters<typeof shouldInvalidateOnUpdate>[0],
+              updContactId
+            )) {
+              scheduleConversationCacheInvalidation(updContactId);
+            }
           }
         }
       )
