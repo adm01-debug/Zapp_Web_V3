@@ -43,7 +43,7 @@ describe('useTicketStatus — contexto ausente', () => {
     expect(result.current.assignedTo).toBeNull();
   });
 
-  it('não chama bootstrap quando contactId é null', () => {
+  it('não chama bootstrap quando contactId é null', async () => {
     const { ticketStore } = await import('@/lib/inbox/ticketStore');
     renderHook(() => useTicketStatus(null));
     expect(ticketStore.bootstrap).not.toHaveBeenCalled();
