@@ -473,43 +473,28 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
                 </div>
               )}
               <div className="relative flex-1">
-                <List
-                  listRef={s.listRef}
-                  rowCount={s.filteredMessages.length}
-                  rowHeight={dynamicRowHeight}
-                  rowProps={{}}
-                  className="scrollbar-none absolute inset-0"
-                  overscanCount={10}
-                  rowComponent={({ index, style, ariaAttributes }) => {
-                    const msg = s.filteredMessages[index];
-                    const showDate = dateFirstIndexes.has(index);
-                    const isMine = msg.sender_id === s.profile?.id;
-                    const isEditing = s.editingId === msg.id;
-                    const hasMedia = !!msg.media_url;
-                    const repliedMsg = msg.reply_to_id
-                      ? s.messages.find((m) => m.id === msg.reply_to_id)
-                      : null;
-                    const isThisTtsPlaying = s.tts.isPlaying && s.tts.currentMessageId === msg.id;
-                    const isThisTtsLoading = s.tts.isLoading && s.tts.currentMessageId === msg.id;
-                    const cleanText = msg.content
-                      ?.replace(/\[.*?\]/g, '')
-                      .replace(/https?:\/\/\S+/g, '')
-                      .trim();
-
-                    return (
-                      <div
-                        style={style}
-                        {...ariaAttributes}
-                        ref={(el) => {
-                          if (el && !itemHeights.current[index]) {
-                            const h = el.getBoundingClientRect().height;
-                            if (h > 0) {
-                              itemHeights.current[index] = h;
-                              dynamicRowHeight.setRowHeight(index, h);
-                            }
-                          }
-                        }}
-                      >
+                {isFeatureEnabled('team_chat_tanstack') ? (
+                  /* E50: TanStack Virtual path */
+                  <ChatScrollerV2
+                    ref={tanstackScrollerRef}
+                    messages={s.filteredMessages as unknown as import('@/types/chat').Message[]}
+                    estimateSize={() => 80}
+                    renderItem={(_msg, index) => {
+                      const msg = s.filteredMessages[index];
+                      const showDate = dateFirstIndexes.has(index);
+                      const isMine = msg.sender_id === s.profile?.id;
+                      const isEditing = s.editingId === msg.id;
+                      const hasMedia = !!msg.media_url;
+                      const repliedMsg = msg.reply_to_id
+                        ? s.messages.find((m) => m.id === msg.reply_to_id)
+                        : null;
+                      const isThisTtsPlaying = s.tts.isPlaying && s.tts.currentMessageId === msg.id;
+                      const isThisTtsLoading = s.tts.isLoading && s.tts.currentMessageId === msg.id;
+                      const cleanText = msg.content
+                        ?.replace(/\[.*?\]/g, '')
+                        .replace(/https?:\/\/\S+/g, '')
+                        .trim();
+                      return (
                         <ContextMenu key={msg.id}>
                           <ContextMenuTrigger asChild>
                             <div
@@ -768,10 +753,309 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
                             )}
                           </ContextMenuContent>
                         </ContextMenu>
-                      </div>
-                    );
-                  }}
-                />
+                      );
+                    }}
+                    className="scrollbar-none absolute inset-0"
+                    overscan={10}
+                  />
+                ) : (
+                  /* react-window path — mantido intacto */
+                  <List
+                    listRef={s.listRef}
+                    rowCount={s.filteredMessages.length}
+                    rowHeight={dynamicRowHeight}
+                    rowProps={{}}
+                    className="scrollbar-none absolute inset-0"
+                    overscanCount={10}
+                    rowComponent={({ index, style, ariaAttributes }) => {
+                      const msg = s.filteredMessages[index];
+                      const showDate = dateFirstIndexes.has(index);
+                      const isMine = msg.sender_id === s.profile?.id;
+                      const isEditing = s.editingId === msg.id;
+                      const hasMedia = !!msg.media_url;
+                      const repliedMsg = msg.reply_to_id
+                        ? s.messages.find((m) => m.id === msg.reply_to_id)
+                        : null;
+                      const isThisTtsPlaying = s.tts.isPlaying && s.tts.currentMessageId === msg.id;
+                      const isThisTtsLoading = s.tts.isLoading && s.tts.currentMessageId === msg.id;
+                      const cleanText = msg.content
+                        ?.replace(/\[.*?\]/g, '')
+                        .replace(/https?:\/\/\S+/g, '')
+                        .trim();
+
+                      return (
+                        <div
+                          style={style}
+                          {...ariaAttributes}
+                          ref={(el) => {
+                            if (el && !itemHeights.current[index]) {
+                              const h = el.getBoundingClientRect().height;
+                              if (h > 0) {
+                                itemHeights.current[index] = h;
+                                dynamicRowHeight.setRowHeight(index, h);
+                              }
+                            }
+                          }}
+                        >
+                          <ContextMenu key={msg.id}>
+                            <ContextMenuTrigger asChild>
+                              <div
+                                data-testid={`message-container-${msg.id}`}
+                                className="group/msg relative px-4"
+                              >
+                                {showDate && (
+                                  <div className="flex justify-center py-2">
+                                    <span className="rounded-full border border-border/10 bg-muted/20 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                                      {formatDateSep(msg.created_at)}
+                                    </span>
+                                  </div>
+                                )}
+                                <div
+                                  className={cn(
+                                    'relative flex gap-2 py-0.5',
+                                    isMine ? 'justify-end' : 'justify-start'
+                                  )}
+                                >
+                                  {!isMine && (
+                                    <Avatar className="mt-1 h-7 w-7 shrink-0">
+                                      <AvatarImage src={msg.sender?.avatar_url || undefined} />
+                                      <AvatarFallback className="bg-muted text-[10px]">
+                                        {msg.sender?.name?.charAt(0) || '?'}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  )}
+
+                                  <div className={cn('relative max-w-[70%] space-y-1')}>
+                                    <TeamQuickReactionBar
+                                      messageId={msg.id}
+                                      isMine={isMine}
+                                      onToggle={(emoji) =>
+                                        toggleReaction({ messageId: msg.id, emoji })
+                                      }
+                                      reactions={aggregate(msg.id)}
+                                    />
+
+                                    <div
+                                      className={cn(
+                                        'relative rounded-2xl px-3.5 py-2 shadow-none',
+                                        isMine
+                                          ? 'rounded-br-md bg-primary text-primary-foreground'
+                                          : 'rounded-bl-md border border-border/20 bg-muted/30 text-foreground'
+                                      )}
+                                    >
+                                      {!isMine && conversation.type === 'group' && (
+                                        <p className="mb-1 text-[11px] font-bold text-primary opacity-90">
+                                          {msg.sender?.name}
+                                        </p>
+                                      )}
+                                      {repliedMsg && (
+                                        <div
+                                          className={cn(
+                                            'mb-1.5 rounded border-l-2 px-2 py-1 text-[10px]',
+                                            isMine
+                                              ? 'border-primary-foreground/30 bg-primary-foreground/10'
+                                              : 'border-muted-foreground/30 bg-muted/50'
+                                          )}
+                                        >
+                                          <span className="font-medium">
+                                            {repliedMsg.sender?.name}
+                                          </span>
+                                          <p className="flex items-center gap-1 truncate opacity-80">
+                                            {repliedMsg.media_type && (
+                                              <MediaTypeIcon type={repliedMsg.media_type} />
+                                            )}
+                                            {repliedMsg.content || 'Mídia'}
+                                          </p>
+                                        </div>
+                                      )}
+                                      {isEditing ? (
+                                        <div className="space-y-1.5">
+                                          <Input
+                                            value={s.editText}
+                                            onChange={(e) => s.setEditText(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') s.handleSaveEdit();
+                                              if (e.key === 'Escape') s.handleCancelEdit();
+                                            }}
+                                            className="h-7 bg-background text-sm text-foreground"
+                                            autoFocus
+                                          />
+                                          <div className="flex justify-end gap-1">
+                                            <Button
+                                              aria-label="Cancelar edição"
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-5 w-5"
+                                              onClick={s.handleCancelEdit}
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                            <Button
+                                              aria-label="Salvar edição"
+                                              size="icon"
+                                              variant="ghost"
+                                              className="h-5 w-5"
+                                              onClick={s.handleSaveEdit}
+                                            >
+                                              <Check className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          {hasMedia && (
+                                            <MediaContent
+                                              msg={msg}
+                                              resolvedUrl={signedUrls.get(msg.id)}
+                                            />
+                                          )}
+                                          {msg.content &&
+                                            (!hasMedia || msg.media_type === 'document') && (
+                                              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                                                <MarkdownPreview
+                                                  text={msg.content}
+                                                  className="inline"
+                                                />
+                                              </p>
+                                            )}
+                                          {msg.content &&
+                                            hasMedia &&
+                                            msg.media_type !== 'document' &&
+                                            ![
+                                              '🎨 Figurinha',
+                                              '🎵 Áudio meme',
+                                              '😀 Emoji',
+                                              '🎤 Mensagem de áudio',
+                                            ].includes(msg.content) && (
+                                              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
+                                                {msg.content}
+                                              </p>
+                                            )}
+                                          <div
+                                            className={cn(
+                                              'mt-0.5 flex items-center gap-1',
+                                              isMine ? 'justify-end' : 'justify-between'
+                                            )}
+                                          >
+                                            {cleanText && (
+                                              <button
+                                                onClick={() =>
+                                                  isThisTtsPlaying
+                                                    ? s.tts.stop()
+                                                    : s.tts.speak(msg.content, msg.id)
+                                                }
+                                                className={cn(
+                                                  'rounded-full p-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100',
+                                                  isMine
+                                                    ? 'text-primary-foreground/60 hover:text-primary-foreground'
+                                                    : 'text-muted-foreground hover:text-foreground'
+                                                )}
+                                              >
+                                                {isThisTtsLoading ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : isThisTtsPlaying ? (
+                                                  <VolumeX className="h-3 w-3" />
+                                                ) : (
+                                                  <Volume2 className="h-3 w-3" />
+                                                )}
+                                              </button>
+                                            )}
+                                            <div className="flex items-center gap-1">
+                                              <span
+                                                className={cn(
+                                                  'text-[10px]',
+                                                  isMine
+                                                    ? 'text-primary-foreground/60'
+                                                    : 'text-muted-foreground'
+                                                )}
+                                              >
+                                                {formatTime(msg.created_at)}
+                                                {msg.is_edited && ' · editado'}
+                                              </span>
+                                              {isMine && (
+                                                <MessageStatus
+                                                  status={msg.status || 'sent'}
+                                                  className={cn(
+                                                    'origin-right scale-75',
+                                                    msg.status === 'read'
+                                                      ? 'text-info'
+                                                      : 'text-primary-foreground/60'
+                                                  )}
+                                                />
+                                              )}
+                                            </div>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <MessageReactions
+                                  messageId={msg.id}
+                                  reactions={aggregate(msg.id)}
+                                  isMine={isMine}
+                                  isToggling={isToggling}
+                                  onToggle={(emoji) => toggleReaction({ messageId: msg.id, emoji })}
+                                />
+                              </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger className="gap-2">
+                                  <SmilePlus className="h-3.5 w-3.5" /> Reagir
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent>
+                                  <div className="grid grid-cols-4 gap-1 p-1">
+                                    {QUICK_EMOJIS.map((e) => (
+                                      <Button
+                                        key={e}
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() =>
+                                          toggleReaction({ messageId: msg.id, emoji: e })
+                                        }
+                                        className="h-9 w-9 text-xl transition-all hover:scale-125 focus-visible:ring-2 focus-visible:ring-primary"
+                                        aria-label={`Reagir com ${e}`}
+                                      >
+                                        {e}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
+                              <ContextMenuItem onClick={() => s.setReplyTo(msg)} className="gap-2">
+                                <Reply className="h-3.5 w-3.5" /> Responder
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => s.handleCopyMessage(msg.content || '')}
+                                className="gap-2"
+                              >
+                                <Copy className="h-3.5 w-3.5" /> Copiar Texto
+                              </ContextMenuItem>
+                              {isMine && (
+                                <>
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem
+                                    onClick={() => s.handleStartEdit(msg)}
+                                    className="gap-2"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" /> Editar
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onClick={() => s.handleDelete(msg.id)}
+                                    className="gap-2 text-destructive"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" /> Excluir
+                                  </ContextMenuItem>
+                                </>
+                              )}
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        </div>
+                      );
+                    }}
+                  />
+                )}
               </div>
             </div>
           )}
