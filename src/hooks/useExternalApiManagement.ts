@@ -88,7 +88,11 @@ export function useExternalContact360(phone: string | undefined) {
       );
 
       if (error) {
-        log.error('Error fetching external 360:', error);
+        log.error('Error fetching external 360:', {
+          message: (error as { message?: string })?.message ?? String(error),
+          code: (error as { code?: string })?.code,
+          detail: (error as { detail?: string })?.detail,
+        });
         return null;
       }
 
@@ -127,7 +131,11 @@ export function useExternalContact360Batch(phones: string[]) {
       );
 
       if (error) {
-        log.error('Batch CRM lookup error:', error);
+        log.error('Batch CRM lookup error:', {
+          message: (error as { message?: string })?.message ?? String(error),
+          code: (error as { code?: string })?.code,
+          detail: (error as { detail?: string })?.detail,
+        });
         return new Map();
       }
 
@@ -221,14 +229,26 @@ export function useExternalContact360BatchRef(phones: string[]) {
       });
 
       if (error) {
-        log.error('Error fetching external 360 batch:', error);
+        log.error('Error fetching external 360 batch:', {
+          message: (error as { message?: string })?.message ?? String(error),
+          code: (error as { code?: string })?.code,
+          detail: (error as { detail?: string })?.detail,
+        });
         return new Map();
       }
 
       // Convert batch response to Map for O(1) lookups.
       // RPC returns: { results: [{phone, contact, found, conversation_id}, ...], count: N }
       const map = new Map<string, Contact360Data>();
-      const batchData = data as { results?: Array<{ phone: string; contact: unknown; found: boolean; conversation_id?: string | null }>; count?: number } | null;
+      const batchData = data as {
+        results?: Array<{
+          phone: string;
+          contact: unknown;
+          found: boolean;
+          conversation_id?: string | null;
+        }>;
+        count?: number;
+      } | null;
       if (batchData?.results && Array.isArray(batchData.results)) {
         for (const entry of batchData.results) {
           if (!entry.found || !entry.contact) continue;
@@ -496,7 +516,10 @@ export function useExternalConversations(enabled = true) {
     const dur = _lastQueryDurationRef.current;
     if (dur > SLOW_POLL_THRESHOLD_MS) {
       // Backoff exponencial suave: 2× até 60s
-      const backed = Math.min(POLL_INTERVAL * Math.ceil(dur / SLOW_POLL_THRESHOLD_MS) * 2, MAX_POLL_INTERVAL_MS);
+      const backed = Math.min(
+        POLL_INTERVAL * Math.ceil(dur / SLOW_POLL_THRESHOLD_MS) * 2,
+        MAX_POLL_INTERVAL_MS
+      );
       return backed;
     }
     return POLL_INTERVAL;
@@ -1410,7 +1433,10 @@ export function useExternalMutation() {
       validateEntityAccess(params.table, 'external');
       const dc = getDynamicClient();
       if (params.action === 'insert') {
-        const { data, error } = await dc.from(params.table).insert(params.data as never).select();
+        const { data, error } = await dc
+          .from(params.table)
+          .insert(params.data as never)
+          .select();
         if (error) throw new Error(error.message);
         return data;
       }
