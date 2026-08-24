@@ -1,9 +1,9 @@
 # P0 — Offsite Backup Supabase-db: Status Crítico
 
-> **Estado:** 🟡 PROVAVELMENTE RECUPERADO (2026-08-24) — requer verificação final no R2  
-> **Marcador histórico:** `OFFSITE_FAILED_20260810_211518` (falha real de 08-10, ver análise abaixo)  
-> **Risco residual:** até a verificação do R2, tratar como quebrado no planejamento de DR  
-> **Ação:** Verificar bucket R2 (comando abaixo) e só então remover marcador/runbook §2
+> **Estado:** ✅ **RECUPERADO E VERIFICADO NO R2 (2026-08-24)** — P0 FECHADO  
+> **Marcador histórico:** `OFFSITE_FAILED_20260810_211518` (falha real de 08-10; marcador **removido** em 24/08 após verificação)  
+> **Risco residual:** nenhum para o offsite diário — cadeia contínua confirmada (abaixo). pgbackrest segue não validado (item separado)  
+> **Ação:** ~~Verificar bucket R2 e remover marcador~~ ✅ EXECUTADO 2026-08-24 (evidência abaixo)
 
 ## 🔍 ANÁLISE DA DISCREPÂNCIA (2026-08-24, via código versionado)
 
@@ -23,17 +23,24 @@
 | Camada | Estado | Evidência |
 |--------|--------|-----------|
 | **Dump local** | ✅ SAUDÁVEL | 2026-08-20 03:19 (188 MB) + 17:34 (140 MB), com `.sha256`; 33 cópias locais (19,3 GB) |
-| **Offsite R2** | 🟡 PROVAVELMENTE OK | Sentinel 24/08 09:29 com `last_offsite_at` = hoje (flag real pós-AG-EX-17); R2 sem dump completo em 20/08 → verificação final pendente |
+| **Offsite R2** | ✅ **VERIFICADO 2026-08-24** | Cadeia diária contínua **15/08→24/08 sem lacunas**; `supabase_selfhosted_20260824_092900.dump.gpg` (125 MiB, ETag `b0a07a62…-8`, CRC64NVME presente); timestamp do objeto = `last_offsite_at` do sentinel (09:29 UTC) |
 | **Config offsite** | ✅ OK | Tarballs diários de config chegam ao R2 |
 | **pgbackrest** | ⚠️ Não validado | Stack 270 criado 16-08, sem drill |
 
-## ✅ VERIFICAÇÃO FINAL (1 comando, via VPS)
+## ✅ VERIFICAÇÃO FINAL — EXECUTADA (2026-08-24, via Portainer exec no container supabase-backup_backup)
 
 ```bash
-# Listar os 10 dumps mais recentes no R2 (dentro do container supabase-backup_backup)
-mc ls --recursive r2/promo-brindes-backups/backups/supabase-db/daily/ | sort -k2 | tail -10
-# Esperado se recuperado: dump .gpg de 2026-08-24 (~tamanho do local de 09:29)
+# Executado (evidência em log da sessão):
+mc ls --recursive r2/promo-brindes-backups/backups/supabase-db/daily/ | sort -k1,2 | tail -12
+#   → 10 dumps diários contínuos 15/08 → 24/08 (125–143 MiB cada)
+mc stat r2/promo-brindes-backups/backups/supabase-db/daily/supabase_selfhosted_20260824_092900.dump.gpg
+#   → ETag b0a07a62…-8 · CRC64NVME presente · 125 MiB
+rm /backups/OFFSITE_FAILED_20260810_211518   # marcador removido (critérios a+b+c atendidos)
 ```
+
+**Nota:** o redeploy do stack 124 (v4.3, service `dump-alert` adicionado às ~19:0x UTC)
+reiniciou o ciclo de backup → novo dump `20260824_190851` (143 MB, 755 tabelas) subiu ao
+R2 no mesmo dia e atualizou o sentinel. Efeito colateral benigno; cadeia segue contínua.
 
 ## Diagnóstico Necessário (Runbook §2)
 
@@ -79,11 +86,11 @@ Após religar, backfill dos dumps locais mais recentes para `backups/supabase-db
 
 ## Próximos Passos
 
-1. **VERIFICAR R2** (comando acima) — se dump de 24/08 presente: remover marcador, fechar P0, atualizar este doc para ✅
-2. **Se R2 vazio:** sentinel mente (função mal-comportada) → executar runbook §2 completo + versionar corpo de `fn_update_backup_sentinel` corrigido
-3. **Alerta:** `scripts/alert-missing-dumps.sh` criado (sessão 2026-08-24) — agendar na VPS
-4. **P1:** Restore limpo (FK órfã + mv_system_status)
-5. **Validar:** pgbackrest (stack 270, drill trimestral)
+1. ~~**VERIFICAR R2**~~ ✅ **FEITO (2026-08-24)** — dump presente e íntegro; marcador removido; P0 fechado
+2. ~~**Se R2 vazio**~~ — não se aplica (R2 verificado com cadeia completa)
+3. **Alerta:** ✅ automatizado — service `dump-alert` no stack 124 (v4.3), espelho em `scripts/alert-missing-dumps.sh`; primeira execução 24/08 19:08 UTC tudo OK
+4. **P1:** ✅ restore limpo — drill 2026-08-24 com 0 erros (`RESTORE_DRILL.md` §3)
+5. **Validar:** pgbackrest (stack 270, drill trimestral) — **aberto**
 
 ---
 

@@ -4,6 +4,11 @@
 > **Aprovado pelo dono em:** 2026-08-24 (handoff PLANO-100)  
 > **Execução:** superuser, na VPS (container `supabase_db` ou psql admin). Fora do alcance de sessão de chat/CI.
 
+> ▶️ **JANELA ATIVA:** dia 0 executado em **2026-08-24 ~18:40 UTC** (`none` → `all`,
+> reload confirmado; baseline §1 = **1.499 fns**: zapp 994 / extensions 401 / evo 104 —
+> `ops.track_functions_baseline_202608`). **Dia 7 = 2026-08-31**: rodar §2/§2b/§3 do
+> `scripts/sql/track-functions-coleta.sql`. **NUNCA** `pg_stat_reset()`.
+
 ## Por que 7 dias e não para sempre
 
 `track_functions = 'all'` mede overhead em TODA chamada de função do banco (inclusive funções SQL

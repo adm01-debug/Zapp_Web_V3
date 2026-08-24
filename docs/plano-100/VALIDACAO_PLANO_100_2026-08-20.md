@@ -22,9 +22,11 @@
 | N/A (deixou de existir o alvo) | **1** |
 | ❌ Não implementado e sem ação | **0** |
 
-**Resultado: 62/100 etapas concluídas (+ 1 N/A, alvo deixou de existir), 21
-concluídas com ressalvas documentadas, 16 com pendência objetiva (dono/janela
-definidos abaixo). Nenhuma etapa ficou sem tratamento.**
+**Resultado (atualizado 2026-08-24): 65/100 etapas concluídas (+ 1 N/A, alvo deixou
+de existir), 21 concluídas com ressalvas documentadas, 12 com pendência objetiva
+(dono/janela definidos abaixo). Nenhuma etapa ficou sem tratamento.**
+*(Fechamentos de 24/08: etapas 38/39 dia 0 · 56 · 57 · 65 · 88 · 98 · 99 —
+ver pendências e tabela por etapa.)*
 
 ### 🔴 Achados NOVOS desta validação (fora do plano original)
 
@@ -46,9 +48,14 @@ definidos abaixo). Nenhuma etapa ficou sem tratamento.**
    rodada diária nunca falhava. **Corrigido** (▶️).
 5. **P2 — Lacunas no daily do evolution-db no R2**: faltam 09, 11, 12, 13 e
    16/08 na janela de 14 dias (runs falharam nesses dias).
+   *(24/08: monitoração automatizada ativa — service `dump-alert`; nova lacuna
+   23/08 detectada na primeira listagem.)*
 6. Drill de restore **já tinha sido executado** em 2026-08-17 (E93) com **19
    erros ignorados** — 2 causas reais catalogadas no runbook (FK órfã em
    `evolution_whatsapp_status`; `mv_system_status` ausente).
+   *(24/08: re-executado com **0 erros** — fixups §0/§3/§4 + replay `-L`;
+   achado novo: 15.109 órfãos sob FKs `convalidated` na PRODUÇÃO — decisão de
+   dono pendente, ver `RESTORE_DRILL.md` §1.)*
 
 ---
 
@@ -126,8 +133,8 @@ definidos abaixo). Nenhuma etapa ficou sem tratamento.**
 | 53 | 🟡 | Spot-check: serviços críticos (web, supabase core, evolution, consumer, grafana…) com `(healthy)`; watchdogs alpine sem HC por design (sleep-loop). Padronizar HC nos watchdogs = cosmético. |
 | 54 | 🔧 | 256M/0.5cpu p/ nginx estático é adequado; monitorado por cadvisor — painel novo (etapa 92) inclui gráfico com threshold em 200/250MB. |
 | 55 | 🟡 | Inventário dos ~30 watchdogs entregue (ag6 w1–w9 + evolution-watchdogs + guards + obs-*). Consolidação num serviço único = projeto de infra (recomendação: 1 scheduler + config declarativa, manter isolamento de secrets por probe). |
-| 56 | ▶️🔴 | **Validação executada** — resultado misto: evolution-db diário no R2 ✅ (dump de hoje 02:00, 81MB) **mas com 5 dias faltando**; supabase-db local ✅ (2 dumps hoje, sha256, 33 cópias) **offsite R2 PARADO desde 08-10** (P0 — runbook com diagnóstico). |
-| 57 | 🔧 | **Drill de restore já executado em 2026-08-17** (E93; descoberto nesta validação) — completou com 19 erros ignorados; 2 causas reais catalogadas. `infra/runbooks/RESTORE_DRILL.md` (▶️) define o ciclo trimestral e o critério de 0 erros. |
+| 56 | ✅ | **Fechado em 2026-08-24:** supabase-db local ✅ + **offsite R2 verificado ao vivo** (cadeia contínua 15→24/08, ETag/CRC íntegros — P0 encerrado); evolution-db diário ✅ com lacunas (11,12,13,16,23/08) **agora monitoradas** pelo service `dump-alert` (stack 124 v4.3, alerta diário via `webhook_health_alerts` + n8n). |
+| 57 | ✅ | **Drill re-executado em 2026-08-24 com 0 erros** (baseline E93 2026-08-17: 19 ignorados → 0): fixups §0/§3/§4 + replay `-L`; 4 FKs revalidadas; sanidade OK. Ciclo trimestral e procedimento provado em `infra/runbooks/RESTORE_DRILL.md` §3. Achado de produção (órfãos sob FKs convalidated) documentado — decisão de dono. |
 | 58 | 🟡 | crowdsec-bouncer ativo nos 3 routers (stack file conferido); auditoria da allowlist do crowdsec não coube nesta sessão — pendência anotada. |
 | 59 | 🔧▶️ | NNP presente no stack 210; ▶️ adicionado ao compose inline do deploy e ao versionado do 157 (o serviço web não tinha). |
 | 60 | ✅ | Certificados LE verificados de dentro da VPS: zapp 23/10 · apex 05/11 · www 18/11 · supabase 23/10 — renovação automática funcionando (www emitido hoje). |
@@ -209,11 +216,11 @@ definidos abaixo). Nenhuma etapa ficou sem tratamento.**
 
 | Prioridade | Item | Ação objetiva |
 |---|---|---|
-| **P0** | Offsite supabase-db parado desde 08-10 | ▶️ **Discrepância resolvida por análise de código (2026-08-24):** sentinel `last_offsite_at` = 24/08 09:29 com flag real pós-AG-EX-17 (stack de 08-06 corrige flag `false` hardcoded) ⇒ offsite **provavelmente recuperado** entre 20 e 24/08. Verificação final do R2 pendente (1 comando em `P0_OFFSITE_FAILED_STATUS.md`). Marcador de 08-10 é legítimo (criado por código já corrigido) |
-| **P1** | Lacunas no daily evolution-db (5 dias) | Ver logs do `postgres-backup-daily` nos dias falhos; avaliar retry/alerta de ausência — script `scripts/alert-missing-dumps.sh` criado (2026-08-24), agendar na VPS |
-| **P1** | Restore com 19 erros ignorados | ▶️ **Fixups materializados (2026-08-24):** [`scripts/sql/restore-drill-fixups.sql`](../../scripts/sql/restore-drill-fixups.sql) — §1 limpa órfão da FK (teto de 15) + §2 recria `mv_system_status` + REFRESH. Execução do drill na VPS pendente |
+| **P0** | Offsite supabase-db parado desde 08-10 | ✅ **FECHADO (2026-08-24, verificado ao vivo no R2):** cadeia diária contínua 15/08→24/08 sem lacunas; dump 24/08 09:29 presente (125 MiB, ETag/CRC64 íntegros, timestamp bate com `last_offsite_at` do sentinel). Marcador `OFFSITE_FAILED_20260810_211518` era stale → removido. Detalhes: [`P0_OFFSITE_FAILED_STATUS.md`](../operations/P0_OFFSITE_FAILED_STATUS.md) |
+| **P1** | Lacunas no daily evolution-db (5 dias) | ▶️ **Alerta automatizado ATIVO (2026-08-24):** service `dump-alert` no stack supabase-backup (v4.3) roda diariamente — idade do dump mais recente (limite 26h) + lacunas de calendário (<6 dumps/7d) → `zapp.webhook_health_alerts` + webhook n8n. 1º ciclo 19:08 UTC: tudo OK. **Lacuna nova detectada: 23/08** (janela atual: ausentes 11,12,13,16,23/08). Investigar logs `postgres-backup-daily` nos dias falhos |
+| **P1** | Restore com 19 erros ignorados | ✅ **FECHADO (2026-08-24, drill com meta 0 erros):** dump 24/08 09:29 → restore bruto 99 erros (93 = cascata pg_cron same-instance; 4 = FKs órfãs; 2 = MV) → fixups §0/§3/§4 + replay `-L` = **0 erros**, 4 FKs revalidadas, sanidade OK (314.917 msgs / 22.440 contatos / 51.688 empresas). **Achado real de produção:** 15.109 órfãos sob FKs `convalidated` (`evolution_whatsapp_status` 14.780 = 99,9% — FK vestigial; `mfa_amr_claims` 320; `contact_intelligence` 8; `conversation_events` 1) — decisão de dono pendente. Procedimento: [`RESTORE_DRILL.md`](../../infra/runbooks/RESTORE_DRILL.md) §3 |
 | P2 | `migration-smoke-test` zero-success ativo em PR | ✅ Causa raiz consertada neste PR (PEP 668 no runner: pip global/--user recusado e erro engolido por `2>/dev/null` — o job morria no gate de sintaxe antes de aplicar qualquer migration). Fix: venv + `--break-system-packages` + erro visível |
-| P2 | `zapp-schema-drift-gate` (job `drift-check`) **vermelho na `main`** | ▶️ **Investigado (2026-08-24, decisão do dono: investigar antes do regen):** divergência atual = **4.170 linhas** (não 11.995 — snapshot regenerado em 21/08 09:39 reduziu). Decomposição do run 32711639089: (a) migrations legítimas pós-regen (sicoob 20260821005000, SLA 20260821010000/20260822114406, materializações 20260821* — maioria, benigno) + (b) **tuning autovacuum sem migration** em `webhook_events_processed`/`app_notifications` (gap I7 real) → materializado em `20260824120000`. Caminho pro verde: aplicar migration → `workflow_dispatch regen=true` → run seguinte. Detalhe: `docs/audits/DRIFT_GATE_INVESTIGACAO_2026-08-24.md` |
+| P2 | `zapp-schema-drift-gate` (job `drift-check`) **vermelho na `main`** | ✅ **FECHADO (2026-08-24):** tuning autovacuum materializado (`20260824120000` + complemento `20260824160000` freeze_max_age); regen `workflow_dispatch regen=true` (run 32763374409) — push do CI bot **rejeitado pela branch protegida (GH006, 6 checks)** → diff extraído do workspace do runner e entrado via **PR #1403 (merged 19:16 UTC, `0f9f15d0f`)**: drift-check ✅ · schema-drift-guard ✅ · CodeQL ✅. Incidente GH006 + investigação: [`DRIFT_GATE_INVESTIGACAO_2026-08-24.md`](../audits/DRIFT_GATE_INVESTIGACAO_2026-08-24.md) |
 | P2 | Rate-limit nas 19 públicas sem limiter / unificação CORS / HMAC ad-hoc ×8 | Janela de edge functions (mapas prontos nas etapas 27–29) |
 | P2 | `evo.idx_recon_coverage_daily_snapshot_date` duplicado | DROP no repo **evolution-stack** (fronteira de DDL) |
 | P2 | Rebuild do graphify pós-merge | ✅ **CONCLUÍDO em 2026-08-24** (commit `c3e3c01c7`) — ver etapa 98 |

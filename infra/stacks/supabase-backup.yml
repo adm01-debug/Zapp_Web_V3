@@ -1,5 +1,17 @@
 version: '3.8'
 
+# supabase-backup v4.2 — CC7 (2026-08-08): sha256 do dump local + decisão _supabase
+# v4.2 (2026-08-18): retencao R2 14d (G-B4) — dry-run SEMPRE; rm real SOMENTE
+#   com RETENTION_ENABLED=true (OFF em producao). Nada destrutivo por padrao.
+# v4 fix A4: tmpfs mount previne volume anonimo acumulado
+# A imagem postgres:15-alpine declara VOLUME /var/lib/postgresql/data.
+# O container usa apenas psql/pg_dump (sem servidor PG local), portanto
+# o volume e desnecessario. tmpfs de 64MB previne acumulo de volumes orfaos.
+# Aplicado 2026-08-08 - mesmo padrao fix A4 do evolution-db-purge (stack 126).
+# CC7: sha256sum gravado junto ao dump (supabase_selfhosted_*.dump.sha256) —
+#      validacao de integridade pos-restore; _supabase (analytics 9.9GB) NÃO
+#      incluído no dump (descartável/reconstruível — RPO infinito documentado).
+
 services:
   backup:
     image: postgres:15-alpine@sha256:09e4f20b14ddb3dfe3a0c825b206032aaf8f28300ba2070c0b60fc1c10c6abc7
@@ -7,10 +19,14 @@ services:
       - atomicabr
     volumes:
       - backup_data:/backups
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+        tmpfs:
+          size: 67108864
     secrets:
       - supabase_db_password_v1
-      - r2_backup_access_key_v1
-      - r2_backup_secret_key_v1
+      - evolution_r2_access_key_v1
+      - evolution_r2_secret_key_v1
       - backup_passphrase_v1
     environment:
       PGHOST: "supabase_db"
@@ -24,48 +40,84 @@ services:
       R2_BUCKET: "promo-brindes-backups"
       R2_PREFIX: "backups/supabase-db/daily"
       R2_RETENTION: "14d"
+      RETENTION_ENABLED: "false"
       BACKUP_MODE: "local+r2"
+      ALERT_WEBHOOK_URL: "https://n8n.atomicabr.com.br/webhook/warroom-alert"
     entrypoint: ["sh", "-c"]
     command:
       - |
-        echo "=== SUPABASE BACKUP v4 (R25: sentinel sync) ==="
+        echo "=== SUPABASE BACKUP v4.2 (CC7 sha256 + retencao R2 14d dry-run) ==="
         export PGPASSWORD=$$(cat /run/secrets/supabase_db_password_v1)
-        apk add --no-cache --quiet gnupg >/dev/null 2>&1 || true
+        apk add --no-cache --quiet gnupg curl >/dev/null 2>&1 || true
         if ! command -v mc >/dev/null 2>&1; then
           wget -q -O /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x /usr/local/bin/mc || true
         fi
         MC_BIN=$$(command -v mc || true)
+
+        alert() {
+          _ST="$$1"; _MSG="$$2"
+          _TS=$$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          case "$$_ST" in P1_*) _AT="critical" ;; *) _AT="warning" ;; esac
+          echo "[ALERT $$_ST] $$_MSG"
+          curl -s --max-time 10 -X POST "$$ALERT_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"source\":\"supabase-backup\",\"entity\":\"supabase-backup\",\"alert_type\":\"$$_AT\",\"title\":\"supabase-backup $$_ST\",\"message\":\"$$_MSG\",\"ts\":\"$$_TS\"}" \
+            >/dev/null 2>&1 || true
+        }
         while true; do
           STAMP=$$(date +%Y%m%d_%H%M%S); FILE="supabase_selfhosted_$${STAMP}.dump"
           if ! pg_dump --no-owner --no-acl --format=custom --compress=6 --file=/backups/$${FILE} 2>/dev/null; then
-            touch /backups/BACKUP_FAILED_$${STAMP}; sleep 3600; continue
+            touch /backups/BACKUP_FAILED_$${STAMP}
+            rm -f /backups/$${FILE}
+            alert "P1_CRITICAL" "supabase-backup: pg_dump falhou ($$STAMP)"
+            sleep 3600; continue
           fi
           SIZE_BYTES=$$(stat -c%s /backups/$${FILE} 2>/dev/null || echo 0)
           TABLE_COUNT=$$(pg_restore --list /backups/$${FILE} 2>/dev/null | grep -c 'TABLE DATA' || echo 0)
           if [ "$$SIZE_BYTES" -lt "$$MIN_SIZE_BYTES" ] || [ "$$TABLE_COUNT" -lt "$$MIN_TABLES" ]; then
             echo "[$$STAMP] FAIL: size=$$SIZE_BYTES tables=$$TABLE_COUNT"
-            mv /backups/$$FILE /backups/REJECTED_$$FILE; sleep 3600; continue
+            mv /backups/$$FILE /backups/REJECTED_$$FILE
+            alert "P1_CRITICAL" "supabase-backup: dump rejeitado size=$$SIZE_BYTES tables=$$TABLE_COUNT"
+            sleep 3600; continue
           fi
           echo "[$$STAMP] OK: $$((SIZE_BYTES/1048576))MB $$TABLE_COUNT tables"
-          # [AG-EX-17] Offsite PRIMEIRO; sentinel DEPOIS com o flag real (era false hardcoded)
+          # CC7: integridade local (arquivo .sha256 ao lado do dump)
+          sha256sum /backups/$${FILE} > /backups/$${FILE}.sha256 2>/dev/null \
+            && echo "[$$STAMP] sha256 gravado: $$(cat /backups/$${FILE}.sha256 | cut -c1-12)..." \
+            || echo "[$$STAMP] WARN: sha256 falhou (continua sem hash)"
           OFFSITE_OK=false
           if [ -n "$$MC_BIN" ] && command -v gpg >/dev/null 2>&1; then
             if gpg --batch --yes --symmetric --cipher-algo AES256 \
                  --passphrase-file /run/secrets/backup_passphrase_v1 \
                  -o /backups/$${FILE}.gpg /backups/$${FILE} 2>/dev/null \
-               && $$MC_BIN alias set r2 "$$R2_ENDPOINT" "$$(cat /run/secrets/r2_backup_access_key_v1)" "$$(cat /run/secrets/r2_backup_secret_key_v1)" >/dev/null 2>&1 \
+               && $$MC_BIN alias set r2 "$$R2_ENDPOINT" "$$(cat /run/secrets/evolution_r2_access_key_v1)" "$$(cat /run/secrets/evolution_r2_secret_key_v1)" >/dev/null 2>&1 \
                && $$MC_BIN cp -q /backups/$${FILE}.gpg r2/$$R2_BUCKET/$$R2_PREFIX/ 2>/dev/null; then
               echo "[$$STAMP] R2 OK"
               OFFSITE_OK=true
             else
               touch /backups/OFFSITE_FAILED_$$STAMP
+              alert "P2_WARNING" "supabase-backup: upload R2 falhou ($$STAMP)"
             fi
             rm -f /backups/$${FILE}.gpg
           fi
-          # [R25 P1-3] Sincroniza sentinel com o backup real + flag real de offsite (AG-EX-17)
           psql -tAc "SELECT ops.fn_update_backup_sentinel('$$FILE', $$SIZE_BYTES, $$TABLE_COUNT, $${OFFSITE_OK})" 2>/dev/null \
             || echo "[$$STAMP] WARN: sentinel sync falhou (psql/sql)"
-          find /backups -name "supabase_selfhosted_*.dump" -mtime +$$RETENTION_DAYS -delete 2>/dev/null
+          find /backups -name "supabase_selfhosted_*.dump*" -mtime +$$RETENTION_DAYS -delete 2>/dev/null
+          # ---- retencao R2 14d (G-B4): dry-run SEMPRE; rm real SOMENTE com RETENTION_ENABLED=true ----
+          if [ -n "$$MC_BIN" ]; then
+            RET_D="$${R2_RETENTION:-14d}"
+            echo "[$$STAMP] [retencao] dry-run R2 $${RET_D}:"
+            $$MC_BIN alias set r2 "$$R2_ENDPOINT" "$$(cat /run/secrets/evolution_r2_access_key_v1)" "$$(cat /run/secrets/evolution_r2_secret_key_v1)" >/dev/null 2>&1 || true
+            $$MC_BIN rm --recursive --older-than "$$RET_D" --dry-run --force "r2/$$R2_BUCKET/$$R2_PREFIX/" 2>&1 | sed 's/^/  /' || true
+            if [ "$${RETENTION_ENABLED:-false}" = "true" ]; then
+              echo "[$$STAMP] [retencao] RETENTION_ENABLED=true - aplicando rm $${RET_D}"
+              $$MC_BIN rm --recursive --older-than "$$RET_D" --force "r2/$$R2_BUCKET/$$R2_PREFIX/" \
+                && echo "[$$STAMP] [retencao] rm aplicado" \
+                || alert "P2_WARNING" "supabase-backup: rm retencao R2 falhou"
+            else
+              echo "[$$STAMP] [retencao] RETENTION_ENABLED=false - nada removido (dry-run)"
+            fi
+          fi
           sleep 86400
         done
     deploy:
@@ -78,11 +130,67 @@ services:
         limits:
           memory: 1G
       labels:
-        - com.atomicabr.audit=supabase-backup-v4-r25-2026-08-01|AG-EX-17-sentinel-offsite-flag-2026-08-06
+        - com.atomicabr.audit=supabase-backup-v4.2-retencao-r2-14d-dryrun-2026-08-18|v4.1-cc7-sha256-2026-08-08|AG-EX-17-sentinel-offsite-flag-2026-08-06|fix-A4-tmpfs-2026-08-08|C3-retencao-glob-sufixos-2026-08-15|C4-alert-webhook-2026-08-15|C5-payload-n8n-schema-2026-08-15
+        - com.atomicabr.tier=critical
+        - com.atomicabr.fix=cc7-sha256-integridade-2026-08-08
+
+  dump-alert:
+    image: postgres:15-alpine@sha256:09e4f20b14ddb3dfe3a0c825b206032aaf8f28300ba2070c0b60fc1c10c6abc7
+    networks:
+      - atomicabr
+    volumes:
+      - alert_state:/state
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+        tmpfs:
+          size: 67108864
+    secrets:
+      - supabase_db_password_v1
+      - evolution_r2_access_key_v1
+      - evolution_r2_secret_key_v1
+    environment:
+      PGHOST: "supabase_db"
+      PGPORT: "5432"
+      PGUSER: "supabase_admin"
+      PGDATABASE: "postgres"
+      R2_ENDPOINT: "https://cd0f4eee542191c4957567814e1f8ca1.r2.cloudflarestorage.com"
+      R2_BUCKET: "promo-brindes-backups"
+      MAX_AGE_HOURS: "26"
+      ALERT_WEBHOOK_URL: "https://n8n.atomicabr.com.br/webhook/warroom-alert"
+    entrypoint: ["sh", "-c"]
+    command:
+      # script espelho versionado em scripts/alert-missing-dumps.sh (base64)
+      - |
+        echo "=== DUMP ALERT v1 (PLANO-100 2026-08-24) ==="
+        apk add --no-cache --quiet curl >/dev/null 2>&1 || true
+        if ! command -v mc >/dev/null 2>&1; then
+          wget -q -O /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x /usr/local/bin/mc || true
+        fi
+        MC_BIN=$$(command -v mc || true)
+        $$MC_BIN alias set r2 "$$R2_ENDPOINT" "$$(cat /run/secrets/evolution_r2_access_key_v1)" "$$(cat /run/secrets/evolution_r2_secret_key_v1)" >/dev/null 2>&1 || true
+        echo "IyEvYmluL3NoCiMg4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQ4pWQCiMgQWxlcnRhOiBkdW1wcyBhdXNlbnRlcyBubyBSMiAoUExBTk8tMTAwIOKAlCBmZWNoYSBhIGxhY3VuYSBkZSBjYWxlbmTDoXJpbykKIyDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZAKIyBDaGVjYWdlbnM6CiMgICAxLiBJZGFkZSBkbyBkdW1wIG1haXMgcmVjZW50ZSBwb3IgcHJlZml4ICg+PTI2aCA9IHByb2JsZW1hKQojICAgICAgc3VwYWJhc2UtZGIvZGFpbHkgIChQMCDigJQgZHVtcCB+MDk6MjkgVVRDOyBzZXZlcml0eSBjcml0aWNhbCkKIyAgICAgIGV2b2x1dGlvbi1kYi9kYWlseSAoUDEg4oCUIGR1bXAgfjAyOjAwIFVUQzsgc2V2ZXJpdHkgaGlnaCkKIyAgIDIuIExhY3VuYXMgZGUgY2FsZW5kw6FyaW86IDw2IGR1bXBzIGVtIDcgZGlhcyA9IHByb2JsZW1hICh0b2xlcmEgMSBkaWEpCiMKIyBPTkRFIFJPREE6IHNlcnZpY2UgYGR1bXAtYWxlcnRgIGRvIHN0YWNrIHN1cGFiYXNlLWJhY2t1cCAoUG9ydGFpbmVyIDEyNCkuCiMgRXN0ZSBhcnF1aXZvIMOpIG8gRVNQRUxITyB2ZXJzaW9uYWRvIGRvIGNvbWFuZG8gZW1iZWRhZG8gZW0KIyBpbmZyYS9zdGFja3Mvc3VwYWJhc2UtYmFja3VwLnltbCDigJQgbWFudGVyIG9zIGRvaXMgZW0gc2luY3JvbmlhLgojCiMgQ2FuYWwgZGUgYWxlcnRhOiBJTlNFUlQgZW0gemFwcC53ZWJob29rX2hlYWx0aF9hbGVydHMgKG1lc21hIHRhYmVsYSBkbwojIHNlbnRpbmVsIGNoZWNrIGNyb24gMTI3KSwgZGVkdXBsaWNhZG8gcG9yIGRpYSt0aXRsZS4gTWFya2VyIGVtIC9zdGF0ZS8uCiMKIyBOb3RhcyBkZSBwb3J0YWJpbGlkYWRlIChhbHBpbmUvYnVzeWJveCDigJQgdmFsaWRhZG8gYW8gdml2byAyMDI2LTA4LTI0KToKIyAgIC0gYnVzeWJveCBhd2sgTsODTyB0ZW0gbWt0aW1lIOKGkiBpZGFkZXMgY2FsY3VsYWRhcyB2aWEgcHNxbCAodGltZXN0YW1wdHopCiMgICAtIGBtYyBsc2AgY29sdW5hczogW2RhdGEgaG9yYSBVVENdIHRhbWFuaG8gY2xhc3NlIGFycXVpdm8g4oaSIHNvcnQgLWsxLDIKIyAgIC0gY29tcGFyYcOnw7VlcyBkZSBkYXRhIGNvbW8gc3RyaW5nICJZWVlZLU1NLUREIEhIOk1NOlNTIiAob3JkZW0gbGV4aWNvZ3LDoWZpY2EKIyAgICAgPSBvcmRlbSBjcm9ub2zDs2dpY2EgbmVzdGUgZm9ybWF0bykKIyDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZAKc2V0IC11CgpSMl9CVUNLRVQ9IiR7UjJfQlVDS0VUOi1wcm9tby1icmluZGVzLWJhY2t1cHN9IgpNQVhfQUdFX0hPVVJTPSIke01BWF9BR0VfSE9VUlM6LTI2fSIKU1RBVEVfRElSPSIke1NUQVRFX0RJUjotL3N0YXRlfSIKVE9EQVk9JChkYXRlIC11ICslWS0lbS0lZCkKZXhwb3J0IFBHUEFTU1dPUkQ9IiQoY2F0IC9ydW4vc2VjcmV0cy9zdXBhYmFzZV9kYl9wYXNzd29yZF92MSAyPi9kZXYvbnVsbCB8fCBlY2hvIHgpIgpQRz0icHNxbCAtaCBzdXBhYmFzZV9kYiAtcCA1NDMyIC1VIHN1cGFiYXNlX2FkbWluIC1kIHBvc3RncmVzIC10QSIKCk1JU1NJTkc9MAoKbmV3ZXN0X2xpbmUoKSB7IG1jIGxzIC0tcmVjdXJzaXZlICJyMi8ke1IyX0JVQ0tFVH0vJDEiIDI+L2Rldi9udWxsIHwgc29ydCAtazEsMiB8IHRhaWwgLTE7IH0KbmV3ZXN0X3RzKCkgICB7IG5ld2VzdF9saW5lICIkMSIgfCBzZWQgLW4gJ3MvXlxbXChbXl1dKiBVVENcKVxdLiovXDEvcCc7IH0KCmFnZV9ob3VycygpIHsKICAjIGlkYWRlIGVtIGhvcmFzIGRvIHRpbWVzdGFtcCAiWVlZWS1NTS1ERCBISDpNTTpTUyBVVEMiICh2aWEgcHNxbDsgYnVzeWJveCBuw6NvIHRlbSBta3RpbWUpCiAgdHM9IiQxIgogIFsgLXogIiR0cyIgXSAmJiB7IGVjaG8gOTk5OTk5OyByZXR1cm47IH0KICAkUEcgLWMgInNlbGVjdCBmbG9vcihleHRyYWN0KGVwb2NoIGZyb20gKG5vdygpIC0gJyR7dHN9Jzo6dGltZXN0YW1wdHopKSAvIDM2MDApOjppbnQiIDI+L2Rldi9udWxsIHx8IGVjaG8gOTk5OTk5Cn0KCmluc2VydF9hbGVydCgpIHsKICAjICQxPWFsZXJ0X3R5cGUgJDI9c2V2ZXJpdHkgJDM9dGl0bGUgJDQ9ZGV0YWlsc19qc29uYgogICRQRyAtYyAiSU5TRVJUIElOVE8gemFwcC53ZWJob29rX2hlYWx0aF9hbGVydHMgKGFsZXJ0X3R5cGUsIHNldmVyaXR5LCB0aXRsZSwgZGV0YWlscykKU0VMRUNUICckMScsICckMicsICckMycsICckNCc6Ompzb25iCldIRVJFIE5PVCBFWElTVFMgKAogIFNFTEVDVCAxIEZST00gemFwcC53ZWJob29rX2hlYWx0aF9hbGVydHMKICBXSEVSRSBhbGVydF90eXBlID0gJyQxJyBBTkQgdGl0bGUgPSAnJDMnIEFORCBjcmVhdGVkX2F0ID49IGN1cnJlbnRfZGF0ZQopIiAyPi9kZXYvbnVsbCB8fCBlY2hvICJXQVJOOiBJTlNFUlQgZG8gYWxlcnRhIGZhbGhvdSAocHNxbCkiCn0KCm5vdGlmeSgpIHsKICAjIHdlYmhvb2sgbjhuIHdhcnJvb20tYWxlcnQg4oCUIG1lc21vIHNjaGVtYSBkbyBhbGVydCgpIGRvIHN0YWNrIHN1cGFiYXNlLWJhY2t1cAogIFsgLW4gIiR7QUxFUlRfV0VCSE9PS19VUkw6LX0iIF0gfHwgcmV0dXJuIDAKICBjdXJsIC1zIC0tbWF4LXRpbWUgMTAgLVggUE9TVCAiJEFMRVJUX1dFQkhPT0tfVVJMIiAtSCAiQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uIiBcCiAgICAtZCAie1wic291cmNlXCI6XCJkdW1wLWFsZXJ0XCIsXCJlbnRpdHlcIjpcImR1bXAtYWxlcnRcIixcImFsZXJ0X3R5cGVcIjpcIiQxXCIsXCJ0aXRsZVwiOlwiJDJcIixcIm1lc3NhZ2VcIjpcIiQzXCIsXCJ0c1wiOlwiJChkYXRlIC11ICslWS0lbS0lZFQlSDolTTolU1opXCJ9IiBcCiAgICA+L2Rldi9udWxsIDI+JjEgfHwgdHJ1ZQp9CgpjaGVja19hZ2UoKSB7CiAgbmFtZT0iJDEiOyBzZXY9IiQyIgogIHRzPSQobmV3ZXN0X3RzICIkbmFtZSIpCiAgYWdlPSQoYWdlX2hvdXJzICIkdHMiKQogIGlmIFsgIiR7YWdlOi05OTk5OTl9IiAtZ3QgIiRNQVhfQUdFX0hPVVJTIiBdOyB0aGVuCiAgICBNSVNTSU5HPSQoKE1JU1NJTkcgKyAxKSkKICAgIGVjaG8gIlskKGRhdGUgLXUgKyVZJW0lZF8lSCVNJVMpXSBBTEVSVEEgJHtuYW1lfTogdWx0aW1vPScke3RzOi1ORU5IVU19JyBpZGFkZT0ke2FnZX1oIChsaW1pdGUgJHtNQVhfQUdFX0hPVVJTfWgpIgogICAgdG91Y2ggIiR7U1RBVEVfRElSfS9BTEVSVF9EVU1QX01JU1NJTkdfJHtuYW1lLy9cLy9ffV8ke1RPREFZfSIgMj4vZGV2L251bGwKICAgIGRldGFpbHM9IntcInByZWZpeFwiOlwiJHtuYW1lfVwiLFwiYWdlX2hvdXJzXCI6JHthZ2U6LTB9LFwibGFzdF9vYmplY3RcIjpcIiR7dHM6LW5lbmh1bX1cIixcImxpbWl0X2hvdXJzXCI6JHtNQVhfQUdFX0hPVVJTfX0iCiAgICBpbnNlcnRfYWxlcnQgYmFja3VwX2R1bXBfbWlzc2luZyAiJHNldiIgIkR1bXAgJHtuYW1lfSBhdXNlbnRlL3N0YWxlIG5vIFIyICgke1RPREFZfSkiICIkZGV0YWlscyIKICAgIG5vdGlmeSAiJHNldiIgImR1bXAtYWxlcnQ6ICR7bmFtZX0gc3RhbGUiICJ1bHRpbW8gZHVtcDogJHt0czotbmVuaHVtfSAoJHthZ2V9aDsgbGltaXRlICR7TUFYX0FHRV9IT1VSU31oKSIKICBlbHNlCiAgICBlY2hvICJbJChkYXRlIC11ICslWSVtJWRfJUglTSVTKV0gT0sgJHtuYW1lfTogdWx0aW1vPScke3RzfScgaWRhZGU9JHthZ2V9aCIKICBmaQp9CgojIOKUgOKUgOKUgCAyLiBsYWN1bmFzIGRlIGNhbGVuZMOhcmlvICg3ZCwgdG9sZXJhIDEpIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgApjdXRvZmY3PSQoJFBHIC1jICJzZWxlY3QgdG9fY2hhcihub3coKSAtIGludGVydmFsICc3IGRheXMnLCAnWVlZWS1NTS1ERCBISDI0Ok1JOlNTJykiIDI+L2Rldi9udWxsIHx8IGVjaG8gIiIpCgpjb3VudF9zaW5jZSgpIHsKICAjIGNvbnRhIG9iamV0b3MgY29tIHRpbWVzdGFtcCA+PSBjdXRvZmYgKGNvbXBhcmHDp8OjbyBsZXhpY29ncsOhZmljYSBzZWd1cmEpCiAgWyAteiAiJGN1dG9mZjciIF0gJiYgeyBlY2hvIDk5OTsgcmV0dXJuOyB9CiAgbWMgbHMgLS1yZWN1cnNpdmUgInIyLyR7UjJfQlVDS0VUfS8kMSIgMj4vZGV2L251bGwgfCBhd2sgLXYgY3V0b2ZmPSIkY3V0b2ZmNyIgJwogICAgewogICAgICBkID0gJDE7IGdzdWIoL1xbfFxdLywgIiIsIGQpOwogICAgICBuID0gc3BsaXQoZCwgeW1kLCAiLSIpOwogICAgICBpZiAobiA8IDMpIG5leHQKICAgICAgdHMgPSBzcHJpbnRmKCIlMDRkLSUwMmQtJTAyZCAlcyIsIHltZFsxXSwgeW1kWzJdLCB5bWRbM10sICQyKQogICAgICBpZiAodHMgPj0gY3V0b2ZmKSBjKysKICAgIH0gRU5EIHsgcHJpbnQgYyArIDAgfScKfQoKY2hlY2tfZ2FwcygpIHsKICBuYW1lPSIkMSI7IHNldj0iJDIiCiAgYz0kKGNvdW50X3NpbmNlICIkbmFtZSIpCiAgaWYgWyAiJHtjOi0wfSIgLWx0IDYgXTsgdGhlbgogICAgTUlTU0lORz0kKChNSVNTSU5HICsgMSkpCiAgICBlY2hvICJbJChkYXRlIC11ICslWSVtJWRfJUglTSVTKV0gQUxFUlRBIGxhY3VuYXMgJHtuYW1lfTogJHtjfSBkdW1wcyBlbSA3ZCAoZXNwZXJhZG8gPj02KSIKICAgIHRvdWNoICIke1NUQVRFX0RJUn0vQUxFUlRfRFVNUF9HQVBTXyR7bmFtZS8vXC8vX31fJHtUT0RBWX0iIDI+L2Rldi9udWxsCiAgICBkZXRhaWxzPSJ7XCJwcmVmaXhcIjpcIiR7bmFtZX1cIixcImR1bXBzXzdkXCI6JHtjOi0wfSxcImVzcGVyYWRvX21pblwiOjZ9IgogICAgaW5zZXJ0X2FsZXJ0IGJhY2t1cF9kdW1wX2dhcHMgIiRzZXYiICJMYWN1bmFzIGRlIGNhbGVuZGFyaW8gZW0gJHtuYW1lfSAoJHtUT0RBWX0pIiAiJGRldGFpbHMiCiAgICBub3RpZnkgIiRzZXYiICJkdW1wLWFsZXJ0OiBsYWN1bmFzIGVtICR7bmFtZX0iICJhcGVuYXMgJHtjfSBkdW1wcyBlbSA3ZCAoZXNwZXJhZG8gPj02KSIKICBlbHNlCiAgICBlY2hvICJbJChkYXRlIC11ICslWSVtJWRfJUglTSVTKV0gT0sgJHtuYW1lfTogJHtjfSBkdW1wcyBub3MgdWx0aW1vcyA3ZCIKICBmaQp9CgplY2hvICI9PT0gRFVNUCBBTEVSVCAkKGRhdGUgLXUgKyVZLSVtLSVkVCVIOiVNOiVTWikgKGJ1Y2tldD0ke1IyX0JVQ0tFVH0sIGxpbWl0ZT0ke01BWF9BR0VfSE9VUlN9aCkgPT09IgpjaGVja19hZ2UgICJiYWNrdXBzL3N1cGFiYXNlLWRiL2RhaWx5IiAgImNyaXRpY2FsIgpjaGVja19hZ2UgICJiYWNrdXBzL2V2b2x1dGlvbi1kYi9kYWlseSIgImhpZ2giCmNoZWNrX2dhcHMgImJhY2t1cHMvc3VwYWJhc2UtZGIvZGFpbHkiICAid2FybmluZyIKY2hlY2tfZ2FwcyAiYmFja3Vwcy9ldm9sdXRpb24tZGIvZGFpbHkiICJoaWdoIgoKaWYgWyAiJE1JU1NJTkciIC1lcSAwIF07IHRoZW4KICBlY2hvICI9PT0gUkVTVUxUQURPOiB0b2RvcyBvcyBkdW1wcyBwcmVzZW50ZXMgPT09IgplbHNlCiAgZWNobyAiPT09IFJFU1VMVEFETzogJHtNSVNTSU5HfSBwcm9ibGVtYShzKSA9PT0iCmZpCmV4aXQgIiRNSVNTSU5HIgo=" | base64 -d > /dump-alert.sh
+        chmod +x /dump-alert.sh
+        while true; do
+          STATE_DIR=/state sh /dump-alert.sh || echo "[dump-alert] check reportou problema"
+          sleep 86400
+        done
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 120s
+      resources:
+        limits:
+          memory: 256M
+      labels:
+        - com.atomicabr.audit=dump-alert-v1-2026-08-24
         - com.atomicabr.tier=critical
 
 volumes:
   backup_data:
+    driver: local
+  alert_state:
     driver: local
 
 networks:
@@ -93,9 +201,9 @@ networks:
 secrets:
   supabase_db_password_v1:
     external: true
-  r2_backup_access_key_v1:
+  evolution_r2_access_key_v1:
     external: true
-  r2_backup_secret_key_v1:
+  evolution_r2_secret_key_v1:
     external: true
   backup_passphrase_v1:
     external: true

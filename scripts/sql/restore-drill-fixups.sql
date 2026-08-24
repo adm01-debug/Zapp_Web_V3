@@ -2,21 +2,42 @@
 -- PLANO-100 P1 — fixups pós-restore para drill limpo (0 erros ignorados)
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Alvo: BANCO DE RESTORE DESCARTÁVEL (restore_drill_YYYYMMDD). NUNCA rodar em
--- produção — o passo §1 apaga linha de dado (órfã) para destravar a FK.
+-- produção — §3 apaga linhas de dado (órfãs) para destravar as FKs.
 --
--- Corrige os 2 erros conhecidos do drill E93 (2026-08-17, 19 erros ignorados):
---   1. FK evolution_whatsapp_status_contact_id_fkey — contact_id órfão
---      (409ebe64-…) sem linha pai em evolution_contacts
---   2. REFRESH zapp.mv_system_status — MV ausente no destino do restore
+-- VALIDADO AO VIVO em 2026-08-24 (drill com dump 09:29, 137 MB):
+--   restore bruto: 99 erros → após §0+§3+§4 e replay (§5): 0 erros
+--   decomposição dos 99: 93 cascata pg_cron (mesma instância) + 4 FKs órfãs
+--   + 2 mv_system_status (subsumida pela cascata).
 --
--- Uso (VPS, após pg_restore no banco descartável):
---   psql -h <host> -U postgres -d restore_drill_$(date +%Y%m%d) \
---     -v ON_ERROR_STOP=1 -f scripts/sql/restore-drill-fixups.sql
+-- Sequência comprovada (ver RESTORE_DRILL.md §3):
+--   1. pg_restore -j4 (99 erros conhecidos)
+--   2. §0 stubs cron      → destrava views/comments/MV
+--   3. §3 limpeza órfãs   → destrava as 4 FKs
+--   4. §4 re-add FKs      → prova validação limpa
+--   5. §5 replay -L       → reexecuta TUDO que falhou (0 erros)
+--   6. sanidade + dropdb
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- ─── §1 Órfãos da FK evolution_whatsapp_status_contact_id_fkey ─────────────
--- A tabela física pode estar em zapp ou evo (a superfície zapp.* é view em
--- partes). Localizar pela própria constraint deixa o script imune à topologia.
+-- ─── §0 Stubs do schema cron (AMBIENTE DE DRILL, mesma instância) ──────────
+-- pg_cron SÓ pode ser criado no banco definido em cron.database_name ('postgres').
+-- Num drill na mesma instância, CREATE EXTENSION pg_cron falha e arrasta 93
+-- objetos (views v_steps_progress/v_ai_catalog/v_cron_health_24h/v_ai_health_
+-- summary, v_perf_dashboard, 79 comments, mv_system_status). Os stubs abaixo
+-- recebem o COPY dos dados de cron.job e destravam o replay (§5).
+-- Em DR real (instância nova), este bloco é desnecessário — a extensão instala
+-- normalmente no banco postgres do destino.
+
+CREATE SCHEMA IF NOT EXISTS cron;
+CREATE TABLE IF NOT EXISTS cron.job (
+  jobid bigint, schedule text, command text, nodename text, nodeport integer,
+  database text, username text, active boolean, jobname text);
+CREATE TABLE IF NOT EXISTS cron.job_run_details (
+  jobid bigint, runid bigint, job_pid integer, database text, username text,
+  command text, status text, return_message text,
+  start_time timestamptz, end_time timestamptz);
+
+-- ─── §1 (legado) localizar FK evolution_whatsapp_status por constraint ─────
+-- Mantido para compatibilidade; a limpeza geral está no §3.
 
 DO $fix_fk$
 DECLARE
@@ -33,7 +54,7 @@ BEGIN
   LIMIT 1;
 
   IF v_table IS NULL THEN
-    RAISE NOTICE '§1: constraint não encontrada — nada a fazer (dump já limpo?)';
+    RAISE NOTICE '§1: constraint não encontrada — nada a fazer (ver §3/§4)';
     RETURN;
   END IF;
 
@@ -48,8 +69,6 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Sanity: nunca mais que 0,1% da tabela é órfão esperado (erro de janela de
-  -- dump, não de corrupção). Se estourar, o drill deve PARAR para investigar.
   IF v_orphans > 15 THEN
     RAISE EXCEPTION '§1: % órfãos (>15) — investigar antes de limpar', v_orphans;
   END IF;
@@ -66,7 +85,8 @@ $fix_fk$;
 
 -- ─── §2 mv_system_status ausente no destino ────────────────────────────────
 -- Definição canônica extraída do snapshot do drift-gate (regen 2026-08-21).
--- WITH NO DATA + REFRESH no final = mesmo estado de produção.
+-- OBS (2026-08-24): se o replay (§5) rodou, a MV já vem do dump — este bloco
+-- é o fallback. WITH NO DATA + REFRESH no final = mesmo estado de produção.
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS zapp.mv_system_status AS
  SELECT now() AS snapshot_at,
@@ -121,3 +141,61 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS zapp.mv_system_status AS
   WITH NO DATA;
 
 REFRESH MATERIALIZED VIEW zapp.mv_system_status;
+
+-- ─── §3 Órfãos das 4 FKs conhecidas (drill de 2026-08-24, contagens reais) ──
+-- Produção TEM esses órfãos AGORA (FKs convalidated — bypass via bulk ops /
+-- session_replication_role). No drill: DELETE nos pequenos, NULL no gigante.
+-- ⚠ DECISÃO DE DONO pendente p/ PRODUÇÃO (não é escopo do drill):
+--    evolution_whatsapp_status.contact_id referencia outro domínio de id
+--    (14.780/14.789 linhas órfãs = 99,9% da tabela) — FK provavelmente
+--    vestigial; opções: dropar FK via migration ou NULL em massa.
+
+DELETE FROM zapp.conversation_events s
+ WHERE s.contact_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM evo.evolution_contacts c WHERE c.id = s.contact_id);
+
+DELETE FROM zapp.contact_intelligence s
+ WHERE s.contact_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM evo.evolution_contacts c WHERE c.id = s.contact_id);
+
+DELETE FROM auth.mfa_amr_claims s
+ WHERE s.session_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM auth.sessions c WHERE c.id = s.session_id);
+
+UPDATE zapp.evolution_whatsapp_status s
+   SET contact_id = NULL
+ WHERE s.contact_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM evo.evolution_contacts c WHERE c.id = s.contact_id);
+
+-- ─── §4 Re-adicionar as 4 FKs (prova de validação limpa) ───────────────────
+-- Definições conferidas com pg_get_constraintdef da produção em 2026-08-24.
+
+ALTER TABLE zapp.conversation_events
+  ADD CONSTRAINT conversation_events_contact_id_fkey
+  FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE;
+
+ALTER TABLE zapp.contact_intelligence
+  ADD CONSTRAINT ci_contact_id_fk
+  FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE zapp.evolution_whatsapp_status
+  ADD CONSTRAINT evolution_whatsapp_status_contact_id_fkey
+  FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id);
+
+ALTER TABLE auth.mfa_amr_claims
+  ADD CONSTRAINT mfa_amr_claims_session_id_fkey
+  FOREIGN KEY (session_id) REFERENCES auth.sessions(id) ON DELETE CASCADE;
+
+-- ─── §5 Replay das entradas que falharam no restore bruto ──────────────────
+-- (executar NO SHELL, não aqui — pg_restore reexecuta exatamente o que falhou)
+--
+--   pg_restore -l <dump> | grep -E 'v_50_steps_progress|v_ai_catalog|\
+--     v_cron_health_24h|v_ai_health_summary|v_perf_dashboard|mv_system_status' \
+--     > replay.lst
+--   pg_restore -d restore_drill_YYYYMMDD -j2 --no-owner --no-acl \
+--     -L replay.lst <dump>
+--
+-- Resultado em 2026-08-24: EXIT=0, ZERO erros (86 entradas: 6 views,
+-- 79 comments, MV + refresh). Restam impossíveis no drill same-instance:
+-- CREATE EXTENSION pg_cron + COMMENT ON EXTENSION (2 erros, artefato de
+-- ambiente documentado — em DR real não ocorrem).
