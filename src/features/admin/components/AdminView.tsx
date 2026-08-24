@@ -128,6 +128,7 @@ export function AdminView() {
     handleSaveUser,
     handleCreateUser,
     handleInviteUser,
+    inviteFieldErrors,
   } = useAdminData(activeTab as 'users' | 'audit' | 'crm');
 
   useEffect(() => {
@@ -635,6 +636,7 @@ export function AdminView() {
         open={isInviteDialogOpen}
         onOpenChange={setIsInviteDialogOpen}
         onInvite={handleInviteUser}
+        fieldErrors={inviteFieldErrors}
       />
 
       {/* Content */}

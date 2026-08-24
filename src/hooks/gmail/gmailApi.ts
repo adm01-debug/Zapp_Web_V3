@@ -13,6 +13,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge, type InvokeEdgeFailure } from '@/lib/invokeEdge';
 
 // ── Tipos base ───────────────────────────────────────────────────────────
 
@@ -20,11 +21,42 @@ export interface EmailApiError {
   code: number;
   message: string;
   status: string;
+  /** `{path: message}` do 422 canônico (Bloco 7, etapa 79) — vazio/ausente
+   *  quando a falha não é uma violação de contrato por campo. */
+  fieldErrors?: Record<string, string>;
 }
 
 export interface EmailApiResponse<T> {
   data: T | null;
   error: EmailApiError | null;
+}
+
+/**
+ * Converte uma falha de `invokeEdge` pro shape `EmailApiError` deste módulo.
+ *
+ * PLANO-100-CONTRATOS-EDGE, Bloco 7 (etapa 79, F6): antes, TODA falha de
+ * `functions.invoke` (incluindo um 422 de validação com mensagem/campo
+ * específicos) virava `{code:500, message: error.message, status:'INTERNAL'}`
+ * — `error.message` do supabase-js é só "Edge Function returned a non-2xx
+ * status code", então o motivo real (`message`/`details[]` do servidor) era
+ * descartado. Este helper preserva o `code`/`message` reais.
+ */
+function toEmailApiError<T>(result: InvokeEdgeFailure): EmailApiResponse<T> {
+  const httpCode =
+    Object.keys(result.fieldErrors).length > 0 ||
+    result.code === 'contract_violation' ||
+    result.code === 'invalid_json'
+      ? 422
+      : 500;
+  return {
+    data: null,
+    error: {
+      code: httpCode,
+      message: result.message || 'Erro ao processar a solicitação.',
+      status: result.code.toUpperCase(),
+      fieldErrors: Object.keys(result.fieldErrors).length > 0 ? result.fieldErrors : undefined,
+    },
+  };
 }
 
 // ── Funções de API (via Edge Functions) ─────────────────────────────────────
@@ -117,13 +149,12 @@ export async function createEmailLabel(
   name: string,
   color?: { backgroundColor: string; textColor: string }
 ): Promise<EmailApiResponse<{ labelId: string; name: string }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-sync', {
+  const result = await invokeEdge<{ labelId: string; name: string }>('gmail-sync', {
     body: { action: 'createLabel', accountId, name, color },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -133,13 +164,12 @@ export async function moveThreadToTrash(
   accountId: string,
   emailThreadId: string
 ): Promise<EmailApiResponse<{ success: boolean }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<{ success: boolean }>('gmail-send', {
     body: { action: 'moveToTrash', accountId, threadId: emailThreadId },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -151,7 +181,7 @@ export async function modifyThreadLabels(
   addLabels: string[],
   removeLabels: string[]
 ): Promise<EmailApiResponse<{ success: boolean }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<{ success: boolean }>('gmail-send', {
     body: {
       action: 'modifyLabels',
       accountId,
@@ -161,9 +191,8 @@ export async function modifyThreadLabels(
     },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -174,13 +203,13 @@ export async function modifyThreadLabels(
 export async function renewEmailWatch(
   accountId: string
 ): Promise<EmailApiResponse<{ expiresAt: string; historyId: string }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-webhook', {
-    body: { action: 'registerWatch', accountId },
-  });
+  const result = await invokeEdge<{ expiresAt?: string | null; historyId?: string | null }>(
+    'gmail-webhook',
+    { body: { action: 'registerWatch', accountId } }
+  );
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  const raw = (data ?? {}) as { expiresAt?: string | null; historyId?: string | null };
+  if (!result.ok) return toEmailApiError(result);
+  const raw = result.data ?? {};
   return {
     data: { expiresAt: raw.expiresAt ?? '', historyId: raw.historyId ?? '' },
     error: null,
@@ -195,13 +224,14 @@ export async function listEmailLabels(
 ): Promise<
   EmailApiResponse<Array<{ id: string; name: string; type: 'system' | 'user'; color?: unknown }>>
 > {
-  const { data, error } = await supabase.functions.invoke('gmail-sync', {
+  const result = await invokeEdge<
+    Array<{ id: string; name: string; type: 'system' | 'user'; color?: unknown }>
+  >('gmail-sync', {
     body: { action: 'listLabels', accountId },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -217,13 +247,12 @@ export async function createDraft(
     threadId?: string;
   }
 ): Promise<EmailApiResponse<{ draftId: string }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<{ draftId: string }>('gmail-send', {
     body: { action: 'createDraft', accountId, ...params },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -239,13 +268,12 @@ export async function updateDraft(
     bodyHtml?: string;
   }
 ): Promise<EmailApiResponse<{ success: boolean }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<{ success: boolean }>('gmail-send', {
     body: { action: 'updateDraft', accountId, draftId, ...params },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -255,13 +283,12 @@ export async function sendDraft(
   accountId: string,
   draftId: string
 ): Promise<EmailApiResponse<{ messageId: string }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<{ messageId: string }>('gmail-send', {
     body: { action: 'sendDraft', accountId, draftId },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -272,13 +299,12 @@ export async function sendDraft(
 export async function emailRefreshToken(
   accountId: string
 ): Promise<EmailApiResponse<{ success: boolean; newExpiry: string }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-token-refresh', {
+  const result = await invokeEdge<{ success: boolean; newExpiry: string }>('gmail-token-refresh', {
     body: { action: 'refreshSingle', accountId },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -287,13 +313,12 @@ export async function emailRefreshToken(
 export async function emailRevokeAccount(
   accountId: string
 ): Promise<EmailApiResponse<{ success: boolean }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-oauth', {
+  const result = await invokeEdge<{ success: boolean }>('gmail-oauth', {
     body: { action: 'revoke', accountId },
   });
 
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 /**
@@ -370,12 +395,11 @@ interface MarkReadParams {
  * Edge function: email-send action=markRead
  */
 export async function emailMarkRead(params: MarkReadParams): Promise<EmailApiResponse<void>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<void>('gmail-send', {
     body: { action: 'markRead', ...params },
   });
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data: data ?? null, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data ?? null, error: null };
 }
 
 interface ModifyLabelsParams {
@@ -393,12 +417,11 @@ interface ModifyLabelsParams {
 export async function emailModifyLabels(
   params: ModifyLabelsParams
 ): Promise<EmailApiResponse<void>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<void>('gmail-send', {
     body: { action: 'modifyLabels', ...params },
   });
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data: data ?? null, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data ?? null, error: null };
 }
 
 interface SendMessageParams {
@@ -426,12 +449,11 @@ interface SendMessageParams {
 export async function emailSendMessage(
   params: SendMessageParams
 ): Promise<EmailApiResponse<{ id: string; threadId: string }>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<{ id: string; threadId: string }>('gmail-send', {
     body: { action: 'send', ...params },
   });
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
 
 interface TrashMessageParams {
@@ -446,12 +468,11 @@ interface TrashMessageParams {
 export async function emailTrashMessage(
   params: TrashMessageParams
 ): Promise<EmailApiResponse<void>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<void>('gmail-send', {
     body: { action: 'trash', ...params },
   });
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data: data ?? null, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data ?? null, error: null };
 }
 
 interface SaveDraftParams {
@@ -491,12 +512,11 @@ export async function emailDeleteDraft(
   accountId: string,
   draftId: string
 ): Promise<EmailApiResponse<void>> {
-  const { data, error } = await supabase.functions.invoke('gmail-send', {
+  const result = await invokeEdge<void>('gmail-send', {
     body: { action: 'deleteDraft', accountId, draftId },
   });
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data: data ?? null, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data ?? null, error: null };
 }
 
 interface ListThreadsParams {
@@ -511,18 +531,18 @@ interface ListThreadsParams {
  * Lista threads do Email com filtros opcionais.
  * Edge function: email-sync action=listThreads
  */
-export async function emailListThreads(
-  params: ListThreadsParams
-): Promise<
+export async function emailListThreads(params: ListThreadsParams): Promise<
   EmailApiResponse<{
     threads: Array<{ id: string; snippet: string; historyId: string }>;
     nextPageToken?: string;
   }>
 > {
-  const { data, error } = await supabase.functions.invoke('gmail-sync', {
+  const result = await invokeEdge<{
+    threads: Array<{ id: string; snippet: string; historyId: string }>;
+    nextPageToken?: string;
+  }>('gmail-sync', {
     body: { action: 'listThreads', ...params },
   });
-  if (error)
-    return { data: null, error: { code: 500, message: error.message, status: 'INTERNAL' } };
-  return { data, error: null };
+  if (!result.ok) return toEmailApiError(result);
+  return { data: result.data, error: null };
 }
