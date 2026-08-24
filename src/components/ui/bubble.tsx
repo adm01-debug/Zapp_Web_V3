@@ -19,5 +19,14 @@ interface BubbleProps
   extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof bubbleVariants> {}
 
 export function Bubble({ className, side, ...props }: BubbleProps) {
-  return <div className={cn(bubbleVariants({ side }), className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        bubbleVariants({ side }),
+        'motion-reduce:animate-none motion-reduce:transition-none',
+        className
+      )}
+      {...props}
+    />
+  );
 }
