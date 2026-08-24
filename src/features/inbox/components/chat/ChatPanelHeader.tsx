@@ -34,6 +34,7 @@ import { useContactAvatar } from '@/features/inbox';
 import { useTags, useContactTags } from '@/hooks/useTags';
 import { isValidUUID } from '@/utils/uuid';
 import { ActiveTool } from './ChatHeaderToolbar';
+import { COPY } from './copy';
 
 interface ChatMessage {
   id: string;
@@ -129,7 +130,7 @@ export const ChatPanelHeader = memo(function ChatPanelHeader({
         href="#chat-messages"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-background focus:p-2 focus:text-sm focus:shadow"
       >
-        Ir para mensagens
+        {COPY.messages.skipLink}
       </a>
       <div className="sticky top-0 z-30 flex h-[64px] shrink-0 items-center justify-between border-b border-border/10 bg-background/60 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-3xl transition-all duration-500 @container md:h-[80px] md:px-8">
         <div className="flex min-w-0 items-center gap-2 md:gap-3">
@@ -171,19 +172,23 @@ export const ChatPanelHeader = memo(function ChatPanelHeader({
               {conversation.sentiment === 'critical' && (
                 <span
                   className="animate-pulse text-destructive"
-                  aria-label="Sentimento Crítico"
+                  aria-label={COPY.sentiment.critical}
                   role="img"
                 >
                   🔥
                 </span>
               )}
               {conversation.sentiment === 'negative' && (
-                <span className="text-destructive/80" aria-label="Sentimento Negativo" role="img">
+                <span
+                  className="text-destructive/80"
+                  aria-label={COPY.sentiment.negative}
+                  role="img"
+                >
                   😡
                 </span>
               )}
               {conversation.sentiment === 'positive' && (
-                <span className="text-success" aria-label="Sentimento Positivo" role="img">
+                <span className="text-success" aria-label={COPY.sentiment.positive} role="img">
                   🌟
                 </span>
               )}

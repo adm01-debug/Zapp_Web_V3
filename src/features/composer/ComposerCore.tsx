@@ -15,6 +15,9 @@ import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Send, Mic, Plus, Loader2, Check } from 'lucide-react';
+// i18n-todo: mover copy.ts para src/lib/chat-copy.ts quando ComposerCore sair do escopo inbox
+import { COPY } from '@/features/inbox/components/chat/copy';
+import { COPY } from '@/features/inbox/components/chat/copy';
 
 export interface ComposerCoreProps {
   // ─── Valor e callbacks obrigatórios ────────────────────────────────────────
@@ -112,8 +115,8 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
     isOverLimit = false,
     isNearLimit = false,
     inputRef,
-    placeholder = 'Escreva sua mensagem...',
-    ariaLabel = 'Digite sua mensagem',
+    placeholder = COPY.composer.placeholder,
+    ariaLabel = COPY.composer.inputLabel,
     onKeyDown,
     onBlur,
     onPaste,
@@ -138,9 +141,9 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
         className
       )}
       role="form"
-      aria-label="Área de composição de mensagem"
+      aria-label={COPY.composer.formLabel}
     >
-      <div className="flex flex-col gap-2" role="toolbar" aria-label="Barra de mensagem">
+      <div className="flex flex-col gap-2" role="toolbar" aria-label={COPY.composer.toolbarLabel}>
         {/* SINGLE ROW: [+] [textarea] [send+mic] [secondary] */}
         <div className="flex w-full items-end gap-1.5">
           {/* ─── "+" button ─────────────────────────────────────────────── */}
@@ -157,7 +160,7 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                     'hover:bg-muted/10 focus-visible:ring-2 focus-visible:ring-primary',
                     isMobile ? 'mb-0.5 h-11 w-11' : 'mb-[3px] h-[42px] w-[42px]'
                   )}
-                  aria-label="Mais opções de mensagem"
+                  aria-label={COPY.composer.plusLabel}
                 >
                   <Plus className="h-6 w-6" />
                 </motion.button>
@@ -232,7 +235,7 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                 animate={{ opacity: 1, x: 0 }}
                 className="text-[10px] font-black uppercase tracking-tighter text-muted-foreground"
               >
-                Enviando...
+                {COPY.composer.sendingInline}
               </motion.span>
             )}
 
@@ -245,7 +248,7 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                   disabled={isSending}
                   whileHover={!isSending ? { scale: 1.1 } : {}}
                   whileTap={!isSending ? { scale: 0.9 } : {}}
-                  aria-label={isSending ? 'Enviando mensagem...' : 'Enviar mensagem'}
+                  aria-label={isSending ? COPY.composer.sendingLabel : COPY.composer.sendLabel}
                   aria-disabled={isSending || !canSend}
                   className={cn(
                     'inline-flex shrink-0 touch-manipulation items-center justify-center rounded-full outline-none',
@@ -293,14 +296,14 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                 className="max-w-[200px] rounded-lg border-none bg-primary px-3 py-1.5 text-[10px] font-medium text-primary-foreground shadow-xl"
               >
                 {isSending
-                  ? '🚀 Mensagem sendo processada...'
+                  ? COPY.composer.tooltipSending
                   : isOverLimit
-                    ? '⚠️ Limite de caracteres excedido'
+                    ? COPY.composer.tooltipOverLimit
                     : !canSend
                       ? '📎 Clique para anexar arquivo'
                       : isEditing
                         ? '✅ Confirmar alterações'
-                        : '🚀 Enviar mensagem (Enter)'}
+                        : COPY.composer.sendTooltipDefault}
               </TooltipContent>
             </Tooltip>
 
@@ -313,7 +316,9 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                   disabled={micDisabled}
                   whileHover={!micDisabled ? { scale: 1.1 } : {}}
                   whileTap={!micDisabled ? { scale: 0.9 } : {}}
-                  aria-label={isMicActive ? 'Parar gravação' : 'Gravar áudio'}
+                  aria-label={
+                    isMicActive ? COPY.composer.micActiveLabel : COPY.composer.micIdleLabel
+                  }
                   aria-disabled={micDisabled}
                   aria-pressed={isMicActive}
                   className={cn(
@@ -334,12 +339,12 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                 className="max-w-[200px] rounded-lg border-none bg-destructive px-3 py-1.5 text-[10px] font-medium text-foreground shadow-xl"
               >
                 {isMicActive
-                  ? '🔴 Gravando... Clique para parar'
+                  ? COPY.composer.tooltipMicActive
                   : canSend
-                    ? '🚫 Limpe o texto para gravar áudio'
+                    ? COPY.composer.tooltipMicCantRecord
                     : isSending
-                      ? '⏳ Aguarde o envio para gravar'
-                      : '🎤 Gravar áudio (Segure ou clique)'}
+                      ? COPY.composer.tooltipMicWaiting
+                      : COPY.composer.tooltipMicIdle}
               </TooltipContent>
             </Tooltip>
           </div>
