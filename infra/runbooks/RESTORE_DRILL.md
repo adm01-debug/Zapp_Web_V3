@@ -14,6 +14,7 @@
 | **Config offsite** (`backups/supabase-db/config/`) | ✅ tarballs diários de config chegando ao R2 | listagem R2 |
 | **pgbackrest** (stack 270, criado 2026-08-16) | ⚠️ camada nova, **não validada** neste drill | — |
 | **Drill de restore** | ✅ **EXECUTADO 2026-08-24** (`drill-restore-20260824.log` + `drill-replay-20260824.log`): bruto 99 erros → **fixups + replay = 0 erros**; 4 FKs revalidadas; MV com dados; sanidade OK (314.917 msgs, 22.440 contatos, 51.688 empresas) | logs no container |
+| **Re-drill (auditoria PhD)** | ✅ **2026-08-24 ~20:10 UTC**, dump NOVO 19:08 (150 MB): bruto **108 erros** (mesmas classes: 93 cascata pg_cron + 4 FKs + 2 extensão + 9 cascade extra de views/comments) → fixups **single-shot `ON_ERROR_STOP=1` EXIT=0** (§3: DELETE 1+8+320, UPDATE 14.780 — idêntico ao 1º drill) → 4 FKs VALIDADAS via §4 → replay 86 entradas limpo → **idempotência provada** (2ª execução: 0 rows, EXIT 0) → sanidade 317.646 msgs / 22.489 contatos / 51.688 empresas (MV == count real; `mv_cron=0` = stub vazio documentado) → dropdb | `/tmp/drill2.log` (ephemeral) |
 
 ### Decomposição dos 99 erros do drill 2026-08-24
 

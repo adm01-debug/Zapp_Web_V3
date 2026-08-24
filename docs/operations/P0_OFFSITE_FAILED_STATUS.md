@@ -1,6 +1,7 @@
 # P0 — Offsite Backup Supabase-db: Status Crítico
 
 > **Estado:** ✅ **RECUPERADO E VERIFICADO NO R2 (2026-08-24)** — P0 FECHADO  
+> **Decriptabilidade provada (auditoria PhD, 24/08 20:13 UTC):** `mc cp` do `.gpg` 19:08 (138 MiB) → `gpg -d` com `backup_passphrase_v1` → **sha256 `86730843…` triplo-idêntico** (R2 decriptado = dump local = manifesto `.sha256`). A cópia offsite é restaurável, não apenas presente.
 > **Marcador histórico:** `OFFSITE_FAILED_20260810_211518` (falha real de 08-10; marcador **removido** em 24/08 após verificação)  
 > **Risco residual:** nenhum para o offsite diário — cadeia contínua confirmada (abaixo). pgbackrest segue não validado (item separado)  
 > **Ação:** ~~Verificar bucket R2 e remover marcador~~ ✅ EXECUTADO 2026-08-24 (evidência abaixo)
