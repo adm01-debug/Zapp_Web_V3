@@ -78,7 +78,7 @@ export function initSentry(): boolean {
         // AbortError de unmount React — navegação normal entre contatos.
         // Já filtrado em consoleErrorFilter, mas Sentry SDK pode capturar
         // antes do beforeSend em alguns caminhos (promise rejection global).
-        'AbortError',
+        /AbortError/, // regex: DOMException.name='AbortError' não aparece no .message
       ],
       // Don't send if user opted out (LGPD friendly)
       beforeSend(event) {

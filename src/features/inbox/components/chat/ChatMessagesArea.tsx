@@ -18,6 +18,7 @@ import { Loader2, Lock, ChevronDown, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getLogger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { buildGroupInfo } from './chatGroupInfo';
 import { EmptyState } from '@/components/ui/empty-states';
 import { ChatWatermark } from './ChatWatermark';
 import { COPY } from './copy';
@@ -240,25 +241,7 @@ export const ChatMessagesArea = memo(
         };
       }, [contactJid, queryClient]);
 
-      const SAME_GROUP_MS = 5 * 60 * 1000;
-      const groupInfo = useMemo(
-        () =>
-          messages.map((msg, i) => {
-            const prev = messages[i - 1];
-            const next = messages[i + 1];
-            const ts = new Date(msg.timestamp ?? 0).getTime();
-            const isFirstInGroup =
-              !prev ||
-              prev.sender !== msg.sender ||
-              ts - new Date(prev.timestamp ?? 0).getTime() > SAME_GROUP_MS;
-            const isLastInGroup =
-              !next ||
-              next.sender !== msg.sender ||
-              new Date(next.timestamp ?? 0).getTime() - ts > SAME_GROUP_MS;
-            return { isFirstInGroup, isLastInGroup };
-          }),
-        [messages] // eslint-disable-line react-hooks/exhaustive-deps
-      );
+      const groupInfo = useMemo(() => buildGroupInfo(messages), [messages]);
 
       const getItemSize = useCallback(
         (index: number) => {

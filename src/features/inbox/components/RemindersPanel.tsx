@@ -40,13 +40,14 @@ export function RemindersPanel({ contactId, profileId }: RemindersPanelProps) {
   const [when, setWhen] = useState('1h');
   const [loading, setLoading] = useState(true);
 
-  const loadReminders = useCallback(async () => {
+  const loadReminders = useCallback(async (signal?: AbortSignal) => {
     if (!profileId) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const data = await fetchReminders(contactId, profileId);
+    const data = await fetchReminders(contactId, profileId, signal);
+    if (signal?.aborted) return;
     setReminders(
       data.map((r) => ({
         id: r.id,
@@ -60,7 +61,9 @@ export function RemindersPanel({ contactId, profileId }: RemindersPanelProps) {
   }, [contactId, profileId]);
 
   useEffect(() => {
-    loadReminders();
+    const ctrl = new AbortController();
+    loadReminders(ctrl.signal);
+    return () => ctrl.abort();
   }, [contactId, profileId, loadReminders]);
 
   const addReminder = async () => {

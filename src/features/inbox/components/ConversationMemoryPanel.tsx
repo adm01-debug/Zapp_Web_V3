@@ -57,9 +57,10 @@ export function ConversationMemoryPanel({ contactId, profileId }: ConversationMe
   const [saving, setSaving] = useState(false);
   const [newItems, setNewItems] = useState<Record<string, string>>({});
 
-  const loadMemory = useCallback(async () => {
+  const loadMemory = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
-    const data = await fetchConversationMemory(contactId);
+    const data = await fetchConversationMemory(contactId, signal);
+    if (signal?.aborted) return;
     if (data) {
       setMemory({
         id: data.id,
@@ -81,7 +82,9 @@ export function ConversationMemoryPanel({ contactId, profileId }: ConversationMe
   }, [contactId]);
 
   useEffect(() => {
-    loadMemory();
+    const ctrl = new AbortController();
+    loadMemory(ctrl.signal);
+    return () => ctrl.abort();
   }, [contactId, loadMemory]);
 
   const addItem = (

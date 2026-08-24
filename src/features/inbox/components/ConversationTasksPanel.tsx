@@ -54,9 +54,10 @@ export function ConversationTasksPanel({ contactId, profileId }: ConversationTas
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
 
-  const loadTasks = useCallback(async () => {
+  const loadTasks = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
-    const data = await fetchConversationTasks(contactId);
+    const data = await fetchConversationTasks(contactId, signal);
+    if (signal?.aborted) return;
     setTasks(
       data.map((t) => ({
         id: t.id,
@@ -74,7 +75,9 @@ export function ConversationTasksPanel({ contactId, profileId }: ConversationTas
   }, [contactId]);
 
   useEffect(() => {
-    loadTasks();
+    const ctrl = new AbortController();
+    loadTasks(ctrl.signal);
+    return () => ctrl.abort();
   }, [contactId, loadTasks]);
 
   const addTask = async () => {

@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/features/auth';
 import { getSignedMediaUrl } from '@/lib/storageSignedUrls';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { isValidUUID } from '@/utils/uuid';
@@ -44,6 +45,7 @@ interface TeamFilesProps {
 
 export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) {
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth(); // BUG-E: evita supabase.auth.getUser() HTTP por upload
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -65,6 +67,7 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!isValidUUID(contactId)) throw new Error('Invalid contact ID');
+      if (!authUser) throw new Error('Usuário não autenticado');
       setIsUploading(true);
       const fileExt = file.name.split('.').pop();
       const filePath = `team-files/${contactId}/${Math.random()}.${fileExt}`;
@@ -75,10 +78,6 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
 
       if (uploadError) throw uploadError;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       const fileUrl = (await getSignedMediaUrl('whatsapp-media', filePath, 604800)) ?? '';
 
       const { error: dbError } = await safeClient.from('whisper_files', (q) =>
@@ -88,7 +87,7 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
           file_url: fileUrl,
           file_size: file.size,
           file_type: file.type,
-          sender_id: user?.id,
+          sender_id: authUser?.id,
         })
       );
 
