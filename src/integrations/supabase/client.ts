@@ -726,6 +726,31 @@ export const retryFetch: typeof fetch = async (input, init) => {
     priority: _highPriorityDepth > 0 ? 'high' : 'normal',
     signal: init?.signal,
   });
+
+  // FIX 2026-08-24: liberar slot imediatamente quando o caller aborta APÓS
+  // o acquire. Sem este listener, o slot fica preso pelo tempo inteiro do
+  // request em voo (até 12s) mesmo quando o componente já desmontou —
+  // exatamente o "slot leak" documentado em cbb45aedc como "decisão pendente".
+  //
+  // SEGURANÇA DE DOUBLE-RELEASE: a flag `callerAbortedSlot` garante que
+  // _releaseSupabaseSlot() só roda uma vez — ou pelo listener do abort, ou
+  // pelo finally. Nunca pelos dois.
+  let callerAbortedSlot = false;
+  const callerSignal = init?.signal ?? null;
+  const releaseOnCallerAbort = (): void => {
+    if (callerAbortedSlot) return;
+    callerAbortedSlot = true;
+    _releaseSupabaseSlot();
+  };
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      // Já abortado antes mesmo de entrar no try — libera e rejeita.
+      _releaseSupabaseSlot();
+      throw makeAbortError('Supabase slot acquire aborted');
+    }
+    callerSignal.addEventListener('abort', releaseOnCallerAbort, { once: true });
+  }
+
   try {
     return await withRetry(
       async () => {
@@ -761,7 +786,14 @@ export const retryFetch: typeof fetch = async (input, init) => {
       throw err;
     });
   } finally {
-    _releaseSupabaseSlot();
+    // Remove listener do caller signal (limpeza) e libera slot APENAS se o
+    // listener não o liberou antes (evita double-release).
+    if (callerSignal) {
+      callerSignal.removeEventListener('abort', releaseOnCallerAbort);
+    }
+    if (!callerAbortedSlot) {
+      _releaseSupabaseSlot();
+    }
   }
 };
 
