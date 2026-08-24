@@ -30,9 +30,9 @@ Hermes é o framework de agentes de IA que opera sobre o ZAPP Web. Ele tem três
 
 ### Padrões obrigatórios
 
-**Commits:** sempre via `git commit --no-verify -m 'tipo(escopo): mensagem'` no container VPS. Não usar Lovable ou commit direto pelo chat.
+**Commits:** toda sessão de chat commita o próprio trabalho — **nunca deixar correção sem commit** (bug de processo). Formato: `tipo(escopo): mensagem` (no container VPS: `git commit --no-verify`). Não usar Lovable.
 
-**Branch:** mudanças de produção vão para `main`. Mudanças de documentação vão para branches `docs/` ou `fix/` e são mergeadas com push direto (o token do runner tem bypass de branch protection).
+**Branch + PR:** qualquer mudança (código, docs, config) segue o fluxo do Claude Code online: branch `fix/`|`feat/`|`docs/` → push → **PR para `main`**. **Nunca** push direto na `main` pela sessão de chat (causa rebases competitivos com a sessão VPS) — merge só via PR com CI verde. O bypass de branch protection do runner fica restrito a pipelines automatizados. O merge que toca `supabase/functions/**` dispara `edge-deploy.yml`.
 
 **Edge functions:** toda função nova declara o chamador no mesmo commit. Sem chamador, não entra. Referencia à regra no `ESTADO.md`.
 
