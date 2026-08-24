@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 
 interface MessagePreviewProps {

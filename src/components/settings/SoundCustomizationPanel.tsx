@@ -16,7 +16,7 @@ import {
   Moon,
   Upload,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from '@/components/ui/motion';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { toast } from 'sonner';
 import { SoundCategoryCard } from './SoundCategoryCard';

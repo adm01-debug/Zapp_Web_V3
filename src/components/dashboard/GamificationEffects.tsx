@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { Trophy, Star, Flame, Zap, Crown, Award, ArrowUp, ArrowDown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';

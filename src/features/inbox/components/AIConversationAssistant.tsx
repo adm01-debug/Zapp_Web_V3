@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { log } from '@/lib/logger';
 import {
   PeriodFilterSelector,
@@ -33,10 +33,7 @@ import {
 import { VisionIcon } from './ai-tools/VisionIcon';
 import { useAnalysisTts } from './ai-tools/useAnalysisTts';
 import { AnalysisTabs } from './ai-tools/AnalysisTabs';
-import {
-  type AnalysisData,
-  type AnalysisMessage,
-} from './ai-tools/analysisConfigs';
+import { type AnalysisData, type AnalysisMessage } from './ai-tools/analysisConfigs';
 
 interface AIConversationAssistantProps {
   messages: AnalysisMessage[];
@@ -264,7 +261,16 @@ export function AIConversationAssistant({
         if (cancelled || !cached?.summary) return;
         // const p/ preservar narrowing dentro do closure do setState
         const cachedSummary: string = cached.summary;
-        setAnalysis((prev) => prev ?? { summary: cachedSummary, status: '', keyPoints: [], sentiment: 'neutro', sentimentScore: 50 });
+        setAnalysis(
+          (prev) =>
+            prev ?? {
+              summary: cachedSummary,
+              status: '',
+              keyPoints: [],
+              sentiment: 'neutro',
+              sentimentScore: 50,
+            }
+        );
       })
       .catch(() => {});
     return () => {

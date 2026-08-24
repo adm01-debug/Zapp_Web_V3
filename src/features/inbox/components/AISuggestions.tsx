@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('AISuggestions');
@@ -31,7 +31,12 @@ interface AISuggestionsProps {
 }
 
 /** AISuggestions component. */
-export function AISuggestions({ messages, contactName, contactId, onSelectSuggestion }: AISuggestionsProps) {
+export function AISuggestions({
+  messages,
+  contactName,
+  contactId,
+  onSelectSuggestion,
+}: AISuggestionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -40,30 +45,30 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
   const fetchSuggestions = async () => {
     if (messages.length === 0) {
       toast({
-        title: "Sem mensagens",
-        description: "É necessário ter mensagens na conversa para gerar sugestões.",
-        variant: "destructive"
+        title: 'Sem mensagens',
+        description: 'É necessário ter mensagens na conversa para gerar sugestões.',
+        variant: 'destructive',
       });
       return;
     }
 
     setIsLoading(true);
     setIsOpen(true);
-    
+
     try {
       const { data, error } = await supabase.functions.invoke('ai-suggest-reply', {
         body: {
-          messages: messages.slice(-10).map(m => ({
+          messages: messages.slice(-10).map((m) => ({
             content: m.content,
-            sender: m.sender
+            sender: m.sender,
           })),
           contactName,
           contactId,
-        }
+        },
       });
 
       if (error) throw error;
-      
+
       if (data?.suggestions) {
         setSuggestions(data.suggestions);
       }
@@ -71,9 +76,9 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
       const error = err instanceof Error ? err : new Error('Unknown error');
       log.error('Error fetching suggestions:', error);
       toast({
-        title: "Erro ao gerar sugestões",
-        description: error.message || "Tente novamente mais tarde.",
-        variant: "destructive"
+        title: 'Erro ao gerar sugestões',
+        description: error.message || 'Tente novamente mais tarde.',
+        variant: 'destructive',
       });
       setIsOpen(false);
     } finally {
@@ -89,19 +94,27 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'direct': return <Check className="h-4 w-4" />;
-      case 'empathetic': return <MessageCircle className="h-4 w-4" />;
-      case 'followup': return <HelpCircle className="h-4 w-4" />;
-      default: return <Sparkles className="h-4 w-4" />;
+      case 'direct':
+        return <Check className="h-4 w-4" />;
+      case 'empathetic':
+        return <MessageCircle className="h-4 w-4" />;
+      case 'followup':
+        return <HelpCircle className="h-4 w-4" />;
+      default:
+        return <Sparkles className="h-4 w-4" />;
     }
   };
 
   const getLabel = (type: string) => {
     switch (type) {
-      case 'direct': return 'Direta';
-      case 'empathetic': return 'Empática';
-      case 'followup': return 'Follow-up';
-      default: return type;
+      case 'direct':
+        return 'Direta';
+      case 'empathetic':
+        return 'Empática';
+      case 'followup':
+        return 'Follow-up';
+      default:
+        return type;
     }
   };
 
@@ -113,7 +126,7 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
         size="icon"
         onClick={fetchSuggestions}
         disabled={isLoading}
-        className="relative text-primary hover:text-primary/80 hover:bg-primary/10"
+        className="relative text-primary hover:bg-primary/10 hover:text-primary/80"
         title="Sugestões de IA"
       >
         {isLoading ? (
@@ -129,13 +142,15 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute bottom-full right-0 mb-2 w-80 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50"
+            className="absolute bottom-full right-0 z-50 mb-2 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-xl"
           >
-             <div className="flex items-center justify-between p-3 border-b border-border bg-muted/50">
+            <div className="flex items-center justify-between border-b border-border bg-muted/50 p-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">Copilot IA</span>
-                <Badge variant="secondary" className="text-[10px]">KB</Badge>
+                <span className="text-sm font-medium">Copilot IA</span>
+                <Badge variant="secondary" className="text-[10px]">
+                  KB
+                </Badge>
               </div>
               <Button
                 aria-label="Fechar sugestões"
@@ -148,7 +163,7 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
               </Button>
             </div>
 
-            <div className="p-2 max-h-64 overflow-y-auto">
+            <div className="max-h-64 overflow-y-auto p-2">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="flex flex-col items-center gap-2">
@@ -165,22 +180,22 @@ export function AISuggestions({ messages, contactName, contactId, onSelectSugges
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
                       onClick={() => handleSelect(suggestion.text)}
-                      className="w-full text-left p-3 rounded-lg bg-background hover:bg-primary/10 border border-transparent hover:border-primary/30 transition-all group"
+                      className="group w-full rounded-lg border border-transparent bg-background p-3 text-left transition-all hover:border-primary/30 hover:bg-primary/10"
                     >
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="mb-1 flex items-center gap-2">
                         <span className="text-primary">{getIcon(suggestion.type)}</span>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           {getLabel(suggestion.type)}
                         </span>
-                        <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-xs text-primary">
+                        <span className="ml-auto text-xs text-primary opacity-0 transition-opacity group-hover:opacity-100">
                           Usar ↵
                         </span>
                       </div>
-                      <p className="text-sm text-foreground line-clamp-3">
+                      <p className="line-clamp-3 text-sm text-foreground">
                         {suggestion.emoji} {suggestion.text}
                       </p>
                       {suggestion.source && (
-                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                        <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
                           📚 Fonte: {suggestion.source}
                         </p>
                       )}

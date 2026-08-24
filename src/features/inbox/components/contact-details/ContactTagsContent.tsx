@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Plus, TagsIcon, X } from 'lucide-react';
@@ -23,7 +23,12 @@ export function ContactTagsContent({ contact, conversation }: ContactTagsContent
   // vez de exibir apenas os arrays legados decorativos. O hook já existia órfão.
   const contactId = contact.id;
   const validContact = !!contactId && isValidUUID(contactId);
-  const { contactTags: realTags, addTag, removeTag, isLoading } = useContactTags(validContact ? contactId : undefined);
+  const {
+    contactTags: realTags,
+    addTag,
+    removeTag,
+    isLoading,
+  } = useContactTags(validContact ? contactId : undefined);
   const { tags: allTags } = useTags();
 
   // Fallback legado quando o contato não tem UUID válido (ex.: contato JID-only)
@@ -36,54 +41,55 @@ export function ContactTagsContent({ contact, conversation }: ContactTagsContent
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      {!validContact && conversation.tags.map((tag, i) => (
-        <motion.div
-          key={`conv-${tag}`}
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: (contactTags.length + i) * 0.03 }}
-        >
-          <Badge
-            variant="outline"
-            className="group/tag flex cursor-default items-center gap-1 border-border/30 transition-all hover:scale-105 hover:border-primary/30"
+      {!validContact &&
+        conversation.tags.map((tag, i) => (
+          <motion.div
+            key={`conv-${tag}`}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: (contactTags.length + i) * 0.03 }}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-            {tag}
-          </Badge>
-        </motion.div>
-      ))}
+            <Badge
+              variant="outline"
+              className="group/tag flex cursor-default items-center gap-1 border-border/30 transition-all hover:scale-105 hover:border-primary/30"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+              {tag}
+            </Badge>
+          </motion.div>
+        ))}
 
       {contactTags.map((tag, i) => {
         // contactTags pode conter string (tag legada) ou Tag (DB) — normaliza.
         const tagId = typeof tag === 'string' ? undefined : tag.id;
         const tagName = typeof tag === 'string' ? tag : tag.name;
         return (
-        <motion.div
-          key={`contact-${tagId ?? tagName}`}
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: i * 0.03 }}
-        >
-          <Badge
-            variant="secondary"
-            className="group/tag flex cursor-default items-center gap-1 border border-primary/20 bg-primary/10 text-foreground transition-all hover:scale-105 hover:bg-primary/20"
+          <motion.div
+            key={`contact-${tagId ?? tagName}`}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: i * 0.03 }}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            {tagName}
-            {validContact && (
-              <button
-                type="button"
-                aria-label={`Remover etiqueta ${tagName}`}
-                className="cursor-pointer opacity-0 transition-all hover:text-destructive group-hover/tag:opacity-100"
-                onClick={() => {
-                  if (tagId) void removeTag(tagId);
-                }}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </Badge>
-        </motion.div>
+            <Badge
+              variant="secondary"
+              className="group/tag flex cursor-default items-center gap-1 border border-primary/20 bg-primary/10 text-foreground transition-all hover:scale-105 hover:bg-primary/20"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              {tagName}
+              {validContact && (
+                <button
+                  type="button"
+                  aria-label={`Remover etiqueta ${tagName}`}
+                  className="cursor-pointer opacity-0 transition-all hover:text-destructive group-hover/tag:opacity-100"
+                  onClick={() => {
+                    if (tagId) void removeTag(tagId);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </Badge>
+          </motion.div>
         );
       })}
 
@@ -122,7 +128,10 @@ export function ContactTagsContent({ contact, conversation }: ContactTagsContent
                   className="cursor-pointer gap-2 text-xs"
                   onClick={() => void addTag(tag.id)}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color || 'var(--primary)' }} />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: tag.color || 'var(--primary)' }}
+                  />
                   {tag.name}
                 </DropdownMenuItem>
               ))

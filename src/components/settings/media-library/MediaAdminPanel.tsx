@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Card } from '@/components/ui/card';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from '@/components/ui/motion';
 import {
   Search,
   Trash2,

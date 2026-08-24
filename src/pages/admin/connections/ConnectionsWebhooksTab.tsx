@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Webhook, Plus, Settings, Trash2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 /** Connections Webhooks Tab. */
 export function ConnectionsWebhooksTab() {
@@ -55,9 +55,7 @@ export function ConnectionsWebhooksTab() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge className="border-success/20 bg-success/10 text-success">
-                      Ativo
-                    </Badge>
+                    <Badge className="border-success/20 bg-success/10 text-success">Ativo</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">

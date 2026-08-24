@@ -17,7 +17,7 @@ import {
   Legend,
 } from 'recharts';
 import { GitCompare } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { COLORS, TOOLTIP_STYLE } from './reportChartsHelpers';
 
 // ─── Comparison Summary ───

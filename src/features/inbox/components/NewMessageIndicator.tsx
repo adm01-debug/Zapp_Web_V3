@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { MessageSquare, X } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -34,12 +34,12 @@ export function NewMessageIndicator({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -50, scale: 0.9 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className="fixed top-20 right-4 z-[100] max-w-sm"
+          className="fixed right-4 top-20 z-[100] max-w-sm"
         >
           <motion.div
             className={cn(
               'relative overflow-hidden rounded-xl border border-primary/30',
-              'bg-card/95 backdrop-blur-md shadow-2xl',
+              'bg-card/95 shadow-2xl backdrop-blur-md',
               'shadow-primary/20'
             )}
             whileHover={{ scale: 1.02 }}
@@ -86,7 +86,7 @@ export function NewMessageIndicator({
                       repeat: Infinity,
                     }}
                   />
-                  <Avatar className="w-12 h-12 ring-2 ring-primary/50">
+                  <Avatar className="h-12 w-12 ring-2 ring-primary/50">
                     <AvatarImage
                       src={avatarUrl || undefined}
                       alt={contactName}
@@ -95,7 +95,7 @@ export function NewMessageIndicator({
                         (e.target as HTMLImageElement).removeAttribute('src');
                       }}
                     />
-                    <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                    <AvatarFallback className="bg-primary/20 font-semibold text-primary">
                       {contactName
                         .split(' ')
                         .map((n) => n[0])
@@ -105,15 +105,15 @@ export function NewMessageIndicator({
                   </Avatar>
                   {/* New message badge */}
                   <motion.div
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center"
+                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary"
                     animate={{ scale: [1, 1.2, 1] }}
                     transition={{ duration: 0.5, repeat: Infinity }}
                   >
-                    <MessageSquare className="w-3 h-3 text-primary-foreground" />
+                    <MessageSquare className="h-3 w-3 text-primary-foreground" />
                   </motion.div>
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <motion.p
                       className="font-semibold text-foreground"
@@ -126,15 +126,15 @@ export function NewMessageIndicator({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="w-6 h-6 hover:bg-muted/50"
+                      className="h-6 w-6 hover:bg-muted/50"
                       onClick={onDismiss}
                       aria-label="Dispensar notificação"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
                   <motion.p
-                    className="text-sm text-muted-foreground truncate"
+                    className="truncate text-sm text-muted-foreground"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
@@ -146,17 +146,17 @@ export function NewMessageIndicator({
 
               {/* Action buttons */}
               <motion.div
-                className="flex gap-2 mt-3"
+                className="mt-3 flex gap-2"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
               >
                 <Button
                   size="sm"
-                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={onView}
                 >
-                  <MessageSquare className="w-4 h-4 mr-2" />
+                  <MessageSquare className="mr-2 h-4 w-4" />
                   Ver mensagem
                 </Button>
                 <Button

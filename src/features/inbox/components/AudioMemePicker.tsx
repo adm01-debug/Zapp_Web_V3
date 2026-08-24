@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 // Tooltip removido para evitar loop Tooltip+Popover.
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import {
   Music,
   Search,
@@ -58,7 +58,9 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
 
   const { categories, filtered, categoryCounts } = useMemo(() => {
     const cats = [...new Set(memes.map((m) => m.category).filter(Boolean))].sort();
-    const counts = new Map(cats.map((cat) => [cat, memes.filter((m) => m.category === cat).length]));
+    const counts = new Map(
+      cats.map((cat) => [cat, memes.filter((m) => m.category === cat).length])
+    );
     const fil = memes.filter((m) => {
       const matchSearch =
         !search ||
@@ -155,7 +157,8 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
               className="h-8 border-border/50 bg-muted/50 pl-8 text-xs"
             />
             {search && (
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => setSearch('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2"
               >
@@ -168,7 +171,8 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
         <div className="border-b border-border/30 px-2 py-2">
           <ScrollArea className="w-full">
             <div className="flex flex-wrap gap-1.5">
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => {
                   setActiveCategory(null);
                   setShowFavorites(false);
@@ -182,7 +186,8 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
               >
                 Todos ({memes.length})
               </button>
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => {
                   setShowFavorites(!showFavorites);
                   setActiveCategory(null);
@@ -200,7 +205,8 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
                 const info = CATEGORY_LABELS[cat];
                 const count = categoryCounts.get(cat) ?? 0;
                 return (
-                  <button type="button"
+                  <button
+                    type="button"
                     key={cat}
                     onClick={() => {
                       setActiveCategory(activeCategory === cat ? null : cat);
@@ -258,7 +264,8 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
                         )
                       }
                     >
-                      <button type="button"
+                      <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handlePreview(meme);
@@ -295,7 +302,9 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button aria-label="Favoritar" type="button"
+                        <button
+                          aria-label="Favoritar"
+                          type="button"
                           onClick={(e) => toggleFavorite(e, meme)}
                           className="rounded p-1 hover:bg-muted"
                         >
@@ -308,7 +317,9 @@ export function AudioMemePicker({ onSendAudioMeme, disabled }: AudioMemePickerPr
                             )}
                           />
                         </button>
-                        <button aria-label="Excluir" type="button"
+                        <button
+                          aria-label="Excluir"
+                          type="button"
                           onClick={(e) => handleDelete(e, meme)}
                           className="rounded p-1 hover:bg-destructive/10"
                         >

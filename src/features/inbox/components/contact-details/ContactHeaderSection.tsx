@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Building, Briefcase, Crown } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { EnrichedContactData } from '@/hooks/useContactEnrichedData';
 import { ImagePreview } from '../ImagePreview';
 import { useExternalContact360 } from '@/hooks/useExternalApiManagement';
@@ -132,7 +132,11 @@ export function ContactHeaderSection({
     s >= 80 ? 'hsl(var(--success))' : s >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))';
 
   const getScoreForeground = (s: number) =>
-    s >= 80 ? 'hsl(var(--success-foreground))' : s >= 50 ? 'hsl(var(--warning-foreground))' : 'hsl(var(--destructive-foreground))';
+    s >= 80
+      ? 'hsl(var(--success-foreground))'
+      : s >= 50
+        ? 'hsl(var(--warning-foreground))'
+        : 'hsl(var(--destructive-foreground))';
 
   if (isCompact) {
     return (
@@ -208,7 +212,10 @@ export function ContactHeaderSection({
                 <TooltipTrigger asChild>
                   <div
                     className="absolute -bottom-1 -left-1 flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold ring-2 ring-background"
-                    style={{ backgroundColor: getScoreColor(engagementScore), color: getScoreForeground(engagementScore) }}
+                    style={{
+                      backgroundColor: getScoreColor(engagementScore),
+                      color: getScoreForeground(engagementScore),
+                    }}
                   >
                     {engagementScore}
                   </div>

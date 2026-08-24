@@ -11,27 +11,60 @@
 
 // Animation variants (CSS-class-free, pure framer-motion objects)
 export {
-  fadeInUp, fadeIn, scaleIn, slideInRight, slideInLeft,
-  staggerContainer, staggerItem, neonReveal,
-  staggeredNeonContainer, staggeredNeonItem,
+  fadeInUp,
+  fadeIn,
+  scaleIn,
+  slideInRight,
+  slideInLeft,
+  staggerContainer,
+  staggerItem,
+  neonReveal,
+  staggeredNeonContainer,
+  staggeredNeonItem,
 } from './variants';
 
 // Animated React components
 /** Re-exported module members. */
 export {
-  PageTransition, NeonPageReveal, MotionCard, MotionButton,
-  StaggeredList, StaggeredItem, MotionFadeIn, MotionSlideUp,
-  MotionScale, MotionInteractive, SkeletonShimmer,
+  PageTransition,
+  NeonPageReveal,
+  MotionCard,
+  MotionButton,
+  StaggeredList,
+  StaggeredItem,
+  MotionFadeIn,
+  MotionSlideUp,
+  MotionScale,
+  MotionInteractive,
+  SkeletonShimmer,
 } from './components';
 
 // Advanced animation effects
 /** Re-exported module members. */
 export {
-  AnimatedCounter, AnimatedProgress, Presence, StaggerContainerEnhanced,
-  SlideTransition, HoverScale, AnimatedList, AnimatedListItem, Typewriter,
+  AnimatedCounter,
+  AnimatedProgress,
+  Presence,
+  StaggerContainerEnhanced,
+  SlideTransition,
+  HoverScale,
+  AnimatedList,
+  AnimatedListItem,
+  Typewriter,
 } from './effects';
 
-// Passthrough from framer-motion for convenience
-/** Re-exported module members. */
-export { AnimatePresence, motion } from 'framer-motion';
-
+// Passthrough from framer-motion — todos os símbolos usados no projeto
+// Permite migrar 'framer-motion' → '@/components/ui/motion' sem quebrar imports
+export {
+  AnimatePresence,
+  motion,
+  LayoutGroup,
+  // hooks
+  useReducedMotion,
+  useMotionValue,
+  useTransform,
+  useSpring,
+  useScroll,
+  useAnimation,
+} from 'framer-motion';
+export type { Variants, Transition, PanInfo, HTMLMotionProps } from 'framer-motion';

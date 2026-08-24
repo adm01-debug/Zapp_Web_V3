@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Info, Phone, PhoneOff, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,9 +12,10 @@ import { getInboundAnswerNotice } from './inboundAnswerNotice';
 import { getLogger } from '@/lib/logger';
 const log = getLogger('IncomingCallAlert');
 
-type BrowserAudioWindow = Window & typeof globalThis & {
-  webkitAudioContext?: typeof AudioContext;
-};
+type BrowserAudioWindow = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
 
 /** Incoming Call Alert component for the calls section. */
 export const IncomingCallAlert = forwardRef<HTMLDivElement, Record<string, never>>(
@@ -67,12 +68,7 @@ export const IncomingCallAlert = forwardRef<HTMLDivElement, Record<string, never
         }
       }
       return undefined;
-    }, [
-      incomingCall,
-      notifSettings.soundEnabled,
-      notifSettings.soundVolume,
-      isQuietHours,
-    ]);
+    }, [incomingCall, notifSettings.soundEnabled, notifSettings.soundVolume, isQuietHours]);
 
     // Auto-dismiss after 30s
     useEffect(() => {

@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Users, Clock, MessageSquare, Siren } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { dbFrom } from '@/integrations/datasource/db';
 
 interface CrisisMetric {
@@ -19,21 +19,28 @@ interface CrisisMetric {
 
 /** Crisis Room component. */
 export function CrisisRoom() {
-  const { data: metrics = [], isFetching, refetch } = useQuery<CrisisMetric[]>({
+  const {
+    data: metrics = [],
+    isFetching,
+    refetch,
+  } = useQuery<CrisisMetric[]>({
     queryKey: queryKeys.adminOps.crisisRoom(),
     queryFn: async () => {
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
       const [unanswered, agentCount, slaBreached] = await Promise.all([
-        dbFrom('messages').select('id', { count: 'exact', head: true })
-          .eq('sender', 'contact').gte('created_at', oneHourAgo.toISOString()),
+        dbFrom('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('sender', 'contact')
+          .gte('created_at', oneHourAgo.toISOString()),
         fetchActiveAgentsCount(),
         fetchBreachedSLACount(),
       ]);
 
       const unansweredCount = unanswered.count || 0;
-      const queueRatio = agentCount > 0 ? Math.round(unansweredCount / agentCount) : unansweredCount;
+      const queueRatio =
+        agentCount > 0 ? Math.round(unansweredCount / agentCount) : unansweredCount;
 
       return [
         {
@@ -73,21 +80,35 @@ export function CrisisRoom() {
   });
 
   const loading = isFetching;
-  const isCrisis = metrics.some(m => m.severity === 'critical');
-  const loadMetrics = () => { void refetch(); };
+  const isCrisis = metrics.some((m) => m.severity === 'critical');
+  const loadMetrics = () => {
+    void refetch();
+  };
 
   const severityConfig = {
     ok: { bg: 'bg-success/10', border: 'border-success/30', text: 'text-success', label: 'Normal' },
-    warning: { bg: 'bg-warning/10', border: 'border-warning/30', text: 'text-warning', label: 'Atenção' },
-    critical: { bg: 'bg-destructive/10', border: 'border-destructive/30', text: 'text-destructive', label: 'Crítico' },
+    warning: {
+      bg: 'bg-warning/10',
+      border: 'border-warning/30',
+      text: 'text-warning',
+      label: 'Atenção',
+    },
+    critical: {
+      bg: 'bg-destructive/10',
+      border: 'border-destructive/30',
+      text: 'text-destructive',
+      label: 'Crítico',
+    },
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Siren className={`w-5 h-5 ${isCrisis ? 'text-destructive animate-pulse' : 'text-primary'}`} />
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Siren
+              className={`h-5 w-5 ${isCrisis ? 'animate-pulse text-destructive' : 'text-primary'}`}
+            />
             Sala de Crise
           </h2>
           <p className="text-sm text-muted-foreground">Monitor em tempo real da operação</p>
@@ -102,29 +123,38 @@ export function CrisisRoom() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-center"
+          className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-center"
         >
-          <AlertTriangle className="w-8 h-8 mx-auto text-destructive mb-2" />
+          <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-destructive" />
           <p className="text-sm font-bold text-destructive">Operação em estado crítico!</p>
-          <p className="text-xs text-muted-foreground mt-1">Uma ou mais métricas excederam limites aceitáveis</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Uma ou mais métricas excederam limites aceitáveis
+          </p>
         </motion.div>
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-32 bg-muted/20 rounded-xl animate-pulse" />)}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted/20" />
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {metrics.map((m, idx) => {
             const cfg = severityConfig[m.severity];
             const Icon = m.icon;
             return (
-              <motion.div key={m.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}>
+              <motion.div
+                key={m.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1 }}
+              >
                 <Card className={`border ${cfg.border}`}>
-                  <CardContent className="p-4 space-y-3">
+                  <CardContent className="space-y-3 p-4">
                     <div className="flex items-center justify-between">
-                      <Icon className={`w-5 h-5 ${cfg.text}`} />
+                      <Icon className={`h-5 w-5 ${cfg.text}`} />
                       <Badge variant="outline" className={`text-[10px] ${cfg.text}`}>
                         {cfg.label}
                       </Badge>

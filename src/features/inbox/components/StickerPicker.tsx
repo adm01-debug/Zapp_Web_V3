@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 // Tooltip removido para evitar loop de refs com Popover/Slot.
 import { cn } from '@/lib/utils';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from '@/components/ui/motion';
 import {
   Sticker,
   Search,
@@ -172,7 +172,8 @@ export function StickerPicker({ onSendSticker, disabled }: StickerPickerProps) {
               aria-label="Buscar figurinhas"
             />
             {search && (
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => {
                   setSearch('');
                   searchInputRef.current?.focus();

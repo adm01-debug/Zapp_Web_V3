@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Users, MessageSquare, Zap, Shield } from 'lucide-react';
 
 const stats = [
@@ -15,7 +15,7 @@ export function SocialProof() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.8 }}
-      className="mt-6 pt-6 border-t border-border/30"
+      className="mt-6 border-t border-border/30 pt-6"
     >
       <div className="grid grid-cols-4 gap-2">
         {stats.map((stat, index) => (
@@ -26,9 +26,9 @@ export function SocialProof() {
             transition={{ delay: 0.9 + index * 0.1 }}
             className="text-center"
           >
-            <stat.icon className="w-4 h-4 mx-auto mb-1 text-primary" />
+            <stat.icon className="mx-auto mb-1 h-4 w-4 text-primary" />
             <div className="text-sm font-bold text-foreground">{stat.value}</div>
-            <div className="text-[10px] text-muted-foreground leading-tight">{stat.label}</div>
+            <div className="text-[10px] leading-tight text-muted-foreground">{stat.label}</div>
           </motion.div>
         ))}
       </div>

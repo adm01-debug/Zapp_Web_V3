@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { IconButton } from './icon-button';
@@ -123,7 +123,8 @@ export function BottomNavigation({ items, activeId, onChange, className }: Botto
         {items.map((item) => {
           const isActive = item.id === activeId;
           return (
-            <button type="button"
+            <button
+              type="button"
               key={item.id}
               onClick={() => {
                 if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(5);

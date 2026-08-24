@@ -1,20 +1,47 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 import {
-  MessageSquare, Users, BarChart3, Phone, Tag, Inbox,
-  FileText, Bell, Search, Plus, ArrowRight, Sparkles,
-  Megaphone, Bot, Kanban, Plug, Package, LucideIcon,
+  MessageSquare,
+  Users,
+  BarChart3,
+  Phone,
+  Tag,
+  Inbox,
+  FileText,
+  Bell,
+  Search,
+  Plus,
+  ArrowRight,
+  Sparkles,
+  Megaphone,
+  Bot,
+  Kanban,
+  Plug,
+  Package,
+  LucideIcon,
 } from 'lucide-react';
 import { illustrations } from './empty-state-illustrations';
 
 /** Empty State Context type alias. */
 export type EmptyStateContext =
-  | 'inbox' | 'contacts' | 'dashboard' | 'calls' | 'tags'
-  | 'search' | 'notifications' | 'generic' | 'transcriptions'
-  | 'campaigns' | 'chatbot' | 'pipeline' | 'reports' | 'integrations'
-  | 'templates' | 'catalog';
+  | 'inbox'
+  | 'contacts'
+  | 'dashboard'
+  | 'calls'
+  | 'tags'
+  | 'search'
+  | 'notifications'
+  | 'generic'
+  | 'transcriptions'
+  | 'campaigns'
+  | 'chatbot'
+  | 'pipeline'
+  | 'reports'
+  | 'integrations'
+  | 'templates'
+  | 'catalog';
 
 interface Action {
   label: string;
@@ -110,7 +137,8 @@ export function EmptyState({
   const illustrationKey = (illustrationOverride as EmptyStateContext | undefined) ?? context;
   const illustration = illustrations[illustrationKey as keyof typeof illustrations];
   const config = contextConfigs[context];
-  const resolvedAction = action ?? (actionLabel && onAction ? { label: actionLabel, onClick: onAction } : undefined);
+  const resolvedAction =
+    action ?? (actionLabel && onAction ? { label: actionLabel, onClick: onAction } : undefined);
 
   return (
     <motion.div
@@ -129,11 +157,11 @@ export function EmptyState({
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.1, duration: 0.5 }}
-          className={cn('relative mb-6', compact ? 'w-32 h-24' : 'w-48 h-36 md:w-56 md:h-44')}
+          className={cn('relative mb-6', compact ? 'h-24 w-32' : 'h-36 w-48 md:h-44 md:w-56')}
         >
           {illustration}
           <div className="absolute inset-0 -z-10 blur-3xl">
-            <div className={cn('w-full h-full bg-gradient-to-br rounded-full', config.gradient)} />
+            <div className={cn('h-full w-full rounded-full bg-gradient-to-br', config.gradient)} />
           </div>
         </motion.div>
       )}
@@ -144,13 +172,13 @@ export function EmptyState({
         animate={{ scale: 1 }}
         transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
         className={cn(
-          'flex items-center justify-center rounded-2xl mb-4',
-          compact ? 'w-12 h-12' : 'w-14 h-14',
+          'mb-4 flex items-center justify-center rounded-2xl',
+          compact ? 'h-12 w-12' : 'h-14 w-14',
           config.gradient,
           'bg-gradient-to-br'
         )}
       >
-        <Icon className={cn('text-primary', compact ? 'w-6 h-6' : 'w-7 h-7')} />
+        <Icon className={cn('text-primary', compact ? 'h-6 w-6' : 'h-7 w-7')} />
       </motion.div>
 
       {/* Title */}
@@ -158,7 +186,10 @@ export function EmptyState({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className={cn('font-semibold text-foreground mb-2', compact ? 'text-lg' : 'text-xl md:text-2xl')}
+        className={cn(
+          'mb-2 font-semibold text-foreground',
+          compact ? 'text-lg' : 'text-xl md:text-2xl'
+        )}
       >
         {title}
       </motion.h3>
@@ -168,7 +199,7 @@ export function EmptyState({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
-        className={cn('text-muted-foreground max-w-md mb-6', compact ? 'text-sm' : 'text-base')}
+        className={cn('mb-6 max-w-md text-muted-foreground', compact ? 'text-sm' : 'text-base')}
       >
         {description}
       </motion.p>
@@ -179,16 +210,16 @@ export function EmptyState({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="flex flex-col sm:flex-row items-center gap-3"
+          className="flex flex-col items-center gap-3 sm:flex-row"
         >
           {resolvedAction && (
             <Button
               onClick={resolvedAction.onClick}
-              className="group shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
+              className="group shadow-lg shadow-primary/20 transition-all hover:shadow-primary/40"
             >
-              {resolvedAction.icon || <Plus className="w-4 h-4 mr-2" />}
+              {resolvedAction.icon || <Plus className="mr-2 h-4 w-4" />}
               {resolvedAction.label}
-              <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
           )}
           {secondaryAction && (
@@ -222,7 +253,7 @@ export function InboxEmptyState({ onStartChat }: { onStartChat?: () => void }) {
           ? {
               label: 'Iniciar conversa',
               onClick: onStartChat,
-              icon: <MessageSquare className="w-4 h-4 mr-2" />,
+              icon: <MessageSquare className="mr-2 h-4 w-4" />,
             }
           : undefined
       }
@@ -239,7 +270,11 @@ export function ContactsEmptyState({ onAddContact }: { onAddContact?: () => void
       description="Adicione contatos para gerenciar suas conversas e manter o histórico organizado."
       action={
         onAddContact
-          ? { label: 'Adicionar contato', onClick: onAddContact, icon: <Users className="w-4 h-4 mr-2" /> }
+          ? {
+              label: 'Adicionar contato',
+              onClick: onAddContact,
+              icon: <Users className="mr-2 h-4 w-4" />,
+            }
           : undefined
       }
     />
@@ -254,7 +289,13 @@ export function DashboardEmptyState({ onExplore }: { onExplore?: () => void }) {
       title="Sem dados para exibir"
       description="Comece a atender para ver métricas e insights sobre seu desempenho aqui."
       action={
-        onExplore ? { label: 'Ir para Inbox', onClick: onExplore, icon: <Sparkles className="w-4 h-4 mr-2" /> } : undefined
+        onExplore
+          ? {
+              label: 'Ir para Inbox',
+              onClick: onExplore,
+              icon: <Sparkles className="mr-2 h-4 w-4" />,
+            }
+          : undefined
       }
     />
   );
@@ -295,7 +336,13 @@ export function TagsEmptyState({ onCreateTag }: { onCreateTag?: () => void }) {
       title="Nenhuma etiqueta criada"
       description="Crie etiquetas para organizar e categorizar suas conversas e contatos."
       action={
-        onCreateTag ? { label: 'Criar etiqueta', onClick: onCreateTag, icon: <Tag className="w-4 h-4 mr-2" /> } : undefined
+        onCreateTag
+          ? {
+              label: 'Criar etiqueta',
+              onClick: onCreateTag,
+              icon: <Tag className="mr-2 h-4 w-4" />,
+            }
+          : undefined
       }
     />
   );
@@ -332,7 +379,11 @@ export function CampaignsEmptyState({ onCreateCampaign }: { onCreateCampaign?: (
       description="Crie campanhas para engajar seus contatos em escala."
       action={
         onCreateCampaign
-          ? { label: 'Nova Campanha', onClick: onCreateCampaign, icon: <Megaphone className="w-4 h-4 mr-2" /> }
+          ? {
+              label: 'Nova Campanha',
+              onClick: onCreateCampaign,
+              icon: <Megaphone className="mr-2 h-4 w-4" />,
+            }
           : undefined
       }
     />
@@ -348,7 +399,7 @@ export function ChatbotEmptyState({ onCreateFlow }: { onCreateFlow?: () => void 
       description="Automatize o atendimento criando fluxos de chatbot inteligentes."
       action={
         onCreateFlow
-          ? { label: 'Criar Fluxo', onClick: onCreateFlow, icon: <Bot className="w-4 h-4 mr-2" /> }
+          ? { label: 'Criar Fluxo', onClick: onCreateFlow, icon: <Bot className="mr-2 h-4 w-4" /> }
           : undefined
       }
     />
@@ -363,7 +414,13 @@ export function PipelineEmptyState({ onCreateDeal }: { onCreateDeal?: () => void
       title="Pipeline vazio"
       description="Gerencie suas oportunidades de venda movendo deals entre etapas."
       action={
-        onCreateDeal ? { label: 'Criar Deal', onClick: onCreateDeal, icon: <Kanban className="w-4 h-4 mr-2" /> } : undefined
+        onCreateDeal
+          ? {
+              label: 'Criar Deal',
+              onClick: onCreateDeal,
+              icon: <Kanban className="mr-2 h-4 w-4" />,
+            }
+          : undefined
       }
     />
   );
@@ -389,7 +446,11 @@ export function IntegrationsEmptyState({ onExplore }: { onExplore?: () => void }
       description="Conecte ferramentas externas para potencializar seu atendimento."
       action={
         onExplore
-          ? { label: 'Explorar Integrações', onClick: onExplore, icon: <Plug className="w-4 h-4 mr-2" /> }
+          ? {
+              label: 'Explorar Integrações',
+              onClick: onExplore,
+              icon: <Plug className="mr-2 h-4 w-4" />,
+            }
           : undefined
       }
     />
@@ -405,7 +466,11 @@ export function TemplatesEmptyState({ onCreateTemplate }: { onCreateTemplate?: (
       description="Crie templates de mensagem para agilizar suas respostas."
       action={
         onCreateTemplate
-          ? { label: 'Criar Template', onClick: onCreateTemplate, icon: <FileText className="w-4 h-4 mr-2" /> }
+          ? {
+              label: 'Criar Template',
+              onClick: onCreateTemplate,
+              icon: <FileText className="mr-2 h-4 w-4" />,
+            }
           : undefined
       }
     />
@@ -421,7 +486,11 @@ export function CatalogEmptyState({ onAddProduct }: { onAddProduct?: () => void 
       description="Adicione produtos e serviços para compartilhar com seus clientes."
       action={
         onAddProduct
-          ? { label: 'Adicionar Produto', onClick: onAddProduct, icon: <Package className="w-4 h-4 mr-2" /> }
+          ? {
+              label: 'Adicionar Produto',
+              onClick: onAddProduct,
+              icon: <Package className="mr-2 h-4 w-4" />,
+            }
           : undefined
       }
     />

@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,7 +17,16 @@ interface ToolPanelProps {
 }
 
 /** Tool Panel component for the ai tools section. */
-export function ToolPanel({ isOpen, onClose, icon, title, subtitle, children, className, headerRight }: ToolPanelProps) {
+export function ToolPanel({
+  isOpen,
+  onClose,
+  icon,
+  title,
+  subtitle,
+  children,
+  className,
+  headerRight,
+}: ToolPanelProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -39,27 +48,27 @@ export function ToolPanel({ isOpen, onClose, icon, title, subtitle, children, cl
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
             className={cn(
-              "absolute left-2 right-2 z-30 flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden",
-              "max-w-[470px] max-h-[70%] mx-auto top-[15%]",
+              'absolute left-2 right-2 z-30 flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl',
+              'top-[15%] mx-auto max-h-[70%] max-w-[470px]',
               className
             )}
           >
             {/* Header padronizado */}
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-border shrink-0">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                 {icon}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-foreground truncate">{title}</h3>
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-sm font-semibold text-foreground">{title}</h3>
                 {subtitle && (
-                  <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
                 )}
               </div>
               {headerRight}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-lg shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                className="h-8 w-8 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
                 aria-label="Fechar painel"
                 onClick={onClose}
               >
@@ -69,9 +78,7 @@ export function ToolPanel({ isOpen, onClose, icon, title, subtitle, children, cl
 
             {/* Corpo com scroll */}
             <ScrollArea className="flex-1">
-              <div className="p-5">
-                {children}
-              </div>
+              <div className="p-5">{children}</div>
             </ScrollArea>
           </motion.div>
         </>

@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Loader2, Play, Square, Check, Volume2, ShieldAlert, Wand2 } from 'lucide-react';
@@ -95,7 +95,8 @@ export function VoiceListItem({
 }) {
   const isLoading = isConverting && isSelected;
   return (
-    <button type="button"
+    <button
+      type="button"
       key={voice.id}
       data-testid={`voice-btn-${voice.id}`}
       onClick={onClick}

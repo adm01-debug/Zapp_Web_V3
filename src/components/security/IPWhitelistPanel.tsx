@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMountedRef } from '@/hooks/useMountedRef';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Check, Plus, Trash2, Globe, Loader2, Search, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import {

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useScribe, CommitStrategy } from '@elevenlabs/react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Mic, MicOff, Loader2, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,10 +17,10 @@ interface RealtimeTranscriptionProps {
 }
 
 /** Realtime Transcription component. */
-export function RealtimeTranscription({ 
-  onTranscript, 
+export function RealtimeTranscription({
+  onTranscript,
   onStatusChange,
-  className 
+  className,
 }: RealtimeTranscriptionProps) {
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const tokenRef = useRef<string | null>(null);
@@ -60,9 +60,9 @@ export function RealtimeTranscription({
       if (error) {
         const errMsg = error?.message || String(error);
         const isAuthError = errMsg.includes('401') || errMsg.toLowerCase().includes('invalid');
-        throw new Error(isAuthError 
-          ? 'Chave da ElevenLabs inválida. Atualize nas configurações.' 
-          : errMsg);
+        throw new Error(
+          isAuthError ? 'Chave da ElevenLabs inválida. Atualize nas configurações.' : errMsg
+        );
       }
 
       if (!data?.token) {
@@ -103,32 +103,32 @@ export function RealtimeTranscription({
   const isConnected = scribe.isConnected;
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn('flex flex-col gap-2', className)}>
       {/* Control Button */}
       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
         <Button
-          variant={isConnected ? "default" : "outline"}
+          variant={isConnected ? 'default' : 'outline'}
           size="sm"
           onClick={isConnected ? handleStop : handleStart}
           disabled={isConnecting}
           className={cn(
-            "gap-2 transition-all",
-            isConnected && "bg-destructive hover:bg-destructive text-primary-foreground"
+            'gap-2 transition-all',
+            isConnected && 'bg-destructive text-primary-foreground hover:bg-destructive'
           )}
         >
           {isConnecting ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Conectando...
             </>
           ) : isConnected ? (
             <>
-              <MicOff className="w-4 h-4" />
+              <MicOff className="h-4 w-4" />
               Parar STT
             </>
           ) : (
             <>
-              <Mic className="w-4 h-4" />
+              <Mic className="h-4 w-4" />
               STT em Tempo Real
             </>
           )}
@@ -149,10 +149,10 @@ export function RealtimeTranscription({
               <motion.div
                 animate={{ scale: [1, 1.2, 1] }}
                 transition={{ repeat: Infinity, duration: 1.5 }}
-                className="w-2 h-2 rounded-full bg-destructive"
+                className="h-2 w-2 rounded-full bg-destructive"
               />
               <span>Ouvindo...</span>
-              <Radio className="w-3 h-3 text-destructive" />
+              <Radio className="h-3 w-3 text-destructive" />
             </div>
 
             {/* Partial transcript display */}
@@ -160,7 +160,7 @@ export function RealtimeTranscription({
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="p-2 rounded-lg bg-muted/50 border border-border/30 text-sm italic text-muted-foreground"
+                className="rounded-lg border border-border/30 bg-muted/50 p-2 text-sm italic text-muted-foreground"
               >
                 "{scribe.partialTranscript}"
               </motion.div>
@@ -168,13 +168,13 @@ export function RealtimeTranscription({
 
             {/* Committed transcripts */}
             {scribe.committedTranscripts.length > 0 && (
-              <div className="space-y-1 max-h-32 overflow-y-auto">
+              <div className="max-h-32 space-y-1 overflow-y-auto">
                 {scribe.committedTranscripts.slice(-3).map((t) => (
                   <motion.div
                     key={t.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="p-2 rounded-lg bg-primary/10 border border-primary/20 text-sm"
+                    className="rounded-lg border border-primary/20 bg-primary/10 p-2 text-sm"
                   >
                     {t.text}
                   </motion.div>

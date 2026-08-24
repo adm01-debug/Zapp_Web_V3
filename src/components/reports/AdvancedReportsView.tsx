@@ -17,7 +17,7 @@ import { DemandForecast } from './DemandForecast';
 import { AbandonmentRate } from './AbandonmentRate';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { useReportsData } from './useReportsData';
 import {

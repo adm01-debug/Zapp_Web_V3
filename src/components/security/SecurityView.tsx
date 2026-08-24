@@ -1,6 +1,20 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Shield, Key, Lock, Activity, Users, Bell, Smartphone, LayoutDashboard, Fingerprint, Globe, FileText, Gauge, Bug } from 'lucide-react';
+import { motion } from '@/components/ui/motion';
+import {
+  Shield,
+  Key,
+  Lock,
+  Activity,
+  Users,
+  Bell,
+  Smartphone,
+  LayoutDashboard,
+  Fingerprint,
+  Globe,
+  FileText,
+  Gauge,
+  Bug,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -29,7 +43,7 @@ export function SecurityView() {
   // (development/staging). Em produção, mesmo quem tem role 'dev' não vê.
   const isDev = hasRole('dev') && isDevBypassAllowed();
   const [activeTab, setActiveTab] = useState('overview');
-  
+
   // Initialize security push notifications
   useSecurityPushNotifications();
 
@@ -38,15 +52,15 @@ export function SecurityView() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-6xl mx-auto space-y-6"
+        className="mx-auto max-w-6xl space-y-6"
       >
         {/* Header */}
         <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-primary/10">
-            <Shield className="w-6 h-6 text-primary" />
+          <div className="rounded-xl bg-primary/10 p-3">
+            <Shield className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-display font-bold">Central de Segurança</h1>
+            <h1 className="font-display text-2xl font-bold">Central de Segurança</h1>
             <p className="text-muted-foreground">
               Gerencie todas as configurações de segurança da sua conta e sistema
             </p>
@@ -60,51 +74,51 @@ export function SecurityView() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-5 md:grid-cols-11">
             <TabsTrigger value="overview" className="gap-2">
-              <LayoutDashboard className="w-4 h-4" />
+              <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Visão Geral</span>
             </TabsTrigger>
             <TabsTrigger value="account" className="gap-2">
-              <Key className="w-4 h-4" />
+              <Key className="h-4 w-4" />
               <span className="hidden sm:inline">Conta</span>
             </TabsTrigger>
             <TabsTrigger value="passkeys" className="gap-2">
-              <Fingerprint className="w-4 h-4" />
+              <Fingerprint className="h-4 w-4" />
               <span className="hidden sm:inline">Passkeys</span>
             </TabsTrigger>
             <TabsTrigger value="devices" className="gap-2">
-              <Smartphone className="w-4 h-4" />
+              <Smartphone className="h-4 w-4" />
               <span className="hidden sm:inline">Dispositivos</span>
             </TabsTrigger>
             <TabsTrigger value="notifications" className="gap-2">
-              <Bell className="w-4 h-4" />
+              <Bell className="h-4 w-4" />
               <span className="hidden sm:inline">Alertas</span>
             </TabsTrigger>
             {(isAdmin || isDev) && (
               <TabsTrigger value="virustotal" className="gap-2">
-                <Bug className="w-4 h-4" />
+                <Bug className="h-4 w-4" />
                 <span className="hidden sm:inline">VirusTotal</span>
               </TabsTrigger>
             )}
             {isAdmin && (
               <>
                 <TabsTrigger value="blocked" className="gap-2">
-                  <Lock className="w-4 h-4" />
+                  <Lock className="h-4 w-4" />
                   <span className="hidden sm:inline">IPs</span>
                 </TabsTrigger>
                 <TabsTrigger value="geo" className="gap-2">
-                  <Globe className="w-4 h-4" />
+                  <Globe className="h-4 w-4" />
                   <span className="hidden sm:inline">Geo</span>
                 </TabsTrigger>
                 <TabsTrigger value="rate-limit" className="gap-2">
-                  <Gauge className="w-4 h-4" />
+                  <Gauge className="h-4 w-4" />
                   <span className="hidden sm:inline">Rate Limit</span>
                 </TabsTrigger>
                 <TabsTrigger value="audit" className="gap-2">
-                  <FileText className="w-4 h-4" />
+                  <FileText className="h-4 w-4" />
                   <span className="hidden sm:inline">Auditoria</span>
                 </TabsTrigger>
                 <TabsTrigger value="admin" className="gap-2">
-                  <Users className="w-4 h-4" />
+                  <Users className="h-4 w-4" />
                   <span className="hidden sm:inline">Admin</span>
                 </TabsTrigger>
               </>
@@ -161,12 +175,12 @@ export function SecurityView() {
               <TabsContent value="admin">
                 <div className="space-y-6">
                   <PasswordResetRequestsPanel />
-                  
+
                   <div className="grid gap-6 md:grid-cols-2">
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <Activity className="w-5 h-5 text-primary" />
+                          <Activity className="h-5 w-5 text-primary" />
                           Rate Limit Dashboard
                         </CardTitle>
                       </CardHeader>
@@ -174,10 +188,10 @@ export function SecurityView() {
                         <p className="text-sm text-muted-foreground">
                           Monitore tentativas de acesso e gerencie rate limiting
                         </p>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="mt-4"
-                          onClick={() => window.location.href = '/admin/rate-limit'}
+                          onClick={() => (window.location.href = '/admin/rate-limit')}
                         >
                           Ver Dashboard
                         </Button>
@@ -187,7 +201,7 @@ export function SecurityView() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
-                          <Users className="w-5 h-5 text-primary" />
+                          <Users className="h-5 w-5 text-primary" />
                           Gerenciamento de Roles
                         </CardTitle>
                       </CardHeader>
@@ -195,10 +209,10 @@ export function SecurityView() {
                         <p className="text-sm text-muted-foreground">
                           Configure roles e permissões para usuários
                         </p>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="mt-4"
-                          onClick={() => window.location.href = '/admin/roles'}
+                          onClick={() => (window.location.href = '/admin/roles')}
                         >
                           Gerenciar Roles
                         </Button>

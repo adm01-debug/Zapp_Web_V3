@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import {
   Dialog,
   DialogContent,
@@ -9,14 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Phone,
-  PhoneOff,
-  Mic,
-  MicOff,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCalls } from '@/features/inbox';
 import { logAudit } from '@/lib/audit';
@@ -52,7 +45,7 @@ export function CallDialog({
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callId, setCallId] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   const { startCall, answerCall, endCall, missCall } = useCalls();
 
   // Start call when dialog opens
@@ -64,7 +57,7 @@ export function CallDialog({
         contactName: contact.name,
         direction,
         whatsappConnectionId,
-      }).then(id => {
+      }).then((id) => {
         if (id) setCallId(id);
       });
     }
@@ -77,7 +70,7 @@ export function CallDialog({
         setDuration((prev) => prev + 1);
       }, 1000);
     }
-    
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -97,11 +90,11 @@ export function CallDialog({
 
   const handleAnswer = async () => {
     setStatus('answered');
-    
+
     if (callId) {
       await answerCall(callId);
     }
-    
+
     onAnswer?.();
     logAudit({
       action: 'call_started',
@@ -113,11 +106,11 @@ export function CallDialog({
 
   const handleEnd = async () => {
     setStatus('ended');
-    
+
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    
+
     if (callId) {
       if (status === 'ringing' && direction === 'inbound') {
         // Missed call if ended while ringing inbound
@@ -126,14 +119,14 @@ export function CallDialog({
         await endCall(callId, duration);
       }
     }
-    
+
     logAudit({
       action: 'call_ended',
       entityType: 'call',
       entityId: callId || undefined,
       details: { direction, duration, contact_phone: contact.phone },
     });
-    
+
     onEnd();
     onOpenChange(false);
   };
@@ -146,29 +139,36 @@ export function CallDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-gradient-to-b from-card to-background border-0">
+      <DialogContent className="overflow-hidden border-0 bg-gradient-to-b from-card to-background p-0 sm:max-w-md">
         <DialogHeader className="sr-only">
-          <DialogTitle>{contact.name || 'Contato Desconhecido'} - Chamada {direction === 'inbound' ? 'recebida' : 'realizada'}</DialogTitle>
+          <DialogTitle>
+            {contact.name || 'Contato Desconhecido'} - Chamada{' '}
+            {direction === 'inbound' ? 'recebida' : 'realizada'}
+          </DialogTitle>
           <DialogDescription>
             {direction === 'inbound'
               ? 'Chamada recebida. Clique no botão verde para atender ou no botão vermelho para rejeitar.'
               : 'Chamada em andamento. Clique no botão vermelho para encerrar.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="p-8 flex flex-col items-center">
+        <div className="flex flex-col items-center p-8">
           {/* Contact Avatar */}
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="relative"
           >
-            <Avatar className="w-24 h-24 border-4 border-whatsapp/20">
+            <Avatar className="h-24 w-24 border-4 border-whatsapp/20">
               <AvatarImage src={contact.avatar} alt={contact.name} />
-              <AvatarFallback className="text-2xl bg-whatsapp/10 text-whatsapp">
-                {contact.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+              <AvatarFallback className="bg-whatsapp/10 text-2xl text-whatsapp">
+                {contact.name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .slice(0, 2)}
               </AvatarFallback>
             </Avatar>
-            
+
             {/* Ringing animation */}
             <AnimatePresence>
               {status === 'ringing' && (
@@ -207,7 +207,7 @@ export function CallDialog({
               </p>
             )}
             {status === 'answered' && (
-              <p className="text-whatsapp  text-lg">{formatDuration(duration)}</p>
+              <p className="text-lg text-whatsapp">{formatDuration(duration)}</p>
             )}
           </motion.div>
 
@@ -221,12 +221,12 @@ export function CallDialog({
                     variant="outline"
                     size="icon"
                     className={cn(
-                      'w-12 h-12 rounded-full',
-                      isMuted && 'bg-destructive/10 border-destructive text-destructive'
+                      'h-12 w-12 rounded-full',
+                      isMuted && 'border-destructive bg-destructive/10 text-destructive'
                     )}
                     onClick={() => setIsMuted(!isMuted)}
                   >
-                    {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                   </Button>
                 </motion.div>
 
@@ -235,13 +235,14 @@ export function CallDialog({
                     aria-label={isSpeakerOn ? 'Desativar alto-falante' : 'Ativar alto-falante'}
                     variant="outline"
                     size="icon"
-                    className={cn(
-                      'w-12 h-12 rounded-full',
-                      !isSpeakerOn && 'bg-muted'
-                    )}
+                    className={cn('h-12 w-12 rounded-full', !isSpeakerOn && 'bg-muted')}
                     onClick={() => setIsSpeakerOn(!isSpeakerOn)}
                   >
-                    {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                    {isSpeakerOn ? (
+                      <Volume2 className="h-5 w-5" />
+                    ) : (
+                      <VolumeX className="h-5 w-5" />
+                    )}
                   </Button>
                 </motion.div>
               </>
@@ -252,10 +253,10 @@ export function CallDialog({
                 <Button
                   aria-label="Atender chamada"
                   size="icon"
-                  className="w-14 h-14 rounded-full bg-whatsapp hover:bg-whatsapp-dark"
+                  className="h-14 w-14 rounded-full bg-whatsapp hover:bg-whatsapp-dark"
                   onClick={handleAnswer}
                 >
-                  <Phone className="w-6 h-6" />
+                  <Phone className="h-6 w-6" />
                 </Button>
               </motion.div>
             )}
@@ -264,22 +265,21 @@ export function CallDialog({
               <Button
                 aria-label="Encerrar chamada"
                 size="icon"
-                className="w-14 h-14 rounded-full bg-destructive hover:bg-destructive/90"
+                className="h-14 w-14 rounded-full bg-destructive hover:bg-destructive/90"
                 onClick={handleEnd}
               >
-                <PhoneOff className="w-6 h-6" />
+                <PhoneOff className="h-6 w-6" />
               </Button>
             </motion.div>
           </div>
 
           {/* Info text */}
-          <p className="mt-6 text-xs text-muted-foreground text-center max-w-xs">
-            {status === 'ringing' && direction === 'outbound' 
+          <p className="mt-6 max-w-xs text-center text-xs text-muted-foreground">
+            {status === 'ringing' && direction === 'outbound'
               ? 'Aguardando resposta do contato...'
               : status === 'answered'
-              ? 'Chamada em andamento'
-              : null
-            }
+                ? 'Chamada em andamento'
+                : null}
           </p>
         </div>
       </DialogContent>

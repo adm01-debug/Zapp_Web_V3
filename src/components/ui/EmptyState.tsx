@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import {
   Users,
@@ -147,7 +147,7 @@ export function EmptyState({
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className={cn(
-        'flex flex-col items-center justify-center text-center py-16 px-6 max-w-md mx-auto',
+        'mx-auto flex max-w-md flex-col items-center justify-center px-6 py-16 text-center',
         className
       )}
     >
@@ -155,26 +155,22 @@ export function EmptyState({
       <motion.div
         animate={floatAnimation}
         className={cn(
-          'w-20 h-20 rounded-2xl bg-gradient-to-br flex items-center justify-center mb-6 shadow-none',
+          'mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br shadow-none',
           config.gradient
         )}
       >
-        <Icon className="w-9 h-9 text-primary" strokeWidth={1.5} />
+        <Icon className="h-9 w-9 text-primary" strokeWidth={1.5} />
       </motion.div>
 
-      <h3 className="text-lg font-semibold text-foreground mb-2">
-        {title}
-      </h3>
+      <h3 className="mb-2 text-lg font-semibold text-foreground">{title}</h3>
 
-      <p className="text-sm text-muted-foreground leading-relaxed mb-6 max-w-sm">
-        {description}
-      </p>
+      <p className="mb-6 max-w-sm text-sm leading-relaxed text-muted-foreground">{description}</p>
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row items-center gap-3">
+      <div className="flex flex-col items-center gap-3 sm:flex-row">
         {actionLabel && onAction && (
           <Button onClick={onAction} size="default" className="gap-2 shadow-md">
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" />
             {actionLabel}
           </Button>
         )}
@@ -186,10 +182,16 @@ export function EmptyState({
       </div>
 
       {/* Decorative dots */}
-      <div className="flex items-center gap-1.5 mt-8 opacity-30">
-        <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />
-        <div className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: '0.3s' }} />
-        <div className="w-1 h-1 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: '0.6s' }} />
+      <div className="mt-8 flex items-center gap-1.5 opacity-30">
+        <div className="h-1 w-1 animate-pulse rounded-full bg-primary" />
+        <div
+          className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary/60"
+          style={{ animationDelay: '0.3s' }}
+        />
+        <div
+          className="h-1 w-1 animate-pulse rounded-full bg-primary/40"
+          style={{ animationDelay: '0.6s' }}
+        />
       </div>
     </motion.div>
   );

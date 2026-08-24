@@ -43,7 +43,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { MarkdownPreview } from '@/features/inbox';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from '@/components/ui/motion';
 import { AddMembersDialog } from './AddMembersDialog';
 import { TeamChatHeader } from './TeamChatHeader';
 import { ParticipantStatsGraph } from './ParticipantStatsGraph';

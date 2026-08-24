@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type RefObject } from 'react';
-import { useMotionValue, useTransform } from 'framer-motion';
+import { useMotionValue, useTransform } from '@/components/ui/motion';
 import { useAudioRecorder } from '@/hooks/useAudioManagement';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from '@/hooks/use-toast';

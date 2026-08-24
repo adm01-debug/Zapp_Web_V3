@@ -1,5 +1,5 @@
 import { useState, memo } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Image, FileVideo, FileAudio, File, Play, Check } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';

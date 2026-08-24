@@ -10,7 +10,7 @@
  * `ContactsShortcutHelp`) + hook `useContactsKeyboardShortcuts`.
  */
 import React, { useMemo, useState, useCallback } from 'react';
-import { motion, LayoutGroup } from 'framer-motion';
+import { motion, LayoutGroup } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { DEFAULT_WHATSAPP_INSTANCE } from '@/lib/constants/whatsappInstances';
 

@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 
 interface Reminder {
   id: string;
@@ -40,25 +40,28 @@ export function RemindersPanel({ contactId, profileId }: RemindersPanelProps) {
   const [when, setWhen] = useState('1h');
   const [loading, setLoading] = useState(true);
 
-  const loadReminders = useCallback(async (signal?: AbortSignal) => {
-    if (!profileId) {
+  const loadReminders = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!profileId) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      const data = await fetchReminders(contactId, profileId, signal);
+      if (signal?.aborted) return;
+      setReminders(
+        data.map((r) => ({
+          id: r.id,
+          title: r.title,
+          remind_at: r.remind_at,
+          is_dismissed: r.is_dismissed,
+          created_at: r.created_at ?? '',
+        }))
+      );
       setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const data = await fetchReminders(contactId, profileId, signal);
-    if (signal?.aborted) return;
-    setReminders(
-      data.map((r) => ({
-        id: r.id,
-        title: r.title,
-        remind_at: r.remind_at,
-        is_dismissed: r.is_dismissed,
-        created_at: r.created_at ?? '',
-      }))
-    );
-    setLoading(false);
-  }, [contactId, profileId]);
+    },
+    [contactId, profileId]
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();

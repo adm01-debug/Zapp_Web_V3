@@ -1,5 +1,5 @@
 import { memo, useState, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -108,7 +108,8 @@ export const MessageReactions = memo(function MessageReactions({
         {reactionsList.map((reaction) => (
           <Tooltip key={reaction.emoji}>
             <TooltipTrigger asChild>
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => handleReact(reaction.emoji)}
                 className={cn(
                   'flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs transition-all',
@@ -152,7 +153,8 @@ export const MessageReactions = memo(function MessageReactions({
         }}
       >
         <PopoverTrigger asChild>
-          <button type="button"
+          <button
+            type="button"
             className={cn(
               'rounded-full p-1 transition-all hover:scale-110 active:scale-90',
               'text-muted-foreground hover:bg-muted/80 hover:text-foreground',
@@ -201,7 +203,8 @@ export const MessageReactions = memo(function MessageReactions({
               const userHasReacted = hasReacted(emoji);
 
               return (
-                <button type="button"
+                <button
+                  type="button"
                   key={emoji}
                   role="gridcell"
                   aria-label={`Reagir com ${emoji}`}
@@ -287,7 +290,8 @@ export const QuickReactionBar = memo(function QuickReactionBar({
         className="flex items-center gap-0.5 rounded-full border border-border/40 bg-card/95 px-1.5 py-1 shadow-lg backdrop-blur-sm dark:bg-[hsl(var(--card)/0.95)]"
       >
         {WHATSAPP_REACTIONS.map((emoji) => (
-          <button type="button"
+          <button
+            type="button"
             key={emoji}
             onClick={() => handleReact(emoji)}
             aria-label={`Reagir com ${emoji}`}
@@ -311,7 +315,8 @@ export const QuickReactionBar = memo(function QuickReactionBar({
           }}
         >
           <PopoverTrigger asChild>
-            <button type="button"
+            <button
+              type="button"
               className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground outline-none transition-all hover:bg-muted/80 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
               aria-label="Mais reações"
             >
@@ -348,7 +353,8 @@ export const QuickReactionBar = memo(function QuickReactionBar({
               }}
             >
               {EXTENDED_REACTIONS.map((emoji) => (
-                <button type="button"
+                <button
+                  type="button"
                   key={emoji}
                   role="gridcell"
                   aria-label={`Reagir com ${emoji}`}

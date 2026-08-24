@@ -1,6 +1,6 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { useMemo, forwardRef } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from '@/components/ui/motion';
 
 interface Particle {
   id: number;

@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { queryKeys } from '@/services/api/queryKeys';
 import { useQuery } from '@tanstack/react-query';
 import { safeClient } from '@/integrations/supabase/safeClient';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import type { TalkXRecipient } from '@/hooks/useTalkX';
 
 const TALKX_POLL_INTERVAL = 30_000;

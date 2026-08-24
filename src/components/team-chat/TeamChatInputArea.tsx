@@ -3,7 +3,7 @@ import { useTeamChatDraft } from '@/hooks/useTeamChatDraft';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from '@/components/ui/motion';
 import { RichTextToolbar, RichTextToggle } from '@/features/inbox';
 import { AIRewriteButton } from '@/features/inbox';
 import { TextToAudioButton } from '@/features/inbox';

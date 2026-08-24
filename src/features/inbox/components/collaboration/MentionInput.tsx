@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 
 interface MentionInputProps {
   value: string;
@@ -18,7 +18,13 @@ interface MentionInputProps {
 }
 
 /** Mention Input component for the collaboration section. */
-export function MentionInput({ value, onChange, onSubmit, placeholder, disabled }: MentionInputProps) {
+export function MentionInput({
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+  disabled,
+}: MentionInputProps) {
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
 
@@ -48,29 +54,54 @@ export function MentionInput({ value, onChange, onSubmit, placeholder, disabled 
     setShowMentions(false);
   };
 
-  const filteredAgents = agents?.filter(a => a.name.toLowerCase().includes(mentionFilter)) || [];
+  const filteredAgents = agents?.filter((a) => a.name.toLowerCase().includes(mentionFilter)) || [];
 
   return (
     <div className="relative">
       <div className="flex gap-2">
-        <Input value={value} onChange={handleInputChange} placeholder={placeholder} disabled={disabled}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !showMentions) { e.preventDefault(); onSubmit(); } }}
-          className="flex-1" />
-        <Button aria-label="Enviar" onClick={onSubmit} disabled={disabled || !value.trim()} size="icon">
-          <Send className="w-4 h-4" />
+        <Input
+          value={value}
+          onChange={handleInputChange}
+          placeholder={placeholder}
+          disabled={disabled}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !showMentions) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+          className="flex-1"
+        />
+        <Button
+          aria-label="Enviar"
+          onClick={onSubmit}
+          disabled={disabled || !value.trim()}
+          size="icon"
+        >
+          <Send className="h-4 w-4" />
         </Button>
       </div>
       <AnimatePresence>
         {showMentions && filteredAgents.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className="absolute bottom-full left-0 right-0 mb-1 bg-popover border rounded-lg shadow-lg overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute bottom-full left-0 right-0 mb-1 overflow-hidden rounded-lg border bg-popover shadow-lg"
+          >
             <ScrollArea className="max-h-48">
               {filteredAgents.map((agent) => (
-                <button type="button" key={agent.id} className="w-full flex items-center gap-2 p-2 hover:bg-muted text-left"
-                  onClick={() => handleSelectMention(agent)}>
-                  <Avatar className="w-6 h-6">
+                <button
+                  type="button"
+                  key={agent.id}
+                  className="flex w-full items-center gap-2 p-2 text-left hover:bg-muted"
+                  onClick={() => handleSelectMention(agent)}
+                >
+                  <Avatar className="h-6 w-6">
                     <AvatarImage src={agent.avatar_url || undefined} alt={agent.name} />
-                    <AvatarFallback className="text-xs">{agent.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback className="text-xs">
+                      {agent.name.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <span className="text-sm">{agent.name}</span>
                 </button>

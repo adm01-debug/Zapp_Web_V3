@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { ExternalLink, Play, Globe, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DOMPurify from 'dompurify';

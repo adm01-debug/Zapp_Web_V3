@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from '@/components/ui/motion';
 import { AlertTriangle, Loader2, MessageCircle } from 'lucide-react';
 import type { VoiceAgentPhase } from '@/features/inbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';

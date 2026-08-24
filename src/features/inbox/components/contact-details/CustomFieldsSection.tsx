@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ListChecks, Loader2, Plus, Pencil, Trash2, Check, X } from 'lucide-react';

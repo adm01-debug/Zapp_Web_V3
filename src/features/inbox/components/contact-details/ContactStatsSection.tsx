@@ -1,7 +1,7 @@
 import { MessageSquare, Clock, Star, Users, TrendingUp, TrendingDown } from 'lucide-react';
 import { useContactDetailStats } from '../../hooks/useContactDetailStats';
 import { Skeleton } from '@/components/ui/skeleton';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 
 interface ContactStatsSectionProps {

@@ -4,7 +4,7 @@ import { useSLARulesCounts } from '@/features/sla/hooks/useSLARulesCounts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { LayoutGrid } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { SCOPE_TABS } from './sla/sla-utils';
 import { ScopeRulesList } from './sla/ScopeRulesList';
 import { SLARuleScope } from '@/features/sla';
@@ -15,7 +15,12 @@ export function SLARulesManager() {
 
   const ruleCounts = useMemo(() => {
     const counts: Record<SLARuleScope, number> = {
-      contact: 0, company: 0, job_title: 0, contact_type: 0, queue: 0, agent: 0,
+      contact: 0,
+      company: 0,
+      job_title: 0,
+      contact_type: 0,
+      queue: 0,
+      agent: 0,
     };
     for (const row of rows) {
       if (row.contact_id) counts.contact++;

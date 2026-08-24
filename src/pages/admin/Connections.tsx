@@ -32,7 +32,7 @@ import { runConnectionDiagnostics } from '@/lib/diagnostics';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('Connections');
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 
 interface SystemConnection {
   id: string;
@@ -446,7 +446,8 @@ export default function AdminConnectionsPage() {
                         onChange={(e) => setDraftUrl(e.target.value)}
                         readOnly={!editOpen}
                         className="font-mono text-xs"
-                      /> {/* @technical */}
+                      />{' '}
+                      {/* @technical */}
                     </div>
                     <div className="space-y-2">
                       <Label>Chave Anon (Public)</Label>
@@ -463,7 +464,8 @@ export default function AdminConnectionsPage() {
                         readOnly={!editOpen}
                         placeholder={editOpen ? 'eyJhbGciOi...' : ''}
                         className="font-mono text-xs"
-                      /> {/* @technical */}
+                      />{' '}
+                      {/* @technical */}
                     </div>
                     {editOpen && (
                       <p className="text-[11px] text-muted-foreground">
@@ -710,8 +712,7 @@ export default function AdminConnectionsPage() {
               <Card className="border-accent/20 bg-accent/5">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Cpu className="h-5 w-5 text-accent" /> MCP (Model Context Protocol) para
-                    Claude
+                    <Cpu className="h-5 w-5 text-accent" /> MCP (Model Context Protocol) para Claude
                   </CardTitle>
                   <CardDescription>
                     Permita que instâncias do Claude Desktop ou AI Gateway acessem dados do ZAPP Web
@@ -753,7 +754,9 @@ export default function AdminConnectionsPage() {
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto whitespace-pre rounded border border-secondary/20 bg-muted p-3 font-mono text-[10px]"> {/* @technical */}
+                  <div className="overflow-x-auto whitespace-pre rounded border border-secondary/20 bg-muted p-3 font-mono text-[10px]">
+                    {' '}
+                    {/* @technical */}
                     {`"mcpServers": {
   "zapp-web": {
     "command": "npx",

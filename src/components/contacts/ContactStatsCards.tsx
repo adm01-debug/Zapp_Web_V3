@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Users, UserPlus, Building, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -48,9 +48,21 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
         </linearGradient>
       </defs>
       <path d={areaD} fill={`url(#spark-${color.replace(/[^a-z0-9]/g, '')})`} />
-      <path d={pathD} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       {/* End dot */}
-      <circle cx={Number(points[points.length - 1].split(',')[0])} cy={Number(points[points.length - 1].split(',')[1])} r="2" fill={color} />
+      <circle
+        cx={Number(points[points.length - 1].split(',')[0])}
+        cy={Number(points[points.length - 1].split(',')[1])}
+        r="2"
+        fill={color}
+      />
     </svg>
   );
 }
@@ -59,7 +71,7 @@ function getWeeklyGrowth(contacts: { created_at: string }[], weeks = 6): number[
   const now = new Date();
   const buckets: number[] = Array(weeks).fill(0);
 
-  contacts.forEach(c => {
+  contacts.forEach((c) => {
     const created = new Date(c.created_at);
     const weeksAgo = Math.floor((now.getTime() - created.getTime()) / (7 * 24 * 60 * 60 * 1000));
     if (weeksAgo >= 0 && weeksAgo < weeks) {
@@ -68,12 +80,14 @@ function getWeeklyGrowth(contacts: { created_at: string }[], weeks = 6): number[
   });
 
   // Convert to cumulative
-  let running = contacts.filter(c => {
-    const weeksAgo = Math.floor((now.getTime() - new Date(c.created_at).getTime()) / (7 * 24 * 60 * 60 * 1000));
+  let running = contacts.filter((c) => {
+    const weeksAgo = Math.floor(
+      (now.getTime() - new Date(c.created_at).getTime()) / (7 * 24 * 60 * 60 * 1000)
+    );
     return weeksAgo >= weeks;
   }).length;
 
-  return buckets.map(count => {
+  return buckets.map((count) => {
     running += count;
     return running;
   });
@@ -93,11 +107,14 @@ const TYPE_LABELS: Record<string, string> = {
 
 /** Contact Stats Cards function. */
 export function ContactStatsCards({
-  totalCount, contactCountByType, uniqueCompanies, contacts,
+  totalCount,
+  contactCountByType,
+  uniqueCompanies,
+  contacts,
 }: ContactStatsCardsProps) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const recentCount = contacts.filter(c => new Date(c.created_at) >= thirtyDaysAgo).length;
+  const recentCount = contacts.filter((c) => new Date(c.created_at) >= thirtyDaysAgo).length;
 
   const topType = Object.entries(contactCountByType)
     .filter(([key]) => key !== 'all')
@@ -161,14 +178,19 @@ export function ContactStatsCards({
   ];
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+    >
       {stats.map((stat) => (
         <motion.div
           key={stat.label}
           variants={item}
           whileHover={{ y: -4, transition: { duration: 0.2 } }}
           className={cn(
-            "relative rounded-xl border bg-card p-4 overflow-hidden group hover:shadow-xl hover:shadow-primary/5 transition-all duration-300",
+            'group relative overflow-hidden rounded-xl border bg-card p-4 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5',
             stat.border
           )}
         >
@@ -180,11 +202,14 @@ export function ContactStatsCards({
                   {stat.value.toLocaleString('pt-BR')}
                 </p>
                 {stat.change !== null && stat.change !== 0 && (
-                  <span className={cn(
-                    "text-[10px] font-semibold",
-                    stat.change > 0 ? 'text-[hsl(142_71%_45%)]' : 'text-destructive'
-                  )}>
-                    {stat.change > 0 ? '+' : ''}{stat.change}%
+                  <span
+                    className={cn(
+                      'text-[10px] font-semibold',
+                      stat.change > 0 ? 'text-[hsl(142_71%_45%)]' : 'text-destructive'
+                    )}
+                  >
+                    {stat.change > 0 ? '+' : ''}
+                    {stat.change}%
                   </span>
                 )}
               </div>
@@ -192,8 +217,8 @@ export function ContactStatsCards({
                 <p className="text-[10px] text-muted-foreground">{stat.suffix}</p>
               )}
             </div>
-            <div className={cn("rounded-lg p-2.5", stat.bg)}>
-              <stat.icon className={cn("w-5 h-5", stat.color)} />
+            <div className={cn('rounded-lg p-2.5', stat.bg)}>
+              <stat.icon className={cn('h-5 w-5', stat.color)} />
             </div>
           </div>
 
@@ -205,10 +230,12 @@ export function ContactStatsCards({
           )}
 
           {/* Decorative glow */}
-          <div className={cn(
-            "absolute -bottom-4 -right-4 w-20 h-20 rounded-full opacity-[0.07] blur-2xl",
-            stat.bg.replace('/10', '')
-          )} />
+          <div
+            className={cn(
+              'absolute -bottom-4 -right-4 h-20 w-20 rounded-full opacity-[0.07] blur-2xl',
+              stat.bg.replace('/10', '')
+            )}
+          />
         </motion.div>
       ))}
     </motion.div>
