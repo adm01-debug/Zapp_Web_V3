@@ -258,10 +258,10 @@ export const ChatMessagesArea = memo(
             const lines = Math.ceil(content.length / 60);
             h = Math.max(80, 70 + lines * 22);
           }
-          // BUG-21: incrementos para recursos que aumentam a altura do bubble
-          if (item.replyTo) h += 56; // citação (reply) no topo do bubble
+          // BUG-21 (E43): incrementos calibrados conforme plano
+          if (item.replyTo) h += 52; // citação (reply) no topo do bubble
           if (Array.isArray(item.reactions) && item.reactions.length > 0) {
-            h += 24; // linha de reações
+            h += 28; // linha de reações (inclui padding top)
           }
           if (
             item.interactive &&
