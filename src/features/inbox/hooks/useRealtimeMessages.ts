@@ -23,6 +23,16 @@ import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { isValidUUID } from '@/utils/uuid';
 export type { MessageBatcherStatus } from './realtime/useMessageUpdateBatcher';
 
+export function shouldInvalidateOnUpdate(
+  payload: {
+    new?: { contact_id?: string | null } | null;
+    old?: { contact_id?: string | null } | null;
+  },
+  activeContactId: string
+): boolean {
+  return payload.new?.contact_id === activeContactId || payload.old?.contact_id === activeContactId;
+}
+
 const log = getLogger('RealtimeMessages');
 // F4-01: paginação por cursor — os limites fixos SEEDED_CONTACT_LIMIT=500 /
 // RECENT_MESSAGES_LIMIT=1000 (que carregavam o inbox inteiro a cada
@@ -573,10 +583,7 @@ export function useRealtimeMessages() {
       }
 
       commitConversations(
-        buildConversations(
-          [...contactsPage, ...messageContacts],
-          normalizedMessages
-        )
+        buildConversations([...contactsPage, ...messageContacts], normalizedMessages)
       );
     } catch (err) {
       log.error('Error fetching conversations:', err);
@@ -601,16 +608,17 @@ export function useRealtimeMessages() {
     setLoadingMoreConversations(true);
     try {
       const [contactsPage, messagesPage] = await Promise.all([
-        hasMoreContactsRef.current ? fetchContactsPage(contactsCursorRef.current) : Promise.resolve([] as ConversationContact[]),
-        hasMoreMessagesRef.current ? fetchMessagesPage(messagesCursorRef.current) : Promise.resolve([] as RealtimeMessage[]),
+        hasMoreContactsRef.current
+          ? fetchContactsPage(contactsCursorRef.current)
+          : Promise.resolve([] as ConversationContact[]),
+        hasMoreMessagesRef.current
+          ? fetchMessagesPage(messagesCursorRef.current)
+          : Promise.resolve([] as RealtimeMessage[]),
       ]);
       if (!isMountedRef.current) return;
 
       if (contactsPage.length > 0) {
-        loadedContactsRef.current = dedupeContacts([
-          ...loadedContactsRef.current,
-          ...contactsPage,
-        ]);
+        loadedContactsRef.current = dedupeContacts([...loadedContactsRef.current, ...contactsPage]);
         contactsCursorRef.current =
           contactsPage.length === CONTACTS_PAGE_SIZE
             ? cursorFromContact(contactsPage[contactsPage.length - 1])
@@ -621,10 +629,7 @@ export function useRealtimeMessages() {
       hasMoreContactsRef.current = contactsCursorRef.current !== null;
 
       if (messagesPage.length > 0) {
-        loadedMessagesRef.current = dedupeMessages([
-          ...loadedMessagesRef.current,
-          ...messagesPage,
-        ]);
+        loadedMessagesRef.current = dedupeMessages([...loadedMessagesRef.current, ...messagesPage]);
         messagesCursorRef.current =
           messagesPage.length === MESSAGES_PAGE_SIZE
             ? cursorFromMessage(messagesPage[messagesPage.length - 1])
@@ -647,9 +652,7 @@ export function useRealtimeMessages() {
         ]);
       }
 
-      commitConversations(
-        buildConversations(loadedContactsRef.current, loadedMessagesRef.current)
-      );
+      commitConversations(buildConversations(loadedContactsRef.current, loadedMessagesRef.current));
     } catch (err) {
       log.error('Error loading more conversations:', err);
       if (isMountedRef.current) {
@@ -766,7 +769,12 @@ export function useRealtimeMessages() {
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // E31: classifica CHANNEL_ERROR/TIMED_OUT (transiente vs real) com o
           // mesmo padrão dos hooks irmãos (useMessagesCursor/useIncomingCallBroadcast).
-          void logChannelError(log, '[useRealtimeMessages] subscription status:', lastConnectedAtMs, status);
+          void logChannelError(
+            log,
+            '[useRealtimeMessages] subscription status:',
+            lastConnectedAtMs,
+            status
+          );
           log.debug('Subscription status', { status });
         } else {
           log.debug('Subscription status', { status });
