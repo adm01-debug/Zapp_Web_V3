@@ -162,17 +162,21 @@ export const ChatPanelHeader = memo(function ChatPanelHeader({
               {conversation.contact.name}
             </h3>
             {conversation.sentiment === 'critical' && (
-              <span className="animate-pulse text-destructive" title="Sentimento Crítico">
+              <span
+                className="animate-pulse text-destructive"
+                aria-label="Sentimento Crítico"
+                role="img"
+              >
                 🔥
               </span>
             )}
             {conversation.sentiment === 'negative' && (
-              <span className="text-destructive/80" title="Sentimento Negativo">
+              <span className="text-destructive/80" aria-label="Sentimento Negativo" role="img">
                 😡
               </span>
             )}
             {conversation.sentiment === 'positive' && (
-              <span className="text-success" title="Sentimento Positivo">
+              <span className="text-success" aria-label="Sentimento Positivo" role="img">
                 🌟
               </span>
             )}
