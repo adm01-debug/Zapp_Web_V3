@@ -126,6 +126,10 @@ export async function pingSupabaseBackend(force = false): Promise<boolean> {
     // reiniciando rotas) = alcançável. TypeError só ocorre em falha real de
     // rede/DNS/timeout. Isso elimina o falso backend-down de produção causado
     // pelo preflight do header apikey durante o restart do Kong.
+    // NOTA (fix 2026-08-24): o 401 visível em logs de producao NAO vem deste
+    // probe (modo no-cors retorna resposta opaca — status HTTP invisivel ao
+    // browser). A fonte real era supabase.auth.getUser() chamado a cada montagem
+    // de useMessageSignature.ts; corrigido para useAuth().user (sem HTTP).
     await fetch(`${url}/auth/v1/health`, {
       method: 'GET',
       mode: 'no-cors',
@@ -248,9 +252,7 @@ function stopHeartbeat(): void {
  * Assina mudanças de conectividade. Inicia o heartbeat no 1º subscriber e
  * para no último. Retorna unsubscribe.
  */
-export function subscribeSupabaseConnectivity(
-  listener: SupabaseConnectivityListener
-): () => void {
+export function subscribeSupabaseConnectivity(listener: SupabaseConnectivityListener): () => void {
   listeners.add(listener);
   listenerCount += 1;
   if (listenerCount === 1) startHeartbeat();

@@ -14,6 +14,7 @@ import { toast } from '@/hooks/use-toast';
 import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useMessageSignature } from '@/features/inbox';
 import { useChatMediaSending } from '../hooks/useChatMediaSending';
+import { useDebouncedSaveSettings } from '../hooks/useDebouncedSaveSettings';
 import { resolveContactRef, isUuidRef } from '../utils/contactRef';
 import { CRMAutoSync } from './CRMAutoSync';
 import { ChatToolPanels } from './chat/ChatToolPanels';
@@ -216,34 +217,8 @@ export function ChatPanel({
     instanceNameProp
   );
 
-  const saveSettingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Ref que sempre aponta para a versão mais recente de saveSettings
-  // sem causar re-run do cleanup effect a cada mudança de settings.
-  const saveSettingsRef = useRef<() => Promise<boolean>>(saveSettings);
-  useEffect(() => {
-    saveSettingsRef.current = saveSettings;
-  }, [saveSettings]);
+  const debouncedSave = useDebouncedSaveSettings(saveSettings);
 
-  const debouncedSave = useCallback(() => {
-    if (saveSettingsTimerRef.current !== null) clearTimeout(saveSettingsTimerRef.current);
-    saveSettingsTimerRef.current = setTimeout(() => {
-      saveSettingsTimerRef.current = null;
-      void saveSettingsRef.current();
-    }, 500);
-  }, []);
-
-  // Cleanup no unmount: salva apenas se havia save pendente (debounce não disparou)
-  // []: roda UMA VEZ no mount; cleanup roda no unmount. Sem deps = sem cleanup espúrio.
-  useEffect(
-    () => () => {
-      if (saveSettingsTimerRef.current !== null) {
-        clearTimeout(saveSettingsTimerRef.current);
-        saveSettingsTimerRef.current = null;
-        void saveSettingsRef.current();
-      }
-    },
-    []
-  );
   useEffect(
     () => () => {
       if (focusTimerRef.current !== null) clearTimeout(focusTimerRef.current);

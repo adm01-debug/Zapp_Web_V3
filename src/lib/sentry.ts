@@ -67,6 +67,19 @@ export function initSentry(): boolean {
         browserTracingIntegration(),
         replayIntegration({ maskAllText: true, blockAllMedia: true }),
       ],
+      ignoreErrors: [
+        // Erros de semáforo/fila Supabase — ruído de pico de carga, não bug.
+        // 75+ ocorrências por sessão consumiam quota do Sentry (tunnel 429).
+        'SupabaseQueueSaturatedError',
+        'SupabaseQueueTimeoutError',
+        /slot acquire aborted/,
+        /queue saturated/,
+        /queue wait timed out/,
+        // AbortError de unmount React — navegação normal entre contatos.
+        // Já filtrado em consoleErrorFilter, mas Sentry SDK pode capturar
+        // antes do beforeSend em alguns caminhos (promise rejection global).
+        'AbortError',
+      ],
       // Don't send if user opted out (LGPD friendly)
       beforeSend(event) {
         // Filtra ruído benigno (extensões browser, ResizeObserver loop,
