@@ -2,7 +2,7 @@
 
 **Projeto:** zapp-web-v3 · **Banco:** Supabase self-hosted (PostgreSQL 15.8)
 **Coletado em:** 2026-08-04 (sessão de auditoria de reconciliação)
-**Método:** SQL read-only via MCP `supabase_db_query` (endpoint `supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp`)
+**Método:** SQL read-only via MCP `supabase_db_query` (endpoint `supabase-mcp.atomicabr.com.br/s-REDACTED-rotacionado-20260824/mcp`)
 **Regras:** apenas SELECT; toda evidência acompanhada do SQL executado e do resultado.
 **Arquivo:** `docs/reconciliation/02_backend.md` (+ `02_backend.json`)
 
