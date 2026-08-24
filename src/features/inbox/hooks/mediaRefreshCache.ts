@@ -40,6 +40,25 @@ export function mediaCacheConfigure(opts: { maxBytes?: number; maxEntries?: numb
   if (opts.maxEntries !== undefined) maxCacheEntries = opts.maxEntries;
 }
 
+/**
+ * Tipos de mensagem WhatsApp que nunca produzem base64 válido via Evolution API.
+ * Extraído de useMediaUrl.ts (E21/A13) para evitar duplicação.
+ * Consumidores: useMediaUrl.ts, MediaRefreshKey em MessageBubble/ChatMessageBubble.
+ */
+export const MEDIA_REFRESH_SKIP_TYPES = new Set([
+  'sticker',
+  'ephemeral',
+  'ptv', // view-once video
+  'viewOnce',
+  'vcard',
+  'contact',
+  'location',
+  'liveLocation',
+  'reaction',
+  'poll',
+  'pollUpdate',
+]);
+
 /** Lê uma chave e promove para MRU. Retorna `undefined` quando ausente. */
 export function mediaCacheGet(key: string): string | undefined {
   const value = cache.get(key);
