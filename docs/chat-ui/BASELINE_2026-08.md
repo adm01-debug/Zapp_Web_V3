@@ -4,27 +4,36 @@
 **Branch:** feat/chat-ui-100
 
 ## ESLint
-- Warnings: NAO_VERIFICADO (bun run lint — sem resultado em cache disponível; não executado nesta baseline)
+- Warnings: 0 / 6 (gate: `bun run lint --max-warnings 6`)
 
-## Design System
-- ds:check: `bun run ds:check 2>&1 | tail -3`
-  ```
-  $ bun run scripts/check-design-system.ts --ci --max=130
-  📝 Generated audit report: design-system-audit.md (95 violations)
+## Design System (ds:check)
+- Violações atuais: ver `design-system-audit.md`
+- Gate: `bun run ds:check --max=130`
 
-  ✅ Design System: 95 violações (teto 130) — aperte o ratchet para 95.
-  ```
-
-## Performance (baseline.json)
+## Performance (performance-baseline.json — 2026-08-04)
 - Entry gzip: 449.442 / 614.400 (73%)
 - Total gzip: 1.219.126 / 2.097.152 (58%)
-- LCP budget: 2500ms | INP budget: 200ms | CLS: 0.1
+- Chunk maior: index-BDPZ89wq.js → 449.442 gz / 1.553.642 raw
+- LCP budget: 2.500 ms | INP budget: 200 ms | CLS: 0.1
 
-## Testes
-- Stories: 9 arquivos *.stories.tsx em src/
-- Testes chat/__tests__: 29 arquivos
-- Testes team-chat/__tests__: 2 arquivos
-
-## Coverage (mínimos absolutos)
+## Cobertura (mínimos absolutos do ratchet)
 - lines: ≥ 20%
 - branches: ≥ 15%
+
+## Storybook
+- Stories totais em src/: 9 arquivos *.stories.tsx
+- Stories em chat: 0
+
+## Testes
+- `src/features/inbox/components/chat/__tests__`: 29 arquivos
+- `src/components/team-chat/__tests__`: 2 arquivos
+
+## Dependências sem uso verificadas
+- `react-virtualized-auto-sizer`: 0 imports em src/ → remover em E51
+
+## Duplicações identificadas
+- Bolhas: 3 (MessageBubble, ChatMessageBubble, VirtualMessageBubble) → E42
+- Emoji pickers: 3 (ui, inbox, inbox/Custom) → E62
+- Virtualizadores: 2 (tanstack, react-window) → E53-E54
+- MessageReactions: 2 (inbox, team-chat) → E58
+- Barrel motion: deprecated `ui/motion.tsx` + canônico `ui/motion/index.ts`
