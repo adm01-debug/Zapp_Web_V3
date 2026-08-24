@@ -5,13 +5,14 @@ import { getLogger } from '@/lib/logger';
 
 const log = getLogger('useConversationTasksData');
 
-export async function fetchConversationTasks(contactId: string) {
+export async function fetchConversationTasks(contactId: string, signal?: AbortSignal) {
   if (!isValidUUID(contactId)) return [];
   const { data } = await supabase
     .from('conversation_tasks')
     .select('*')
     .eq('contact_id', contactId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .abortSignal(signal);
   return data ?? [];
 }
 

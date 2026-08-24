@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { isValidUUID } from '@/utils/uuid';
 
-export async function fetchReminders(contactId: string, profileId: string) {
+export async function fetchReminders(contactId: string, profileId: string, signal?: AbortSignal) {
   if (!isValidUUID(contactId) || !isValidUUID(profileId)) return [];
   const { data } = await supabase
     .from('reminders')
@@ -9,7 +9,8 @@ export async function fetchReminders(contactId: string, profileId: string) {
     .eq('contact_id', contactId)
     .eq('profile_id', profileId)
     .eq('is_dismissed', false)
-    .order('remind_at', { ascending: true });
+    .order('remind_at', { ascending: true })
+    .abortSignal(signal);
   return data ?? [];
 }
 
