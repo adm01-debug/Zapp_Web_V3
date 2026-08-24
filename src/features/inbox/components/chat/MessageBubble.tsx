@@ -94,7 +94,9 @@ export const MessageBubble = memo(function MessageBubble({
   // (era código morto). O gatilho real é onLoadingStatusChange('error') +
   // remount via key para re-disparar o preload. Re-render não re-dispara nada;
   // troca de URL/mensagem/conversa reseta via efeito.
-  const [avatarPhase, setAvatarPhase] = useState<'idle' | 'backoff' | 'retrying' | 'failed'>('idle');
+  const [avatarPhase, setAvatarPhase] = useState<'idle' | 'backoff' | 'retrying' | 'failed'>(
+    'idle'
+  );
   const [avatarSrc, setAvatarSrc] = useState<string | undefined>(avatarUrl || undefined);
   const avatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -159,11 +161,6 @@ export const MessageBubble = memo(function MessageBubble({
             remoteJid: contactJid,
             fromMe: isSent,
             id: message.external_id,
-            // FIX 2026-08-06 (GAP-01 auditoria mídia): propagar tipo para a
-            // skip-list de mídia — mesmo fix já aplicado em ChatMessageBubble/
-            // VirtualMessageBubble. Sem isso, ptv/ephemeral/vcard disparam
-            // refresh get-media-base64 que sempre falha (WARN spam + toast
-            // "Mídia indisponível" desnecessário) no caminho principal.
             messageType: message.message_type ?? message.type ?? null,
           }
         : undefined,

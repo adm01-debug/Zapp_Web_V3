@@ -573,7 +573,7 @@ describe('P0-7 — toggleSound stale closure is fixed (E17)', () => {
 //      it was a real UUID — JID-derived IDs caused DB error "invalid input syntax".
 // ────────────────────────────────────────────────────────────────────
 describe('P0-8 — isValidUUID guard on handleEditSave prevents invalid DB update (Bloco 7)', () => {
-  const simulateEditSaveBuggy = (messageId: string): 'update' | 'skipped' => {
+  const simulateEditSaveBuggy = (_messageId: string): 'update' | 'skipped' => {
     // BASELINE: no guard, always attempts UPDATE
     return 'update';
   };
@@ -698,10 +698,10 @@ describe('P0-9 — lastFailedSendRef records correct conversationId after switch
 // ────────────────────────────────────────────────────────────────────
 describe('P0-10 — isSendingRef guard prevents simultaneous audio+text send (Bloco 7)', () => {
   it('[REGRESSION] baseline allows audio send even while text is being sent', () => {
-    let isSendingRef = { current: false };
+    const isSendingRef = { current: false };
     let audioSendCount = 0;
 
-    const buggyHandleAudioSend = async (blob: Blob) => {
+    const buggyHandleAudioSend = async (_blob: Blob) => {
       // No guard — proceeds even if isSendingRef.current is true
       audioSendCount++;
     };
@@ -715,7 +715,7 @@ describe('P0-10 — isSendingRef guard prevents simultaneous audio+text send (Bl
     const isSendingRef = { current: false };
     let audioSendCount = 0;
 
-    const fixedHandleAudioSend = async (blob: Blob) => {
+    const fixedHandleAudioSend = async (_blob: Blob) => {
       if (isSendingRef.current) return; // guard added in Bloco 7
       audioSendCount++;
     };
@@ -729,7 +729,7 @@ describe('P0-10 — isSendingRef guard prevents simultaneous audio+text send (Bl
     const isSendingRef = { current: false };
     let audioSendCount = 0;
 
-    const fixedHandleAudioSend = async (blob: Blob) => {
+    const fixedHandleAudioSend = async (_blob: Blob) => {
       if (isSendingRef.current) return;
       audioSendCount++;
     };
@@ -826,7 +826,7 @@ describe('P0-12 — handleScroll timer is cleared on unmount (Bloco 8)', () => {
   it('[REGRESSION] buggy version cannot cancel pending timer after unmount', () => {
     let timerFiredAfterUnmount = false;
     let isMounted = true;
-    let pendingTimerId: ReturnType<typeof setTimeout> | null = null;
+    const _pendingTimerId: ReturnType<typeof setTimeout> | null = null;
 
     const buggyHandleScroll = () => {
       // No stored ID — cannot cancel
