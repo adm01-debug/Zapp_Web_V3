@@ -20,7 +20,7 @@
 #   - `mc ls` colunas: [data hora UTC] tamanho classe arquivo → sort -k1,2
 #   - comparações de data como string "YYYY-MM-DD HH:MM:SS" (ordem lexicográfica
 #     = ordem cronológica neste formato)
-# ═════════════════════════════════════════════════════════��════════════════
+# ═══════════════════════════════════════════════════════════════════════════
 set -u
 
 R2_BUCKET="${R2_BUCKET:-promo-brindes-backups}"
