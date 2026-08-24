@@ -5,6 +5,7 @@ import { Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ELEVENLABS_VOICES, type ElevenLabsVoice } from './VoiceSelector';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/features/auth';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import {
   VoiceChangerHeader,
@@ -34,6 +35,7 @@ export const VoiceChanger = memo(function VoiceChanger({
   initialTaskId,
 }: VoiceChangerProps) {
   const [open, setOpen] = useState(false);
+  const { user: authUser } = useAuth(); // BUG-E: evita supabase.auth.getUser() HTTP na conversao
   const [selectedVoice, setSelectedVoice] = useState<ElevenLabsVoice | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [convertedAudioUrl, setConvertedAudioUrl] = useState<string | null>(null);
@@ -116,9 +118,6 @@ export const VoiceChanger = memo(function VoiceChanger({
       let taskId = activeTaskId;
 
       if (!taskId) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
         const { data: taskRows, error: queueError } = await safeClient.from(
           'voice_conversion_queue',
           (q) =>
@@ -127,7 +126,7 @@ export const VoiceChanger = memo(function VoiceChanger({
                 input_audio_url: audioUrl || 'blob-input',
                 voice_preset: voice.id,
                 status: 'pending',
-                user_id: user?.id,
+                user_id: authUser?.id,
                 message_id: messageId,
                 conversation_id: conversationId,
               })
