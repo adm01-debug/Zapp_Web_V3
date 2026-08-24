@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, Mail, UserPlus } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { toast } from 'sonner';
 
 interface InviteAgentDialogProps {
@@ -32,6 +32,7 @@ export function InviteAgentDialog({ open, onOpenChange }: InviteAgentDialogProps
   const [name, setName] = useState('');
   const [role, setRole] = useState('agent');
   const [isSending, setIsSending] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleInvite = async () => {
     if (!email.trim()) {
@@ -40,13 +41,16 @@ export function InviteAgentDialog({ open, onOpenChange }: InviteAgentDialogProps
     }
 
     setIsSending(true);
-    try {
-      // Send invite email via edge function
-      const { error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: email,
-          subject: 'Convite para a plataforma ZAPP',
-          html: `
+    setFieldErrors({});
+    // Bloco 7 (etapa 80, F1): antes `throw error` caía num catch genérico
+    // ("Verifique a configuração de email") — hardcoded, mesmo quando o 422
+    // apontava um motivo específico (ex.: "to" inválido). invokeEdge nunca
+    // lança; preserva a mensagem real e os fieldErrors do contrato.
+    const result = await invokeEdge('send-email', {
+      body: {
+        to: email,
+        subject: 'Convite para a plataforma ZAPP',
+        html: `
             <h2>Você foi convidado!</h2>
             <p>Olá ${name || 'colega'},</p>
             <p>Você foi convidado para participar da plataforma ZAPP como <strong>${
@@ -58,21 +62,22 @@ export function InviteAgentDialog({ open, onOpenChange }: InviteAgentDialogProps
             }</strong>.</p>
             <p>Acesse a plataforma e crie sua conta para começar.</p>
           `,
-        },
-      });
+      },
+    });
 
-      if (error) throw error;
-
-      toast.success(`Convite enviado para ${email}!`);
-      setEmail('');
-      setName('');
-      setRole('agent');
-      onOpenChange(false);
-    } catch {
-      toast.error('Erro ao enviar convite. Verifique a configuração de email.');
-    } finally {
+    if (!result.ok) {
+      setFieldErrors(result.fieldErrors);
+      toast.error(result.message || 'Erro ao enviar convite. Verifique a configuração de email.');
       setIsSending(false);
+      return;
     }
+
+    toast.success(`Convite enviado para ${email}!`);
+    setEmail('');
+    setName('');
+    setRole('agent');
+    setIsSending(false);
+    onOpenChange(false);
   };
 
   return (
@@ -108,6 +113,11 @@ export function InviteAgentDialog({ open, onOpenChange }: InviteAgentDialogProps
               onChange={(e) => setEmail(e.target.value)}
               placeholder="agente@empresa.com"
             />
+            {fieldErrors.to && (
+              <p role="alert" className="text-xs text-destructive">
+                {fieldErrors.to}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

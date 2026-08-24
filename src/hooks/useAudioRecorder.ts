@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { toast } from '@/hooks/use-toast';
 import { log } from '@/lib/logger';
 import { MAX_PTT_DURATION_SEC } from '@/lib/audio/pttLimits';
@@ -183,19 +184,21 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
 
           // If local transcription is empty and we had issues, try backend STT
           if (transcriptionRef.current.trim() === '' && audioBlob.size > 1000) {
-            try {
-              if (mountedRef.current) setIsTranscribing(true);
-              const { data, error } = await supabase.functions.invoke('speech-to-text', {
-                body: { audio: await blobToBase64(audioBlob) },
-              });
-              if (!error && data?.text && mountedRef.current) {
-                setTranscription(data.text);
-              }
-            } catch (err) {
-              log.error('Backend STT failed:', err);
-            } finally {
-              if (mountedRef.current) setIsTranscribing(false);
+            // Bloco 7 (etapa 82, §D): antes, `!error && data?.text` sem `else`
+            // engolia QUALQUER falha (422/500) em silêncio — nem log, nem
+            // toast; o `catch` só pegava exceção real de rede. Best-effort
+            // por design (sem transcrição local, o usuário só fica sem
+            // legenda), mas agora ao menos visível na depuração.
+            if (mountedRef.current) setIsTranscribing(true);
+            const sttResult = await invokeEdge<{ text?: string }>('speech-to-text', {
+              body: { audio: await blobToBase64(audioBlob) },
+            });
+            if (sttResult.ok && sttResult.data?.text && mountedRef.current) {
+              setTranscription(sttResult.data.text);
+            } else if (!sttResult.ok) {
+              log.error('Backend STT failed:', sttResult.message || sttResult.code);
             }
+            if (mountedRef.current) setIsTranscribing(false);
           }
 
           onRecordingComplete?.(audioBlob, url);

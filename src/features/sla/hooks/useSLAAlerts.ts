@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { queryKeys } from '@/services/api/queryKeys';
 import { useSLAAlertPreferences } from './useSLAAlertPreferences';
 import { isValidUUID } from '@/utils/uuid';
@@ -244,49 +245,57 @@ export function useSLAAlerts(params: SLAAlertParams) {
           toast.warning(title, { description, duration: 6_000, action });
         }
 
-        // Audit trail via Edge Function (service role) — evita RLS/403 do frontend
-        try {
-          const { error: fnError } = await supabase.functions.invoke('sla-alert-log-failure', {
-            body: {
-              contact_id: contactId,
-              attempted_event_type: 'sla_alert',
-              event_type: 'sla_alert',
-              original_metadata: {
-                kind,
-                severity,
-                scope,
-                rule_name: ruleName,
-                duration_ms: durationMs,
-              },
-            },
-          });
-          if (!fnError) {
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.conversationHistory.events(contactId),
-            });
-          }
-        } catch {
-          console.error('[useSLAAlerts] Edge Function failed');
-        }
-
-        // External webhook forwarding (best-effort, fire-and-forget).
-        void supabase.functions
-          .invoke('sla-alert-forward', {
-            body: {
-              contact_id: contactId,
-              contact_name: contactName,
+        // Audit trail via Edge Function (service role) — evita RLS/403 do frontend.
+        // Bloco 7 (etapa 82, §D): antes o catch logava uma string fixa sem o
+        // erro real, e o branch `if (!fnError) {...} ` não tinha `else` — uma
+        // falha do invoke (422/500) era tão silenciosa quanto a de rede.
+        const logResult = await invokeEdge('sla-alert-log-failure', {
+          body: {
+            contact_id: contactId,
+            attempted_event_type: 'sla_alert',
+            event_type: 'sla_alert',
+            original_metadata: {
               kind,
               severity,
-              scope: scope,
+              scope,
               rule_name: ruleName,
               duration_ms: durationMs,
-              occurred_at: new Date().toISOString(),
             },
-          })
-          .then(
-            () => undefined,
-            () => undefined
+          },
+        });
+        if (logResult.ok) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.conversationHistory.events(contactId),
+          });
+        } else {
+          console.error(
+            '[useSLAAlerts] sla-alert-log-failure falhou:',
+            logResult.message || logResult.code
           );
+        }
+
+        // External webhook forwarding (best-effort, fire-and-forget) — antes
+        // `.then(() => undefined, () => undefined)` engolia QUALQUER
+        // resultado, sucesso ou falha, sem log algum.
+        void invokeEdge('sla-alert-forward', {
+          body: {
+            contact_id: contactId,
+            contact_name: contactName,
+            kind,
+            severity,
+            scope: scope,
+            rule_name: ruleName,
+            duration_ms: durationMs,
+            occurred_at: new Date().toISOString(),
+          },
+        }).then((forwardResult) => {
+          if (!forwardResult.ok) {
+            console.warn(
+              '[useSLAAlerts] sla-alert-forward falhou (non-fatal):',
+              forwardResult.message || forwardResult.code
+            );
+          }
+        });
       } finally {
         inflightRef.current.delete(key);
       }

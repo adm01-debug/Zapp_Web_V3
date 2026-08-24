@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { toast } from 'sonner';
 import { useUndoableAction } from '@/hooks/useUndoableAction';
 import { ConversationWithMessages } from '@/features/inbox';
@@ -136,19 +136,22 @@ export function useInboxBulkActions({ refetch, filteredConversations }: UseInbox
 
   const handleBatchFetchAvatars = useCallback(async () => {
     setFetchingAvatars(true);
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke('batch-fetch-avatars');
-      if (fnError) throw fnError;
-      toast.success(
-        `${data?.updated || 0} avatares atualizados de ${data?.processed || 0} contatos.`
-      );
-      refetch();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      toast.error('Erro ao buscar avatares: ' + message);
-    } finally {
+    // Bloco 7 (etapa 82, §D): antes `throw fnError` caía num catch que lia
+    // `err.message` — pra um FunctionsHttpError isso é só "Edge Function
+    // returned a non-2xx status code", não o motivo real do servidor.
+    const result = await invokeEdge<{ updated?: number; processed?: number }>(
+      'batch-fetch-avatars'
+    );
+    if (!result.ok) {
+      toast.error('Erro ao buscar avatares: ' + (result.message || 'Erro desconhecido'));
       setFetchingAvatars(false);
+      return;
     }
+    toast.success(
+      `${result.data?.updated || 0} avatares atualizados de ${result.data?.processed || 0} contatos.`
+    );
+    refetch();
+    setFetchingAvatars(false);
   }, [refetch]);
 
   return {

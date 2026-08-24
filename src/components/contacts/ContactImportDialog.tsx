@@ -25,7 +25,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { parseCsvFile, downloadCsv } from '@/lib/csvUtils';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -144,15 +144,25 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({
 
       setProgress(30);
 
-      const { data, error: fnError } = await supabase.functions.invoke('contacts-import', {
+      // Bloco 7 (etapa 78/80, F5): antes `throw fnError` caía no catch
+      // genérico, que mostrava `String(FunctionsHttpError)` — literalmente
+      // "FunctionsHttpError: Edge Function returned a non-2xx status code",
+      // sem apontar o campo/motivo real (ex.: "workspace_id inválido",
+      // "Máximo 50.000 contatos" do próprio contrato). invokeEdge preserva
+      // a mensagem real do 422.
+      const result = await invokeEdge<ImportResult>('contacts-import', {
         body: { rows },
       });
 
       setProgress(90);
 
-      if (fnError) throw fnError;
+      if (!result.ok) {
+        setError(result.message || 'Erro na importação. Tente novamente.');
+        setProgress(0);
+        return;
+      }
 
-      const res = data as ImportResult; // ignore-audit: narrows Supabase query result to local interface
+      const res = result.data;
       setResult(res);
       setProgress(100);
 
@@ -169,6 +179,8 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({
         }, 2_000);
       }
     } catch (err) {
+      // Sobra pra erros de parsing local do CSV (parseCsvFile/parseRows),
+      // não mais pra falha do invoke — essa agora é tratada acima sem lançar.
       setError(`Erro na importação: ${String(err)}`);
       setProgress(0);
     } finally {
