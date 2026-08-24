@@ -1,4 +1,4 @@
-# Etapas 13/14/15/32 — Cierre Frontend (VALIDATION_PLAN_50_STEPS)
+# Etapas 13/14/15/32 — Cierre Frontend ([`docs/audits/VALIDATION_PLAN_50_STEPS.md`](../audits/VALIDATION_PLAN_50_STEPS.md))
 
 > Auditado: 2026-08-20 · Base: `origin/main` (f749a7d12) · Método: git grep sobre src/, evidencia real, sem invenção.
 > Cierra las 4 etapas pendentes del plan: 13 (permisos), 14 (modales/forms), 15 (consolidar inventario), 32 (matriz recurso × camadas).

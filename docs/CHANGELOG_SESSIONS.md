@@ -205,7 +205,7 @@ Continuação da auditoria da Evolution API iniciada na sessão anterior (PR #88
 
 | Arquivo | Ação | Motivo |
 |---------|------|--------|
-| `VALIDATION_PLAN_50_STEPS.md` | Corrigido: 50/50 → 41/50 (82%) | Tabela de progresso estava inflada incorretamente |
+| [`docs/audits/VALIDATION_PLAN_50_STEPS.md`](audits/VALIDATION_PLAN_50_STEPS.md) | Corrigido: 50/50 → 41/50 (82%) | Tabela de progresso estava inflada incorretamente |
 | `docs/AUDIT_REPORT_2026-08-06.md` | Criado | Relatório síntese dos 5 agentes (78 testes) |
 | `FEATURE_REGISTRY.md` | Criado (sessão anterior) | Inventário de 175 recursos em 15 domínios |
 | `feature_registry.json` | Criado (sessão anterior) | Registro estruturado com FIX-01 documentado |

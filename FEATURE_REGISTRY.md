@@ -385,4 +385,4 @@
 
 *Gerado por auditoria automatizada em 2026-08-06.*
 *Evidências: agentes Evolution API, Frontend Inventory, Backend Inventory (em andamento).*
-*Artefatos correlatos: `VALIDATION_PLAN_50_STEPS.md`, `feature_registry.json`, `feature_registry.csv`*
+*Artefatos correlatos: [`docs/audits/VALIDATION_PLAN_50_STEPS.md`](docs/audits/VALIDATION_PLAN_50_STEPS.md) — feature_registry.csv/json removidos*
