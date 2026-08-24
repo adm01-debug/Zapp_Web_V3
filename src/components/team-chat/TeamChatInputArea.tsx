@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { ComposerCore } from '@/features/composer';
 import { useTeamChatDraft } from '@/hooks/useTeamChatDraft';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -169,56 +170,47 @@ export function TeamChatInputArea({
         onToggle={() => setShowRichToolbar(!showRichToolbar)}
       />
 
-      <div
-        className={cn(
-          'border-t border-border bg-card px-4 py-3',
-          isMobile && 'safe-area-bottom px-2.5 py-2'
+      <AnimatePresence>
+        {isRecordingAudio && (
+          <div className="mb-3 border-t border-border bg-card px-4 pt-3">
+            <AudioRecorder onSend={onAudioSend} onCancel={() => onRecordToggle()} />
+          </div>
         )}
-      >
-        <AnimatePresence>
-          {isRecordingAudio && (
-            <div className="mb-3">
-              <AudioRecorder onSend={onAudioSend} onCancel={() => onRecordToggle()} />
+      </AnimatePresence>
+      <ComposerCore
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          checkForMention(e.target.value, e.target.selectionStart ?? 0);
+        }}
+        onSend={handleSendWithAnimation}
+        onRecordToggle={onRecordToggle}
+        isSending={isPending}
+        canSend={draftHasText && !draftIsOverLimit}
+        isMicActive={isRecordingAudio}
+        isRecordingAudio={isRecordingAudio}
+        isMobile={isMobile}
+        charCount={draft.charCount}
+        charLimit={draft.CHAR_LIMIT}
+        isOverLimit={draftIsOverLimit}
+        isNearLimit={draft.isNearLimit}
+        inputRef={textareaRef}
+        placeholder="Digite uma mensagem... (/ para comandos, @ para mencionar)"
+        ariaLabel="Digite sua mensagem para o chat da equipe"
+        onKeyDown={handleKeyDown}
+        onPaste={draft.handlePaste}
+        onClick={(e) => {
+          const t = e.target as HTMLTextAreaElement;
+          checkForMention(t.value, t.selectionStart ?? 0);
+        }}
+        className="border-t border-border bg-card px-4 py-3"
+        slots={{
+          plusMenuContent: (
+            <div className="flex flex-col gap-1">
+              <TeamFileUploader conversationId={conversationId} onFileSent={onFileSent} />
             </div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {showMarkdownPreview && draft.hasText && showRichToolbar && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-1 max-h-[100px] overflow-y-auto rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm"
-            >
-              <MarkdownPreview text={text} className="leading-relaxed text-foreground" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="flex items-end gap-1.5" role="toolbar" aria-label="Barra de mensagem">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  'shrink-0 touch-manipulation text-muted-foreground hover:bg-muted hover:text-foreground',
-                  isMobile ? 'h-10 w-10' : 'h-9 w-9'
-                )}
-                aria-label="Mais opções"
-              >
-                <Plus className="h-[18px] w-[18px]" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 border-border bg-popover p-2" align="start" side="top">
-              <div className="flex flex-col gap-1">
-                <TeamFileUploader conversationId={conversationId} onFileSent={onFileSent} />
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          <div className="relative min-w-0 flex-1">
+          ),
+          beforeTextarea: (
             <MentionAutocomplete
               inputValue={text}
               cursorPosition={mentionCursorPos}
@@ -226,124 +218,46 @@ export function TeamChatInputArea({
               onClose={closeMention}
               isOpen={mentionOpen}
             />
-            <textarea
-              ref={textareaRef}
-              value={text}
-              aria-label="Digite sua mensagem para o chat da equipe"
-              aria-multiline="true"
-              tabIndex={0}
-              onChange={(e) => {
-                setText(e.target.value);
-                checkForMention(e.target.value, e.target.selectionStart ?? 0);
-              }}
-              onKeyDown={handleKeyDown}
-              onPaste={draft.handlePaste}
-              autoFocus
-              onClick={(e) => {
-                const t = e.target as HTMLTextAreaElement;
-                checkForMention(t.value, t.selectionStart ?? 0);
-              }}
-              placeholder="Digite uma mensagem... (/ para comandos, @ para mencionar)"
-              rows={1}
-              className={cn(
-                'w-full resize-none rounded-xl border border-border/50 bg-transparent text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20',
-                isMobile
-                  ? 'max-h-[200px] min-h-[42px] px-3 py-2.5 text-[16px]'
-                  : 'max-h-[200px] min-h-[40px] px-3 py-2',
-                draft.isOverLimit &&
-                  'border-destructive/50 focus:border-destructive focus:ring-destructive/20'
-              )}
-              aria-describedby={draft.charCount > 0 ? 'team-char-counter' : undefined}
-            />
-            {draft.charCount > 100 && (
-              <span
-                id="team-char-counter"
-                className={cn(
-                  'pointer-events-none absolute bottom-1 right-2 select-none text-[10px]',
-                  draft.isOverLimit
-                    ? 'font-medium text-destructive'
-                    : draft.isNearLimit
-                      ? 'text-warning'
-                      : 'text-muted-foreground/50'
-                )}
+          ),
+          textareaOverlay:
+            showMarkdownPreview && draft.hasText && showRichToolbar ? (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-1 max-h-[100px] overflow-y-auto rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm"
               >
-                {draft.charCount}/{draft.CHAR_LIMIT}
-              </span>
-            )}
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label="Enviar mensagem"
-                  onClick={handleSendWithAnimation}
-                  disabled={!draft.hasText || draft.isOverLimit || isPending}
-                  size="icon"
-                  className={cn(
-                    'shrink-0 touch-manipulation rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-40',
-                    isMobile ? 'h-11 w-11' : 'h-10 w-10',
-                    sendAnimation && 'motion-safe:animate-pulse'
-                  )}
-                >
-                  {isPending ? (
-                    <Loader2 className="h-[18px] w-[18px] animate-spin" />
-                  ) : (
-                    <Send className="h-[18px] w-[18px]" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Enviar (Enter)</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label={isRecordingAudio ? 'Parar gravação' : 'Gravar áudio'}
-                  size="icon"
-                  className={cn(
-                    'shrink-0 touch-manipulation rounded-full transition-all active:scale-95',
-                    isMobile ? 'h-11 w-11' : 'h-10 w-10',
-                    isRecordingAudio
-                      ? 'bg-destructive text-destructive-foreground shadow-lg shadow-destructive/30'
-                      : 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary/90'
-                  )}
-                  onClick={onRecordToggle}
-                >
-                  <Mic className={cn('h-5 w-5', isRecordingAudio && 'motion-safe:animate-pulse')} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {isRecordingAudio ? 'Parar gravação' : 'Gravar áudio'}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-
-          {!isMobile && (
-            <div className="flex shrink-0 items-center gap-0.5">
+                <MarkdownPreview text={text} className="leading-relaxed text-foreground" />
+              </motion.div>
+            ) : null,
+          afterMic: (
+            <>
+              {!isMobile && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {secondaryTools}
+                  <TextToAudioButton inputValue={text} onAudioReady={onAudioSend} />
+                </div>
+              )}
+              {isMobile && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <TeamFileUploader conversationId={conversationId} onFileSent={onFileSent} />
+                </div>
+              )}
+            </>
+          ),
+          footer: isMobile ? (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="scrollbar-none mt-1.5 flex items-center gap-1 overflow-x-auto pb-0.5"
+              role="toolbar"
+              aria-label="Ferramentas de formatação"
+            >
               {secondaryTools}
-              <TextToAudioButton inputValue={text} onAudioReady={onAudioSend} />
-            </div>
-          )}
-          {isMobile && (
-            <div className="flex shrink-0 items-center gap-0.5">
-              <TeamFileUploader conversationId={conversationId} onFileSent={onFileSent} />
-            </div>
-          )}
-        </div>
-
-        {isMobile && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="scrollbar-none mt-1.5 flex items-center gap-1 overflow-x-auto pb-0.5"
-            role="toolbar"
-            aria-label="Ferramentas de formatação"
-          >
-            {secondaryTools}
-          </motion.div>
-        )}
-      </div>
+            </motion.div>
+          ) : undefined,
+        }}
+      ></ComposerCore>
     </>
   );
 }
