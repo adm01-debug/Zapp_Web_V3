@@ -14,7 +14,7 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { queryKeys } from '@/services/api/queryKeys';
 import { supabase } from '@/integrations/supabase/client';
 import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
-import { Loader2, Lock, ChevronDown, Clock } from 'lucide-react';
+import { Lock, ChevronDown, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getLogger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -30,6 +30,7 @@ import { useConversationReactionsRealtime } from '../../hooks/reactions/useConve
 import { ReactionsBatchProvider } from '../../hooks/reactions/usePreloadConversationReactions';
 
 import type { LoadOlderProps } from './loadOlderTypes';
+import { ChatShimmer } from '@/components/ui/chat-shimmer';
 
 const log = getLogger('ChatMessagesArea');
 
@@ -368,11 +369,7 @@ export const ChatMessagesArea = memo(
           >
             <ChatWatermark />
 
-            {isLoading && (
-              <div className="p-10 text-center">
-                <Loader2 className="mx-auto animate-spin text-primary" />
-              </div>
-            )}
+            {isLoading && <ChatShimmer />}
 
             {messages.length === 0 && !isLoading && (
               <div className="flex h-full items-center justify-center">
