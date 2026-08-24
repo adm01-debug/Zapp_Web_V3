@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { z } from 'zod';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { toast } from 'sonner';
 import { getLogger } from '@/lib/logger';
 
@@ -37,26 +37,31 @@ export function useForgotPassword() {
     }
 
     setLoading(true);
-    try {
-      const { error: invokeError } = await supabase.functions.invoke('request-password-reset', {
-        body: {
-          email,
-          reason: reason || undefined,
-          userAgent: navigator.userAgent,
-        },
-      });
+    // Bloco 7 (etapa 80, F1): antes `throw invokeError` caía num catch
+    // genérico ("Erro ao enviar solicitação. Tente novamente.") mesmo
+    // quando o 422 tinha um motivo específico (ex.: rate-limit, e-mail
+    // malformado além da checagem local). invokeEdge preserva a mensagem
+    // real do servidor sem lançar.
+    const result = await invokeEdge('request-password-reset', {
+      body: {
+        email,
+        reason: reason || undefined,
+        userAgent: navigator.userAgent,
+      },
+    });
 
-      if (invokeError) throw invokeError;
-
-      setSent(true);
-      toast.success('Solicitação enviada! Aguarde a aprovação de um administrador.');
-    } catch (err: unknown) {
-      log.error('Error submitting reset request:', err);
-      setError('Erro ao enviar solicitação. Tente novamente.');
-      toast.error('Erro ao enviar solicitação');
-    } finally {
+    if (!result.ok) {
+      log.error('Error submitting reset request:', result.message || result.code);
+      const message = result.message || 'Erro ao enviar solicitação. Tente novamente.';
+      setError(message);
+      toast.error(message);
       setLoading(false);
+      return;
     }
+
+    setSent(true);
+    toast.success('Solicitação enviada! Aguarde a aprovação de um administrador.');
+    setLoading(false);
   };
 
   return { email, setEmail, reason, setReason, loading, sent, error, handleSubmit };

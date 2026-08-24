@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { sanitizePostgrestFilter } from '@/lib/sanitize';
 import { toast } from 'sonner';
 import { newRequestId } from '@/lib/withRequestId';
@@ -144,7 +145,17 @@ export function useNewConversation(
           throw newContactErr;
         }
         contactId = newContact.id;
-        await supabase.functions.invoke('batch-fetch-avatars');
+        // Bloco 7 (etapa 82, §D): fire-and-forget por design (enriquecimento
+        // de avatar é best-effort, não deve bloquear/alarmar o envio) — mas
+        // antes o resultado era 100% descartado, nem logado. Loga em falha
+        // pra não ficar invisível na depuração, sem virar toast.
+        const avatarResult = await invokeEdge('batch-fetch-avatars');
+        if (!avatarResult.ok) {
+          console.warn(
+            '[useNewConversation] batch-fetch-avatars falhou (non-fatal):',
+            avatarResult.message
+          );
+        }
       }
       if (!contactId) {
         toast.error('Selecione um contato');
@@ -199,17 +210,26 @@ export function useNewConversation(
           messageType: 'text',
           content: sendValidation.data.text,
         });
-        await sendText({
-          remoteJid: toJid(sendValidation.data.number),
-          text: sendValidation.data.text,
-          instance: sendValidation.data.instanceName,
-        }, idemKey);
+        await sendText(
+          {
+            remoteJid: toJid(sendValidation.data.number),
+            text: sendValidation.data.text,
+            instance: sendValidation.data.instanceName,
+          },
+          idemKey
+        );
       } catch (err) {
         sendError = err;
       }
       if (sendError) throw sendError;
       toast.success('Mensagem enviada!');
-      await supabase.functions.invoke('batch-fetch-avatars');
+      const avatarResultAfterSend = await invokeEdge('batch-fetch-avatars');
+      if (!avatarResultAfterSend.ok) {
+        console.warn(
+          '[useNewConversation] batch-fetch-avatars falhou (non-fatal):',
+          avatarResultAfterSend.message
+        );
+      }
       onConversationStarted?.(contactId);
       onClose?.();
       resetForm();

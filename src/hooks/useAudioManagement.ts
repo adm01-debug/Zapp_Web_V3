@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { resolvePublicStorageUrl } from '@/lib/mediaUrl';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { getLogger } from '@/lib/logger';
@@ -620,15 +621,26 @@ export function useAudioPlayer({ audioUrl, messageId, refreshKey }: UseAudioPlay
 
   // ✅ fix: pré-resolve URLs de storage para signed URLs no mount (evita 400 no preload)
   useEffect(() => {
-    if (!audioUrl) { setResolvedUrl(''); return; }
-    if (!audioUrl.includes('/storage/v1/')) { setResolvedUrl(audioUrl); return; }
+    if (!audioUrl) {
+      setResolvedUrl('');
+      return;
+    }
+    if (!audioUrl.includes('/storage/v1/')) {
+      setResolvedUrl(audioUrl);
+      return;
+    }
     let cancelled = false;
     resolveAudioUrl(audioUrl)
-      .then((signed) => { if (!cancelled && signed) setResolvedUrl(signed); })
-      .catch(() => { /* silently ignore: error state handled by player on click */ });
-    return () => { cancelled = true; };
+      .then((signed) => {
+        if (!cancelled && signed) setResolvedUrl(signed);
+      })
+      .catch(() => {
+        /* silently ignore: error state handled by player on click */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [audioUrl, resolveAudioUrl]);
-
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -940,19 +952,20 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
           }
 
           if (transcriptionRef.current.trim() === '' && audioBlob.size > 1000) {
-            try {
-              setIsTranscribing(true);
-              const { data, error } = await supabase.functions.invoke('speech-to-text', {
-                body: { audio: await blobToBase64(audioBlob) },
-              });
-              if (!error && data?.text) {
-                setTranscription(data.text);
-              }
-            } catch (err) {
-              logLib.error('Backend STT failed:', err);
-            } finally {
-              setIsTranscribing(false);
+            // Bloco 7 (etapa 82, §D): antes, `!error && data?.text` sem
+            // `else` engolia QUALQUER falha (422/500) em silêncio — nem log,
+            // nem toast. Best-effort por design, mas agora visível na
+            // depuração.
+            setIsTranscribing(true);
+            const sttResult = await invokeEdge<{ text?: string }>('speech-to-text', {
+              body: { audio: await blobToBase64(audioBlob) },
+            });
+            if (sttResult.ok && sttResult.data?.text) {
+              setTranscription(sttResult.data.text);
+            } else if (!sttResult.ok) {
+              logLib.error('Backend STT failed:', sttResult.message || sttResult.code);
             }
+            setIsTranscribing(false);
           }
 
           onRecordingComplete?.(audioBlob, url);

@@ -46,10 +46,11 @@ vi.mock('@/hooks/useUndoableAction', () => ({
 }));
 
 const mockSupabaseFrom = vi.fn();
+const mockInvoke = vi.fn();
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: (...args: unknown[]) => mockSupabaseFrom(...args),
-    functions: { invoke: vi.fn() },
+    functions: { invoke: (...args: unknown[]) => mockInvoke(...args) },
   },
 }));
 
@@ -328,5 +329,52 @@ describe('useInboxBulkActions — regressão bulkMarkAsRead / bulkTransfer (não
     expect(mockDbFrom).toHaveBeenCalledWith('contacts');
     expect(chain.update).toHaveBeenCalledWith({ queue_id: QUEUE_ID });
     expect(chain.in).toHaveBeenCalledWith('id', [UUID_1]);
+  });
+});
+
+/**
+ * handleBatchFetchAvatars — PLANO-100-CONTRATOS-EDGE Bloco 7, etapa 82 (§D):
+ * antes `throw fnError` caía num catch que lia `err.message` — pra um
+ * FunctionsHttpError isso é só "Edge Function returned a non-2xx status
+ * code", nunca o motivo real do servidor (invokeEdge, migrado nesta etapa,
+ * preserva a mensagem real).
+ */
+describe('useInboxBulkActions — handleBatchFetchAvatars', () => {
+  it('sucesso: toast com contagens reais e refetch', async () => {
+    mockInvoke.mockResolvedValue({ data: { updated: 3, processed: 5 }, error: null });
+    const { result, refetch } = setup();
+
+    await act(async () => {
+      await result.current.handleBatchFetchAvatars();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('batch-fetch-avatars', undefined);
+    expect(toast.success).toHaveBeenCalledWith('3 avatares atualizados de 5 contatos.');
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(result.current.fetchingAvatars).toBe(false);
+  });
+
+  it('422 do servidor: mensagem real no toast (não "Edge Function returned a non-2xx status code")', async () => {
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: {
+        context: {
+          json: vi.fn().mockResolvedValue({
+            error: true,
+            code: 'contract_violation',
+            message: 'workspace inválido',
+          }),
+        },
+      },
+    });
+    const { result, refetch } = setup();
+
+    await act(async () => {
+      await result.current.handleBatchFetchAvatars();
+    });
+
+    expect(toast.error).toHaveBeenCalledWith('Erro ao buscar avatares: workspace inválido');
+    expect(refetch).not.toHaveBeenCalled();
+    expect(result.current.fetchingAvatars).toBe(false);
   });
 });
