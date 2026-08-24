@@ -111,7 +111,7 @@ GRANT EXECUTE ON FUNCTION zapp.get_connection_instance(uuid)         TO authenti
 2. `feature_registry.json` lista 175 recursos em 15 domínios ✅
 3. 7 stubs de RPC documentados corretamente em `docs/RPC_STUBS_STATUS.md` ✅
 4. Feature flags desabilitados: `v2_audio_recorder` (percentage=0), `advanced_transcription`, `realtime_metrics` ✅
-5. `VALIDATION_PLAN_50_STEPS.md` corrigido nesta sessão: progresso real **41/50 (82%)** ← era 50/50 (100%) incorreto
+5. [`docs/audits/VALIDATION_PLAN_50_STEPS.md`](audits/VALIDATION_PLAN_50_STEPS.md) corrigido nesta sessão: progresso real **41/50 (82%)** ← era 50/50 (100%) incorreto
 
 ### Ressalvas ⚠️
 6. `FEATURE_REGISTRY.md` lista ~131 recursos vs `feature_registry.json` com 175 — inconsistência entre documentos
@@ -157,7 +157,7 @@ GRANT EXECUTE ON FUNCTION zapp.get_connection_instance(uuid)         TO authenti
    - Causa comportamento indeterminado na CLI
 
 ### Ressalvas ⚠️
-9. `VALIDATION_PLAN_50_STEPS.md` declarava 50/50 completo quando 9 etapas estavam pendentes (corrigido)
+9. [`docs/audits/VALIDATION_PLAN_50_STEPS.md`](audits/VALIDATION_PLAN_50_STEPS.md) declarava 50/50 completo quando 9 etapas estavam pendentes (corrigido)
 10. `docs/SCHEMA_SNAPSHOT.md` com dados de 2026-08-04 (2 dias desatualizado após FIX-01)
 
 ---

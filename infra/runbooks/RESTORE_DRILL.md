@@ -84,7 +84,11 @@ marcador — removê-lo cedo demais esconde o incidente em vez de fechá-lo.
    ignorados, contagens de sanidade) — o drill E93 (2026-08-17) é o baseline.
 4. Meta: **0 erros ignorados**. Os 2 erros conhecidos acima têm correção própria
    (limpar FK órfã de `evolution_whatsapp_status`; incluir/normalizar
-   `mv_system_status` no dump ou pós-restore).
+   `mv_system_status` no dump ou pós-restore) — **materializada** em
+   [`scripts/sql/restore-drill-fixups.sql`](../../scripts/sql/restore-drill-fixups.sql)
+   (2026-08-24): roda no banco descartável pós-`pg_restore`; §1 limpa o órfão da
+   FK (com teto de segurança de 15 órfãos — acima disso o drill PARA para
+   investigar) e §2 recria a `mv_system_status` + REFRESH.
 
 > Nota da sessão 2026-08-20: a re-execução remota do passo 1 via exec não
 > concluiu (env do container `postgres-backup-daily` não expõe as credenciais em

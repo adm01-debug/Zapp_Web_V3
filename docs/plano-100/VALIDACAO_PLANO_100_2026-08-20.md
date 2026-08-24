@@ -103,8 +103,8 @@ definidos abaixo). Nenhuma etapa ficou sem tratamento.**
 | 35 | ✅ | Decisão documentada (ARQUITETURA_CANONICA §3): **multi-app por design** — `financeiro`/`artes`/`bpm`/`vendas`/`email_app` são os outros painéis da casa (stacks 140/139/169/182 rodando). |
 | 36 | ✅ | Ownership confirmado: apps distintos no mesmo Postgres com RLS próprio. |
 | 37 | ✅ | 1 único `pg_temp` ao vivo (sessão ativa) — órfãos já limpos. |
-| 38 | 🟡 | 992 fns em `zapp` confirmadas. Auditoria de mortas exige telemetria (`track_functions`) — metodologia registrada; execução em janela (ligar telemetria 7d → colher → podar). |
-| 39 | 🟡 | 401 fns em `extensions` = majoritariamente das extensões instaladas; separação padrão×custom na mesma janela do 38. |
+| 38 | 🟡▶️ | 992 fns em `zapp` confirmadas. Auditoria de mortas exige telemetria (`track_functions`) — ▶️ **pacote pronto (2026-08-24)**: runbook [`TRACK_FUNCTIONS_JANELA_7D.md`](../../infra/runbooks/TRACK_FUNCTIONS_JANELA_7D.md) + coleta/poda em `scripts/sql/track-functions-*.sql`. Aplicação (`ALTER SYSTEM SET track_functions='all'` + baseline) requer superuser na VPS — aprovado pelo dono, aguardando janela. |
+| 39 | 🟡▶️ | 401 fns em `extensions` = majoritariamente das extensões instaladas; ▶️ separação padrão×custom scriptada (§2b da coleta — `pg_depend deptype='e'`), roda na mesma janela do 38. |
 | 40 | ✅ | Mapa completo levantado: 83 FKs cross-schema no perímetro — 40+ `zapp→evo.evolution_contacts`, 25 `zapp→auth.users`, 6 `email_app→evo/zapp`, 3 `evo→ops` (vps_*), 1 `zapp→vault`. **Zero FK de negócio `evo→zapp`.** |
 | 41 | ✅ | 10 `rpc_boundary_*` existentes e enumeradas (apply_lid_mappings, insert_consumer_stats, log_audit, normalize_send_jid, raise/resolve_alert, register_media, system_health_score, touch_contact, upsert_status). |
 | 42 | ✅ | Drift fechado em 2026-08-20 (`MIGRATION_DRIFT_2026-08-20.md` + stamps): 0 pendentes de apply. |
@@ -188,8 +188,8 @@ definidos abaixo). Nenhuma etapa ficou sem tratamento.**
 | 95 | ✅▶️ | `.hermes-pr-body.md` removido (0ea06c6); ▶️ `test.txt` (resíduo do commit "test") removido. |
 | 96 | 🔧▶️ | Auditoria refeita nesta sessão: 36 vars conferidas contra o código; ▶️ `.env.example` corrigido (aliases fora; `VITE_SUPABASE_PROJECT_ID` dentro). Recomendação: gate de CI validando `.env.example`×código (não criado — evitar mais um workflow sem decisão do dono; ver etapa 68). |
 | 97 | ▶️ | CLAUDE.md **corrigido contra o banco vivo** (topologia/realtime estavam invertidos — achado nº 3); contagens atualizadas (cron 239, vault 37); IPs reais → `<IP-VPS>` no CLAUDE.md e ESTADO.md (conformidade com a regra do AGENTS.md:66); contradição de domínio canônico resolvida. HERMES/AGENTS sem mudanças necessárias além disso. |
-| 98 | 🟡 | Grafo stale (construído em `3fcc322`; HEAD avançou). Rebuild só roda no container claude-code da VPS (comando no CLAUDE.md, ~2,5min) — pendência operacional pós-merge (o grafo deve ser rebuildado APÓS este PR, senão fica stale de novo). |
-| 99 | 🟡▶️ | ▶️ Raiz reduzida nesta sessão (test.txt, PLANO-ESTADO, zero-success → docs/ci, QUALITY-GATE-FIX-PLAN → docs/ci): 53→49 itens visíveis. Follow-up: mover os 4 relatórios de auditoria restantes (`REGRESSION_SIMULATION_REPORT`, `VALIDATION_REPORT_PHD`, `VALIDATION_PLAN_50_STEPS`, `RLS_AUDIT_REPORT`) atualizando os links que apontam para eles. |
+| 98 | ✅ | ▶️ **CONCLUÍDO em 2026-08-24** (commit `c3e3c01c7`) — grafo rebuildado (19.104 nós, 45.482 arestas, inclui 406 migrations SQL). `.gitattributes` registra merge driver; `.graphifyignore` adicionado. |
+| 99 | ✅ | ▶️ Raiz reduzida nesta sessão (test.txt, PLANO-ESTADO, zero-success → docs/ci, QUALITY-GATE-FIX-PLAN → docs/ci): 53→49 itens visíveis. ✅ **CONCLUÍDO** nesta sessão: 4 relatórios movidos para [`docs/audits/`](docs/audits/) com links atualizados (`REGRESSION_SIMULATION_REPORT.md`, `VALIDATION_REPORT_PHD.md`, `VALIDATION_PLAN_50_STEPS.md`, `RLS_AUDIT_REPORT.md`). |
 | 100 | ▶️ | **`docs/ARQUITETURA_CANONICA.md`** criado — hosting, DB, edge, secrets, deploy, observabilidade e regras permanentes, com estado verificado ao vivo. |
 
 ---
@@ -209,12 +209,12 @@ definidos abaixo). Nenhuma etapa ficou sem tratamento.**
 
 | Prioridade | Item | Ação objetiva |
 |---|---|---|
-| **P0** | Offsite supabase-db parado desde 08-10 | Runbook `RESTORE_DRILL.md` §2 — verificar credencial R2 (suspeita: rotação do stack 261), religar, backfill, remover marcador |
-| **P1** | Lacunas no daily evolution-db (5 dias) | Ver logs do `postgres-backup-daily` nos dias falhos; avaliar retry/alerta de ausência |
-| **P1** | Restore com 19 erros ignorados | Limpar FK órfã de `evolution_whatsapp_status`; tratar `mv_system_status` no fluxo de dump/restore |
+| **P0** | Offsite supabase-db parado desde 08-10 | ▶️ **Discrepância resolvida por análise de código (2026-08-24):** sentinel `last_offsite_at` = 24/08 09:29 com flag real pós-AG-EX-17 (stack de 08-06 corrige flag `false` hardcoded) ⇒ offsite **provavelmente recuperado** entre 20 e 24/08. Verificação final do R2 pendente (1 comando em `P0_OFFSITE_FAILED_STATUS.md`). Marcador de 08-10 é legítimo (criado por código já corrigido) |
+| **P1** | Lacunas no daily evolution-db (5 dias) | Ver logs do `postgres-backup-daily` nos dias falhos; avaliar retry/alerta de ausência — script `scripts/alert-missing-dumps.sh` criado (2026-08-24), agendar na VPS |
+| **P1** | Restore com 19 erros ignorados | ▶️ **Fixups materializados (2026-08-24):** [`scripts/sql/restore-drill-fixups.sql`](../../scripts/sql/restore-drill-fixups.sql) — §1 limpa órfão da FK (teto de 15) + §2 recria `mv_system_status` + REFRESH. Execução do drill na VPS pendente |
 | P2 | `migration-smoke-test` zero-success ativo em PR | ✅ Causa raiz consertada neste PR (PEP 668 no runner: pip global/--user recusado e erro engolido por `2>/dev/null` — o job morria no gate de sintaxe antes de aplicar qualquer migration). Fix: venv + `--break-system-packages` + erro visível |
-| P2 | `zapp-schema-drift-gate` (job `drift-check`) **vermelho na `main` em todos os runs de 2026-08-20** (pré-existente a este PR) | O snapshot versionado nunca foi regenerado após o fechamento do drift das 684 migrations — 11.995 linhas divergem (ex.: funções de sentinela FDW aplicadas direto no banco). Remédio desenhado pelo próprio workflow: `workflow_dispatch` com regen do snapshot — **decisão do dono** (aceita o estado atual do banco como novo baseline versionado) |
+| P2 | `zapp-schema-drift-gate` (job `drift-check`) **vermelho na `main`** | ▶️ **Investigado (2026-08-24, decisão do dono: investigar antes do regen):** divergência atual = **4.170 linhas** (não 11.995 — snapshot regenerado em 21/08 09:39 reduziu). Decomposição do run 32711639089: (a) migrations legítimas pós-regen (sicoob 20260821005000, SLA 20260821010000/20260822114406, materializações 20260821* — maioria, benigno) + (b) **tuning autovacuum sem migration** em `webhook_events_processed`/`app_notifications` (gap I7 real) → materializado em `20260824120000`. Caminho pro verde: aplicar migration → `workflow_dispatch regen=true` → run seguinte. Detalhe: `docs/audits/DRIFT_GATE_INVESTIGACAO_2026-08-24.md` |
 | P2 | Rate-limit nas 19 públicas sem limiter / unificação CORS / HMAC ad-hoc ×8 | Janela de edge functions (mapas prontos nas etapas 27–29) |
 | P2 | `evo.idx_recon_coverage_daily_snapshot_date` duplicado | DROP no repo **evolution-stack** (fronteira de DDL) |
-| P2 | Rebuild do graphify pós-merge | Comando no CLAUDE.md (container claude-code) |
-| P3 | Consolidação de watchdogs (55) · redução de runners (51) · filter-repo do histórico (9) · endurecer ai-agent-pr-policy (70) · mover 4 relatórios da raiz (99) | Decisões do dono com desenho registrado nesta matriz |
+| P2 | Rebuild do graphify pós-merge | ✅ **CONCLUÍDO em 2026-08-24** (commit `c3e3c01c7`) — ver etapa 98 |
+| P3 | Consolidação de watchdogs (55) · redução de runners (51) · filter-repo do histórico (9) · endurecer ai-agent-pr-policy (70) | Decisões do dono com desenho registrado nesta matriz |
