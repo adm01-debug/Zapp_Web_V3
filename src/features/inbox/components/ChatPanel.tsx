@@ -217,21 +217,32 @@ export function ChatPanel({
   );
 
   const saveSettingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref que sempre aponta para a versão mais recente de saveSettings
+  // sem causar re-run do cleanup effect a cada mudança de settings.
+  const saveSettingsRef = useRef<() => Promise<boolean>>(saveSettings);
+  useEffect(() => {
+    saveSettingsRef.current = saveSettings;
+  }, [saveSettings]);
+
   const debouncedSave = useCallback(() => {
     if (saveSettingsTimerRef.current !== null) clearTimeout(saveSettingsTimerRef.current);
     saveSettingsTimerRef.current = setTimeout(() => {
       saveSettingsTimerRef.current = null;
-      void saveSettings();
+      void saveSettingsRef.current();
     }, 500);
-  }, [saveSettings]);
+  }, []);
+
+  // Cleanup no unmount: salva apenas se havia save pendente (debounce não disparou)
+  // []: roda UMA VEZ no mount; cleanup roda no unmount. Sem deps = sem cleanup espúrio.
   useEffect(
     () => () => {
       if (saveSettingsTimerRef.current !== null) {
         clearTimeout(saveSettingsTimerRef.current);
-        void saveSettings();
+        saveSettingsTimerRef.current = null;
+        void saveSettingsRef.current();
       }
     },
-    [saveSettings]
+    []
   );
   useEffect(
     () => () => {
@@ -264,10 +275,6 @@ export function ChatPanel({
     onVoiceChange: handleVoiceChange,
     onSpeedChange: handleSpeedChange,
   });
-  useEffect(() => {
-    if (settings.tts_voice_id) setVoiceId(settings.tts_voice_id);
-    if (settings.tts_speed !== undefined) setSpeed(settings.tts_speed);
-  }, [settings.tts_voice_id, settings.tts_speed, setVoiceId, setSpeed]);
 
   const handlers = useChatPanelHandlers({
     conversationId: conversation.id ?? '',
@@ -460,59 +467,80 @@ export function ChatPanel({
     onToggleDetails?.();
   }, [onToggleDetails]);
 
-  const handlePollSent = useCallback(async (poll: { name: string; options: string[] }) => {
-    if (!isValidUUID(conversation.contact.id)) return;
-    try {
-      const ref = resolveContactRef(conversation.contact.id);
-      if (!isUuidRef(ref)) return;
-      await dbFrom('messages').insert({
-        contact_id: ref.uuid,
-        whatsapp_connection_id: whatsappConnectionId,
-        content: `📊 *Enquete:* ${poll.name}\n${poll.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`,
-        message_type: 'text',
-        sender: 'agent',
-        status: 'pending',
-      });
-    } catch (err) {
-      log.error('Failed to insert poll message', err);
-    }
-  }, [conversation.contact.id, whatsappConnectionId]);
+  const handlePollSent = useCallback(
+    async (poll: { name: string; options: string[] }) => {
+      if (!isValidUUID(conversation.contact.id)) return;
+      try {
+        const ref = resolveContactRef(conversation.contact.id);
+        if (!isUuidRef(ref)) return;
+        await dbFrom('messages').insert({
+          contact_id: ref.uuid,
+          whatsapp_connection_id: whatsappConnectionId,
+          content: `📊 *Enquete:* ${poll.name}\n${poll.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`,
+          message_type: 'text',
+          sender: 'agent',
+          status: 'pending',
+        });
+      } catch (err) {
+        log.error('Failed to insert poll message', err);
+      }
+    },
+    [conversation.contact.id, whatsappConnectionId]
+  );
 
-  const handleContactSent = useCallback(async (contactName: string) => {
-    if (!isValidUUID(conversation.contact.id)) return;
-    try {
-      const ref = resolveContactRef(conversation.contact.id);
-      if (!isUuidRef(ref)) return;
-      await dbFrom('messages').insert({
-        contact_id: ref.uuid,
-        whatsapp_connection_id: whatsappConnectionId,
-        content: `📇 Cartão de contato: ${contactName}`,
-        message_type: 'text',
-        sender: 'agent',
-        status: 'pending',
-      });
-    } catch (err) {
-      log.error('Failed to insert contact card message', err);
-    }
-  }, [conversation.contact.id, whatsappConnectionId]);
+  const handleContactSent = useCallback(
+    async (contactName: string) => {
+      if (!isValidUUID(conversation.contact.id)) return;
+      try {
+        const ref = resolveContactRef(conversation.contact.id);
+        if (!isUuidRef(ref)) return;
+        await dbFrom('messages').insert({
+          contact_id: ref.uuid,
+          whatsapp_connection_id: whatsappConnectionId,
+          content: `📇 Cartão de contato: ${contactName}`,
+          message_type: 'text',
+          sender: 'agent',
+          status: 'pending',
+        });
+      } catch (err) {
+        log.error('Failed to insert contact card message', err);
+      }
+    },
+    [conversation.contact.id, whatsappConnectionId]
+  );
 
   // ── Bloco 6: stable callbacks para ChatInputArea (React.memo) ────────────
-  const { setIsWhisper, handleSend, setReplyToMessage, setIsRecordingAudio,
-          handleAudioSend, setInputValue } = handlers;
+  const {
+    setIsWhisper,
+    handleSend,
+    setReplyToMessage,
+    setIsRecordingAudio,
+    handleAudioSend,
+    setInputValue,
+  } = handlers;
   const cbToggleWhisper = useCallback(() => setIsWhisper((v) => !v), [setIsWhisper]);
   const cbSend = useCallback((att?: File[]) => handleSend(att), [handleSend]);
   const cbCancelReply = useCallback(() => setReplyToMessage(null), [setReplyToMessage]);
   const cbCloseSlashCommands = useCallback(() => closeDialog('slashCommands'), [closeDialog]);
   const cbRecordToggle = useCallback(() => setIsRecordingAudio((v) => !v), [setIsRecordingAudio]);
-  const cbAudioSend = useCallback((blob: Blob) => handleAudioSend(blob, onSendAudio), [handleAudioSend, onSendAudio]);
+  const cbAudioSend = useCallback(
+    (blob: Blob) => handleAudioSend(blob, onSendAudio),
+    [handleAudioSend, onSendAudio]
+  );
   const cbAudioCancel = useCallback(() => setIsRecordingAudio(false), [setIsRecordingAudio]);
-  const cbOpenInteractiveBuilder = useCallback(() => openDialog('interactiveBuilder'), [openDialog]);
+  const cbOpenInteractiveBuilder = useCallback(
+    () => openDialog('interactiveBuilder'),
+    [openDialog]
+  );
   const cbOpenScheduleDialog = useCallback(() => openDialog('scheduleDialog'), [openDialog]);
   const cbOpenLocationPicker = useCallback(() => openDialog('locationPicker'), [openDialog]);
   const cbOpenCatalog = useCallback(() => openDialog('catalogDirect'), [openDialog]);
   const cbSelectSuggestion = useCallback((text: string) => setInputValue(text), [setInputValue]);
   const cbSelectTemplate = useCallback((text: string) => setInputValue(text), [setInputValue]);
-  const cbOpenTeamFiles = useCallback(() => handleSetActiveTool('teamFiles'), [handleSetActiveTool]);
+  const cbOpenTeamFiles = useCallback(
+    () => handleSetActiveTool('teamFiles'),
+    [handleSetActiveTool]
+  );
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
