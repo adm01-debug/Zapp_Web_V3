@@ -300,9 +300,9 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
                   : isOverLimit
                     ? COPY.composer.tooltipOverLimit
                     : !canSend
-                      ? '📎 Clique para anexar arquivo'
+                      ? COPY.composer.tooltipAttach
                       : isEditing
-                        ? '✅ Confirmar alterações'
+                        ? COPY.composer.tooltipEdit
                         : COPY.composer.sendTooltipDefault}
               </TooltipContent>
             </Tooltip>
