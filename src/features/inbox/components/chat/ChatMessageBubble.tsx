@@ -221,8 +221,12 @@ export function ChatMessageBubble({
             message.isWhisper
               ? 'rounded-2xl border border-warning/40 bg-warning/10 text-warning-foreground shadow-inner'
               : isSent
-                ? 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                : 'rounded-2xl rounded-bl-md border border-border/70 bg-card text-card-foreground shadow-sm'
+                ? isFeatureEnabled('chat_bubble_v2')
+                  ? bubbleVariants({ side: 'sent' })
+                  : 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                : isFeatureEnabled('chat_bubble_v2')
+                  ? bubbleVariants({ side: 'received' })
+                  : 'rounded-2xl rounded-bl-md border border-border/70 bg-card text-card-foreground shadow-sm'
           )}
         >
           {/* Quoted message (reply) */}

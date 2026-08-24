@@ -5,7 +5,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const bubbleVariants = cva('relative max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm', {
+export const bubbleVariants = cva('relative max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm', {
   variants: {
     side: {
       sent: 'ml-auto bg-chat-sent text-chat-sent-fg rounded-br-sm',

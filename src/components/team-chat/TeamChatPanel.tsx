@@ -57,6 +57,8 @@ import { TeamMessage } from '@/hooks/useTeamChat';
 import { isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { MessageStatus } from '@/features/inbox/components/MessageStatus';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import { bubbleVariants } from '@/components/ui/bubble';
 
 function formatTime(dateStr: string) {
   return format(new Date(dateStr), 'HH:mm');
@@ -180,7 +182,10 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
     isToggling,
   } = useTeamMessageReactions(conversation.id);
   const dynamicRowHeight = useDynamicRowHeight({ defaultRowHeight: 100, key: conversation.id });
-  const { signedUrls } = useSignedMediaUrlBatch(filteredMessages, supabase as unknown as Parameters<typeof useSignedMediaUrlBatch>[1]);
+  const { signedUrls } = useSignedMediaUrlBatch(
+    filteredMessages,
+    supabase as unknown as Parameters<typeof useSignedMediaUrlBatch>[1]
+  );
   const itemHeights = useRef<Record<number, number>>({});
 
   // Keyboard shortcuts for chat
@@ -542,8 +547,12 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
                                     className={cn(
                                       'relative rounded-2xl px-3.5 py-2 shadow-none',
                                       isMine
-                                        ? 'rounded-br-md bg-primary text-primary-foreground'
-                                        : 'rounded-bl-md border border-border/20 bg-muted/30 text-foreground'
+                                        ? isFeatureEnabled('chat_bubble_v2')
+                                          ? bubbleVariants({ side: 'sent' })
+                                          : 'rounded-br-md bg-primary text-primary-foreground'
+                                        : isFeatureEnabled('chat_bubble_v2')
+                                          ? bubbleVariants({ side: 'received' })
+                                          : 'rounded-bl-md border border-border/20 bg-muted/30 text-foreground'
                                     )}
                                   >
                                     {!isMine && conversation.type === 'group' && (
