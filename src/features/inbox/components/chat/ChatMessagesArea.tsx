@@ -279,7 +279,7 @@ export const ChatMessagesArea = memo(
         count: messages.length,
         getScrollElement: () => scrollContainerRef.current,
         estimateSize: getItemSize,
-        overscan: 12,
+        overscan: 8, // E88 — reduzido de 12 (padrão recomendado TanStack 5-10)
         measureElement: (el) => el.getBoundingClientRect().height,
         // scrollMargin informa ao tanstack-virtual o offset entre o topo do
         // scroll container e o inicio do bloco virtual, ajustando o calculo de
