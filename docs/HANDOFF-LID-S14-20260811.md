@@ -273,7 +273,7 @@ Workflow dispatch:  curl -X POST ... /actions/workflows/328150092/dispatches
 
 ### MCPs
 ```
-Supabase Self-Hosted: https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp
+Supabase Self-Hosted: https://supabase-mcp.atomicabr.com.br/s-REDACTED-rotacionado-20260824/mcp
 Portainer:            https://portainer-mcp.atomicabr.com.br/mcp
 GitHub FOREVER:       https://github-mcp-server.adm01.workers.dev/mcp
 ```

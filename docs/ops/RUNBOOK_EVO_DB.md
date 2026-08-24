@@ -5,7 +5,7 @@
 - Host: 10.0.1.98:5432 (interno Docker Swarm)
 - DB: postgres
 - Schema: evo + zapp + ops
-- MCP: https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp
+- MCP: https://supabase-mcp.atomicabr.com.br/s-REDACTED-rotacionado-20260824/mcp
 
 ## Monitoramento Diário
 
