@@ -48,6 +48,9 @@ interface ChatHeaderProps {
   onSpeedChange?: (speed: number) => void;
   onBack?: () => void;
   onCloseConversation?: () => void;
+  onResolveConversation?: () => void;
+  onArchiveConversation?: () => void | Promise<void>;
+  onAddTag?: () => void;
   onGenerateSummary?: (tool?: string) => void;
   failuresOnly?: boolean;
   onToggleFailuresOnly?: () => void;
@@ -76,6 +79,9 @@ export const ChatHeader = memo(function ChatHeader({
   onVoiceChange,
   onBack,
   onCloseConversation,
+  onResolveConversation,
+  onArchiveConversation,
+  onAddTag,
   onGenerateSummary,
   failuresOnly,
   onToggleFailuresOnly,
@@ -87,7 +93,10 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   const { intelligence: intel } = useContactIntelligence(conversation.contact.phone ?? undefined);
   const _briefing = intel?.found ? intel.briefing : null;
-  const { avatarUrl } = useContactAvatar(conversation.contact.remote_jid, conversation.contact.avatar);
+  const { avatarUrl } = useContactAvatar(
+    conversation.contact.remote_jid,
+    conversation.contact.avatar
+  );
   const { density, cycleDensity } = useDensity();
 
   // ─── A4: retry de avatar (1 tentativa após ~800ms, depois placeholder) ─────
@@ -97,7 +106,9 @@ export const ChatHeader = memo(function ChatHeader({
   // via `new Image()` e o onError inline antigo nunca disparava — o gatilho real
   // é onLoadingStatusChange('error') + remount via key. Retry só nasce desse
   // callback (re-render não re-dispara); troca de conversa (URL nova) reseta.
-  const [avatarPhase, setAvatarPhase] = useState<'idle' | 'backoff' | 'retrying' | 'failed'>('idle');
+  const [avatarPhase, setAvatarPhase] = useState<'idle' | 'backoff' | 'retrying' | 'failed'>(
+    'idle'
+  );
   const [avatarSrc, setAvatarSrc] = useState<string | undefined>(avatarUrl || undefined);
   const avatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -417,6 +428,9 @@ export const ChatHeader = memo(function ChatHeader({
           failuresCount={failuresCount}
           hasMoreOlder={hasMoreOlder}
           onCloseConversation={onCloseConversation}
+          onResolve={onResolveConversation}
+          onArchive={onArchiveConversation}
+          onAddTag={onAddTag}
         />
       </div>
     </motion.div>

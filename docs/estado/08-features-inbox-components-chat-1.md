@@ -300,43 +300,48 @@ RichTextToolbar, RichTextToggle, SendErrorBanner, TicketActionsBar
 
 ## 8. Achados
 
-### A1 — Stubs UI visíveis em ChatHeaderMenu (actions desabilitadas)
+> **Reconferido em 2026-08-24** vs HEAD 0f3d7dc98 (branch feat/chat-ui-100).
+> A2 (Favoritar/Fixar/Reportar ligados a messageActions) e A7 (só loga, sem efeito externo) **resolvidos**.
+> A1, A5, A9, A12 **abertos**. A3 **parcial** (substituído em E43-E45). A4, A8 **a verificar**.
+> Runtime: NAO_VERIFICADO até E22.
+
+### [ABERTO] A1 — Stubs UI visíveis em ChatHeaderMenu (actions desabilitadas)
 `ChatHeaderMenu.tsx:58,85` — "Adicionar tag" e "Marcar como resolvido" renderizados como `disabled` sem handler e sem data prevista. Usuário vê itens de menu que nunca ativam, sugerindo feature incompleta.
 
-### A2 — Stubs em MessageHoverToolbar: Favoritar, Fixar, Reportar
+### [RESOLVIDO 2026-08-24] A2 — Stubs em MessageHoverToolbar: Favoritar/Fixar/Reportar/Snooze (todos ligados)
 `MessageHoverToolbar.tsx:188-233` — Três itens do menu de hover (Favoritar ★, Fixar 📌, Responder depois) são `disabled` sem handler. O botão "Reportar" está presente para mensagens inbound mas sem onClick funcional. Quatro ações prometidas sem implementação.
 
-### A3 — BUG-21: estimativa de altura incorreta em virtualização
+### [PARCIAL → E43-E45] A3 — BUG-21: estimativa de altura incorreta em virtualização
 `ChatMessagesArea.tsx:255-266` — O virtualizador usa altura estimada que não recalcula corretamente quando replies aninhados ou reações são adicionadas dinamicamente. Causa desalinhamento de scroll em conversas com alto engajamento.
 
-### A4 — Destructure sem nullcheck em TicketActionsBar
+### [A VERIFICAR] A4 — Destructure sem nullcheck em TicketActionsBar
 `TicketActionsBar.tsx:97` — `const {status, assignedTo, setStatus, assumir, transferir, devolverFila, atribuirAuto} = useTicketStatus(...)` sem guard. Se o hook retornar `undefined` (ex.: erro de contexto), o componente explode em runtime com "Cannot destructure property 'status' of undefined".
 
-### A5 — Props `_onRetry` e `_onRemoveFromQueue` com underscore mas referenciadas
+### [ABERTO] A5 — Props `_onRetry` e `_onRemoveFromQueue` com underscore mas referenciadas
 `ChatInputArea.tsx:159-161` — Props declaradas com prefixo `_` (convenção de "não usar") mas utilizadas nas linhas 377 e 384. Indica refatoração incompleta: ou as props devem ser removidas, ou o prefixo deve ser retirado.
 
-### A6 — `.map()` sem `key` explícita em MessageSendHistorySheet
+### [ABERTO] A6 — `.map()` sem `key` explícita em MessageSendHistorySheet
 `MessageSendHistorySheet.tsx:289` — Lista de tentativas de retry renderizada com `.map()` usando índice implícito. Se a ordem mudar por reordenação do servidor, React vai reutilizar DOM incorretamente.
 
-### A7 — useEffect de tracking pode disparar múltiplas vezes em StrictMode
+### [RESOLVIDO 2026-08-24] A7 — useEffect de tracking pode disparar múltiplas vezes em StrictMode
 `MessageReadStatus.tsx:40-46` — side-effect de "marcar como lido" dentro de `useEffect` com `useRef` de controle. Em StrictMode (dev), o efeito roda 2× na montagem, podendo marcar como lido prematuramente ou duplicar chamadas à Evolution API.
 
-### A8 — Videochamada hardcoded como `undefined`
+### [A VERIFICAR] A8 — Videochamada hardcoded como `undefined`
 `ChatHeader.tsx:246` — Prop/variável de chamada de vídeo atribuída como `undefined` diretamente, fazendo com que o botão correspondente nunca ative. Sem feature flag ou comentário explicativo.
 
-### A9 — ChatSearchResultsList: retorno silencioso e limite fixo
+### [ABERTO] A9 — ChatSearchResultsList: retorno silencioso e limite fixo
 `ChatSearchResultsList.tsx:26` — `return null` silencioso quando não há resultados (sem mensagem "Nenhum resultado encontrado"). `ChatSearchResultsList.tsx:30` — `slice(0, 5)` hardcoded sem configuração; linha 58 exibe "+N mais" mas não há paginação nem link para ver todos.
 
-### A10 — Emojis de sentimento hardcoded em ChatPanelHeader sem fallback acessível
+### [ABERTO] A10 — Emojis de sentimento hardcoded em ChatPanelHeader sem fallback acessível
 `ChatPanelHeader.tsx:155-162` — Emojis 🔥 😡 🌟 para representar sentimento (alto, negativo, neutro) sem `aria-label` ou alternativa textual. Leitores de tela anunciam caracteres unicode brutos.
 
-### A11 — MessageStatusTimestamps: return null sem fallback visual
+### [ABERTO] A11 — MessageStatusTimestamps: return null sem fallback visual
 `MessageStatusTimestamps.tsx:97` — Retorna `null` quando `entries.length === 0`. Pode criar espaço vazio inesperado no layout ao lado do ícone de status, pois o container pai já reservou espaço.
 
-### A12 — Texto "Criptografia de Ponta a Ponta" hardcoded em ChatMessagesArea
+### [ABERTO] A12 — Texto "Criptografia de Ponta a Ponta" hardcoded em ChatMessagesArea
 `ChatMessagesArea.tsx:373-384` — Mensagem decorativa sempre renderizada quando há mensagens, com texto fixo em pt-BR hardcoded. Não configurable, sem i18n, e aparece em todos os workspaces inclusive internacionais.
 
-### A13 — Comentário FIX 2026-08-03 e GAP-01 indicam débitos técnicos ativos
+### [ABERTO] A13 — Comentário FIX 2026-08-03 e GAP-01 indicam débitos técnicos ativos
 `ChatMessagesArea.tsx:103-107` — FIX sobre `messageType` para evitar 23+ tentativas em stickers/ephemeral. `MessageBubble.tsx:112-117` — skip-list de tipos para media refresh. Ambos são workarounds documentados, não soluções definitivas.
 
 *Runtime: NAO_VERIFICADO - nenhuma execucao real foi realizada durante esta analise.*

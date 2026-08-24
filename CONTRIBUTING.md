@@ -91,3 +91,14 @@ O schema `evo` tem dono único: **evolution-stack** (ADR-015). Mudanças que toc
 4. **PRs cross-repo:** todo PR que toca a fronteira cita o issue-link e menciona o ADR-015 na descrição; merge na ordem expand→contract.
 5. **Gates:** migrations novas com `evo.*` no zapp-web-v3 falham o CI (E42); DDL `zapp.*` no evolution-stack falha (E43). Exceções só via allowlist com justificativa.
 6. **Teste:** mudança de contrato exige teste que falhe sem a mudança (RED→GREEN).
+
+## Instalando componentes shadcn/ui
+
+Sempre use o wrapper pinado para Tailwind v3:
+
+```bash
+bash scripts/shadcn-v3.sh add <componente>
+```
+
+O `npx shadcn@latest` instala componentes Tailwind v4 incompatíveis com o
+build atual. O wrapper acima aponta para `shadcn@2.3.0` (última versão v3).
