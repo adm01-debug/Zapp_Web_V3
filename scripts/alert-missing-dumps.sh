@@ -37,7 +37,7 @@ if [ $MISSING -gt 0 ] && [ -n "$ALERT_WEBHOOK" ]; then
           \"type\": \"section\",
           \"text\": {
             \"type\": \"mrkdwn\",
-            \"text\": \"*$MISSING dump(s) ausente(s) no R2*\\n\\nDumps: $MISSING_DUMPS\\n\\nData esperada: $YESTERDAY\\n\\n<https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp|Acessar Supabase MCP>\"
+            \"text\": \"*$MISSING dump(s) ausente(s) no R2*\\n\\nDumps: $MISSING_DUMPS\\n\\nData esperada: $YESTERDAY\\n\\nRunbook: docs/operations/P0_OFFSITE_FAILED_STATUS.md\"
           }
         }
       ]
