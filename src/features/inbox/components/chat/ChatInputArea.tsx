@@ -157,8 +157,6 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
     inputRef,
     onOpenTeamFiles,
     queue: _queue,
-    onRetry: _onRetry,
-    onRemoveFromQueue: _onRemoveFromQueue,
   } = props;
 
   const prevRecordingRef = useRef(isRecordingAudio);

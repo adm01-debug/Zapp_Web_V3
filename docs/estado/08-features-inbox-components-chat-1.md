@@ -308,7 +308,7 @@ RichTextToolbar, RichTextToggle, SendErrorBanner, TicketActionsBar
 ### [ABERTO] A1 — Stubs UI visíveis em ChatHeaderMenu (actions desabilitadas)
 `ChatHeaderMenu.tsx:58,85` — "Adicionar tag" e "Marcar como resolvido" renderizados como `disabled` sem handler e sem data prevista. Usuário vê itens de menu que nunca ativam, sugerindo feature incompleta.
 
-### [RESOLVIDO 2026-08-24] A2 — Stubs em MessageHoverToolbar: Favoritar, Fixar, Reportar
+### [RESOLVIDO 2026-08-24] A2 — Stubs em MessageHoverToolbar: Favoritar/Fixar/Reportar/Snooze (todos ligados)
 `MessageHoverToolbar.tsx:188-233` — Três itens do menu de hover (Favoritar ★, Fixar 📌, Responder depois) são `disabled` sem handler. O botão "Reportar" está presente para mensagens inbound mas sem onClick funcional. Quatro ações prometidas sem implementação.
 
 ### [PARCIAL → E43-E45] A3 — BUG-21: estimativa de altura incorreta em virtualização
