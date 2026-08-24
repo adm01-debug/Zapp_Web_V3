@@ -124,7 +124,7 @@ export const ChatPanelHeader = memo(function ChatPanelHeader({
   const availableTags = (allTags ?? []).filter((t) => !contactTags.some((ct) => ct.id === t.id));
 
   return (
-    <div className="sticky top-0 z-30 flex h-[64px] shrink-0 items-center justify-between border-b border-border/10 bg-background/60 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-3xl transition-all duration-500 md:h-[80px] md:px-8">
+    <div className="sticky top-0 z-30 flex h-[64px] shrink-0 items-center justify-between border-b border-border/10 bg-background/60 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-3xl transition-all duration-500 @container md:h-[80px] md:px-8">
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
         {isMobile && onBack && (
           <Button
@@ -316,10 +316,7 @@ export const ChatPanelHeader = memo(function ChatPanelHeader({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {/* Etapa 42: religado ao ticketStore (paridade com o slash /resolve). */}
-            <DropdownMenuItem
-              disabled={!onResolveConversation}
-              onClick={onResolveConversation}
-            >
+            <DropdownMenuItem disabled={!onResolveConversation} onClick={onResolveConversation}>
               <CheckCircle className="mr-2 h-4 w-4" />
               Marcar como resolvido
             </DropdownMenuItem>

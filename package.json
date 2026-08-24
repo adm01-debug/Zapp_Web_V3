@@ -97,6 +97,7 @@
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@sentry/react": "10.70.0",
     "@supabase/supabase-js": "^2.110.0",
+    "@tailwindcss/container-queries": "^0.1.1",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-virtual": "^3.14.5",
     "baseline-browser-mapping": "^2.10.42",
