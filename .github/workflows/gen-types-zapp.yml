@@ -62,9 +62,9 @@ jobs:
           git add src/integrations/supabase/types.ts
           git commit -m "chore(types): regenerate zapp/evo types [gen-types-zapp workflow]
 
-Schemas: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
-Triggered by: ${{ github.actor }}
-Workflow run: ${{ github.run_id }}"
+          Schemas: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+          Triggered by: ${{ github.actor }}
+          Workflow run: ${{ github.run_id }}"
           git push origin "$BRANCH"
 
       - name: Create PR and auto-merge
@@ -79,11 +79,11 @@ Workflow run: ${{ github.run_id }}"
             --title "chore(types): regenerate zapp/evo types [$(date +%Y-%m-%d)]" \
             --body "Geração automática de \`types.ts\` via workflow \`gen-types-zapp\`.
 
-**Schemas:** \`${{ github.event.inputs.schemas || 'public,zapp,evo' }}\`
-**Triggered by:** \`${{ github.actor }}\`
-**Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          **Schemas:** \`${{ github.event.inputs.schemas || 'public,zapp,evo' }}\`
+          **Triggered by:** \`${{ github.actor }}\`
+          **Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-> Auto-merge via squash será executado imediatamente.")
+          > Auto-merge via squash será executado imediatamente.")
           echo "PR created: $PR_URL"
           # Auto-merge squash (requer branch protection configurado para aceitar)
           gh pr merge "$BRANCH" --squash --auto --delete-branch
