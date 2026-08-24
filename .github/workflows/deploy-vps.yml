@@ -287,88 +287,16 @@ jobs:
           echo "Deploying: ${ZAPP_IMAGE}"
 
           # ============================================================
-          # ETAPA 12 — VPS Disk Defense Plan
-          # FIX: usa ZAPP_IMAGE (SHA-based, imutuavel) em vez de
-          # production-latest (moving tag que gera dangling images).
-          # production-latest ainda e pushado no build para referencia
-          # externa, mas o STACK SWARM referencia a tag SHA imutavel.
-          # Antes: cada deploy = 1 dangling x 51MB ~ 3.5GB/dia.
-          # Depois: stack aponta para SHA imutavel, zero dangling.
           # ============================================================
-          cat > /tmp/compose.yml << 'COMPOSEYML'
-          version: "3.8"
-          services:
-            web:
-              image: ZAPP_IMAGE_PLACEHOLDER
-              networks:
-                - AtomicaBRNet
-                - zapp-net
-              healthcheck:
-                test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
-                interval: 30s
-                timeout: 5s
-                retries: 3
-                start_period: 30s
-              security_opt:
-                - no-new-privileges:true
-              deploy:
-                mode: replicated
-                replicas: 1
-                placement:
-                  constraints:
-                    - node.role == manager
-                labels:
-                  - traefik.enable=true
-                  - "traefik.http.routers.zapp-prod.rule=Host(`zapp.atomicabr.com.br`)"
-                  - traefik.http.services.zapp-prod.loadbalancer.server.port=80
-                  - traefik.http.routers.zapp-prod.service=zapp-prod
-                  - traefik.http.routers.zapp-prod.entrypoints=websecure
-                  - traefik.http.routers.zapp-prod.tls.certresolver=letsencryptresolver
-                  - traefik.http.routers.zapp-prod.tls=true
-                  # Router secundario zappweb.app.br (OC-07, 2026-08-07) —
-                  # no compose inline p/ sobreviver a redeploys (service update
-                  # de label-add e perdido quando o stack e recriado).
-                  - "traefik.http.routers.zappweb.rule=Host(`zappweb.app.br`)"
-                  - traefik.http.services.zappweb.loadbalancer.server.port=80
-                  - traefik.http.routers.zappweb.service=zappweb
-                  - traefik.http.routers.zappweb.entrypoints=websecure
-                  - traefik.http.routers.zappweb.tls.certresolver=letsencryptresolver
-                  - traefik.http.routers.zappweb.tls=true
-                  # Router www.zappweb.app.br (deploy-fix 2026-08-20) — inline p/ sobreviver a redeploys.
-                  - "traefik.http.routers.zappweb-www.rule=Host(`www.zappweb.app.br`)"
-                  - traefik.http.services.zappweb-www.loadbalancer.server.port=80
-                  - traefik.http.routers.zappweb-www.service=zappweb-www
-                  - traefik.http.routers.zappweb-www.entrypoints=websecure
-                  - traefik.http.routers.zappweb-www.tls.certresolver=letsencryptresolver
-                  - traefik.http.routers.zappweb-www.tls=true
-                  - traefik.http.routers.zappweb-www.middlewares=crowdsec-bouncer@docker
-                  - com.centurylinklabs.watchtower.enable=false
-                  - traefik.http.routers.zapp-prod.middlewares=crowdsec-bouncer@docker
-                  - traefik.http.routers.zappweb.middlewares=crowdsec-bouncer@docker
-                  - com.atomicabr.tier=critical
-                update_config:
-                  failure_action: rollback
-                  monitor: 60s
-                  order: start-first
-                rollback_config:
-                  order: start-first
-                  monitor: 60s
-                  failure_action: continue
-                resources:
-                  limits:
-                    memory: 256M
-                    cpus: "0.5"
-          networks:
-            AtomicaBRNet:
-              external: true
-              name: AtomicaBRNet
-            zapp-net:
-              external: true
-              name: zapp-net
-          COMPOSEYML
+          # ETAPA 65 CONCLUÍDA (2026-08-24): deploy lê compose versionado
+          # Fonte única de verdade: infra/docker-compose-zapp-web.yml
+          # ETAPA 12 — VPS Disk Defense Plan (preservado: SHA-based tags)
+          # ============================================================
+          cp infra/docker-compose-zapp-web.yml /tmp/compose.yml
 
-          # Substitui o placeholder pelo SHA-based tag real
-          sed -i "s|ZAPP_IMAGE_PLACEHOLDER|${ZAPP_IMAGE}|g" /tmp/compose.yml
+          # Substitui a variável ${ZAPP_IMAGE} pelo SHA-based tag real
+          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}|g" /tmp/compose.yml
+          echo "✅ Compose versionado usado: infra/docker-compose-zapp-web.yml"
           echo "Image no compose: $(grep 'image:' /tmp/compose.yml | head -1 | xargs)"
 
           STACK_CONTENT=$(cat /tmp/compose.yml | jq -Rs .)
