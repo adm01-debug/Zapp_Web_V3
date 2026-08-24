@@ -364,6 +364,10 @@ export const ChatMessagesArea = memo(
         <ReactionsBatchProvider messageIds={messageIds}>
           <div
             ref={scrollContainerRef}
+            id="chat-messages"
+            role="log"
+            aria-live="polite"
+            aria-label="Mensagens da conversa"
             onScroll={handleScroll}
             className="scrollbar-none relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-background/20 px-4 py-6 md:px-24"
           >

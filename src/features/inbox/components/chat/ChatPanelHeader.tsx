@@ -124,233 +124,241 @@ export const ChatPanelHeader = memo(function ChatPanelHeader({
   const availableTags = (allTags ?? []).filter((t) => !contactTags.some((ct) => ct.id === t.id));
 
   return (
-    <div className="sticky top-0 z-30 flex h-[64px] shrink-0 items-center justify-between border-b border-border/10 bg-background/60 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-3xl transition-all duration-500 @container md:h-[80px] md:px-8">
-      <div className="flex min-w-0 items-center gap-2 md:gap-3">
-        {isMobile && onBack && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0 touch-manipulation rounded-xl transition-all hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary active:scale-95"
-            onClick={onBack}
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        )}
-        <div className="relative shrink-0">
-          <Avatar className="h-9 w-9 border border-border/50 shadow-sm md:h-11 md:w-11">
-            <AvatarImage
-              src={avatarUrl || undefined}
-              alt={conversation.contact.name ?? undefined}
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                (e.target as HTMLImageElement).removeAttribute('src');
-              }}
-            />
-            <AvatarFallback className="bg-primary/15 text-sm font-semibold text-primary">
-              {(conversation.contact.name ?? '')
-                .split(' ')
-                .map((n: string) => n[0])
-                .join('')}
-            </AvatarFallback>
-          </Avatar>
-          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-[hsl(var(--online))]" />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold leading-none tracking-normal text-foreground">
-              {conversation.contact.name}
-            </h3>
-            {conversation.sentiment === 'critical' && (
-              <span
-                className="animate-pulse text-destructive"
-                aria-label="Sentimento Crítico"
-                role="img"
-              >
-                🔥
-              </span>
-            )}
-            {conversation.sentiment === 'negative' && (
-              <span className="text-destructive/80" aria-label="Sentimento Negativo" role="img">
-                😡
-              </span>
-            )}
-            {conversation.sentiment === 'positive' && (
-              <span className="text-success" aria-label="Sentimento Positivo" role="img">
-                🌟
-              </span>
-            )}
-
-            {whisperCount !== undefined && whisperCount > 0 && (
-              <span
-                className="text-warning-accessible inline-flex h-4 items-center rounded-full border border-warning/30 bg-warning/15 px-1.5 text-[10px] font-bold leading-none"
-                title="Mensagens sussurradas"
-              >
-                🤫 {whisperCount}
-              </span>
-            )}
-
-            {conversation.queue && (
-              <Badge
-                variant="outline"
-                className="h-4 border-primary/20 bg-primary/5 px-1.5 text-[10px] font-bold uppercase tracking-wider text-primary"
-                style={{
-                  borderColor: `${conversation.queue.color}40`,
-                  color: conversation.queue.color,
-                }}
-              >
-                {conversation.queue.name}
-              </Badge>
-            )}
-
-            <SLAIndicatorForContact conversation={conversation} />
-
-            {sendState === 'retrying' && (
-              <span className="text-warning-accessible inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/15 px-2 py-0.5 text-[10px] font-medium">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
-                Tentando reenviar…
-              </span>
-            )}
-            {sendState === 'failed' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
-                Última mensagem falhou
-              </span>
-            )}
-          </div>
-          <div className="flex h-4 items-center">
-            {isContactTyping ? (
-              <div className="flex items-center gap-1.5">
-                <TypingIndicatorCompact isVisible={true} className="text-success" />
-                <span className="animate-pulse text-[11px] font-semibold text-success">
-                  digitando…
-                </span>
-              </div>
-            ) : (
-              <div className="group flex cursor-default items-center gap-1.5">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"></span>
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success"></span>
-                </span>
-                <span className="text-[11px] font-medium text-muted-foreground/80 transition-colors group-hover:text-foreground">
-                  Ativo
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="mx-2 hidden h-8 w-px shrink-0 bg-border/40 md:flex" />
-      </div>
-
-      <div className="flex items-center gap-0.5">
-        <ChatHeaderToolbar
-          activeTool={activeTool}
-          showAIAssistant={showAIAssistant}
-          showDetails={showDetails}
-          showSummaryPanel={showSummaryPanel}
-          isSummaryLoading={isSummaryLoading}
-          onOpenSearch={onOpenSearch}
-          onSetActiveTool={onSetActiveTool}
-          onToggleAIAssistant={onToggleAIAssistant}
-          onToggleDetails={onToggleDetails}
-          onGenerateSummary={onGenerateSummary}
-          failuresOnly={failuresOnly}
-          onToggleFailuresOnly={onToggleFailuresOnly}
-          failuresCount={failuresCount}
-          hasMoreOlder={hasMoreOlder}
-          onOpenValidation={onOpenValidation}
-        />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+    <>
+      <a
+        href="#chat-messages"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-background focus:p-2 focus:text-sm focus:shadow"
+      >
+        Ir para mensagens
+      </a>
+      <div className="sticky top-0 z-30 flex h-[64px] shrink-0 items-center justify-between border-b border-border/10 bg-background/60 px-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] backdrop-blur-3xl transition-all duration-500 @container md:h-[80px] md:px-8">
+        <div className="flex min-w-0 items-center gap-2 md:gap-3">
+          {isMobile && onBack && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Mais ações"
-              title="Mais ações"
+              className="h-10 w-10 shrink-0 touch-manipulation rounded-xl transition-all hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary active:scale-95"
+              onClick={onBack}
+              aria-label="Voltar"
             >
-              <MoreVertical className="h-[18px] w-[18px]" />
+              <ArrowLeft className="h-5 w-5" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 border-border bg-popover">
-            <DropdownMenuItem
-              onClick={() =>
-                openChatPopup(conversation.contact.id ?? '', conversation.contact.name ?? '')
-              }
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Abrir em popup
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {/* Etapa 42: religado — tag real do contato via contact_tags (o item era disabled). */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="gap-2">
-                <Tag className="h-4 w-4" />
-                Adicionar tag
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="min-w-[150px] border-border bg-popover">
-                {availableTags.length === 0 ? (
-                  <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                    Nenhuma etiqueta disponível
-                  </DropdownMenuItem>
-                ) : (
-                  availableTags.map((tag) => (
-                    <DropdownMenuItem
-                      key={tag.id}
-                      className="cursor-pointer gap-2 text-xs"
-                      onClick={() => void addTag(tag.id)}
-                    >
-                      <span
-                        className="h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: tag.color || 'var(--primary)' }}
-                      />
-                      {tag.name}
+          )}
+          <div className="relative shrink-0">
+            <Avatar className="h-9 w-9 border border-border/50 shadow-sm md:h-11 md:w-11">
+              <AvatarImage
+                src={avatarUrl || undefined}
+                alt={conversation.contact.name ?? undefined}
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).removeAttribute('src');
+                }}
+              />
+              <AvatarFallback className="bg-primary/15 text-sm font-semibold text-primary">
+                {(conversation.contact.name ?? '')
+                  .split(' ')
+                  .map((n: string) => n[0])
+                  .join('')}
+              </AvatarFallback>
+            </Avatar>
+            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card bg-[hsl(var(--online))]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[15px] font-semibold leading-none tracking-normal text-foreground">
+                {conversation.contact.name}
+              </h3>
+              {conversation.sentiment === 'critical' && (
+                <span
+                  className="animate-pulse text-destructive"
+                  aria-label="Sentimento Crítico"
+                  role="img"
+                >
+                  🔥
+                </span>
+              )}
+              {conversation.sentiment === 'negative' && (
+                <span className="text-destructive/80" aria-label="Sentimento Negativo" role="img">
+                  😡
+                </span>
+              )}
+              {conversation.sentiment === 'positive' && (
+                <span className="text-success" aria-label="Sentimento Positivo" role="img">
+                  🌟
+                </span>
+              )}
+
+              {whisperCount !== undefined && whisperCount > 0 && (
+                <span
+                  className="text-warning-accessible inline-flex h-4 items-center rounded-full border border-warning/30 bg-warning/15 px-1.5 text-[10px] font-bold leading-none"
+                  title="Mensagens sussurradas"
+                >
+                  🤫 {whisperCount}
+                </span>
+              )}
+
+              {conversation.queue && (
+                <Badge
+                  variant="outline"
+                  className="h-4 border-primary/20 bg-primary/5 px-1.5 text-[10px] font-bold uppercase tracking-wider text-primary"
+                  style={{
+                    borderColor: `${conversation.queue.color}40`,
+                    color: conversation.queue.color,
+                  }}
+                >
+                  {conversation.queue.name}
+                </Badge>
+              )}
+
+              <SLAIndicatorForContact conversation={conversation} />
+
+              {sendState === 'retrying' && (
+                <span className="text-warning-accessible inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/15 px-2 py-0.5 text-[10px] font-medium">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+                  Tentando reenviar…
+                </span>
+              )}
+              {sendState === 'failed' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                  Última mensagem falhou
+                </span>
+              )}
+            </div>
+            <div className="flex h-4 items-center">
+              {isContactTyping ? (
+                <div className="flex items-center gap-1.5">
+                  <TypingIndicatorCompact isVisible={true} className="text-success" />
+                  <span className="animate-pulse text-[11px] font-semibold text-success">
+                    digitando…
+                  </span>
+                </div>
+              ) : (
+                <div className="group flex cursor-default items-center gap-1.5">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75"></span>
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success"></span>
+                  </span>
+                  <span className="text-[11px] font-medium text-muted-foreground/80 transition-colors group-hover:text-foreground">
+                    Ativo
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mx-2 hidden h-8 w-px shrink-0 bg-border/40 md:flex" />
+        </div>
+
+        <div className="flex items-center gap-0.5">
+          <ChatHeaderToolbar
+            activeTool={activeTool}
+            showAIAssistant={showAIAssistant}
+            showDetails={showDetails}
+            showSummaryPanel={showSummaryPanel}
+            isSummaryLoading={isSummaryLoading}
+            onOpenSearch={onOpenSearch}
+            onSetActiveTool={onSetActiveTool}
+            onToggleAIAssistant={onToggleAIAssistant}
+            onToggleDetails={onToggleDetails}
+            onGenerateSummary={onGenerateSummary}
+            failuresOnly={failuresOnly}
+            onToggleFailuresOnly={onToggleFailuresOnly}
+            failuresCount={failuresCount}
+            hasMoreOlder={hasMoreOlder}
+            onOpenValidation={onOpenValidation}
+          />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Mais ações"
+                title="Mais ações"
+              >
+                <MoreVertical className="h-[18px] w-[18px]" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 border-border bg-popover">
+              <DropdownMenuItem
+                onClick={() =>
+                  openChatPopup(conversation.contact.id ?? '', conversation.contact.name ?? '')
+                }
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Abrir em popup
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* Etapa 42: religado — tag real do contato via contact_tags (o item era disabled). */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
+                  <Tag className="h-4 w-4" />
+                  Adicionar tag
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-[150px] border-border bg-popover">
+                  {availableTags.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                      Nenhuma etiqueta disponível
                     </DropdownMenuItem>
-                  ))
-                )}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onClick={onOpenTransfer}>
-              <ArrowRight className="mr-2 h-4 w-4" />
-              Transferir
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenSchedule}>
-              <Clock className="mr-2 h-4 w-4" />
-              Agendar mensagem
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {/* Etapa 42: religado ao ticketStore (paridade com o slash /resolve). */}
-            <DropdownMenuItem disabled={!onResolveConversation} onClick={onResolveConversation}>
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Marcar como resolvido
-            </DropdownMenuItem>
-            {/* Arquivar real: soft-delete do contato (religado ao fluxo da
+                  ) : (
+                    availableTags.map((tag) => (
+                      <DropdownMenuItem
+                        key={tag.id}
+                        className="cursor-pointer gap-2 text-xs"
+                        onClick={() => void addTag(tag.id)}
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: tag.color || 'var(--primary)' }}
+                        />
+                        {tag.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onClick={onOpenTransfer}>
+                <ArrowRight className="mr-2 h-4 w-4" />
+                Transferir
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenSchedule}>
+                <Clock className="mr-2 h-4 w-4" />
+                Agendar mensagem
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* Etapa 42: religado ao ticketStore (paridade com o slash /resolve). */}
+              <DropdownMenuItem disabled={!onResolveConversation} onClick={onResolveConversation}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Marcar como resolvido
+              </DropdownMenuItem>
+              {/* Arquivar real: soft-delete do contato (religado ao fluxo da
                 Sidebar/slash — useArchiveConversationActions). Desabilitado
                 quando o ChatPanel não fornece o handler OU o contato é JID
                 externo (não-UUID): o guard da mutation seria no-op silencioso. */}
-            <DropdownMenuItem
-              disabled={!onArchiveConversation || !validContact}
-              onClick={onArchiveConversation}
-              title={
-                !validContact
-                  ? 'Não é possível arquivar contato externo (JID sem cadastro interno)'
-                  : undefined
-              }
-            >
-              <Archive className="mr-2 h-4 w-4" />
-              Arquivar
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={onCloseConversation}
-              className="text-destructive focus:text-destructive"
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Encerrar Conversa
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem
+                disabled={!onArchiveConversation || !validContact}
+                onClick={onArchiveConversation}
+                title={
+                  !validContact
+                    ? 'Não é possível arquivar contato externo (JID sem cadastro interno)'
+                    : undefined
+                }
+              >
+                <Archive className="mr-2 h-4 w-4" />
+                Arquivar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={onCloseConversation}
+                className="text-destructive focus:text-destructive"
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Encerrar Conversa
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-    </div>
+    </>
   );
 });
