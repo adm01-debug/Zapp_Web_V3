@@ -59,6 +59,7 @@ import { ptBR } from 'date-fns/locale';
 import { MessageStatus } from '@/features/inbox/components/MessageStatus';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { bubbleVariants } from '@/components/ui/bubble';
+import { ChatScrollerV2, type ChatScrollerV2Handle } from '@/features/inbox/components/chat/ChatScrollerV2';
 
 function formatTime(dateStr: string) {
   return format(new Date(dateStr), 'HH:mm');
@@ -187,6 +188,8 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
     supabase as unknown as Parameters<typeof useSignedMediaUrlBatch>[1]
   );
   const itemHeights = useRef<Record<number, number>>({});
+  // E50: ref para ChatScrollerV2 quando team_chat_tanstack está ativo
+  const tanstackScrollerRef = useRef<ChatScrollerV2Handle>(null);
 
   // Keyboard shortcuts for chat
   useEffect(() => {
@@ -249,11 +252,13 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
 
   useEffect(() => {
     // If we are at the bottom, stay at the bottom
-    if (isNearBottomRef.current && listRef.current) {
-      const lastIndex = filteredMessages.length - 1;
-      if (lastIndex >= 0) {
-        listRef.current.scrollToRow({ index: lastIndex, align: 'end' });
-      }
+    if (!isNearBottomRef.current) return;
+    const lastIndex = filteredMessages.length - 1;
+    if (lastIndex < 0) return;
+    if (isFeatureEnabled('team_chat_tanstack')) {
+      tanstackScrollerRef.current?.scrollToIndex(lastIndex);
+    } else if (listRef.current) {
+      listRef.current.scrollToRow({ index: lastIndex, align: 'end' });
     }
   }, [filteredMessages, conversation.id, isNearBottomRef, listRef]);
 
