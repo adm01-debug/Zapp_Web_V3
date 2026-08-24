@@ -3,7 +3,7 @@
 
 ## OBRIGATORIO: leia antes de qualquer acao
 
-> **Regra de commits (multi-agente) — atualizada 2026-08-24:** Toda sessao de chat COMMITA o proprio trabalho (codigo, docs, config) — correcao sem commit e bug de processo. Fluxo padrao, igual ao Claude Code online: branch `fix/`|`feat/`|`docs/` -> commit -> push -> **PR para main**. Unica proibicao: push DIRETO na `main` (causa rebases competitivos com a sessao VPS) — merge so via PR com CI verde; o merge que toca `supabase/functions/**` dispara `edge-deploy.yml`. Politica canonica: HERMES.md.
+> **Regra de commits (multi-agente) — v2, 2026-08-24:** Toda sessao de chat COMMITA o proprio trabalho (codigo, docs, config) — correcao sem commit e bug de processo. Fluxo padrao, igual ao Claude Code online: branch `fix/`|`feat/`|`docs/`|`chore/`|`ci/`|`hotfix/` criado de `origin/main` atualizada -> commit -> push -> **PR para `main`**. Push direto na `main` e proibido para qualquer agente/sessao (causa rebases competitivos com a sessao VPS). Merge do PR: ato humano (Joaquim), so com CI verde — a sessao de chat abre o PR e nao o mergeia. Merge que toca `supabase/functions/**` dispara `edge-deploy.yml`. Sessoes concorrentes na mesma maquina: cada uma em worktree propria (`git worktree add`). Politica canonica: HERMES.md.
 > Para agentes Hermes: leia tambem [`HERMES.md`](./HERMES.md) para regras especificas de execucao paralela e estado do framework.
 
 **1. Leia ESTADO.md (raiz do repo) antes de qualquer mudanca.**

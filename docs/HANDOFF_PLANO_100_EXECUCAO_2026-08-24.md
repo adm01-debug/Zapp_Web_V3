@@ -58,9 +58,9 @@ Referenciado no runbook: [`RESTORE_DRILL.md`](../infra/runbooks/RESTORE_DRILL.md
 
 ---
 
-## 📦 NÃO COMMITADO — fila para o container VPS (stack 122)
+## 📦 COMMITADO — via PR #1401 (squash `2cff29b41`) — política de commits v2 (2026-08-24)
 
-**Regra:** sessão de chat não faz push no main. Arquivos novos/modificados aguardando commit pelo agente VPS:
+**Regra vigente:** a própria sessão de chat commita o próprio trabalho — branch `fix/`|`feat/`|`docs/`|`chore/`|`ci/`|`hotfix/` de `origin/main` → push → PR para `main`. Fila abaixo já commitada (registro histórico):
 
 ```
 NOVOS:
@@ -85,7 +85,7 @@ MODIFICADOS:
 
 | # | Ação | Onde | Comando/ref |
 |---|------|------|-------------|
-| 1 | **Commit da fila acima** | container VPS (stack 122) | política HERMES.md |
+| 1 | ~~Commit da fila acima~~ ✅ commitado via PR #1401 (2026-08-24) | — | política v2: HERMES.md |
 | 2 | **Verificar R2** (fecha P0) | container `supabase-backup_backup` | `mc ls --recursive r2/promo-brindes-backups/backups/supabase-db/daily/ \| sort -k2 \| tail -10` — dump de 24/08 presente? → atualizar P0_OFFSITE_FAILED_STATUS.md p/ ✅ e remover marcador |
 | 3 | **Aplicar migration autovacuum** + **regen snapshot** (fecha P2) | db-migrate + `gh workflow run zapp-schema-drift-gate.yml -f regen=true` | ordem: migration ANTES do regen |
 | 4 | **Ligar track_functions** (abre janela 7d) | superuser na VPS | runbook TRACK_FUNCTIONS_JANELA_7D.md dia 0 (ligar + baseline §1) |

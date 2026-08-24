@@ -4,7 +4,7 @@
 **Origem:** auditoria exaustiva da malha de contratos (4 frentes paralelas — núcleo do `contract-kit`, adoção por function, testes/CI, consumo no frontend; leitura linha a linha de 11 arquivos `_shared/` + 122 `index.ts` + camada de invoke do front).
 **Objetivo do usuário:** testes de contrato com validação de schema para **todos** os webhooks e edge functions, garantindo que payloads válidos e inválidos produzam respostas consistentes; envelope 422 único (código, mensagem, lista de campos); casos de campo ausente / tipo errado / valor vazio; versionamento v1/v2 com compatibilidade retroativa durante deprecação.
 
-> **Regra de commits (multi-agente):** este documento é entregável de análise. Correções de código vão por branch + PR (nunca push direto no `main` a partir de sessão de chat) ou delegadas ao container `claude-code` — política canônica em `HERMES.md`/`CLAUDE.md`.
+> **Regra de commits (multi-agente) — v2, 2026-08-24:** este documento é entregável de análise. Correções vão por branch + PR criado pela própria sessão (nunca push direto no `main`) — política canônica em `HERMES.md`/`CLAUDE.md`.
 
 ---
 
@@ -291,5 +291,5 @@ Objetivo do usuário: "versionamento de contratos (v1/v2) e testes garantindo co
 
 ### Armadilhas de execução (deste ambiente)
 - Deno local: a pasta `_shared/__tests__/` mistura `.test.ts` (Deno) e `.spec.ts` (Vitest); rodar só os `*.test.ts` de contrato, não a pasta inteira.
-- Commits/PR: sessão de chat nunca faz push direto no `main` — branch + PR, ou delegar ao container `claude-code` (regra `CLAUDE.md`/`HERMES.md`).
+- Commits/PR: a sessão de chat commita o próprio trabalho — branch + PR, nunca push direto no `main` (regra v2 em `CLAUDE.md`/`HERMES.md`, 2026-08-24).
 - O gate de CI (`deno-contract-tests.yml`) cancela runs de `main` em rajada — validar localmente antes de confiar no verde do GitHub.
