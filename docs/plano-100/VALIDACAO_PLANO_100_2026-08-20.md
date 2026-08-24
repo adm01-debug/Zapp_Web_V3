@@ -13,18 +13,21 @@
 
 ## Placar geral
 
-| Situação | Qtde |
+| Situação (estado FINAL da etapa) | Qtde |
 |---|---|
-| ✅ Já implementado 100% (validado ao vivo) | **47** |
-| ▶️ Implementado **nesta sessão** | **15** |
-| 🔧 Implementado com correções/ajustes | **21** |
-| 🟡 Parcial — backlog objetivo registrado | **16** |
-| N/A (deixou de existir o alvo) | **1** |
+| ✅ Concluída 100% — validada ao vivo (47 puras + 14 fechadas em 24/08 + 3 ✅▶️ + 1 N/A→✅) | **65** |
+| 🔧 Concluída com correções/ressalvas documentadas (13 + 7 🔧▶️) | **20** |
+| 🟡 Parcial — pendência objetiva, dono/janela definidos (8 + 6 🟡▶️) | **14** |
+| N/A (alvo deixou de existir) | **1** |
 | ❌ Não implementado e sem ação | **0** |
 
-**Resultado (atualizado 2026-08-24): 65/100 etapas concluídas (+ 1 N/A, alvo deixou
-de existir), 21 concluídas com ressalvas documentadas, 12 com pendência objetiva
-(dono/janela definidos abaixo). Nenhuma etapa ficou sem tratamento.**
+> ▶️ é sufixo "tocada na sessão de 24/08" (30 etapas), não um estado — por isso
+> não tem linha própria. Contagem mecânica por coluna de status: 47 ✅ + 14 ▶️ +
+> 13 🔧 + 7 🔧▶️ + 6 🟡▶️ + 8 🟡 + 3 ✅▶️ + 1 N/A→✅ + 1 N/A = 100.
+
+**Resultado (atualizado 2026-08-24, recontado mecanicamente na auditoria PhD):
+85/100 com tratamento concluído — 65 ✅ plenas + 20 🔧 com ressalvas —, 14 🟡
+parciais com pendência objetiva, 1 N/A. Nenhuma etapa ficou sem tratamento.**
 *(Fechamentos de 24/08: etapas 38/39 dia 0 · 56 · 57 · 65 · 88 · 98 · 99 —
 ver pendências e tabela por etapa.)*
 

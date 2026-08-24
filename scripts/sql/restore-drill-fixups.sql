@@ -8,6 +8,11 @@
 --   restore bruto: 99 erros → após §0+§3+§4 e replay (§5): 0 erros
 --   decomposição dos 99: 93 cascata pg_cron (mesma instância) + 4 FKs órfãs
 --   + 2 mv_system_status (subsumida pela cascata).
+--   Revalidado em 2026-08-24 (auditoria PhD): arquivo inteiro executado em
+--   UM psql -f com ON_ERROR_STOP=1 (§1 agora é read-only; §4 idempotente).
+--   Os 2 erros restantes do restore bruto (CREATE EXTENSION pg_cron +
+--   COMMENT ON EXTENSION) são artefatos do sandbox same-instance — não
+--   ocorrem em DR real (instância nova instala a extensão normalmente).
 --
 -- Sequência comprovada (ver RESTORE_DRILL.md §3):
 --   1. pg_restore -j4 (99 erros conhecidos)
@@ -16,6 +21,11 @@
 --   4. §4 re-add FKs      → prova validação limpa
 --   5. §5 replay -L       → reexecuta TUDO que falhou (0 erros)
 --   6. sanidade + dropdb
+--
+-- Uso (VPS, após pg_restore no banco descartável) — arquivo inteiro, 1 shot:
+--   psql -h <host> -U postgres -d restore_drill_$(date +%Y%m%d) \
+--     -v ON_ERROR_STOP=1 -f scripts/sql/restore-drill-fixups.sql
+--   (§5 é o ÚNICO passo fora do arquivo — pg_restore roda no shell)
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ─── §0 Stubs do schema cron (AMBIENTE DE DRILL, mesma instância) ──────────
@@ -23,7 +33,10 @@
 -- Num drill na mesma instância, CREATE EXTENSION pg_cron falha e arrasta 93
 -- objetos (views v_steps_progress/v_ai_catalog/v_cron_health_24h/v_ai_health_
 -- summary, v_perf_dashboard, 79 comments, mv_system_status). Os stubs abaixo
--- recebem o COPY dos dados de cron.job e destravam o replay (§5).
+-- destravam a criação desses objetos no replay (§5).
+-- ⚠ Stub permanece VAZIO: tabelas de extensão não entram no dump (pg_dump
+-- ignora extschema). Consequência cosmética: mv_system_status.cron_jobs = 0
+-- no drill (prod = 239). Não afeta sanidade de dados.
 -- Em DR real (instância nova), este bloco é desnecessário — a extensão instala
 -- normalmente no banco postgres do destino.
 
@@ -36,8 +49,13 @@ CREATE TABLE IF NOT EXISTS cron.job_run_details (
   command text, status text, return_message text,
   start_time timestamptz, end_time timestamptz);
 
--- ─── §1 (legado) localizar FK evolution_whatsapp_status por constraint ─────
--- Mantido para compatibilidade; a limpeza geral está no §3.
+-- ─── §1 (legado) Diagnóstico read-only da FK evolution_whatsapp_status ──────
+-- Auditoria PhD 2026-08-24: este bloco era write (DELETE ≤15 órfãos, EXCEPTION
+-- >15) — com os 14.780 órfãos reais de produção ele ABORTAVA o arquivo inteiro
+-- sob ON_ERROR_STOP antes de §3/§4 rodarem. Convertido em diagnóstico puro:
+-- reporta a contagem e a política de limpeza vive SÓ no §3 (um único dono).
+-- Referências qualificadas (evo.evolution_contacts) — não dependem de
+-- search_path nem das views proxy de public.
 
 DO $fix_fk$
 DECLARE
@@ -54,32 +72,18 @@ BEGIN
   LIMIT 1;
 
   IF v_table IS NULL THEN
-    RAISE NOTICE '§1: constraint não encontrada — nada a fazer (ver §3/§4)';
+    RAISE NOTICE '§1: constraint não encontrada no restore — será recriada pelo §4';
     RETURN;
   END IF;
 
   EXECUTE format(
     'SELECT count(*) FROM %I.%I s
       WHERE s.contact_id IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM evolution_contacts c WHERE c.id = s.contact_id)',
+        AND NOT EXISTS (SELECT 1 FROM evo.evolution_contacts c WHERE c.id = s.contact_id)',
     v_schema, v_table) INTO v_orphans;
 
-  IF v_orphans = 0 THEN
-    RAISE NOTICE '§1: 0 órfãos — FK pode ser reaplicada limpa';
-    RETURN;
-  END IF;
-
-  IF v_orphans > 15 THEN
-    RAISE EXCEPTION '§1: % órfãos (>15) — investigar antes de limpar', v_orphans;
-  END IF;
-
-  EXECUTE format(
-    'DELETE FROM %I.%I s
-      WHERE s.contact_id IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM evolution_contacts c WHERE c.id = s.contact_id)',
-    v_schema, v_table);
-
-  RAISE NOTICE '§1: % órfãos removidos de %.% — FK recriável', v_orphans, v_schema, v_table;
+  RAISE NOTICE '§1: % órfãos de contact_id em %.% — limpeza no §3 (UPDATE p/ NULL)',
+    v_orphans, v_schema, v_table;
 END
 $fix_fk$;
 
@@ -169,22 +173,48 @@ UPDATE zapp.evolution_whatsapp_status s
 
 -- ─── §4 Re-adicionar as 4 FKs (prova de validação limpa) ───────────────────
 -- Definições conferidas com pg_get_constraintdef da produção em 2026-08-24.
+-- Idempotente (auditoria PhD 2026-08-24): guarda em pg_constraint — se um
+-- dump futuro vier limpo e o pg_restore criar as FKs, §3 zera e §4 no-op.
 
-ALTER TABLE zapp.conversation_events
-  ADD CONSTRAINT conversation_events_contact_id_fkey
-  FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE;
+DO $add_fk$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'conversation_events_contact_id_fkey'
+                    AND conrelid = 'zapp.conversation_events'::regclass) THEN
+    ALTER TABLE zapp.conversation_events
+      ADD CONSTRAINT conversation_events_contact_id_fkey
+      FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE;
+    RAISE NOTICE '§4: conversation_events_contact_id_fkey criada e VALIDADA';
+  END IF;
 
-ALTER TABLE zapp.contact_intelligence
-  ADD CONSTRAINT ci_contact_id_fk
-  FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'ci_contact_id_fk'
+                    AND conrelid = 'zapp.contact_intelligence'::regclass) THEN
+    ALTER TABLE zapp.contact_intelligence
+      ADD CONSTRAINT ci_contact_id_fk
+      FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+    RAISE NOTICE '§4: ci_contact_id_fk criada e VALIDADA';
+  END IF;
 
-ALTER TABLE zapp.evolution_whatsapp_status
-  ADD CONSTRAINT evolution_whatsapp_status_contact_id_fkey
-  FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id);
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'evolution_whatsapp_status_contact_id_fkey'
+                    AND conrelid = 'zapp.evolution_whatsapp_status'::regclass) THEN
+    ALTER TABLE zapp.evolution_whatsapp_status
+      ADD CONSTRAINT evolution_whatsapp_status_contact_id_fkey
+      FOREIGN KEY (contact_id) REFERENCES evo.evolution_contacts(id);
+    RAISE NOTICE '§4: evolution_whatsapp_status_contact_id_fkey criada e VALIDADA';
+  END IF;
 
-ALTER TABLE auth.mfa_amr_claims
-  ADD CONSTRAINT mfa_amr_claims_session_id_fkey
-  FOREIGN KEY (session_id) REFERENCES auth.sessions(id) ON DELETE CASCADE;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'mfa_amr_claims_session_id_fkey'
+                    AND conrelid = 'auth.mfa_amr_claims'::regclass) THEN
+    ALTER TABLE auth.mfa_amr_claims
+      ADD CONSTRAINT mfa_amr_claims_session_id_fkey
+      FOREIGN KEY (session_id) REFERENCES auth.sessions(id) ON DELETE CASCADE;
+    RAISE NOTICE '§4: mfa_amr_claims_session_id_fkey criada e VALIDADA';
+  END IF;
+END
+$add_fk$;
 
 -- ─── §5 Replay das entradas que falharam no restore bruto ──────────────────
 -- (executar NO SHELL, não aqui — pg_restore reexecuta exatamente o que falhou)
