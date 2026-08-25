@@ -107,7 +107,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
     sendProgress = 0,
     onInputChange,
     onKeyDown,
-    onBlur,
+    onBlur: _onBlur,
     onSend,
     onCancelReply,
     onCancelEdit,
@@ -137,7 +137,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
     inputRef,
     onOpenTeamFiles,
     queue: _queue,
-    showSearch = false,
+    showSearch: _showSearch = false,
   } = props;
 
   const prevRecordingRef = useRef(isRecordingAudio);
