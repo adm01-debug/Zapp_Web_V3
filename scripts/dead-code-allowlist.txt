@@ -190,3 +190,5 @@ src/components/ui/prompt-kit/PromptInput.tsx  # P19 — scaffolding prompt-kit m
 src/components/ui/prompt-kit/PromptSuggestion.tsx  # P19 — idem PromptInput
 src/components/ui/prompt-kit/PromptActions.tsx  # P19 — idem PromptInput
 src/components/ui/prompt-kit/index.ts  # P19 — barrel do prompt-kit; consumido quando AI panel for integrado
+src/features/inbox/components/ai/AIChatScroller.tsx  # P21 — scaffolding AI streaming chat scroll (use-stick-to-bottom@1.1.6); AIChatPanel pendente de criação na próxima sprint
+src/features/inbox/components/ai/AIChatResponseCard.tsx  # P20 — scaffolding AI layer; integração pendente no AIChatScroller (próxima sprint)
