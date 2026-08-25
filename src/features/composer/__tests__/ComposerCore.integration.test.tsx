@@ -4,7 +4,7 @@
  * de ComposerCore sem dependência de DOM real.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { ComposerCore } from '../ComposerCore';
+import { ComposerCore as _ComposerCore } from '../ComposerCore';
 
 const BASE_PROPS = {
   value: '',
@@ -26,7 +26,7 @@ describe('ComposerCore — contrato de props (integração)', () => {
   it('onSend tem assinatura compatível com ChatInputArea caller', () => {
     // ChatInputArea passa onSend: (attachments?: File[]) => void
     const mockSend = vi.fn<[File[]?], void>();
-    const props = { ...BASE_PROPS, onSend: mockSend };
+    const _props = { ...BASE_PROPS, onSend: mockSend };
     mockSend([]);
     expect(mockSend).toHaveBeenCalledWith([]);
   });

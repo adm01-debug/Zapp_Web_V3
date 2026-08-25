@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/context-menu';
 import { MarkdownPreview } from '@/features/inbox';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { bubbleVariants, Bubble } from '@/components/ui/bubble';
+import { bubbleVariants } from '@/components/ui/bubble';
 import { WHATSAPP_EMOJIS } from '@/components/ui/message-reactions';
 import { TeamReactionBar, TeamQuickReactionBarWrapper } from './TeamMessageReactionsWrapper';
 import {

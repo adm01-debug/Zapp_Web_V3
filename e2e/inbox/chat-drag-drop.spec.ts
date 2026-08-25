@@ -2,7 +2,6 @@
  * P40 — E2E: Drag-drop no compositor de mensagens
  */
 import { test, expect } from '@playwright/test';
-import * as path from 'path';
 
 test.describe('Chat — Drag and Drop', () => {
   test.beforeEach(async ({ page }) => {

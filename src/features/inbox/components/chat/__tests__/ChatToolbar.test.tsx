@@ -3,7 +3,7 @@
  * Cobre: disabled state, toggle de rich toolbar, SecondaryToolbar forwarding.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('@/components/ui/motion', () => ({
