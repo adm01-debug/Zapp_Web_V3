@@ -5,7 +5,7 @@
 > na branch `feat/plano100-fechamento-2026-08-25`.
 >
 > **Fronteiras:** este documento NÃO edita a validação de 2026-08-20 (PR #1411 aberto a
-> revisa) — ele a revalida e registra o estado posterior. Dados verificados localmente
+> revisar) — ele a revalida e registra o estado posterior. Dados verificados localmente
 > nesta sessão estão marcados **[verificado 25/08]**; os vindos dos PRs #1401–#1413 estão
 > marcados com o PR de origem; placeholders `[FRONTA N]` serão preenchidos pelo coordenador.
 
@@ -55,7 +55,7 @@ contagens medem coisas diferentes** — não houve perda:
 2. O apêndice do PLANO-100-CONTRATOS-EDGE registra baseline de 21/08 com
    **"Functions com `__tests__/contract.test.ts`: 25"** — batendo com a contagem forense.
    O "45/122" da etapa 26 era métrica anterior à consolidação de #927/#949 (quando as
-   suítes dos webhooks removidos ainda contavam) — número histório, não perda recente.
+   suítes dos webhooks removidos ainda contavam) — número histórico, não perda recente.
 3. **Cobertura central é universal:** `contract-matrix.test.ts` aplica T3/T4/T8/T15 a
    **todas** as keys de `CONTRACT_SCHEMAS` (`Object.keys(...)`, laço explícito);
    `contract-field-matrix.test.ts` deriva campo-a-campo (happy path, missing, wrong type,
@@ -122,7 +122,7 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
   (2 sites; duplo-prefixo `sha256=` evitado), `recheck-webhook-signature` (comparador caseiro
   removido; cadeia de secrets alinhada à do evolution-webhook — antes ignorava a lista de
   rotação `EVOLUTION_WEBHOOK_SECRETS`). Pulos: `gmail-oauth` (protocolo próprio anti-CSRF —
-  migração invalidaria states), `ai-router` (request-signing Base64 próprio), `webhook-hmac-selftest`
+  migração invalidaria states), `ai-router` (request-signing hexadecimal próprio), `webhook-hmac-selftest`
   (é autoteste DO módulo por design).
 - **Rate-limit: 8 functions públicas endurecidas** com `checkRateLimit` por-isolate
   (`_shared/validation.ts`, o padrão real do repo — não o DB-backed do evolution-webhook):
@@ -158,8 +158,8 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
 ### Frente 4 — Rollback-protection pós-deploy (etapa 73) + alerta 2-falhas (etapa 16)
 - **Etapa 73 — implementada como gate verifica+alerta** no job `post-deploy-health` do
   `deploy-vps.yml` (step 4/4, só em deploy verde): valida se a SHA deployada está em
-  `infra/ghcr-protected-tags.txt`; se não, sentinela greppável `ROLLBACK_UNPROTECTED` + 1 alerta
-  único por SHA (mesmo canal best-effort do alerta de retenção — nunca bloqueia deploy).
+  `infra/ghcr-protected-tags.txt`; se não, sentinela greppável `ROLLBACK_UNPROTECTED` + alerta
+  best-effort por execução (mesmo canal do alerta de retenção — nunca bloqueia deploy).
   **Auto-commit pela CI foi avaliado e rejeitado**: quebraria a política do repo (PR + merge
   humano) e o `permissions: contents: read`. Janela natural intacta (keep 30 = 10 deploys).
   YAML validado; 3 cenários simulados localmente (SHA protegida/nova/arquivo ausente).

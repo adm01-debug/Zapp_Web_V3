@@ -64,7 +64,10 @@ const call = (body: unknown, opts: { secret?: string; token?: string; svix?: Rec
   return h(new Request(url, { method: "POST", body: JSON.stringify(body), headers }));
 };
 const svixHeaders = async (raw: string, secret: string, ts = Math.floor(Date.now() / 1000)) => {
-  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const keyBytes = secret.startsWith("whsec_")
+    ? Uint8Array.from(atob(secret.slice("whsec_".length)), (char) => char.charCodeAt(0))
+    : new TextEncoder().encode(secret);
+  const k = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`svix-id-1.${ts}.${raw}`));
   const sig = btoa(String.fromCharCode(...new Uint8Array(mac)));
   return { "svix-id": "svix-id-1", "svix-timestamp": String(ts), "svix-signature": `v1,${sig}` };
@@ -136,6 +139,16 @@ Deno.test("zapp-email-inbound-webhook: Svix válido (com webhook secret) → 200
   Deno.env.set("RESEND_INBOUND_SIGNING_SECRET", "svix-test-secret");
   const raw = JSON.stringify(PAYLOAD);
   const svix = await svixHeaders(raw, "svix-test-secret");
+  const res = await call(PAYLOAD, { secret: WEBHOOK_SECRET, svix });
+  assertEquals(res.status, 200);
+  assertEquals(emailInserts.length, 1);
+});
+Deno.test("zapp-email-inbound-webhook: segredo Svix whsec_ é decodificado antes do HMAC", async () => {
+  reset();
+  const signingSecret = `whsec_${btoa("svix-provider-secret")}`;
+  Deno.env.set("RESEND_INBOUND_SIGNING_SECRET", signingSecret);
+  const raw = JSON.stringify(PAYLOAD);
+  const svix = await svixHeaders(raw, signingSecret);
   const res = await call(PAYLOAD, { secret: WEBHOOK_SECRET, svix });
   assertEquals(res.status, 200);
   assertEquals(emailInserts.length, 1);

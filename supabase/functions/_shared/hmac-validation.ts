@@ -94,24 +94,44 @@ export async function verifySvixWebhookSignature(
     return false; // replay/stale
   }
 
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`${id}.${timestamp}.${rawBody}`),
-  );
-  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+  try {
+    // Segredos emitidos pelo Svix usam `whsec_<base64>`. O prefixo é apenas
+    // identificação e não participa do HMAC. Aceitar texto cru mantém
+    // compatibilidade com instalações antigas que cadastraram uma chave
+    // própria em vez do segredo gerado pelo provedor.
+    let keyBytes: Uint8Array;
+    if (secret.startsWith('whsec_')) {
+      const encoded = secret.slice('whsec_'.length);
+      const decoded = atob(encoded);
+      keyBytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
+      if (keyBytes.length === 0) return false;
+    } else {
+      keyBytes = new TextEncoder().encode(secret);
+    }
 
-  // Formato: "v1,<sig> v1,<sig2> ..." — qualquer entrada v1 que bata autentica.
-  for (const part of signatureHeader.split(' ')) {
-    const [version, sig] = part.split(',');
-    if (version === 'v1' && sig && timingSafeEqual(sig, expected)) return true;
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const mac = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(`${id}.${timestamp}.${rawBody}`),
+    );
+    const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+
+    // Formato: "v1,<sig> v1,<sig2> ..." — qualquer entrada v1 que bata autentica.
+    for (const part of signatureHeader.trim().split(/\s+/)) {
+      const [version, sig] = part.split(',');
+      if (version === 'v1' && sig && timingSafeEqual(sig, expected)) return true;
+    }
+  } catch {
+    // Segredo base64 malformado, chave inválida ou falha criptográfica:
+    // autenticação é fail-closed e não derruba o handler do webhook.
+    return false;
   }
   return false;
 }

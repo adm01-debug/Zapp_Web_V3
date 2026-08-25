@@ -387,7 +387,7 @@ jobs:
   post-deploy-health:
     name: 🩺 Health check pós-deploy (determinístico)
     needs: deploy
-    if: always()
+    if: ${{ needs.deploy.result == 'success' }}
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 10
     steps:
@@ -399,7 +399,7 @@ jobs:
           command -v bc >/dev/null 2>&1 || { echo "::error::BC_UNAVAILABLE — não foi possível obter bc; abortando (fail-closed)"; exit 1; }
           bc --version | head -1
 
-      - name: "1/3 — TTM www.zappweb.app.br (< 3.0s)"
+      - name: "1/4 — TTM www.zappweb.app.br (< 3.0s)"
         run: |
           RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
           CODE=$(echo "$RESP" | awk '{print $1}')
@@ -417,7 +417,7 @@ jobs:
           fi
           echo "✅ Site OK — TTM ${TTM}s (< 3.0s)"
 
-      - name: "2/3 — Supabase PostgREST vivo (4xx ok; 5xx/timeout = falha)"
+      - name: "2/4 — Supabase PostgREST vivo (4xx ok; 5xx/timeout = falha)"
         if: always()
         run: |
           CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://supabase.atomicabr.com.br/rest/v1/ || true)
@@ -432,7 +432,7 @@ jobs:
           esac
           echo "✅ PostgREST vivo — HTTP ${CODE} (401/4xx sem apikey é esperado)"
 
-      - name: "3/3 — Edge Function get-media-base64 viva (4xx ok; 5xx/timeout = falha)"
+      - name: "3/4 — Edge Function get-media-base64 viva (4xx ok; 5xx/timeout = falha)"
         if: always()
         run: |
           CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST https://supabase.atomicabr.com.br/functions/v1/evolution-api/get-media-base64 || true)
@@ -456,7 +456,7 @@ jobs:
       # build seguinte). Auto-commit pela CI foi avaliado e REJEITADO:
       # quebraria a política do repo (PR + merge humano) e o permissions
       # contents: read. Este step VERIFICA e ALERTA (nunca muta):
-      # sentinela greppável ROLLBACK_UNPROTECTED + 1 alerta único por SHA
+      # sentinela greppável ROLLBACK_UNPROTECTED + alerta por execução
       # (mesmo canal/best-effort do alerta de retenção do job build —
       # nunca bloqueia deploy verde).
       # Roda SÓ em deploy verde (steps 1-3 ok; sem if:always de propósito).
@@ -472,12 +472,13 @@ jobs:
         env:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           GH_TOKEN_ACTIONS: ${{ secrets.GH_TOKEN_ACTIONS }}
+          DEPLOY_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
           # workflow_dispatch com image_tag custom: a SHA do evento não
           # corresponde à tag deployada — gate não consegue verificar, pular.
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            echo "::notice::GATE_ROLLBACK_PULSO — image_tag custom (${{ inputs.image_tag }}): SHA do evento não corresponde à tag deployada."
+          if [ -n "$DEPLOY_IMAGE_TAG" ]; then
+            echo "::notice::GATE_ROLLBACK_PULSO — image_tag custom (${DEPLOY_IMAGE_TAG}): SHA do evento não corresponde à tag deployada."
             exit 0
           fi
           SHA12="${GITHUB_SHA::12}"
@@ -492,12 +493,14 @@ jobs:
           MSG="SHA production-$SHA12 NÃO está protegida em infra/ghcr-protected-tags.txt. Janela natural: 10 deploys (keep 30). Para blindar além: bash scripts/update-rollback-protection.sh $SHA12 + PR (política: CI não commita na main). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "::warning::ROLLBACK_UNPROTECTED ${MSG}"
           if [ -n "$ALERT_WEBHOOK_URL" ]; then
+            PAYLOAD=$(jq -cn --arg text "🛡️ ${MSG}" '{text: $text}')
             curl -fsS -X POST "$ALERT_WEBHOOK_URL" \
               -H 'Content-Type: application/json' \
-              -d "{\"text\":\"🛡️ ${MSG}\"}" || true
+              -d "$PAYLOAD" || true
           elif [ -n "$GH_TOKEN_ACTIONS" ]; then
+            PAYLOAD=$(jq -cn --arg body "🛡️ ${MSG}" '{body: $body}')
             curl -fsS -X POST "https://api.github.com/repos/${{ github.repository }}/commits/${GITHUB_SHA}/comments" \
               -H "Authorization: Bearer $GH_TOKEN_ACTIONS" \
               -H "Accept: application/vnd.github+json" \
-              -d "{\"body\":\"🛡️ ${MSG}\"}" || true
+              -d "$PAYLOAD" || true
           fi

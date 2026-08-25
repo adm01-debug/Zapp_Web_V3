@@ -745,7 +745,7 @@ function decrementConcurrency(concurrencyKey: string): void {
  * - Rejects if signature mismatch or timestamp too old (>5 minutes)
  *
  * USAGE:
- * Client computes: signature = Base64(HMAC-SHA256(JSON.stringify(body) + '.' + timestamp, secret))
+ * Client computes: signature = Hex(HMAC-SHA256(JSON.stringify(body) + '.' + timestamp, secret))
  * Sends header: X-Signature: timestamp.signature
  * Server validates and rejects tampering
  *
