@@ -1406,33 +1406,37 @@ describe('Team Chat — Component Source Contract', () => {
     });
 
     it('send button is disabled when text is empty or mutation pending', () => {
-      expect(src).toContain('disabled={!draft.hasText');
+      // ComposerCore encapsula o botão de envio; TeamChatInputArea acessa draft.hasText
+      expect(src).toContain('draft.hasText');
     });
 
-    it('GAP real: textarea does not auto-resize (rows={1} + resize-none)', () => {
-      expect(src).toContain('rows={1}');
-      expect(src).toContain('resize-none');
+    it('FIXED: textarea auto-resize via ComposerCore + textareaRef (anterior era rows={1} + resize-none)', () => {
+      // E52: TeamChatInputArea usa ComposerCore com auto-grow via textareaRef
+      expect(src).toContain('textareaRef');
+      expect(src).toContain('ComposerCore');
     });
   });
 
   describe('TeamChatPanel', () => {
     const src = read('TeamChatPanel.tsx');
+    // E52: render de mensagem movido para TeamMessageItem.tsx
+    const item = read('TeamMessageItem.tsx');
 
     it('shows edit indicator "· editado" for edited messages', () => {
-      expect(src).toContain("msg.is_edited && ' · editado'");
+      expect(item).toContain("msg.is_edited && ' · editado'");
     });
 
     it('renders markdown via MarkdownPreview and media via MediaContent/MediaTypeIcon', () => {
-      expect(src).toContain('MarkdownPreview');
-      expect(src).toContain('MediaContent');
-      expect(src).toContain('MediaTypeIcon');
+      expect(item).toContain('MarkdownPreview');
+      expect(item).toContain('MediaContent');
+      expect(item).toContain('MediaTypeIcon');
     });
 
     it('context menu: own messages get Reply/Edit/Delete actions', () => {
-      expect(src).toContain('ContextMenu');
-      expect(src).toContain('Responder');
-      expect(src).toContain('Editar');
-      expect(src).toContain('Excluir');
+      expect(item).toContain('ContextMenu');
+      expect(item).toContain('Responder');
+      expect(item).toContain('Editar');
+      expect(item).toContain('Excluir');
     });
 
     it('auto-scrolls only when near bottom (gap FIXED) and has scroll-to-bottom button', () => {
@@ -1443,18 +1447,25 @@ describe('Team Chat — Component Source Contract', () => {
     it('message list is virtualized + infinite scroll (gaps FIXED)', () => {
       expect(src).toContain('scrollTop < 100');
       expect(src).toContain('hasNextPage');
-      expect(src).toContain('useDynamicRowHeight');
+      // E52: react-window (useDynamicRowHeight) substituído por ChatScrollerV2
+      expect(src).toContain('ChatScrollerV2');
     });
 
     it('date separators via local formatDateSep (Hoje/Ontem/ptBR)', () => {
-      expect(src).toContain("if (isToday(d)) return 'Hoje'");
-      expect(src).toContain("if (isYesterday(d)) return 'Ontem'");
-      expect(src).toContain('ptBR');
+      // Implementação canônica em teamChatParts.tsx; TeamMessageItem chama formatDateSep
+      const parts = readFileSync(
+        path.join(process.cwd(), 'src/components/team-chat/teamChatParts.tsx'),
+        'utf-8'
+      );
+      expect(parts).toContain("if (isToday(d)) return 'Hoje'");
+      expect(parts).toContain("if (isYesterday(d)) return 'Ontem'");
+      expect(parts).toContain('ptBR');
+      expect(item).toContain('formatDateSep'); // TeamMessageItem chama a função
     });
 
     it('supports replies with cancel (setReplyTo(null)) and media-type icon in preview', () => {
-      expect(src).toContain('onCancelReply={() => s.setReplyTo(null)}');
-      expect(src).toContain('<MediaTypeIcon type={repliedMsg.media_type} />');
+      expect(src).toContain('onCancelReply={() => s.setReplyTo(null)}'); // TeamChatPanel passa a prop
+      expect(item).toContain('repliedMsg.media_type'); // E52: render do reply em TeamMessageItem
     });
 
     it('has in-conversation search (gap FIXED)', () => {
@@ -1468,7 +1479,8 @@ describe('Team Chat — Component Source Contract', () => {
     });
 
     it('GAP real: XSS prevention — content rendered as text, no dangerouslySetInnerHTML', () => {
-      expect(src).not.toContain('dangerouslySetInnerHTML');
+      // E52: render do conteúdo em TeamMessageItem — verifica ausência de XSS lá
+      expect(item).not.toContain('dangerouslySetInnerHTML');
     });
   });
 
@@ -1549,11 +1561,11 @@ describe('Team Chat — Component Source Contract', () => {
     const src = read('TeamChatView.tsx');
 
     it('sidebar hidden on mobile when a conversation is selected', () => {
-      expect(src).toContain('selectedId && "hidden md:flex"');
+      expect(src).toContain("selectedId && 'hidden md:flex'");
     });
 
     it('chat area hidden on mobile when no conversation is selected', () => {
-      expect(src).toContain('!selectedId && "hidden md:flex"');
+      expect(src).toContain("!selectedId && 'hidden md:flex'");
     });
 
     it('back button clears selection', () => {
