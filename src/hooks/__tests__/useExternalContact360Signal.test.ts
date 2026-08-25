@@ -173,6 +173,12 @@ describe('useExternalContact360 — abort plumbing (signal → dbGet → builder
     expect(result.current.error).toBeNull();
     expect(result.current.isError).toBe(false);
     expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+    // Cancelamento não pode ser convertido em sucesso com `null` no cache.
+    expect(
+      queryClient.getQueryData(['external-contact-360', '5511912345678'])
+    ).toBeUndefined();
   });
 
   it('backward compat: builder sem abortSignal (mock/Promise pura) resolve normalmente', async () => {
