@@ -40,8 +40,6 @@ export function ChatAttachmentPreview({ attachments, onRemove }: ChatAttachmentP
                   src={att.preview}
                   alt="Pré-visualização do anexo"
                   className="h-full w-full object-cover"
-                  loading="lazy"
-                  decoding="async"
                 />
               ) : (
                 <div className="flex flex-col items-center gap-1 p-1 text-muted-foreground">

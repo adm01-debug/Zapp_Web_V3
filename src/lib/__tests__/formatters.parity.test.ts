@@ -82,4 +82,10 @@ describe('formatWhatsAppText (P15 — E65)', () => {
 
   it('caso 8: escape \\* preserva literal *', () =>
     expect(formatWhatsAppText('\\*não formatado\\*')).toBe('*não formatado*'));
+  it('caso 9: HTML tags são escapadas antes de formatar (B2 XSS fix)', () =>
+    expect(formatWhatsAppText('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;'));
+  it('caso 10: payload onerror é escapado', () =>
+    expect(formatWhatsAppText('<img onerror=alert(1)>')).toBe('&lt;img onerror=alert(1)&gt;'));
+  it('caso 11: bold em texto seguro funciona após HTML-escape', () =>
+    expect(formatWhatsAppText('*oi <mundo>*')).toBe('<strong>oi &lt;mundo&gt;</strong>'));
 });

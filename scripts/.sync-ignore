@@ -502,3 +502,4 @@ transfer_comments
 grant_lgpd_consent
 revoke_lgpd_consent
 rpc_get_reactions_batch
+email_revalidation_jobs

@@ -167,7 +167,9 @@ export function ChatTextarea({
             ? 'Editar mensagem'
             : replyToMessage
               ? 'Responder mensagem'
-              : 'Digite sua mensagem'
+              : isWhisper
+                ? 'Sussurro interno (apenas agentes)'
+                : 'Digite sua mensagem'
         }
         aria-describedby={logic.charCount > 100 ? 'char-counter' : undefined}
       />
