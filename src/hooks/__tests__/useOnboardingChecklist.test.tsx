@@ -29,6 +29,17 @@ vi.mock('@/lib/logger');
 
 import { useOnboardingChecklist } from '@/hooks/useOnboardingChecklist';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+
+function createWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
+
 describe('useOnboardingChecklist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,13 +89,13 @@ describe('useOnboardingChecklist', () => {
   });
 
   it('initializes with all false status', async () => {
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.status).toBeDefined();
   });
 
   it('checks profile completion', async () => {
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.status.profile).toBe(true); // "Agent Name" length > 2
   });
@@ -103,48 +114,44 @@ describe('useOnboardingChecklist', () => {
         };
       }
       return {
-        select: vi
-          .fn()
-          .mockReturnValue({
-            eq: vi
-              .fn()
-              .mockReturnValue({
-                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-              }),
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
           }),
+        }),
       };
     });
 
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.status.profile).toBe(false);
   });
 
   it('does not check when no user', async () => {
     mockUseAuth.mockReturnValue({ user: null });
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     // Should not crash
     expect(result.current.status).toBeDefined();
   });
 
   it('isDismissed defaults to false', async () => {
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     expect(result.current.isDismissed).toBe(false);
   });
 
   it('exposes dismiss function', async () => {
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     expect(typeof result.current.dismiss).toBe('function');
   });
 
   it('exposes checkStatus function', async () => {
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     expect(typeof result.current.checkStatus).toBe('function');
   });
 
   it('exposes progress percentage', async () => {
-    const { result } = renderHook(() => useOnboardingChecklist());
+    const { result } = renderHook(() => useOnboardingChecklist(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(typeof result.current.progress).toBe('number');
     expect(result.current.progress).toBeGreaterThanOrEqual(0);

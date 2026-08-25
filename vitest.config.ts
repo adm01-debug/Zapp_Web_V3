@@ -48,16 +48,13 @@ export default defineConfig({
       'src/hooks/__tests__/useSwipeGesture.test.ts',
       'src/hooks/__tests__/useSwipeNavigation.test.ts',
       'src/hooks/useEmailActions.test.ts',
-      // FAILING — hook existe, teste usa API refatorada
+      // FAILING — hook existe, API refatorada. WIP: wrapper QueryClient adicionado, falhas residuais de mock.
+      // Parcialmente verdes: useQueueAnalytics (7/9), useContactCustomFields (4/5).
       'src/hooks/__tests__/useGlobalSearchShortcut.test.ts',
       'src/hooks/__tests__/useContactCustomFields.test.tsx',
-      'src/hooks/__tests__/useDownloadPermission.test.ts',
       'src/hooks/__tests__/useExportData.test.tsx',
-      'src/hooks/__tests__/useOnboardingChecklist.test.tsx',
       'src/hooks/__tests__/useQueueAnalytics.test.tsx',
       'src/hooks/__tests__/useQueueGoals.test.tsx',
-      'src/hooks/__tests__/useQueues.test.tsx',
-      'src/hooks/__tests__/useQueuesComparison.test.tsx',
       'src/hooks/__tests__/useRealtimeMessages.test.tsx',
       'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',
       'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',

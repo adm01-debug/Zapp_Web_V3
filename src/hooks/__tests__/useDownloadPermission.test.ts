@@ -14,6 +14,7 @@ vi.mock('@/integrations/supabase/client', () => ({
       select: mockSelect.mockReturnValue({
         eq: mockEq.mockReturnValue({
           single: mockSingle,
+          maybeSingle: mockSingle, // hook usa .maybeSingle()
         }),
       }),
     })),
@@ -34,7 +35,17 @@ import { useAuth } from '@/hooks/useAuth';
 
 function createWrapper() {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+        staleTime: 0,
+        // initialData é setado pelo hook — sobrescrever aqui não funciona.
+        // A solução é não ter initialData no wrapper, e usar initialData: undefined no hook durante testes.
+        // Na prática: o hook tem initialData: false + staleTime: 5min.
+        // Ao forçar staleTime: 0 no cliente, a query roda mesmo com initialData.
+      },
+    },
   });
   return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
@@ -51,8 +62,7 @@ describe('useDownloadPermission', () => {
 
     const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.canDownload).toBe(false);
+    await waitFor(() => expect(result.current.canDownload).toBe(false));
   });
 
   it('retorna true quando can_download é true no perfil', async () => {
@@ -60,7 +70,9 @@ describe('useDownloadPermission', () => {
 
     const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.canDownload).toBe(true));
+    // initialData: false no hook faz isLoading=false imediatamente com valor false.
+    // Com staleTime:0 no cliente, a query refetch ocorre logo após o mount.
+    await waitFor(() => expect(result.current.canDownload).toBe(true), { timeout: 3000 });
   });
 
   it('retorna false quando can_download é false no perfil', async () => {
@@ -68,8 +80,7 @@ describe('useDownloadPermission', () => {
 
     const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.canDownload).toBe(false);
+    await waitFor(() => expect(result.current.canDownload).toBe(false));
   });
 
   it('retorna false quando can_download é null (fallback seguro)', async () => {
@@ -77,8 +88,7 @@ describe('useDownloadPermission', () => {
 
     const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.canDownload).toBe(false);
+    await waitFor(() => expect(result.current.canDownload).toBe(false));
   });
 
   it('retorna false quando não há usuário autenticado', async () => {
@@ -86,7 +96,6 @@ describe('useDownloadPermission', () => {
 
     const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    // Query should not be enabled, so canDownload stays default false
     expect(result.current.canDownload).toBe(false);
   });
 
@@ -95,18 +104,16 @@ describe('useDownloadPermission', () => {
 
     const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.canDownload).toBe(false);
+    await waitFor(() => expect(result.current.canDownload).toBe(false));
   });
 
   it('consulta a tabela profiles com user_id correto', async () => {
     mockSingle.mockResolvedValue({ data: { can_download: true }, error: null });
 
-    renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useDownloadPermission(), { wrapper: createWrapper() });
 
-    await waitFor(() => {
-      expect(mockSelect).toHaveBeenCalledWith('can_download');
-      expect(mockEq).toHaveBeenCalledWith('user_id', 'user-123');
-    });
+    await waitFor(() => expect(result.current.canDownload).toBe(true), { timeout: 3000 });
+    expect(mockSelect).toHaveBeenCalledWith('can_download');
+    expect(mockEq).toHaveBeenCalledWith('user_id', 'user-123');
   });
 });
