@@ -8,7 +8,7 @@
  * Auth: qualquer usuário autenticado (a campanha pertence ao workspace do usuário).
  */
 import { createZappAdminClient, createZappClient } from '../_shared/db-client.ts';
-import { getCorsHeaders, handleCors, Logger } from "../_shared/validation.ts";
+import { getCorsHeaders, handleCors, Logger, checkRateLimit } from "../_shared/validation.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
@@ -27,6 +27,14 @@ Deno.serve(async (req) => {
 
   const authed = await requireUser(req);
   if (authed instanceof Response) return authed;
+
+  // Rate limit por-isolate, chaveado por user (JWT verificado pelo requireUser):
+  // upsert em batch de até 1000 destinatários é write pesado. 30/min acompanha
+  // a irmã per-user mais folgada (sla-alert-forward). PLANO-100 etapa 28.
+  const rl = checkRateLimit(`talkx-add-recipients:${authed.user.id}`, 30, 60_000);
+  if (!rl.allowed) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers });
+  }
 
   try {
     const raw = await req.json().catch(() => null);

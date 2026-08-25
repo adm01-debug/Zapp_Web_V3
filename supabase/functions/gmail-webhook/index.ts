@@ -113,6 +113,7 @@ Deno.serve(async (req) => {
           signal: AbortSignal.timeout(15_000),
         });
         if (!watchRes.ok) {
+          // Resposta OUTBOUND do Google — {} é fallback inofensivo (só degrada o detail do erro); não é o antipadrão de body de request (D1/etapa 27).
           const watchErr = await watchRes.json().catch(() => ({}));
           return json({ error: 'Watch failed', detail: watchErr }, 500);
         }

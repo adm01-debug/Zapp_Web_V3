@@ -265,8 +265,9 @@ export const ProviderRouterV1Schema = z.object({
 
 /**
  * recover-corrupted-audios@v1 — POST interno (requireServiceRoleOrCron).
- * index.ts: `const { batch_size = 20, offset = 0, dry_run = false } =
- * await req.json().catch(() => ({}));` — body opcional.
+ * index.ts lê o body com readJsonBodyOrEmpty() (_shared/validation.ts):
+ * corpo vazio → {} aceito (todos os campos opcionais); corpo malformado
+ * não-vazio → 422 invalid_json. — body opcional.
  */
 export const RecoverCorruptedAudiosV1Schema = z.object({
   batch_size: z.number().int().min(1).optional(),

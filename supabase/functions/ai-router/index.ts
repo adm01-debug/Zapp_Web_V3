@@ -753,6 +753,13 @@ function decrementConcurrency(concurrencyKey: string): void {
  * - Replay attack prevention (timestamp validation)
  * - Tampering detection (signature validation)
  * - Non-repudiation (client signed the request)
+ *
+ * NÃO migrou pra _shared/hmac-validation.ts (PLANO-100 etapa 22, 2026-08-25):
+ * esquema de assinatura de REQUEST próprio (header "timestamp.signature", HMAC
+ * Base64 sobre body+'.'+timestamp, janela anti-replay 5min, assinatura opcional)
+ * — o módulo valida assinatura de webhook em HEX sobre o body cru; migrar mudaria
+ * o protocolo de fio e quebraria clientes integrados. A comparação usa o
+ * timingSafeStringEqual canônico (_shared/auth.ts).
  */
 async function validateRequestSignature(
   req: Request,

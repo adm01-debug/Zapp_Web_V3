@@ -65,6 +65,58 @@ export async function verifyHmacSignature(
 export const timingSafeEqual = timingSafeStringEqual;
 
 /**
+ * Verifica assinatura de webhook no formato Svix (usado pelo Resend inbound).
+ *
+ * O Svix assina `${svix-id}.${svix-timestamp}.${rawBody}` com HMAC-SHA256 e
+ * envia o digest **base64** em `svix-signature`, como entradas separadas por
+ * espaço no formato `v1,<base64sig>` (mecanismo de rotação de chave: QUALQUER
+ * entrada v1 válida autentica). O binding com timestamp (±`toleranceSec`) é o
+ * núcleo anti-replay — request capturado deixa de validar quando a janela fecha.
+ *
+ * Protocolo de fio distinto do `verifyHmacSignature` (que verifica assinaturas
+ * HEX sobre o body cru), por isso vive ao lado dele em vez de dobrado nele.
+ * Consolidado aqui a partir de zapp-email-inbound-webhook (PLANO-100 etapa 22,
+ * 2026-08-25) para que todo consumidor Svix/Resend valide de forma idêntica.
+ */
+export async function verifySvixWebhookSignature(
+  req: Request,
+  rawBody: string,
+  secret: string,
+  toleranceSec = 5 * 60,
+): Promise<boolean> {
+  const id = req.headers.get('svix-id');
+  const timestamp = req.headers.get('svix-timestamp');
+  const signatureHeader = req.headers.get('svix-signature');
+  if (!id || !timestamp || !signatureHeader || !secret) return false;
+
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > toleranceSec) {
+    return false; // replay/stale
+  }
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${id}.${timestamp}.${rawBody}`),
+  );
+  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+
+  // Formato: "v1,<sig> v1,<sig2> ..." — qualquer entrada v1 que bata autentica.
+  for (const part of signatureHeader.split(' ')) {
+    const [version, sig] = part.split(',');
+    if (version === 'v1' && sig && timingSafeEqual(sig, expected)) return true;
+  }
+  return false;
+}
+
+/**
  * Extracts signature from request headers.
  * Supports multiple common header formats.
  */
