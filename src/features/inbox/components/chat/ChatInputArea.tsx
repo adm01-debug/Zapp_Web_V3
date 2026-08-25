@@ -140,6 +140,11 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
   } = props;
 
   const prevRecordingRef = useRef(isRecordingAudio);
+  // P25 (E76): foco automático no textarea ao entrar/sair de edição ou fechar busca
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [editingMessage, showSearch, inputRef]);
+
 
   useEffect(() => {
     if (isRecordingAudio && !prevRecordingRef.current) {

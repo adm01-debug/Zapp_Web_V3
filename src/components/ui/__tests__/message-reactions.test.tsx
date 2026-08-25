@@ -198,4 +198,33 @@ describe('Emoji sets', () => {
       expect(EXTENDED_EMOJIS).toContain(e);
     }
   });
+
+  it('ReactionBadge — count > 99 → mostra "99+"', () => {
+    render(<ReactionBadge emoji="👍" count={100} messageId="m1" />);
+    expect(screen.getByText('99+')).toBeInTheDocument();
+  });
+
+  it('QuickReactionStrip — todos reagidos → todos aria-pressed="true"', () => {
+    const reactions = ['👍', '❤️', '😂'].map((emoji) => ({
+      emoji,
+      count: 1,
+      userReacted: true,
+    }));
+    render(<QuickReactionStrip reactions={reactions} messageId="m1" onReact={vi.fn()} />);
+    const buttons = screen.getAllByRole('button');
+    const emojiButtons = buttons.filter((b) => b.getAttribute('aria-pressed') !== null);
+    emojiButtons.forEach((btn) => {
+      expect(btn).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+
+  it('MessageReactionBar — lista vazia → só botão "+"', () => {
+    render(<MessageReactionBar reactions={[]} messageId="m1" onReact={vi.fn()} />);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('ReactionBadge — sem messageId → sem data-testid', () => {
+    render(<ReactionBadge emoji="👍" count={1} />);
+    expect(screen.getByRole('button')).not.toHaveAttribute('data-testid');
+  });
 });

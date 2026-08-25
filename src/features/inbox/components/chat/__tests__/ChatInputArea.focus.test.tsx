@@ -1,10 +1,13 @@
 /**
  * P25 — Testes de gestão de foco no ChatInputArea
  * Cobre: editingMessage ativa foco, volta null devolve foco, showSearch fechado devolve foco.
+ *
+ * Nota: Happy-DOM (o jsdom do vitest) simula .focus() mas document.activeElement
+ * só reflete o foco real se o elemento for focusável e estiver no DOM.
+ * Por isso verificamos chamadas ao método .focus() em vez de document.activeElement.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, act } from '@testing-library/react';
-import { createRef } from 'react';
 import type { Message } from '@/types/chat';
 
 vi.mock('framer-motion', () => {
@@ -47,6 +50,17 @@ vi.mock('../ChatAttachmentPreview', () => ({ ChatAttachmentPreview: () => null }
 vi.mock('../ChatToolbar', () => ({ ChatToolbar: () => null }));
 vi.mock('../ChatSendButtons', () => ({ ChatSendButtons: () => null }));
 
+// ChatTextarea renderiza o textarea real para que possamos checar o foco
+vi.mock('../ChatTextarea', () => ({
+  ChatTextarea: ({ inputRef }: { inputRef?: React.RefObject<HTMLTextAreaElement | null> }) => (
+    <textarea
+      ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+      data-testid="chat-textarea"
+      aria-label="Digite sua mensagem"
+    />
+  ),
+}));
+
 import { ChatInputArea } from '../ChatInputArea';
 
 const makeMsg = (id: string): Message =>
@@ -65,35 +79,72 @@ const baseProps = {
 describe('ChatInputArea — focus management (P25)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('editingMessage setado → foco vai para o textarea', () => {
-    const { rerender, container } = render(<ChatInputArea {...baseProps} editingMessage={null} />);
-    const textarea = container.querySelector('textarea');
-    if (!textarea) return; // componente pode estar lazy
+  it('editingMessage setado → foco vai para o textarea', async () => {
+    let rerender: (ui: React.ReactElement) => void;
+    let container: HTMLElement;
 
-    rerender(<ChatInputArea {...baseProps} editingMessage={makeMsg('m1')} />);
-    // foco deve ter sido movido para o textarea
-    expect(document.activeElement).toBe(textarea);
+    await act(async () => {
+      const result = render(<ChatInputArea {...baseProps} editingMessage={null} />);
+      rerender = result.rerender;
+      container = result.container;
+    });
+
+    const textarea = container!.querySelector('textarea');
+    expect(textarea).toBeTruthy();
+
+    const focusSpy = vi.spyOn(textarea!, 'focus');
+
+    await act(async () => {
+      rerender!(<ChatInputArea {...baseProps} editingMessage={makeMsg('m1')} />);
+    });
+
+    // O ChatInputArea chama inputRef.current?.focus() quando editingMessage muda
+    expect(focusSpy).toHaveBeenCalled();
   });
 
-  it('editingMessage volta a null → foco retorna ao textarea', () => {
-    const { rerender, container } = render(
-      <ChatInputArea {...baseProps} editingMessage={makeMsg('m1')} />
-    );
-    const textarea = container.querySelector('textarea');
-    if (!textarea) return;
+  it('editingMessage volta a null → foco retorna ao textarea', async () => {
+    let rerender: (ui: React.ReactElement) => void;
+    let container: HTMLElement;
 
-    rerender(<ChatInputArea {...baseProps} editingMessage={null} />);
-    expect(document.activeElement).toBe(textarea);
+    await act(async () => {
+      const result = render(<ChatInputArea {...baseProps} editingMessage={makeMsg('m1')} />);
+      rerender = result.rerender;
+      container = result.container;
+    });
+
+    const textarea = container!.querySelector('textarea');
+    expect(textarea).toBeTruthy();
+
+    const focusSpy = vi.spyOn(textarea!, 'focus');
+
+    await act(async () => {
+      rerender!(<ChatInputArea {...baseProps} editingMessage={null} />);
+    });
+
+    expect(focusSpy).toHaveBeenCalled();
   });
 
-  it('showSearch fechado → foco retorna ao textarea', () => {
-    const { rerender, container } = render(
-      <ChatInputArea {...baseProps} showSearch={true} editingMessage={null} />
-    );
-    const textarea = container.querySelector('textarea');
-    if (!textarea) return;
+  it('showSearch fechado → foco retorna ao textarea', async () => {
+    let rerender: (ui: React.ReactElement) => void;
+    let container: HTMLElement;
 
-    rerender(<ChatInputArea {...baseProps} showSearch={false} editingMessage={null} />);
-    expect(document.activeElement).toBe(textarea);
+    await act(async () => {
+      const result = render(
+        <ChatInputArea {...baseProps} showSearch={true} editingMessage={null} />
+      );
+      rerender = result.rerender;
+      container = result.container;
+    });
+
+    const textarea = container!.querySelector('textarea');
+    expect(textarea).toBeTruthy();
+
+    const focusSpy = vi.spyOn(textarea!, 'focus');
+
+    await act(async () => {
+      rerender!(<ChatInputArea {...baseProps} showSearch={false} editingMessage={null} />);
+    });
+
+    expect(focusSpy).toHaveBeenCalled();
   });
 });
