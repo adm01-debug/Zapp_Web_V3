@@ -193,38 +193,52 @@ export function formatPercentage(value: number, decimals = 1): string {
 // ─── WhatsApp Text Formatting ────────────────────────────────────────
 
 /**
+/**
  * Converte marcações de formatação do WhatsApp em HTML.
  *
  * Regras suportadas:
- *   *bold*   → <strong>bold</strong>
- *   _italic_ → <em>italic</em>
- *   ~strike~ → <del>strike</del>
- *   `code`   → <code>code</code>
+ *   *bold*       → <strong>bold</strong>
+ *   _italic_     → <em>italic</em>
+ *   ~strike~     → <del>strike</del>
+ *   `code`       → <code>code</code>
+ *   ```block```  → <code>block</code>
+ *   \n           → <br />
  *
- * Escape: \* \_ \~ \` → preserva o caractere literal sem aplicar a tag.
- * Aninhamento: aplicado na ordem bold → italic → strike → code.
- * Segurança: não usa innerHTML — retorna string; o consumidor controla dangerouslySetInnerHTML.
+ * Segurança: escapa HTML antes de processar (< > & " ').
+ *   A saída DEVE ser sanitizada com DOMPurify antes de dangerouslySetInnerHTML.
+ *   Use MarkdownPreview.tsx que já faz o ciclo completo com DOMPurify.
+ *
+ * Escape de marcadores: \* \_ \~ \` preservam o literal.
  */
 export function formatWhatsAppText(text: string): string {
-  // 1. Escapar sequências \X → placeholder temporário para preservar literais
+  // 1. Escapar HTML para neutralizar injeção (B2 FIX — antes ausente)
+  let result = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  // 2. Preservar marcadores literais escapados via placeholder
   const ESCAPE_MAP: Record<string, string> = {
     '\\*': '\x00STAR\x00',
     '\\_': '\x00UNDER\x00',
     '\\~': '\x00TILDE\x00',
     '\\`': '\x00TICK\x00',
   };
-  let result = text;
   for (const [seq, placeholder] of Object.entries(ESCAPE_MAP)) {
     result = result.replaceAll(seq, placeholder);
   }
 
-  // 2. Aplicar substituições (ordem importa: mais específico primeiro)
+  // 3. Aplicar substituições (triple backtick antes do inline)
+  result = result.replace(/```([\s\S]*?)```/g, '<code>$1</code>');
   result = result.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
-  result = result.replace(/_([^_]+)_/g, '<em>$1</em>');
+  result = result.replace(/_((?!_)[^_]+)_/g, '<em>$1</em>');
   result = result.replace(/~([^~]+)~/g, '<del>$1</del>');
   result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+  result = result.replace(/\n/g, '<br />');
 
-  // 3. Restaurar literais escapados
+  // 4. Restaurar literais
   const RESTORE_MAP: Record<string, string> = {
     '\x00STAR\x00': '*',
     '\x00UNDER\x00': '_',

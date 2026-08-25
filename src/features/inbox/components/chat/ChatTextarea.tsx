@@ -14,7 +14,7 @@ import type { Message } from '@/types/chat';
 
 interface ChatTextareaProps {
   logic: ReturnType<typeof useChatInputLogic>;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   inputValue: string;
   inputId?: string;
   isSending?: boolean;

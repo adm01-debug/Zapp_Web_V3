@@ -16,11 +16,11 @@ vi.mock('framer-motion', () => {
 vi.mock('../MentionAutocomplete', () => ({
   MentionAutocomplete: () => null,
   useMentions: () => ({
-    mentionOpen: false,
-    mentionCursorPos: 0,
+    isOpen: false,
+    cursorPos: 0,
     checkForMention: vi.fn(),
-    handleMentionSelect: vi.fn(),
-    closeMention: vi.fn(),
+    handleSelect: vi.fn(),
+    close: vi.fn(),
   }),
 }));
 vi.mock('../MarkdownPreview', () => ({ MarkdownPreview: () => null }));

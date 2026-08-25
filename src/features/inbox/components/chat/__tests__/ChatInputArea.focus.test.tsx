@@ -33,11 +33,11 @@ vi.mock('../AIRewriteButton', () => ({ AIRewriteButton: () => null }));
 vi.mock('../MentionAutocomplete', () => ({
   MentionAutocomplete: () => null,
   useMentions: () => ({
-    mentionOpen: false,
-    mentionCursorPos: 0,
+    isOpen: false,
+    cursorPos: 0,
     checkForMention: vi.fn(),
-    handleMentionSelect: vi.fn(),
-    closeMention: vi.fn(),
+    handleSelect: vi.fn(),
+    close: vi.fn(),
   }),
 }));
 vi.mock('../MarkdownPreview', () => ({ MarkdownPreview: () => null }));
@@ -56,6 +56,8 @@ const baseProps = {
   conversationId: 'conv-1',
   messages: [makeMsg('m1')],
   isSending: false,
+  inputValue: '',
+  onInputChange: vi.fn(),
   onSend: vi.fn(),
   onReply: vi.fn(),
 };

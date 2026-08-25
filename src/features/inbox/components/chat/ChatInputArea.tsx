@@ -2,36 +2,18 @@ import { useMemo, useEffect, useRef, memo } from 'react';
 import { isFeatureEnabled } from '@/lib/featureFlags';
 import { cn } from '@/lib/utils';
 import { Message } from '@/types/chat';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { AnimatePresence, motion } from '@/components/ui/motion';
 import { RichTextToolbar } from './RichTextToolbar';
-import { AIRewriteButton } from './AIRewriteButton';
-import { MentionAutocomplete, useMentions } from './MentionAutocomplete';
-import { MarkdownPreview } from './MarkdownPreview';
 import { SlashCommands, SlashCommand } from '../SlashCommands';
 import { AudioRecorder } from '../AudioRecorder';
 import { FileUploaderRef } from '../FileUploader';
 import { ExternalProduct } from '@/hooks/useExternalApiManagement';
 import type { QueueItem } from '../../hooks/useMessageQueue';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { SecondaryToolbar, TertiaryToolsMenu } from './ChatInputToolbars';
-import { StickerPicker } from '../StickerPicker';
-import { CustomEmojiPicker } from '../CustomEmojiPicker';
-import { RichTextToggle } from './RichTextToolbar';
-import {
-  Send,
-  Mic,
-  Plus,
-  Loader2,
-  X,
-  Image as ImageIcon,
-  FileVideo,
-  FileAudio,
-  Clock,
-} from 'lucide-react';
+import { TertiaryToolsMenu } from './ChatInputToolbars';
 import { InputPreviewBars } from './InputPreviewBars';
 import { ChatSendProgress } from './ChatSendProgress';
-import { getQueueLength, normalizeAttempts, getLastAttemptDuration } from './chatInputGuards';
+import { getQueueLength } from './chatInputGuards';
 import { ChatInputQueueDisplay } from './ChatInputQueueDisplay';
 import { ChatToolbar } from './ChatToolbar';
 import { ChatAttachmentPreview } from './ChatAttachmentPreview';
@@ -40,14 +22,8 @@ import { ChatTextarea } from './ChatTextarea';
 import { ChatSendButtons } from './ChatSendButtons';
 import { useChatInputLogic, setNativeValue } from './useChatInputLogic';
 import { playNotificationSound } from '@/utils/notificationSounds';
-import { formatFileSize } from '@/utils/whatsappFileTypes';
-import { asRef } from '@/lib/reactRefs';
+import { Plus } from 'lucide-react';
 
-function getQueueErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  return 'Erro desconhecido no envio.';
-}
 
 interface QuickReplyItem {
   id: string;
@@ -131,7 +107,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
     sendProgress = 0,
     onInputChange,
     onKeyDown,
-    onBlur,
+    _onBlur: onBlur,
     onSend,
     onCancelReply,
     onCancelEdit,
@@ -187,14 +163,6 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
 
   const isV2AudioEnabled = isFeatureEnabled('v2_audio_recorder');
   const isRetryEnabled = isFeatureEnabled('message_queue_retry');
-
-  const {
-    isOpen: mentionOpen,
-    cursorPos: mentionCursorPos,
-    checkForMention,
-    handleSelect: handleMentionSelect,
-    close: closeMention,
-  } = useMentions(inputRef);
 
   const tertiaryTools = useMemo(
     () => (
@@ -386,7 +354,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
               editingMessage={editingMessage}
               onAudioSend={onAudioSend}
               onAudioCancel={onAudioCancel}
-              onToggleRecording={() => {}}
+              onToggleRecording={onRecordToggle}
             />
             {/* P11 (E61): extraído para ChatToolbar */}
             <ChatToolbar

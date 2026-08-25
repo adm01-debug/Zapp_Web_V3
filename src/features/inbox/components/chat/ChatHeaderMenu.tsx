@@ -32,7 +32,7 @@ interface ChatHeaderMenuProps {
   onCloseConversation?: () => void;
   onAddTag?: () => void;
   onResolve?: () => void;
-  onArchive?: () => void;
+  onArchive?: () => void | Promise<void>;
 }
 
 /** Chat Header Menu component for the chat section. */
