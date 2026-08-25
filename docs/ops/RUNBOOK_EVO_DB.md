@@ -5,7 +5,7 @@
 - Host: 10.0.1.98:5432 (interno Docker Swarm)
 - DB: postgres
 - Schema: evo + zapp + ops
-- MCP: https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp
+- MCP: https://supabase-mcp.atomicabr.com.br/<MCP_PATH_TOKEN>/mcp  ← PathPrefix do router Traefik, stack Portainer id 128; rotacionado 2026-08-24
 
 ## Monitoramento Diário
 

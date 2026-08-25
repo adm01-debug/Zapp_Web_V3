@@ -1,7 +1,7 @@
 # CREDENTIAL INVENTORY — blast radius assessment
 
-**Last Updated:** 2026-07-26
-**Trigger:** Token exposure incident (s-a50174164e4b03ef181a29db65d2db80)
+**Last Updated:** 2026-08-25
+**Trigger:** Token exposure incident (s-a50174164e4b03ef181a29db65d2db80) — ROTACIONADO 2026-08-24
 
 ---
 
@@ -10,16 +10,16 @@
 ### 1. Supabase Service Role Key (COMPROMETIDO)
 | Field | Value |
 |-------|-------|
-| **Token** | `s-a50174164e4b03ef181a29db65d2db80` |
+| **Token** | `s-a50174164e4b03ef181a29db65d2db80` (REVOGADO 2026-08-24) |
 | **Location** | Was in `.mcp.json` (now removed) |
 | **Exposure Date** | 2026-07-14 18:39 |
-| **Action** | **ROTATE IMMEDIATELY** |
+| **Action** | ✅ ROTACIONADO em 2026-08-24 — novo PathPrefix ativo na stack Portainer id 128 |
 | **How** | Supabase Dashboard → Settings → API → Regenerate |
 
 ### 2. Cloudflare Workers — SUPABASE_SERVICE_ROLE_KEY
 | Field | Value |
 |-------|-------|
-| **Current Token** | `s-a50174164e4b03ef181a29db65d2db80` (same as above) |
+| **Current Token** | `<MCP_PATH_TOKEN>` (token real = PathPrefix do router Traefik, rotacionado 2026-08-24) |
 | **Worker** | `supabase-mcp.atomicabr.com.br` |
 | **Action** | Update after Supabase rotation |
 
