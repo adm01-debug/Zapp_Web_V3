@@ -67,6 +67,7 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!isValidUUID(contactId)) throw new Error('Invalid contact ID');
+      if (!authUser) throw new Error('Usuário não autenticado');
       setIsUploading(true);
       const fileExt = file.name.split('.').pop();
       const filePath = `team-files/${contactId}/${Math.random()}.${fileExt}`;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 
 interface RouteLoadingBarProps {
@@ -19,13 +19,13 @@ export function RouteLoadingBar({ isLoading, className }: RouteLoadingBarProps) 
     if (isLoading) {
       setVisible(true);
       setProgress(0);
-      
+
       // Simulate incremental progress
       const t1 = setTimeout(() => setProgress(30), 100);
       const t2 = setTimeout(() => setProgress(60), 400);
       const t3 = setTimeout(() => setProgress(80), 800);
       const t4 = setTimeout(() => setProgress(90), 1500);
-      
+
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
@@ -50,10 +50,10 @@ export function RouteLoadingBar({ isLoading, className }: RouteLoadingBarProps) 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className={cn('fixed top-0 left-0 right-0 z-[100] h-[2px]', className)}
+          className={cn('fixed left-0 right-0 top-0 z-[100] h-[2px]', className)}
         >
           <motion.div
-            className="h-full bg-primary rounded-r-full"
+            className="h-full rounded-r-full bg-primary"
             style={{ width: `${progress}%` }}
             animate={{ width: `${progress}%` }}
             transition={{
@@ -63,7 +63,7 @@ export function RouteLoadingBar({ isLoading, className }: RouteLoadingBarProps) 
           />
           {/* Glow effect */}
           <motion.div
-            className="absolute right-0 top-0 h-full w-12 bg-primary/20 rounded-r-full"
+            className="absolute right-0 top-0 h-full w-12 rounded-r-full bg-primary/20"
             animate={{ opacity: progress < 100 ? [0.4, 0.7, 0.4] : 0 }}
             transition={{ duration: 1, repeat: Infinity }}
           />

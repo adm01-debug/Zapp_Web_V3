@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { CheckCircle, XCircle, Loader2, Mail } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getLogger } from '@/lib/logger';
@@ -22,7 +22,9 @@ export default function VerifyEmail() {
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setStatus('success');
         setEmail(session.user.email || '');
@@ -35,7 +37,7 @@ export default function VerifyEmail() {
 
       if (type === 'signup' || type === 'email_change') {
         const { data, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           setStatus('error');
           return;
@@ -51,18 +53,21 @@ export default function VerifyEmail() {
       } else {
         // Wait a bit for the verification to complete
         timeoutId = setTimeout(() => {
-          supabase.auth.getSession().then(({ data, error }) => {
-            if (error || !data.session) {
-              setStatus('expired');
-            } else {
-              setStatus('success');
-              setEmail(data.session.user.email || '');
-            }
-          }).catch((err: unknown) => {
-            // Rede/timeout: não deixa a promise rejeitar sem handler —
-            // mantém o status atual (loading → sem loop, sem rejection).
-            log.warn('[VerifyEmail] getSession falhou na revalidação:', err);
-          });
+          supabase.auth
+            .getSession()
+            .then(({ data, error }) => {
+              if (error || !data.session) {
+                setStatus('expired');
+              } else {
+                setStatus('success');
+                setEmail(data.session.user.email || '');
+              }
+            })
+            .catch((err: unknown) => {
+              // Rede/timeout: não deixa a promise rejeitar sem handler —
+              // mantém o status atual (loading → sem loop, sem rejection).
+              log.warn('[VerifyEmail] getSession falhou na revalidação:', err);
+            });
         }, 2000);
       }
     };
@@ -97,37 +102,36 @@ export default function VerifyEmail() {
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                className="mx-auto mb-4 w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center"
+                className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10"
               >
-                <Loader2 className="w-8 h-8 text-primary" />
+                <Loader2 className="h-8 w-8 text-primary" />
               </motion.div>
               <CardTitle>Verificando...</CardTitle>
-              <CardDescription>
-                Aguarde enquanto verificamos seu email
-              </CardDescription>
+              <CardDescription>Aguarde enquanto verificamos seu email</CardDescription>
             </CardHeader>
           </Card>
         );
 
       case 'success':
         return (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-          >
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
             <Card className="w-full max-w-md">
               <CardHeader className="text-center">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.2, type: 'spring' }}
-                  className="mx-auto mb-4 w-16 h-16 bg-success/10 dark:bg-success/20/30 rounded-full flex items-center justify-center"
+                  className="dark:bg-success/20/30 mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10"
                 >
-                  <CheckCircle className="w-8 h-8 text-success dark:text-success" />
+                  <CheckCircle className="h-8 w-8 text-success dark:text-success" />
                 </motion.div>
                 <CardTitle>Email Verificado!</CardTitle>
                 <CardDescription>
-                  {email && <>Seu email <strong>{email}</strong> foi verificado com sucesso.</>}
+                  {email && (
+                    <>
+                      Seu email <strong>{email}</strong> foi verificado com sucesso.
+                    </>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -146,9 +150,9 @@ export default function VerifyEmail() {
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="mx-auto mb-4 w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center"
+                className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10"
               >
-                <XCircle className="w-8 h-8 text-destructive" />
+                <XCircle className="h-8 w-8 text-destructive" />
               </motion.div>
               <CardTitle>Erro na Verificação</CardTitle>
               <CardDescription>
@@ -157,7 +161,7 @@ export default function VerifyEmail() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button className="w-full" onClick={handleResendEmail}>
-                <Mail className="w-4 h-4 mr-2" />
+                <Mail className="mr-2 h-4 w-4" />
                 Reenviar Email
               </Button>
               <Button variant="outline" className="w-full" onClick={() => navigate('/auth')}>
@@ -174,14 +178,12 @@ export default function VerifyEmail() {
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="mx-auto mb-4 w-16 h-16 bg-warning/10 dark:bg-warning/20/30 rounded-full flex items-center justify-center"
+                className="dark:bg-warning/20/30 mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-warning/10"
               >
-                <Mail className="w-8 h-8 text-warning dark:text-warning" />
+                <Mail className="h-8 w-8 text-warning dark:text-warning" />
               </motion.div>
               <CardTitle>Link Expirado</CardTitle>
-              <CardDescription>
-                O link de verificação expirou ou é inválido.
-              </CardDescription>
+              <CardDescription>O link de verificação expirou ou é inválido.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <Button className="w-full" onClick={() => navigate('/auth')}>
@@ -194,7 +196,7 @@ export default function VerifyEmail() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
       {renderContent()}
     </div>
   );

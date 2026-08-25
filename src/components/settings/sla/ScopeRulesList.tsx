@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Plus, AlertTriangle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { SLARuleRow } from './SLARuleRow';
 import { SLARuleFormDialog } from './SLARuleFormDialog';
 
@@ -20,15 +20,15 @@ export function ScopeRulesList({ scope }: ScopeRulesListProps) {
   const [editingRule, setEditingRule] = useState<SLARule | null>(null);
 
   // Resolve human-readable names for UUID-based scopes
-  const contactIds = rules.flatMap((r) => r.contact_id ? [r.contact_id] : []);
-  const queueIds = rules.flatMap((r) => r.queue_id ? [r.queue_id] : []);
-  const agentIds = rules.flatMap((r) => r.agent_id ? [r.agent_id] : []);
+  const contactIds = rules.flatMap((r) => (r.contact_id ? [r.contact_id] : []));
+  const queueIds = rules.flatMap((r) => (r.queue_id ? [r.queue_id] : []));
+  const agentIds = rules.flatMap((r) => (r.agent_id ? [r.agent_id] : []));
 
   const { contactNames, queueNames, agentNames } = useSLAScopeNames(
     scope,
     contactIds,
     queueIds,
-    agentIds,
+    agentIds
   );
 
   const getScopeLabel = (rule: SLARule): string | undefined => {

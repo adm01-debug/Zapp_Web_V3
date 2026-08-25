@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { useTalkXCampaignLive } from '@/hooks/useTalkXCampaignLive';
 import { TalkXRecipientsList } from './TalkXRecipientsList';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import type { TalkXCampaign } from '@/hooks/useTalkX';
 
 interface Props {

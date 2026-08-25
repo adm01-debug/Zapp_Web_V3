@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import {
   Smartphone,
   Monitor,
@@ -203,7 +203,8 @@ export function DeviceCard({
           {!isCurrentDevice && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button aria-label="Excluir"
+                <Button
+                  aria-label="Excluir"
                   variant="ghost"
                   size="sm"
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive"

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Edit2, Copy, Search, Folder, FileText } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { toast } from 'sonner';
 import { AVAILABLE_VARIABLES, replaceVariables } from './template-utils';
 import {

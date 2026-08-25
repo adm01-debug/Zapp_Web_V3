@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { X, Users, Clock, TrendingDown, MessageSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ export function QueueAlertsDisplay({ alerts, onDismiss, onNavigate }: QueueAlert
       <AnimatePresence mode="popLayout">
         {alerts.map((alert, index) => {
           const Icon = alertIcons[alert.type];
-          
+
           return (
             <motion.div
               key={`${alert.queueId}-${alert.type}`}
@@ -34,43 +34,39 @@ export function QueueAlertsDisplay({ alerts, onDismiss, onNavigate }: QueueAlert
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, x: 100, scale: 0.95 }}
               transition={{ duration: 0.2, delay: index * 0.05 }}
-              className={`
-                relative flex items-center gap-3 p-3 rounded-lg border backdrop-blur
-                ${alert.severity === 'critical' 
-                  ? 'bg-destructive/10 border-destructive/30 text-destructive' 
-                  : 'bg-warning/10 border-warning/30 text-warning'
-                }
-              `}
+              className={`relative flex items-center gap-3 rounded-lg border p-3 backdrop-blur ${
+                alert.severity === 'critical'
+                  ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                  : 'border-warning/30 bg-warning/10 text-warning'
+              } `}
             >
-              <div 
-                className="w-1 h-8 rounded-full" 
+              <div
+                className="h-8 w-1 rounded-full"
                 style={{ backgroundColor: alert.queueColor ?? 'hsl(var(--primary))' }}
               />
-              
-              <div className={`
-                w-8 h-8 rounded-lg flex items-center justify-center
-                ${alert.severity === 'critical' ? 'bg-destructive/20' : 'bg-warning/20'}
-              `}>
-                <Icon className="w-4 h-4" />
+
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-lg ${alert.severity === 'critical' ? 'bg-destructive/20' : 'bg-warning/20'} `}
+              >
+                <Icon className="h-4 w-4" />
               </div>
 
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="font-medium text-sm cursor-pointer hover:underline bg-transparent border-none p-0 text-left"
+                    className="cursor-pointer border-none bg-transparent p-0 text-left text-sm font-medium hover:underline"
                     onClick={() => onNavigate?.(alert.queueId)}
                   >
                     {alert.queueName}
                   </button>
-                  <span className={`
-                    text-xs px-1.5 py-0.5 rounded
-                    ${alert.severity === 'critical' ? 'bg-destructive/20' : 'bg-warning/20'}
-                  `}>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-xs ${alert.severity === 'critical' ? 'bg-destructive/20' : 'bg-warning/20'} `}
+                  >
                     {alert.severity === 'critical' ? 'Crítico' : 'Atenção'}
                   </span>
                 </div>
-                <p className="text-xs opacity-80 truncate">{alert.message}</p>
+                <p className="truncate text-xs opacity-80">{alert.message}</p>
               </div>
 
               <div className="text-right">
@@ -83,10 +79,10 @@ export function QueueAlertsDisplay({ alerts, onDismiss, onNavigate }: QueueAlert
                   aria-label="Dispensar alerta"
                   variant="ghost"
                   size="icon"
-                  className="w-6 h-6 opacity-60 hover:opacity-100"
+                  className="h-6 w-6 opacity-60 hover:opacity-100"
                   onClick={() => onDismiss(alert)}
                 >
-                  <X className="w-3 h-3" />
+                  <X className="h-3 w-3" />
                 </Button>
               )}
             </motion.div>

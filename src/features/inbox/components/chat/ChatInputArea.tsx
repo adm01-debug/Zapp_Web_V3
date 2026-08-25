@@ -443,7 +443,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
       </AnimatePresence>
       <div
         className={cn(
-          'relative flex shrink-0 flex-col gap-3 border-t border-border/10 bg-background/95 px-4 py-4 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.05)] backdrop-blur-3xl transition-all duration-500 md:px-10 md:py-6',
+          'relative flex shrink-0 flex-col gap-3 border-t border-border/10 bg-background/95 px-4 py-4 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.05)] backdrop-blur-3xl transition-all duration-500 @container md:px-10 md:py-6',
           isWhisper && 'border-t-2 border-warning bg-warning/10 shadow-warning/10',
           logic.isMobile && 'safe-area-bottom px-3 py-4 pb-8'
         )}

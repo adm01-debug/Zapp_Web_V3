@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Shield, Save, Plus, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { getLogger } from '@/lib/logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -209,7 +209,12 @@ export function RateLimitConfigPanel() {
                 </div>
                 <div className="flex items-center gap-2">
                   {getActionBadge(rule.action)}
-                  <Button aria-label="Remover regra" variant="ghost" size="icon" onClick={() => removeRule(rule.id)}>
+                  <Button
+                    aria-label="Remover regra"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeRule(rule.id)}
+                  >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>

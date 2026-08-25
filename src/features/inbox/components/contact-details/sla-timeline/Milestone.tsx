@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { MessageCircle, AlertTriangle, XCircle, User, Users, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

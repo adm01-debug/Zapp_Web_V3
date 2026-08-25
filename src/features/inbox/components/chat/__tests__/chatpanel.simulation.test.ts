@@ -217,7 +217,7 @@ describe('SIMULAÇÃO 01-03 — useChatPanelHandlers', () => {
       expect.objectContaining({ title: 'Erro ao enviar sussurro', variant: 'destructive' })
     );
     // Texto NÃO é perdido (etapa 24): o guard roda antes do setInputValue('').
-    expect(result.current.inputStore.get()).toBe('nota sem usuario');
+    expect(result.current.inputValue).toBe('nota sem usuario');
     // Sem banner: o envio nem chegou a iniciar.
     expect(result.current.lastSendError).toBeNull();
     expect(vi.mocked(insertWhisperMessage)).not.toHaveBeenCalled();

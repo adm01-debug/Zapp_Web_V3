@@ -3,7 +3,7 @@ import { useMountedRef } from '@/hooks/useMountedRef';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { fetchPaymentLinks, createPaymentLink, deletePaymentLink } from '@/hooks/usePaymentLinks';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

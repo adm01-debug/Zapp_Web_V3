@@ -44,7 +44,7 @@ type FeatureFlag =
   | 'chat_bubble_v2'
   /** CHAT-UI-100 E04: scroller v2 por id. Default off. */
   | 'chat_scroller_v2'
-  /** CHAT-UI-100 E04: team-chat TanStack em vez de react-window. Default off. */
+  /** CHAT-UI-100 E04: team-chat TanStack Virtual. Default off. */
   | 'team_chat_tanstack';
 
 interface FeatureConfig {

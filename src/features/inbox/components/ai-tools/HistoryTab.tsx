@@ -1,9 +1,14 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { History, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { type AnalysisData, statusConfig, sentimentConfig, departmentConfig } from './analysisConfigs';
+import {
+  type AnalysisData,
+  statusConfig,
+  sentimentConfig,
+  departmentConfig,
+} from './analysisConfigs';
 
 interface HistoryItem {
   id: string;
@@ -43,7 +48,9 @@ export function HistoryTab({ analyses, historyLoading, onLoadHistory }: HistoryT
       <div className="py-8 text-center">
         <History className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">Nenhuma análise anterior</p>
-        <p className="mt-1 text-xs text-muted-foreground">Clique em &quot;Analisar&quot; para criar a primeira</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Clique em &quot;Analisar&quot; para criar a primeira
+        </p>
       </div>
     );
   }
@@ -78,21 +85,32 @@ export function HistoryTab({ analyses, historyLoading, onLoadHistory }: HistoryT
                 {format(new Date(item.created_at), "dd 'de' MMM, HH:mm", { locale: ptBR })}
               </span>
               {item.department && departmentConfig[item.department] && (
-                <Badge variant="outline" className={`${departmentConfig[item.department].color} text-[9px] px-1.5 py-0`}>
+                <Badge
+                  variant="outline"
+                  className={`${departmentConfig[item.department].color} px-1.5 py-0 text-[9px]`}
+                >
                   <span className="mr-0.5">{departmentConfig[item.department].emoji}</span>
                   {departmentConfig[item.department].label}
                 </Badge>
               )}
             </div>
-            <Badge variant="outline" className={`text-[10px] ${sentimentConfig[item.sentiment]?.color || ''}`}>
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${sentimentConfig[item.sentiment]?.color || ''}`}
+            >
               {item.sentiment_score}%
             </Badge>
           </div>
           <p className="line-clamp-2 text-xs leading-relaxed">{item.summary}</p>
           <div className="mt-2 flex items-center gap-1.5">
-            <Badge variant="secondary" className="text-[10px]">{item.message_count} msgs</Badge>
+            <Badge variant="secondary" className="text-[10px]">
+              {item.message_count} msgs
+            </Badge>
             {statusConfig[item.status] && (
-              <Badge variant="outline" className={`text-[10px] ${statusConfig[item.status].className}`}>
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${statusConfig[item.status].className}`}
+              >
                 {statusConfig[item.status].label}
               </Badge>
             )}

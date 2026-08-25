@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 interface PageTemplateProps {
   /** Page title (H1) */
@@ -64,33 +64,30 @@ export function PageTemplate({
       variants={pageVariants}
       initial="initial"
       animate="animate"
-      className={cn(
-        'flex flex-col w-full h-full overflow-hidden',
-        !fullBleed && 'max-w-full'
-      )}
+      className={cn('flex h-full w-full flex-col overflow-hidden', !fullBleed && 'max-w-full')}
     >
       {/* ─── Header ─── */}
       <motion.header
         variants={childVariants}
         className={cn(
-          'flex flex-col gap-3 shrink-0 border-b border-border/40 bg-card',
-          padded ? 'px-4 sm:px-6 pt-4 sm:pt-5 pb-3 sm:pb-4' : 'px-4 pt-4 pb-3'
+          'flex shrink-0 flex-col gap-3 border-b border-border/40 bg-card',
+          padded ? 'px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5' : 'px-4 pb-3 pt-4'
         )}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           {/* Title block */}
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             {icon && (
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 {icon}
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-fluid-lg sm:text-fluid-xl font-bold text-foreground tracking-tight truncate leading-tight">
+              <h1 className="truncate text-fluid-lg font-bold leading-tight tracking-tight text-foreground sm:text-fluid-xl">
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-fluid-xs sm:text-fluid-sm text-muted-foreground truncate mt-0.5 leading-normal">
+                <p className="mt-0.5 truncate text-fluid-xs leading-normal text-muted-foreground sm:text-fluid-sm">
                   {subtitle}
                 </p>
               )}
@@ -98,16 +95,12 @@ export function PageTemplate({
           </div>
 
           {/* Actions */}
-          {actions && (
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {actions}
-            </div>
-          )}
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
         </div>
 
         {/* Filters row */}
         {filters && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
             {filters}
           </div>
         )}
@@ -117,7 +110,7 @@ export function PageTemplate({
       <motion.div
         variants={childVariants}
         className={cn(
-          'flex-1 overflow-y-auto overflow-x-hidden min-h-0',
+          'min-h-0 flex-1 overflow-y-auto overflow-x-hidden',
           padded && 'p-[var(--density-padding-x)] sm:p-[calc(var(--density-padding-x)*1.5)]',
           className
         )}

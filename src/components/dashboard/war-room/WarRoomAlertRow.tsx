@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { AlertTriangle, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,15 +22,27 @@ export function WarRoomAlertRow({ alert, onDismiss }: AlertRowProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className={cn("p-3 rounded-lg border flex items-start gap-3", alertStyles[alert.type], alert.isNew && alert.type === 'critical' && "animate-pulse")}
+      className={cn(
+        'flex items-start gap-3 rounded-lg border p-3',
+        alertStyles[alert.type],
+        alert.isNew && alert.type === 'critical' && 'animate-pulse'
+      )}
     >
-      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm">{alert.title}</div>
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium">{alert.title}</div>
         <div className="text-xs opacity-80">{alert.message}</div>
-        <div className="text-xs opacity-60 mt-1">{alert.timestamp.toLocaleTimeString()}</div>
+        <div className="mt-1 text-xs opacity-60">{alert.timestamp.toLocaleTimeString()}</div>
       </div>
-      <Button aria-label="Dispensar alerta" variant="ghost" size="icon" className="shrink-0 h-6 w-6" onClick={onDismiss}><XCircle className="w-4 h-4" /></Button>
+      <Button
+        aria-label="Dispensar alerta"
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 shrink-0"
+        onClick={onDismiss}
+      >
+        <XCircle className="h-4 w-4" />
+      </Button>
     </motion.div>
   );
 }

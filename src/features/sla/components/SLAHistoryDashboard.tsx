@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import {
   TrendingUp,
   TrendingDown,
@@ -165,7 +165,12 @@ export const SLAHistoryDashboard = () => {
           <ToggleGroup
             type="single"
             value={period}
-            onValueChange={(v) => v && setPeriod(v as HistoryPeriod /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */)}
+            onValueChange={(v) =>
+              v &&
+              setPeriod(
+                v as HistoryPeriod /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */
+              )
+            }
             className="rounded-lg bg-muted/50 p-1"
           >
             {Object.entries(periodLabels).map(([key, label]) => (

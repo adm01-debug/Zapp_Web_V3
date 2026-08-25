@@ -1,13 +1,19 @@
 import { useState, useMemo, useCallback, type HTMLAttributes } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  MessageSquare, Users, UserCheck, Truck, Wrench,
-  Star, Handshake, GripVertical,
+  MessageSquare,
+  Users,
+  UserCheck,
+  Truck,
+  Wrench,
+  Star,
+  Handshake,
+  GripVertical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getAvatarColor, getInitials } from '@/lib/avatarColors';
@@ -45,56 +51,63 @@ export function ContactKanbanView({ contacts, onContactClick }: ContactKanbanVie
   const [localContacts, setLocalContacts] = useState<KanbanContact[]>(contacts);
 
   // Sync when parent contacts change
-  useMemo(() => { setLocalContacts(contacts); }, [contacts]);
+  useMemo(() => {
+    setLocalContacts(contacts);
+  }, [contacts]);
 
   const columns = useMemo(() => {
     const grouped: Record<string, KanbanContact[]> = {};
-    KANBAN_COLUMNS.forEach(col => { grouped[col.type] = []; });
+    KANBAN_COLUMNS.forEach((col) => {
+      grouped[col.type] = [];
+    });
 
-    localContacts.forEach(c => {
+    localContacts.forEach((c) => {
       const type = c.contact_type || 'cliente';
       if (grouped[type]) grouped[type].push(c);
       else if (grouped['cliente']) grouped['cliente'].push(c);
     });
 
-    return KANBAN_COLUMNS.map(col => ({
+    return KANBAN_COLUMNS.map((col) => ({
       ...col,
       contacts: grouped[col.type] || [],
     }));
   }, [localContacts]);
 
-  const handleDragEnd = useCallback(async (result: DropResult) => {
-    const { draggableId, destination } = result;
-    if (!destination) return;
+  const handleDragEnd = useCallback(
+    async (result: DropResult) => {
+      const { draggableId, destination } = result;
+      if (!destination) return;
 
-    const newType = destination.droppableId;
-    const contact = localContacts.find(c => c.id === draggableId);
-    if (!contact || contact.contact_type === newType) return;
+      const newType = destination.droppableId;
+      const contact = localContacts.find((c) => c.id === draggableId);
+      if (!contact || contact.contact_type === newType) return;
 
-    // Optimistic update
-    setLocalContacts(prev =>
-      prev.map(c => c.id === draggableId ? { ...c, contact_type: newType } : c)
-    );
-
-    const { error } = await dbFrom('contacts')
-      .update({ contact_type: newType })
-      .eq('id', draggableId);
-
-    if (error) {
-      // Revert
-      setLocalContacts(prev =>
-        prev.map(c => c.id === draggableId ? { ...c, contact_type: contact.contact_type } : c)
+      // Optimistic update
+      setLocalContacts((prev) =>
+        prev.map((c) => (c.id === draggableId ? { ...c, contact_type: newType } : c))
       );
-      toast.error('Erro ao mover contato');
-    } else {
-      const col = KANBAN_COLUMNS.find(c => c.type === newType);
-      toast.success(`Movido para ${col?.label || newType}`);
-    }
-  }, [localContacts]);
+
+      const { error } = await dbFrom('contacts')
+        .update({ contact_type: newType })
+        .eq('id', draggableId);
+
+      if (error) {
+        // Revert
+        setLocalContacts((prev) =>
+          prev.map((c) => (c.id === draggableId ? { ...c, contact_type: contact.contact_type } : c))
+        );
+        toast.error('Erro ao mover contato');
+      } else {
+        const col = KANBAN_COLUMNS.find((c) => c.type === newType);
+        toast.success(`Movido para ${col?.label || newType}`);
+      }
+    },
+    [localContacts]
+  );
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4 min-h-[500px]">
+      <div className="flex min-h-[500px] gap-4 overflow-x-auto pb-4">
         {columns.map((column, colIndex) => {
           const Icon = column.icon;
           return (
@@ -103,25 +116,28 @@ export function ContactKanbanView({ contacts, onContactClick }: ContactKanbanVie
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: colIndex * 0.08 }}
-              className="flex-shrink-0 w-[280px]"
+              className="w-[280px] flex-shrink-0"
             >
-              <Card className="border-border/40 h-full">
-                <CardHeader className="pb-3 pt-4 px-4">
-                  <CardTitle className="text-sm font-semibold flex items-center justify-between">
+              <Card className="h-full border-border/40">
+                <CardHeader className="px-4 pb-3 pt-4">
+                  <CardTitle className="flex items-center justify-between text-sm font-semibold">
                     <div className="flex items-center gap-2">
                       <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center"
+                        className="flex h-7 w-7 items-center justify-center rounded-lg"
                         style={{ backgroundColor: `${column.color}20` }}
                       >
-                        <Icon className="w-3.5 h-3.5" style={{ color: column.color }} />
+                        <Icon className="h-3.5 w-3.5" style={{ color: column.color }} />
                       </div>
                       {column.label}
                     </div>
-                    <Badge variant="secondary" className="text-[10px] h-5">
+                    <Badge variant="secondary" className="h-5 text-[10px]">
                       {column.contacts.length}
                     </Badge>
                   </CardTitle>
-                  <div className="h-0.5 rounded-full mt-2" style={{ backgroundColor: column.color, opacity: 0.4 }} />
+                  <div
+                    className="mt-2 h-0.5 rounded-full"
+                    style={{ backgroundColor: column.color, opacity: 0.4 }}
+                  />
                 </CardHeader>
                 <Droppable droppableId={column.type}>
                   {(provided, snapshot) => (
@@ -129,8 +145,8 @@ export function ContactKanbanView({ contacts, onContactClick }: ContactKanbanVie
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={cn(
-                        "px-3 pb-3 min-h-[100px] transition-colors duration-200 rounded-b-lg",
-                        snapshot.isDraggingOver && "bg-primary/5"
+                        'min-h-[100px] rounded-b-lg px-3 pb-3 transition-colors duration-200',
+                        snapshot.isDraggingOver && 'bg-primary/5'
                       )}
                     >
                       <ScrollArea className="max-h-[60vh]">
@@ -144,43 +160,63 @@ export function ContactKanbanView({ contacts, onContactClick }: ContactKanbanVie
                                     ref={dragProvided.innerRef}
                                     {...(dragProvided.draggableProps as unknown as HTMLAttributes<HTMLDivElement>)} // ignore-audit — react-beautiful-dnd DraggableProps doesn't extend HTMLAttributes; same shape at runtime
                                     className={cn(
-                                      "w-full text-left p-3 rounded-lg border border-border/30",
-                                      "bg-card hover:bg-muted/40 hover:border-primary/20",
-                                      "transition-all duration-150 cursor-pointer group",
-                                      dragSnapshot.isDragging && "shadow-lg ring-2 ring-primary/30 rotate-1"
+                                      'w-full rounded-lg border border-border/30 p-3 text-left',
+                                      'bg-card hover:border-primary/20 hover:bg-muted/40',
+                                      'group cursor-pointer transition-all duration-150',
+                                      dragSnapshot.isDragging &&
+                                        'rotate-1 shadow-lg ring-2 ring-primary/30'
                                     )}
-                                    onClick={() => !dragSnapshot.isDragging && onContactClick(contact.id)}
-                                    onKeyDown={(e) => !dragSnapshot.isDragging && e.key === 'Enter' && onContactClick(contact.id)}
+                                    onClick={() =>
+                                      !dragSnapshot.isDragging && onContactClick(contact.id)
+                                    }
+                                    onKeyDown={(e) =>
+                                      !dragSnapshot.isDragging &&
+                                      e.key === 'Enter' &&
+                                      onContactClick(contact.id)
+                                    }
                                   >
                                     <div className="flex items-center gap-2.5">
                                       <div
                                         {...dragProvided.dragHandleProps}
-                                        className="opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+                                        className="cursor-grab opacity-0 transition-opacity hover:!opacity-100 active:cursor-grabbing group-hover:opacity-50"
                                       >
-                                        <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                                        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
                                       </div>
-                                      <Avatar className="w-8 h-8">
-                                        <AvatarImage src={contact.avatar_url || undefined} alt={contact.name} />
-                                        <AvatarFallback className={cn(colors.bg, colors.text, 'text-[10px] font-bold')}>
+                                      <Avatar className="h-8 w-8">
+                                        <AvatarImage
+                                          src={contact.avatar_url || undefined}
+                                          alt={contact.name}
+                                        />
+                                        <AvatarFallback
+                                          className={cn(
+                                            colors.bg,
+                                            colors.text,
+                                            'text-[10px] font-bold'
+                                          )}
+                                        >
                                           {getInitials(contact.name)}
                                         </AvatarFallback>
                                       </Avatar>
                                       <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-semibold truncate text-foreground">
+                                        <p className="truncate text-xs font-semibold text-foreground">
                                           {contact.name} {contact.surname || ''}
                                         </p>
                                         {contact.company && (
-                                          <p className="text-[10px] text-muted-foreground truncate">
+                                          <p className="truncate text-[10px] text-muted-foreground">
                                             {contact.company}
                                           </p>
                                         )}
                                       </div>
-                                      <MessageSquare className="w-3.5 h-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
                                     </div>
                                     {contact.tags && contact.tags.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-2 ml-6">
-                                        {contact.tags.slice(0, 2).map(tag => (
-                                          <Badge key={tag} variant="secondary" className="text-[9px] h-4 px-1">
+                                      <div className="ml-6 mt-2 flex flex-wrap gap-1">
+                                        {contact.tags.slice(0, 2).map((tag) => (
+                                          <Badge
+                                            key={tag}
+                                            variant="secondary"
+                                            className="h-4 px-1 text-[9px]"
+                                          >
                                             {tag}
                                           </Badge>
                                         ))}

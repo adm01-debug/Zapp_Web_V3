@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Shield, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -43,7 +43,7 @@ export function ReauthDialog({
 
     setError('');
     const success = await onConfirm(password);
-    
+
     if (success) {
       setPassword('');
     } else {
@@ -64,13 +64,14 @@ export function ReauthDialog({
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="mx-auto w-16 h-16 rounded-full bg-warning/20 flex items-center justify-center mb-4"
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-warning/20"
           >
-            <Shield className="w-8 h-8 text-warning" />
+            <Shield className="h-8 w-8 text-warning" />
           </motion.div>
           <DialogTitle className="text-center">Confirmação de Segurança</DialogTitle>
           <DialogDescription className="text-center">
-            Para realizar a ação <strong>{actionLabel}</strong>, confirme sua identidade digitando sua senha.
+            Para realizar a ação <strong>{actionLabel}</strong>, confirme sua identidade digitando
+            sua senha.
           </DialogDescription>
         </DialogHeader>
 
@@ -78,7 +79,7 @@ export function ReauthDialog({
           <div className="space-y-2">
             <Label htmlFor="reauth-password">Senha Atual</Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="reauth-password"
                 type={showPassword ? 'text' : 'password'}
@@ -101,7 +102,7 @@ export function ReauthDialog({
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
             {error && (
@@ -116,7 +117,7 @@ export function ReauthDialog({
             )}
           </div>
 
-          <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+          <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
             <p>Esta verificação adicional protege sua conta contra acessos não autorizados.</p>
           </div>
         </div>
@@ -128,7 +129,7 @@ export function ReauthDialog({
           <Button onClick={handleConfirm} disabled={isLoading || !password}>
             {isLoading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Verificando...
               </>
             ) : (

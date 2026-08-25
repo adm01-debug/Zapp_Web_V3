@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -43,12 +43,13 @@ export function SLAAgentTable({ agents }: SLAAgentTableProps) {
       <CardContent>
         {agents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-4">
-              <Users className="w-7 h-7 text-muted-foreground/40" />
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted/50">
+              <Users className="h-7 w-7 text-muted-foreground/40" />
             </div>
-            <p className="font-medium text-foreground mb-1">Sem dados de agentes</p>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Métricas individuais aparecerão quando agentes forem atribuídos a conversas monitoradas.
+            <p className="mb-1 font-medium text-foreground">Sem dados de agentes</p>
+            <p className="max-w-sm text-center text-sm text-muted-foreground">
+              Métricas individuais aparecerão quando agentes forem atribuídos a conversas
+              monitoradas.
             </p>
           </div>
         ) : (
@@ -56,36 +57,54 @@ export function SLAAgentTable({ agents }: SLAAgentTableProps) {
             {agents.map((agent, index) => (
               <motion.div
                 key={agent.agentId}
-                initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.1 }}
-                className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="flex items-center gap-4 rounded-lg bg-muted/30 p-4 transition-colors hover:bg-muted/50"
               >
                 <Avatar className="h-12 w-12">
                   <AvatarImage src={agent.avatarUrl} alt={agent.agentName} />
-                  <AvatarFallback>{agent.agentName.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
+                  <AvatarFallback>
+                    {agent.agentName
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2)}
+                  </AvatarFallback>
                 </Avatar>
 
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium truncate">{agent.agentName}</p>
-                    <Badge className={getRateBadge(agent.overallRate)}>{agent.overallRate.toFixed(0)}% SLA</Badge>
+                    <p className="truncate font-medium">{agent.agentName}</p>
+                    <Badge className={getRateBadge(agent.overallRate)}>
+                      {agent.overallRate.toFixed(0)}% SLA
+                    </Badge>
                   </div>
-                  <div className="flex gap-6 mt-2 text-sm">
+                  <div className="mt-2 flex gap-6 text-sm">
                     <div className="flex items-center gap-2">
                       <Timer className="h-4 w-4 text-info" />
                       <span className="text-muted-foreground">1ª Resposta:</span>
-                      <span className={getRateColor(agent.firstResponse.rate)}>{agent.firstResponse.rate.toFixed(0)}%</span>
-                      <span className="text-muted-foreground">({agent.firstResponse.onTime}/{agent.firstResponse.total})</span>
+                      <span className={getRateColor(agent.firstResponse.rate)}>
+                        {agent.firstResponse.rate.toFixed(0)}%
+                      </span>
+                      <span className="text-muted-foreground">
+                        ({agent.firstResponse.onTime}/{agent.firstResponse.total})
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-primary" />
                       <span className="text-muted-foreground">Resolução:</span>
-                      <span className={getRateColor(agent.resolution.rate)}>{agent.resolution.rate.toFixed(0)}%</span>
-                      <span className="text-muted-foreground">({agent.resolution.onTime}/{agent.resolution.total})</span>
+                      <span className={getRateColor(agent.resolution.rate)}>
+                        {agent.resolution.rate.toFixed(0)}%
+                      </span>
+                      <span className="text-muted-foreground">
+                        ({agent.resolution.onTime}/{agent.resolution.total})
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="hidden md:block w-32">
+                <div className="hidden w-32 md:block">
                   <Progress value={agent.overallRate} className="h-2" />
                 </div>
               </motion.div>

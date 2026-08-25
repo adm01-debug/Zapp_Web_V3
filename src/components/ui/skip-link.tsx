@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { useState, useEffect, useRef, forwardRef } from 'react';
 import { ArrowRight, Navigation, Search, MessageSquare, LayoutDashboard } from 'lucide-react';
 
@@ -97,8 +97,8 @@ export function SkipLinks() {
       for (const { href } of SKIP_TARGETS) {
         if (document.querySelector(href)) next.add(href);
       }
-      setAvailableHrefs(prev => {
-        if (prev.size === next.size && [...prev].every(h => next.has(h))) return prev;
+      setAvailableHrefs((prev) => {
+        if (prev.size === next.size && [...prev].every((h) => next.has(h))) return prev;
         return next;
       });
     };
@@ -108,7 +108,7 @@ export function SkipLinks() {
     return () => observer.disconnect();
   }, []);
 
-  const visible = SKIP_TARGETS.filter(t => availableHrefs.has(t.href));
+  const visible = SKIP_TARGETS.filter((t) => availableHrefs.has(t.href));
   if (visible.length === 0) return null;
 
   return (

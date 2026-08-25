@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,7 +58,9 @@ export function N8nIntegrationView() {
         toast.error('Falha ao salvar a configuração: ' + (result.error ?? 'erro desconhecido'));
         return;
       }
-      toast.success('Configuração salva. A integração permanece desligada até a ativação do pipeline de envio.');
+      toast.success(
+        'Configuração salva. A integração permanece desligada até a ativação do pipeline de envio.'
+      );
     } catch (err: unknown) {
       toast.error('Erro ao salvar: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -69,18 +71,29 @@ export function N8nIntegrationView() {
   const currentStatus = status?.status ?? null;
 
   return (
-    <div className="space-y-6 p-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-primary)' }}>
-            <Zap className="w-5 h-5 text-primary-foreground" />
+        <div className="mb-2 flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-xl"
+            style={{ background: 'var(--gradient-primary)' }}
+          >
+            <Zap className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground">Integração n8n</h1>
-            <p className="text-muted-foreground text-sm">Conecte workflows de automação via webhooks</p>
+            <p className="text-sm text-muted-foreground">
+              Conecte workflows de automação via webhooks
+            </p>
           </div>
           <Badge
-            variant={currentStatus === 'configured' ? 'default' : currentStatus === 'disabled' ? 'outline' : 'secondary'}
+            variant={
+              currentStatus === 'configured'
+                ? 'default'
+                : currentStatus === 'disabled'
+                  ? 'outline'
+                  : 'secondary'
+            }
             className="ml-auto"
           >
             {loading
@@ -95,12 +108,15 @@ export function N8nIntegrationView() {
       {/* Estado honesto da integração */}
       {!loading && status && !status.ok && (
         <Card className="border-destructive/40">
-          <CardContent className="py-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
             <div>
-              <p className="text-sm font-medium text-foreground">Não foi possível consultar o estado real da integração</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A edge function zapp-n8n-sync não respondeu. Nenhuma alteração local é exibida como conexão.
+              <p className="text-sm font-medium text-foreground">
+                Não foi possível consultar o estado real da integração
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A edge function zapp-n8n-sync não respondeu. Nenhuma alteração local é exibida como
+                conexão.
               </p>
             </div>
           </CardContent>
@@ -110,11 +126,11 @@ export function N8nIntegrationView() {
       {!loading && status?.ok && currentStatus === 'not_configured' && (
         <Card className="border-dashed border-secondary/50">
           <CardContent className="py-6 text-center">
-            <Zap className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            <Zap className="mx-auto mb-2 h-8 w-8 opacity-40" />
             <p className="text-sm font-medium text-foreground">Integração não configurada</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-              Nenhuma instância n8n foi cadastrada — nenhum evento do sistema é enviado a fluxos n8n.
-              Salve a URL base abaixo para registrar a configuração.
+            <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+              Nenhuma instância n8n foi cadastrada — nenhum evento do sistema é enviado a fluxos
+              n8n. Salve a URL base abaixo para registrar a configuração.
             </p>
           </CardContent>
         </Card>
@@ -122,13 +138,16 @@ export function N8nIntegrationView() {
 
       {!loading && status?.ok && currentStatus === 'disabled' && (
         <Card className="border-warning/40">
-          <CardContent className="py-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning mt-0.5 shrink-0" />
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
             <div>
-              <p className="text-sm font-medium text-foreground">Configuração salva, integração desligada</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A URL base está registrada, mas <strong>nenhum evento é enviado ao n8n</strong>: o contrato
-                permanece desligado (enabled=false) até a ativação do pipeline de dispatch de eventos.
+              <p className="text-sm font-medium text-foreground">
+                Configuração salva, integração desligada
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A URL base está registrada, mas <strong>nenhum evento é enviado ao n8n</strong>: o
+                contrato permanece desligado (enabled=false) até a ativação do pipeline de dispatch
+                de eventos.
               </p>
             </div>
           </CardContent>
@@ -137,12 +156,13 @@ export function N8nIntegrationView() {
 
       {!loading && status?.ok && currentStatus === 'configured' && (
         <Card className="border-success/40">
-          <CardContent className="py-4 flex items-start gap-3">
-            <Zap className="w-5 h-5 text-success mt-0.5 shrink-0" />
+          <CardContent className="flex items-start gap-3 py-4">
+            <Zap className="mt-0.5 h-5 w-5 shrink-0 text-success" />
             <div>
               <p className="text-sm font-medium text-foreground">Integração configurada</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Eventos do sistema são enviados aos fluxos da instância cadastrada. Verifique os webhooks no n8n.
+              <p className="mt-1 text-xs text-muted-foreground">
+                Eventos do sistema são enviados aos fluxos da instância cadastrada. Verifique os
+                webhooks no n8n.
               </p>
             </div>
           </CardContent>
@@ -163,22 +183,36 @@ export function N8nIntegrationView() {
                 id="n8n-url"
                 placeholder="https://seu-n8n.example.com"
                 value={baseUrl}
-                onChange={e => setBaseUrl(e.target.value)}
+                onChange={(e) => setBaseUrl(e.target.value)}
                 disabled={saving}
               />
             </div>
-            <Button onClick={handleSave} className="mt-auto" style={{ background: 'var(--gradient-primary)' }} disabled={saving || loading}>
-              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            <Button
+              onClick={handleSave}
+              className="mt-auto"
+              style={{ background: 'var(--gradient-primary)' }}
+              disabled={saving || loading}
+            >
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
               Salvar
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Salvar registra a configuração em <code>zapp.n8n_config</code>. A integração só é ativada
-            quando o pipeline de envio de eventos existir (contrato real, desligado por padrão).
+            Salvar registra a configuração em <code>zapp.n8n_config</code>. A integração só é
+            ativada quando o pipeline de envio de eventos existir (contrato real, desligado por
+            padrão).
           </p>
           <div className="flex justify-end">
             <Button variant="ghost" size="sm" onClick={loadStatus} disabled={loading}>
-              {loading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+              {loading ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-3 w-3" />
+              )}
               Verificar estado
             </Button>
           </div>

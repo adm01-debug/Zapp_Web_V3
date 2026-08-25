@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,58 +50,77 @@ const integrations = [
 export function IntegrationsHub() {
   const [currentView, setCurrentView] = useState<IntegrationView>('hub');
 
-  if (currentView === 'evolution-api') return (
-    <div>
-      <div className="p-4 pb-0">
-        <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>← Voltar</Button>
+  if (currentView === 'evolution-api')
+    return (
+      <div>
+        <div className="p-4 pb-0">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>
+            ← Voltar
+          </Button>
+        </div>
+        <EvolutionApiIntegrationView />
       </div>
-      <EvolutionApiIntegrationView />
-    </div>
-  );
+    );
 
-  if (currentView === 'n8n') return (
-    <div>
-      <div className="p-4 pb-0">
-        <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>← Voltar</Button>
+  if (currentView === 'n8n')
+    return (
+      <div>
+        <div className="p-4 pb-0">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>
+            ← Voltar
+          </Button>
+        </div>
+        <N8nIntegrationView />
       </div>
-      <N8nIntegrationView />
-    </div>
-  );
+    );
 
-  if (currentView === 'sentry') return (
-    <div>
-      <div className="p-4 pb-0">
-        <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>← Voltar</Button>
+  if (currentView === 'sentry')
+    return (
+      <div>
+        <div className="p-4 pb-0">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>
+            ← Voltar
+          </Button>
+        </div>
+        <SentryIntegrationView />
       </div>
-      <SentryIntegrationView />
-    </div>
-  );
+    );
 
-  if (currentView === 'bitrix24') return (
-    <div>
-      <div className="p-4 pb-0">
-        <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>← Voltar</Button>
+  if (currentView === 'bitrix24')
+    return (
+      <div>
+        <div className="p-4 pb-0">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentView('hub')}>
+            ← Voltar
+          </Button>
+        </div>
+        <BitrixIntegrationView />
       </div>
-      <BitrixIntegrationView />
-    </div>
-  );
+    );
 
   return (
-    <div className="space-y-6 p-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="font-display text-2xl font-bold text-foreground">Integrações</h1>
-        <p className="text-muted-foreground text-sm">Conecte ferramentas externas ao seu sistema</p>
+        <p className="text-sm text-muted-foreground">Conecte ferramentas externas ao seu sistema</p>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {integrations.map((integration, i) => (
-          <motion.div key={integration.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
-            <Card className="border-secondary/30 hover:border-primary/30 transition-colors h-full">
+          <motion.div
+            key={integration.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+          >
+            <Card className="h-full border-secondary/30 transition-colors hover:border-primary/30">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg ${integration.color} flex items-center justify-center`}>
-                      <integration.icon className="w-5 h-5 text-foreground" />
+                    <div
+                      className={`h-10 w-10 rounded-lg ${integration.color} flex items-center justify-center`}
+                    >
+                      <integration.icon className="h-5 w-5 text-foreground" />
                     </div>
                     <div>
                       <CardTitle className="text-base">{integration.name}</CardTitle>
@@ -113,14 +132,16 @@ export function IntegrationsHub() {
                 </div>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-xs mb-4">{integration.description}</CardDescription>
+                <CardDescription className="mb-4 text-xs">
+                  {integration.description}
+                </CardDescription>
                 <Button
                   size="sm"
                   variant="outline"
                   className="w-full"
                   onClick={() => setCurrentView(integration.id)}
                 >
-                  Configurar <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                  Configurar <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Button>
               </CardContent>
             </Card>

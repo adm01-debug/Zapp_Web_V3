@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Confetti, useCelebration } from './Confetti';
 import { toast } from '@/hooks/use-toast';
 import { Sparkles, PartyPopper, Rocket, Ghost, Music } from 'lucide-react';

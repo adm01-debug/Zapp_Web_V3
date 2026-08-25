@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMountedRef } from '@/hooks/useMountedRef';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import {
   FileText,
   Search,

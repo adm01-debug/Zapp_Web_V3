@@ -12,7 +12,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Plus, Trophy, Trash2, FlaskConical } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { useCampaignABTesting, type ABVariant } from '@/hooks/campaigns/useCampaignABTesting';
 
 interface CampaignABTestingProps {

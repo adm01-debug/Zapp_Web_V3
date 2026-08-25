@@ -115,6 +115,8 @@ export interface Message {
     buttonId: string;
     buttonTitle: string;
     originalMessageId: string;
+    /** Rastreabilidade do tipo de resposta interativa — E66 */
+    type?: 'list_reply' | 'button_reply' | 'nfm_reply';
   };
   // Reply/Quote reference
   replyTo?: {
