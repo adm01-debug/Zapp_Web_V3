@@ -1,0 +1,55 @@
+# ============================================================
+# CONTRACT GUARDS -- paridade FE<->BE de validadores + ratchet invokeEdge
+# ------------------------------------------------------------
+# Por que existe (PLANO-100-CONTRATOS-EDGE, Bloco 8, etapas 87/88/90):
+#   1. check-contract-sync.mjs: o FE valida UX pre-envio em
+#      src/shared/criticalPayloadSchemas.ts (zod v4) e o BE enforce o
+#      contrato de wire em _shared/contract-schemas.ts + _shared/schemas.ts
+#      (zod 3.23.8). Divergencia de veredito (um lado aceita o que o outro
+#      rejeita) = bug de contrato: usuario passa na UX e toma 422.
+#   2. check-invoke-migration.mjs: ratchet anti-regressao da migracao para
+#      src/lib/invokeEdge.ts -- nenhum call-site NOVO de
+#      supabase.functions.invoke direto; o numero so diminui.
+#
+# Gatilho: PR que toca os arquivos vigiados + diario (catch de drift fora
+# do horario cheio, na tradicao do bundle-secret-guard) + manual.
+# Runner ubuntu-latest: job leve, sem docker/deploys (decisao #1368-1370).
+# ============================================================
+name: Contract Guards
+
+on:
+  pull_request:
+    paths:
+      - "scripts/check-*.mjs"
+      - "src/shared/criticalPayloadSchemas.ts"
+      - "supabase/functions/_shared/contract-schemas*.ts"
+      - "supabase/functions/_shared/schemas.ts"
+      - "src/lib/invokeEdge.ts"
+      - ".github/workflows/contract-guards.yml"
+  schedule:
+    - cron: "41 8 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: Paridade de contratos + ratchet invokeEdge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v7
+
+      - name: "Setup Node 22"
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # Script puro (node:fs only) -- sem npm install, sem cache.
+      - name: "Etapa 87/F7: paridade de validadores FE x BE"
+        run: node scripts/check-contract-sync.mjs
+
+      - name: "Etapa 88: ratchet da migracao para invokeEdge"
+        run: node scripts/check-invoke-migration.mjs
