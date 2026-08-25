@@ -51,8 +51,16 @@ export function ChatTextarea({
   onEditStart,
   onFileDrop,
 }: ChatTextareaProps) {
-  const { mentionOpen, mentionCursorPos, checkForMention, handleMentionSelect, closeMention } =
-    useMentions({ inputValue });
+  // B1b FIX: useMentions recebe inputRef (RefObject), não { inputValue }
+  // B1e FIX: nomes corretos — useMentions retorna isOpen/cursorPos/handleSelect/close
+  const safeRef = inputRef ?? ({ current: null } as React.RefObject<HTMLTextAreaElement | null>);
+  const {
+    isOpen: mentionOpen,
+    cursorPos: mentionCursorPos,
+    checkForMention,
+    handleSelect: handleMentionSelect,
+    close: closeMention,
+  } = useMentions(safeRef);
 
   const [isDragOver, setIsDragOver] = useState(false);
 

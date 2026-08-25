@@ -20,13 +20,16 @@ export function useMentionableProfiles() {
   return useQuery<AgentMention[]>({
     queryKey: ['mention-profiles'],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, name, email, avatar_url')
         .limit(50);
+      // B3 FIX: propagar erro para React Query marcar como errored e fazer retry
+      if (error) throw new Error(error.message);
       return (data ?? []) as AgentMention[];
     },
     staleTime: FIVE_MINUTES,
     placeholderData: [],
+    retry: 2,
   });
 }
