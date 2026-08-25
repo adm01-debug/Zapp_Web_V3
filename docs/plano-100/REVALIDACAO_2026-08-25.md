@@ -191,7 +191,7 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
 | Threshold w5-401 (88) | decisão de infra | dono |
 | `ai-agent-pr-policy` (70) | decisão de infra | dono |
 | Índice `evo` duplicado → repo `evolution-stack` | dono | quando evolution-stack absorver |
-| PLANO-CONTRATOS-EDGE — **etapas 54/68/90 EXECUTADAS em 25/08** (sessão de melhorias pós-revisão, branch `feat/plano100-melhorias-2026-08-25`): **54** `respondWithContract` + migração de 6 handlers; **68** padrão de integração fetch contra handlers reais (2 cobertos); **90** ratchet de shape `scripts/check-error-shapes.mjs` (teto 82) no `contract-guards.yml` — PR [PR-EXEC] | dono | fechado nesta branch |
+| PLANO-CONTRATOS-EDGE — **etapas 54/68/90 EXECUTADAS em 25/08** (sessão de melhorias pós-revisão, branch `feat/plano100-melhorias-2026-08-25`): **54** `respondWithContract` + migração de 6 handlers; **68** padrão de integração fetch contra handlers reais (2 cobertos); **90** ratchet de shape `scripts/check-error-shapes.mjs` (teto 82) no `contract-guards.yml` — PR #1420 | dono | fechado nesta branch |
 | PLANO-CONTRATOS-EDGE — **decisões de não-mudança (25/08, registradas)**: mcp-server/mcp-query NÃO viram `.strict()` (etapa 50 — protocolo MCP/JSON-RPC externo, campos arbitrários por design); evolution-api `key`/`message` permanecem permissivos no schema (etapa 49 — validação por-action canônica no handler é superior); etapas 24 (shape pré-gate no whatsapp-cloud-webhook) e 47 (data permissiva no evolution-webhook) aceitas como **exceções documentadas de fronteira** com sistema externo que evolui; etapa 65 (eixo `undefined`) — limitação física do transporte JSON, documentada; etapa 91 allowlist=2 (main/mcp no-op) **congelada por decisão** | dono | DECIDIDO — sem ação futura |
 
 ---
@@ -242,4 +242,4 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
   batch-fetch-avatars tem tratamento completo/fora de custódia (reportados sem edição).
 - **Decisões registradas:** etapas 49/50/65/91 + exceções de fronteira 24/47 (§4, sem
   ação futura).
-- PR desta branch: **[PR-EXEC]** (placeholder — preencher com o nº do PR ao abri-lo).
+- PR desta branch: **#1420** (empilhado no #1417 — mergear o #1417 primeiro).
