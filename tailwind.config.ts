@@ -1,5 +1,6 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
+import containerQueries from "@tailwindcss/container-queries";
 
 export default {
   darkMode: ["class"],
@@ -157,6 +158,11 @@ export default {
           header: "hsl(var(--chat-header))",
           "input-bg": "hsl(var(--chat-input-bg))",
         },
+        // E23: design tokens de bolha
+        'chat-sent':        'hsl(var(--chat-sent))',
+        'chat-sent-fg':     'hsl(var(--chat-sent-fg))',
+        'chat-received':    'hsl(var(--chat-received))',
+        'chat-received-fg': 'hsl(var(--chat-received-fg))',
         elevated: {
           DEFAULT: "hsl(var(--elevated))",
           hover: "hsl(var(--elevated-hover))",
@@ -342,5 +348,5 @@ export default {
       },
     },
   },
-  plugins: [tailwindcssAnimate],
+  plugins: [tailwindcssAnimate, containerQueries],
 } satisfies Config;

@@ -15,7 +15,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 const EVENT_CONFIG: Record<string, { icon: typeof ArrowRight; label: string; color: string }> = {
   assign: { icon: UserPlus, label: 'Atribuído', color: 'text-success' },
@@ -40,9 +40,7 @@ const EVENT_CONFIG: Record<string, { icon: typeof ArrowRight; label: string; col
 export function ConversationTimeline({ contactId }: { contactId: string }) {
   // Query canônica de conversation_events (BUG-2026-08-06): mesma queryKey do
   // stats de contato → 1 GET por contato; staleTime 30s evita refetch ao reabrir.
-  const { data: rawEvents = [], isLoading } = useQuery(
-    conversationEventsQueryOptions(contactId)
-  );
+  const { data: rawEvents = [], isLoading } = useQuery(conversationEventsQueryOptions(contactId));
 
   // Rejeição silenciosa de linhas malformadas (id/event_type ausentes) —
   // preserva joins via passthrough. Enums fora do vocabulário caem no fallback

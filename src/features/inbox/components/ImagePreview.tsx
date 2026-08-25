@@ -1,5 +1,5 @@
 import { forwardRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { X, Download, ZoomIn, ZoomOut, ImageOff, RotateCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDownloadPermission } from '@/hooks/useDownloadPermission';
@@ -15,7 +15,7 @@ interface ImagePreviewProps {
 /** Image Preview constant. */
 export const ImagePreview = forwardRef<HTMLDivElement, ImagePreviewProps>(function ImagePreview(
   { src, alt = 'Image', onClose }: ImagePreviewProps,
-  ref,
+  ref
 ) {
   const [isZoomed, setIsZoomed] = useState(false);
   const { canDownload } = useDownloadPermission();
@@ -23,7 +23,8 @@ export const ImagePreview = forwardRef<HTMLDivElement, ImagePreviewProps>(functi
   const handleDownload = async () => {
     if (!canDownload) {
       toast.error('🔒 Download bloqueado por política de segurança', {
-        description: 'O download de arquivos está desabilitado para proteção de dados. Solicite permissão ao administrador.',
+        description:
+          'O download de arquivos está desabilitado para proteção de dados. Solicite permissão ao administrador.',
       });
       return;
     }
@@ -48,11 +49,11 @@ export const ImagePreview = forwardRef<HTMLDivElement, ImagePreviewProps>(functi
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm"
       onClick={onClose}
     >
       {/* Controls */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
           <Button
             variant="secondary"
@@ -63,7 +64,7 @@ export const ImagePreview = forwardRef<HTMLDivElement, ImagePreviewProps>(functi
             }}
             aria-label={isZoomed ? 'Diminuir zoom' : 'Ampliar imagem'}
           >
-            {isZoomed ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
+            {isZoomed ? <ZoomOut className="h-4 w-4" /> : <ZoomIn className="h-4 w-4" />}
           </Button>
         </motion.div>
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -71,18 +72,23 @@ export const ImagePreview = forwardRef<HTMLDivElement, ImagePreviewProps>(functi
             variant="secondary"
             size="icon"
             aria-label="Baixar arquivo"
-            className={!canDownload ? 'opacity-50 cursor-not-allowed' : ''}
+            className={!canDownload ? 'cursor-not-allowed opacity-50' : ''}
             onClick={(e) => {
               e.stopPropagation();
               handleDownload();
             }}
           >
-            <Download className="w-4 h-4" />
+            <Download className="h-4 w-4" />
           </Button>
         </motion.div>
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button aria-label="Fechar pré-visualização" variant="secondary" size="icon" onClick={onClose}>
-            <X className="w-4 h-4" />
+          <Button
+            aria-label="Fechar pré-visualização"
+            variant="secondary"
+            size="icon"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
           </Button>
         </motion.div>
       </div>
@@ -94,7 +100,7 @@ export const ImagePreview = forwardRef<HTMLDivElement, ImagePreviewProps>(functi
         onClick={(e) => e.stopPropagation()}
         animate={{ scale: isZoomed ? 1.5 : 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl cursor-zoom-in"
+        className="max-h-[85vh] max-w-[90vw] cursor-zoom-in rounded-lg object-contain shadow-2xl"
         style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
       />
     </motion.div>
@@ -121,9 +127,9 @@ export function MessageImage({ src, alt = 'Image', refreshKey }: MessageImagePro
       <div
         role="status"
         aria-live="polite"
-        className="max-w-[280px] rounded-lg border border-border bg-muted/20 p-4 flex flex-col items-center gap-2 text-center"
+        className="flex max-w-[280px] flex-col items-center gap-2 rounded-lg border border-border bg-muted/20 p-4 text-center"
       >
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" aria-hidden="true" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
         <p className="text-sm font-medium text-foreground">Baixando imagem...</p>
         <p className="text-xs text-muted-foreground">Aguarde enquanto processamos a mídia.</p>
       </div>
@@ -136,9 +142,9 @@ export function MessageImage({ src, alt = 'Image', refreshKey }: MessageImagePro
     return (
       <div
         role="alert"
-        className="max-w-[280px] rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex flex-col items-center gap-2 text-center"
+        className="flex max-w-[280px] flex-col items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center"
       >
-        <ImageOff className="w-8 h-8 text-destructive" aria-hidden="true" />
+        <ImageOff className="h-8 w-8 text-destructive" aria-hidden="true" />
         <p className="text-sm font-medium text-foreground">Imagem indisponível</p>
         <p className="text-xs text-muted-foreground">
           {refresh.error?.message ?? 'Não foi possível recuperar esta imagem.'}
@@ -147,13 +153,15 @@ export function MessageImage({ src, alt = 'Image', refreshKey }: MessageImagePro
           variant="outline"
           size="sm"
           className="mt-1"
-          onClick={() => { void refresh.retry(); }}
+          onClick={() => {
+            void refresh.retry();
+          }}
           disabled={refresh.isRefreshing}
         >
           {refresh.isRefreshing ? (
-            <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
           ) : (
-            <RotateCw className="w-3.5 h-3.5 mr-1" />
+            <RotateCw className="mr-1 h-3.5 w-3.5" />
           )}
           Tentar novamente
         </Button>
@@ -170,7 +178,10 @@ export function MessageImage({ src, alt = 'Image', refreshKey }: MessageImagePro
         onClick={() => setShowPreview(true)}
       >
         {(!isLoaded || refresh.isRefreshing) && (
-          <div className="absolute inset-0 bg-muted animate-pulse rounded-lg" aria-busy={refresh.isRefreshing || undefined} />
+          <div
+            className="absolute inset-0 animate-pulse rounded-lg bg-muted"
+            aria-busy={refresh.isRefreshing || undefined}
+          />
         )}
         {effectiveSrc && (
           <motion.img
@@ -181,11 +192,11 @@ export function MessageImage({ src, alt = 'Image', refreshKey }: MessageImagePro
             onError={refresh.onError}
             initial={{ opacity: 0 }}
             animate={{ opacity: isLoaded ? 1 : 0 }}
-            className="max-w-full w-auto max-h-[400px] object-cover rounded-md"
+            className="max-h-[400px] w-auto max-w-full rounded-md object-cover"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-background/20 to-transparent opacity-0 hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
-          <span className="text-primary-foreground text-xs font-medium">Clique para expandir</span>
+        <div className="absolute inset-0 flex items-end justify-center bg-gradient-to-t from-background/20 to-transparent pb-2 opacity-0 transition-opacity hover:opacity-100">
+          <span className="text-xs font-medium text-primary-foreground">Clique para expandir</span>
         </div>
       </motion.div>
 

@@ -19,7 +19,6 @@ import { getSignedMediaUrl } from '@/lib/storageSignedUrls';
 import { toast } from 'sonner';
 import { useDebouncedValue } from '@/hooks/useDebounce';
 import { usePerformanceMetrics } from '@/hooks/usePerformanceMonitoring';
-import { ListImperativeAPI } from 'react-window';
 import { queryKeys } from '@/services/api/queryKeys';
 
 const log = getLogger('useTeamChatPanel');
@@ -59,7 +58,9 @@ export function useTeamChatPanel(conversation: TeamConversation) {
   const [hasNewMessagesUnseen, setHasNewMessagesUnseen] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<ListImperativeAPI>(null); // Reference to react-window List
+  const listRef = useRef<{ scrollToRow: (opts: { index: number; align: string }) => void } | null>(
+    null
+  );
   const isNearBottomRef = useRef(true);
   const settingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollTopRef = useRef(0);

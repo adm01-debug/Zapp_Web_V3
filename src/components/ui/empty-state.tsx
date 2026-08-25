@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { LucideIcon, Plus, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -72,7 +72,11 @@ export function EmptyState({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className={cn('flex flex-col items-center justify-center text-center', sizes.container, className)}
+      className={cn(
+        'flex flex-col items-center justify-center text-center',
+        sizes.container,
+        className
+      )}
     >
       {illustration && illustrations[illustration] ? (
         <motion.div
@@ -83,7 +87,7 @@ export function EmptyState({
         >
           {illustrations[illustration]}
           <div className="absolute inset-0 -z-10 blur-3xl">
-            <div className="w-full h-full bg-gradient-to-br from-primary/10 via-transparent to-secondary/10 rounded-full" />
+            <div className="h-full w-full rounded-full bg-gradient-to-br from-primary/10 via-transparent to-secondary/10" />
           </div>
         </motion.div>
       ) : null}
@@ -92,7 +96,7 @@ export function EmptyState({
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ duration: 0.3, delay: 0.3, type: 'spring', stiffness: 200 }}
-        className={cn('flex items-center justify-center rounded-2xl mb-4', sizes.iconContainer)}
+        className={cn('mb-4 flex items-center justify-center rounded-2xl', sizes.iconContainer)}
         style={{ background: 'var(--gradient-primary)' }}
       >
         <Icon className={cn('text-primary-foreground', sizes.icon)} />
@@ -102,7 +106,7 @@ export function EmptyState({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.4 }}
-        className={cn('font-display font-semibold text-foreground mb-2', sizes.title)}
+        className={cn('mb-2 font-display font-semibold text-foreground', sizes.title)}
       >
         {title}
       </motion.h3>
@@ -111,7 +115,7 @@ export function EmptyState({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.5 }}
-        className={cn('text-muted-foreground max-w-md mb-6', sizes.description)}
+        className={cn('mb-6 max-w-md text-muted-foreground', sizes.description)}
       >
         {description}
       </motion.p>
@@ -121,18 +125,18 @@ export function EmptyState({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.6 }}
-          className="flex flex-col sm:flex-row items-center gap-3"
+          className="flex flex-col items-center gap-3 sm:flex-row"
         >
           {actionLabel && onAction && (
             <Button
               onClick={onAction}
               size={size === 'sm' ? 'sm' : 'default'}
-              className="group shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
+              className="group shadow-lg shadow-primary/20 transition-all hover:shadow-primary/40"
               style={{ background: 'var(--gradient-primary)' }}
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               {actionLabel}
-              <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
           )}
           {secondaryActionLabel && onSecondaryAction && (

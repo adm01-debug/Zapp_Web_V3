@@ -17,7 +17,7 @@ import {
   BatteryFull,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { BusinessHoursIndicator } from './BusinessHoursIndicator';
 import { OfficialApiConfigDialog } from './OfficialApiConfigDialog';
 import { ConnectionAuditDialog } from './ConnectionAuditDialog';

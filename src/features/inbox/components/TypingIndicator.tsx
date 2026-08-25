@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 
 interface TypingIndicatorProps {
@@ -11,8 +11,8 @@ interface TypingIndicatorProps {
 }
 
 /** Typing Indicator component. */
-export function TypingIndicator({ 
-  isVisible = true, 
+export function TypingIndicator({
+  isVisible = true,
   userName = 'Contato',
   className,
   variant = 'default',
@@ -20,7 +20,7 @@ export function TypingIndicator({
   multipleUsers = [],
 }: TypingIndicatorProps) {
   const displayNames = multipleUsers.length > 0 ? multipleUsers : [userName];
-  
+
   const getTypingText = () => {
     if (displayNames.length === 1) {
       return `${displayNames[0]} está digitando`;
@@ -41,7 +41,7 @@ export function TypingIndicator({
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             className={cn(
-              "relative flex items-center gap-3 px-4 py-3 bg-muted border border-border/40 rounded-2xl rounded-bl-md w-fit shadow-lg",
+              'relative flex w-fit items-center gap-3 rounded-2xl rounded-bl-md border border-border/40 bg-muted px-4 py-3 shadow-lg',
               className
             )}
           >
@@ -51,7 +51,7 @@ export function TypingIndicator({
               animate={{ opacity: [0.3, 0.6, 0.3] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
-            
+
             {/* Avatar */}
             {avatarUrl && (
               <motion.div
@@ -59,13 +59,13 @@ export function TypingIndicator({
                 transition={{ duration: 1.5, repeat: Infinity }}
                 className="relative z-10"
               >
-                <img 
-                  src={avatarUrl} 
+                <img
+                  src={avatarUrl}
                   alt={userName}
-                  className="w-8 h-8 rounded-full object-cover ring-2 ring-primary/20"
+                  className="h-8 w-8 rounded-full object-cover ring-2 ring-primary/20"
                 />
                 <motion.div
-                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-success rounded-full border-2 border-background"
+                  className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background bg-success"
                   animate={{ scale: [1, 1.2, 1] }}
                   transition={{ duration: 1, repeat: Infinity }}
                 />
@@ -73,11 +73,11 @@ export function TypingIndicator({
             )}
 
             {/* Animated typing dots */}
-            <div className="relative z-10 flex items-center gap-1.5 p-1.5 rounded-full bg-background/60">
+            <div className="relative z-10 flex items-center gap-1.5 rounded-full bg-background/60 p-1.5">
               {[0, 1, 2].map((i) => (
                 <motion.span
                   key={i}
-                  className="w-2.5 h-2.5 bg-gradient-to-t from-primary to-primary/60 rounded-full shadow-sm"
+                  className="h-2.5 w-2.5 rounded-full bg-gradient-to-t from-primary to-primary/60 shadow-sm"
                   animate={{
                     y: [0, -6, 0],
                     scale: [0.85, 1.15, 0.85],
@@ -91,12 +91,12 @@ export function TypingIndicator({
                 />
               ))}
             </div>
-            
+
             {/* User name */}
             <motion.span
               initial={{ opacity: 0, x: -5 }}
               animate={{ opacity: 1, x: 0 }}
-              className="relative z-10 text-sm text-foreground/80 font-medium"
+              className="relative z-10 text-sm font-medium text-foreground/80"
             >
               {getTypingText()}
             </motion.span>
@@ -114,21 +114,19 @@ export function TypingIndicator({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={cn("flex items-center gap-2", className)}
+            className={cn('flex items-center gap-2', className)}
           >
             <div className="flex items-center gap-0.5">
               {[0, 1, 2].map((i) => (
                 <motion.span
                   key={i}
-                  className="w-1.5 h-1.5 bg-primary/70 rounded-full"
+                  className="h-1.5 w-1.5 rounded-full bg-primary/70"
                   animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1, 0.8] }}
                   transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1 }}
                 />
               ))}
             </div>
-            <span className="text-xs text-muted-foreground italic">
-              {getTypingText()}
-            </span>
+            <span className="text-xs italic text-muted-foreground">{getTypingText()}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -143,7 +141,7 @@ export function TypingIndicator({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className={cn("flex items-center gap-2", className)}
+            className={cn('flex items-center gap-2', className)}
           >
             {/* Multiple avatars stacked */}
             <div className="flex -space-x-2">
@@ -155,28 +153,28 @@ export function TypingIndicator({
                   transition={{ delay: i * 0.1 }}
                   className="relative"
                 >
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-[10px] font-bold text-primary-foreground border-2 border-background">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-gradient-to-br from-primary to-primary/60 text-[10px] font-bold text-primary-foreground">
                     {name.charAt(0).toUpperCase()}
                   </div>
                   <motion.div
-                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-success border border-background"
+                    className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-background bg-success"
                     animate={{ scale: [1, 1.3, 1] }}
                     transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
                   />
                 </motion.div>
               ))}
             </div>
-            
+
             {/* Typing dots bubble */}
             <motion.div
               animate={{ x: [0, 2, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-muted/80 border border-border/50"
+              className="flex items-center gap-1 rounded-full border border-border/50 bg-muted/80 px-2.5 py-1.5"
             >
               {[0, 1, 2].map((i) => (
                 <motion.span
                   key={i}
-                  className="w-1.5 h-1.5 bg-primary rounded-full"
+                  className="h-1.5 w-1.5 rounded-full bg-primary"
                   animate={{ y: [0, -3, 0], opacity: [0.5, 1, 0.5] }}
                   transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.12 }}
                 />
@@ -198,7 +196,7 @@ export function TypingIndicator({
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={cn(
-            "flex items-center gap-2 px-4 py-2.5 bg-card border border-border/30 rounded-2xl rounded-bl-md w-fit shadow-sm",
+            'flex w-fit items-center gap-2 rounded-2xl rounded-bl-md border border-border/30 bg-card px-4 py-2.5 shadow-sm',
             className
           )}
         >
@@ -207,7 +205,7 @@ export function TypingIndicator({
             {[0, 1, 2].map((i) => (
               <motion.span
                 key={i}
-                className="w-2 h-2 bg-primary rounded-full"
+                className="h-2 w-2 rounded-full bg-primary"
                 animate={{
                   y: [0, -5, 0],
                   opacity: [0.4, 1, 0.4],
@@ -222,12 +220,12 @@ export function TypingIndicator({
               />
             ))}
           </div>
-          
+
           {/* User name with typing text */}
           <motion.span
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-xs text-muted-foreground font-medium"
+            className="text-xs font-medium text-muted-foreground"
           >
             {getTypingText()}
           </motion.span>
@@ -239,10 +237,10 @@ export function TypingIndicator({
 
 // Compact version for header
 /** Typing Indicator Compact component. */
-export function TypingIndicatorCompact({ 
+export function TypingIndicatorCompact({
   isVisible = true,
-  className 
-}: { 
+  className,
+}: {
   isVisible?: boolean;
   className?: string;
 }) {
@@ -253,10 +251,10 @@ export function TypingIndicatorCompact({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className={cn("flex items-center gap-1", className)}
+          className={cn('flex items-center gap-1', className)}
         >
-          <motion.span 
-            className="text-success font-medium text-xs"
+          <motion.span
+            className="text-xs font-medium text-success"
             animate={{ opacity: [0.7, 1, 0.7] }}
             transition={{ duration: 1.5, repeat: Infinity }}
           >
@@ -266,7 +264,7 @@ export function TypingIndicatorCompact({
             {[0, 1, 2].map((i) => (
               <motion.span
                 key={i}
-                className="w-1 h-1 bg-success rounded-full"
+                className="h-1 w-1 rounded-full bg-success"
                 animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.2, 0.8] }}
                 transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
               />
@@ -297,7 +295,7 @@ export function TypingIndicatorInline({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className={cn("overflow-hidden", className)}
+          className={cn('overflow-hidden', className)}
         >
           <div className="flex items-center gap-2 text-sm text-success">
             <motion.span
@@ -310,7 +308,7 @@ export function TypingIndicatorInline({
               {[0, 1, 2].map((i) => (
                 <motion.span
                   key={i}
-                  className="w-1 h-1 bg-success rounded-full"
+                  className="h-1 w-1 rounded-full bg-success"
                   animate={{ y: [0, -2, 0] }}
                   transition={{ duration: 0.4, repeat: Infinity, delay: i * 0.1 }}
                 />

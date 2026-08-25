@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('LGPDCompliance');
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

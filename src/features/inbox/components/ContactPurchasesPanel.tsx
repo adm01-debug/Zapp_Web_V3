@@ -21,7 +21,7 @@ import { Plus, DollarSign, Package, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 interface Purchase {
   id: string;

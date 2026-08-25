@@ -9,7 +9,7 @@
  * Rota: /admin/zappweb-demo
  */
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -162,8 +162,7 @@ export default function ZappWebbDemoPage() {
     setActiveId(conv.id);
     if (conv.unread_count > 0) {
       await markAsRead(conv.id);
-      evolutionChatMarkRead(ZAPPWEB_INSTANCE, conv.remote_jid)
-        .catch(() => null); // fire-and-forget (sync de leitura no WhatsApp)
+      evolutionChatMarkRead(ZAPPWEB_INSTANCE, conv.remote_jid).catch(() => null); // fire-and-forget (sync de leitura no WhatsApp)
     }
   };
 

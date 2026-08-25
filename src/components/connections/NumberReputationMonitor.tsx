@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Shield, Flame, Thermometer } from 'lucide-react';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 /**
  * Number Reputation Monitor — hides itself entirely when no data exists.

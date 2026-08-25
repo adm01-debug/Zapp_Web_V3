@@ -19,7 +19,7 @@ import {
 import { useWebAuthn } from '@/hooks/useWebAuthn';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { PasskeyDialogs } from './PasskeyDialogs';
 
 const getDeviceIcon = (deviceType: string | null) => {

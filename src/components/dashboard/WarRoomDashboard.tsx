@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from '@/components/ui/motion';
 import { useWarRoomAlerts } from '@/hooks/useWarRoomAlerts';
 import { useWarRoomData, useWarRoomMetrics } from '@/hooks/useWarRoomData';
 import type { WarRoomAgent, WarRoomQueue, WarRoomAlert } from '@/hooks/useWarRoomData';

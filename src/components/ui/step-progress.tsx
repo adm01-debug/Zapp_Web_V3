@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 /** Step component for the ui section. */
 export interface Step {
@@ -38,24 +38,22 @@ export function StepProgress({ steps, currentStep, className }: StepProgressProp
                 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 className={cn(
-                  'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 border-2 transition-colors',
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-colors',
                   isCompleted && 'border-primary text-primary-foreground',
                   isCurrent && 'border-primary text-primary',
-                  !isCompleted && !isCurrent && 'border-muted-foreground/20 text-muted-foreground/40',
+                  !isCompleted &&
+                    !isCurrent &&
+                    'border-muted-foreground/20 text-muted-foreground/40'
                 )}
               >
-                {isCompleted ? (
-                  <Check className="w-3 h-3" />
-                ) : (
-                  idx + 1
-                )}
+                {isCompleted ? <Check className="h-3 w-3" /> : idx + 1}
               </motion.div>
               <span
                 className={cn(
-                  'text-[11px] font-medium whitespace-nowrap hidden sm:inline',
+                  'hidden whitespace-nowrap text-[11px] font-medium sm:inline',
                   isCurrent && 'text-foreground',
                   isCompleted && 'text-primary',
-                  !isCompleted && !isCurrent && 'text-muted-foreground/40',
+                  !isCompleted && !isCurrent && 'text-muted-foreground/40'
                 )}
               >
                 {step.label}
@@ -64,12 +62,12 @@ export function StepProgress({ steps, currentStep, className }: StepProgressProp
 
             {/* Connector line */}
             {idx < steps.length - 1 && (
-              <div className="w-6 h-0.5 mx-0.5 rounded-full overflow-hidden bg-muted-foreground/10">
+              <div className="mx-0.5 h-0.5 w-6 overflow-hidden rounded-full bg-muted-foreground/10">
                 <motion.div
                   initial={false}
                   animate={{ width: isCompleted ? '100%' : '0%' }}
                   transition={{ duration: 0.3 }}
-                  className="h-full bg-primary rounded-full"
+                  className="h-full rounded-full bg-primary"
                 />
               </div>
             )}

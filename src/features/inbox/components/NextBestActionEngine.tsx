@@ -19,7 +19,7 @@ import {
   CheckCircle2,
   Clock,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 interface NextAction {
   type: string;
@@ -73,11 +73,11 @@ export function NextBestActionEngine({ contactId, contactName }: NextBestActionP
         ]);
 
         // messages vêm em ordem DESC (1000 mais recentes) → [0] = mais recente.
-        const lastMsg =
-          messageRows && messageRows.length > 0 ? messageRows[0] : null;
-        const summaryRow = Array.isArray(summaryResult.data) && summaryResult.data.length > 0
-          ? (summaryResult.data[0] as { pending_tasks: number; unread_whispers: number })
-          : null;
+        const lastMsg = messageRows && messageRows.length > 0 ? messageRows[0] : null;
+        const summaryRow =
+          Array.isArray(summaryResult.data) && summaryResult.data.length > 0
+            ? (summaryResult.data[0] as { pending_tasks: number; unread_whispers: number })
+            : null;
         const memory = memoryResult.data;
 
         if (lastMsg) {

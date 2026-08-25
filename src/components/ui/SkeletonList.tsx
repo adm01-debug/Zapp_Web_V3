@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 interface SkeletonListProps {
   /** Number of skeleton rows */
@@ -22,13 +22,15 @@ const staggerContainer = {
 
 const staggerItem = {
   hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] } },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] },
+  },
 };
 
 function SkeletonPulse({ className }: { className?: string }) {
-  return (
-    <div className={cn('animate-pulse bg-muted/60 rounded-lg', className)} />
-  );
+  return <div className={cn('animate-pulse rounded-lg bg-muted/60', className)} />;
 }
 
 /** Skeleton List function. */
@@ -39,16 +41,16 @@ export function SkeletonList({ count = 5, variant = 'list', className }: Skeleto
         variants={staggerContainer}
         initial="hidden"
         animate="show"
-        className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4', className)}
+        className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3', className)}
       >
         {Array.from({ length: count }).map((_, i) => (
           <motion.div
             key={i}
             variants={staggerItem}
-            className="rounded-xl border border-border/40 p-4 space-y-3"
+            className="space-y-3 rounded-xl border border-border/40 p-4"
           >
             <div className="flex items-center gap-3">
-              <SkeletonPulse className="w-10 h-10 rounded-full" />
+              <SkeletonPulse className="h-10 w-10 rounded-full" />
               <div className="flex-1 space-y-1.5">
                 <SkeletonPulse className="h-3.5 w-3/4" />
                 <SkeletonPulse className="h-2.5 w-1/2" />
@@ -74,23 +76,23 @@ export function SkeletonList({ count = 5, variant = 'list', className }: Skeleto
         className={cn('space-y-1', className)}
       >
         {/* Header */}
-        <div className="flex gap-4 px-4 py-2 border-b border-border/30">
+        <div className="flex gap-4 border-b border-border/30 px-4 py-2">
           <SkeletonPulse className="h-3 w-24" />
           <SkeletonPulse className="h-3 w-32" />
           <SkeletonPulse className="h-3 w-20" />
-          <SkeletonPulse className="h-3 w-16 ml-auto" />
+          <SkeletonPulse className="ml-auto h-3 w-16" />
         </div>
         {Array.from({ length: count }).map((_, i) => (
           <motion.div
             key={i}
             variants={staggerItem}
-            className="flex items-center gap-4 px-4 py-3 border-b border-border/20"
+            className="flex items-center gap-4 border-b border-border/20 px-4 py-3"
           >
-            <SkeletonPulse className="w-8 h-8 rounded-full shrink-0" />
+            <SkeletonPulse className="h-8 w-8 shrink-0 rounded-full" />
             <SkeletonPulse className="h-3.5 w-28" />
             <SkeletonPulse className="h-3 w-40" />
             <SkeletonPulse className="h-3 w-20" />
-            <SkeletonPulse className="h-6 w-16 rounded-full ml-auto" />
+            <SkeletonPulse className="ml-auto h-6 w-16 rounded-full" />
           </motion.div>
         ))}
       </motion.div>
@@ -109,9 +111,9 @@ export function SkeletonList({ count = 5, variant = 'list', className }: Skeleto
         <motion.div
           key={i}
           variants={staggerItem}
-          className="flex items-center gap-3 p-3 rounded-xl border border-border/30"
+          className="flex items-center gap-3 rounded-xl border border-border/30 p-3"
         >
-          <SkeletonPulse className="w-10 h-10 rounded-full shrink-0" />
+          <SkeletonPulse className="h-10 w-10 shrink-0 rounded-full" />
           <div className="flex-1 space-y-1.5">
             <SkeletonPulse className="h-3.5 w-2/5" />
             <SkeletonPulse className="h-2.5 w-3/5" />

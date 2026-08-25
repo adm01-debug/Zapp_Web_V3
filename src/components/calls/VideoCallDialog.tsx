@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import {
   Dialog,
   DialogContent,
@@ -135,7 +135,9 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
     } catch (err) {
       if (!mountedRef.current) return;
       setConnectFailed(true);
-      toast.error(`Erro ao conectar VoIP: ${err instanceof Error ? err.message : 'Falha na conexão'}`);
+      toast.error(
+        `Erro ao conectar VoIP: ${err instanceof Error ? err.message : 'Falha na conexão'}`
+      );
     } finally {
       if (mountedRef.current) setConnecting(false);
     }
@@ -198,7 +200,8 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-foreground">{/* @ds-ignore: letterbox do vídeo exige preto */}
+        <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-foreground">
+          {/* @ds-ignore: letterbox do vídeo exige preto */}
           {/* Remoto (grande) */}
           {callActive ? (
             <video
@@ -215,7 +218,8 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
                 animate={{ scale: 1, opacity: 1 }}
                 className="relative"
               >
-                <Avatar className="h-20 w-20 border-4 border-border/20">{/* @ds-ignore: anel sobre fundo preto do vídeo */}
+                <Avatar className="h-20 w-20 border-4 border-border/20">
+                  {/* @ds-ignore: anel sobre fundo preto do vídeo */}
                   <AvatarImage src={contact.avatar} alt={contact.name} />
                   <AvatarFallback className="bg-primary/20 text-xl text-primary">
                     {contact.name
@@ -236,8 +240,12 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
                   )}
                 </AnimatePresence>
               </motion.div>
-              <p className="text-sm font-medium text-white">{/* @ds-ignore: texto sobre vídeo */}{contact.name}</p>
-              <p className="text-xs text-white/60">{/* @ds-ignore: legenda sobre vídeo */}
+              <p className="text-sm font-medium text-white">
+                {/* @ds-ignore: texto sobre vídeo */}
+                {contact.name}
+              </p>
+              <p className="text-xs text-white/60">
+                {/* @ds-ignore: legenda sobre vídeo */}
                 {callStatus === 'ringing' && 'Tocando...'}
                 {callStatus === 'calling' && 'Chamando...'}
                 {callStatus === 'ended' && 'Chamada encerrada'}
@@ -259,17 +267,22 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
 
           {/* Conectando ao VoIP */}
           {connecting && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-foreground/60">{/* @ds-ignore: scrim escuro sobre vídeo */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-foreground/60">
+              {/* @ds-ignore: scrim escuro sobre vídeo */}
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-white">{/* @ds-ignore: texto sobre scrim de vídeo */}Conectando ao VoIP...</p>
+              <p className="text-sm text-white">
+                {/* @ds-ignore: texto sobre scrim de vídeo */}Conectando ao VoIP...
+              </p>
             </div>
           )}
 
           {/* Falha na conexão */}
           {connectFailed && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-foreground/60 p-6">{/* @ds-ignore: scrim escuro sobre vídeo */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-foreground/60 p-6">
+              {/* @ds-ignore: scrim escuro sobre vídeo */}
               <WifiOff className="h-8 w-8 text-destructive" />
-              <p className="text-center text-sm text-white">{/* @ds-ignore: texto sobre scrim de vídeo */}
+              <p className="text-center text-sm text-white">
+                {/* @ds-ignore: texto sobre scrim de vídeo */}
                 Não foi possível conectar ao servidor VoIP. Verifique as configurações na página
                 VoIP.
               </p>
@@ -286,16 +299,16 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
 
           {/* Badge de voz (provedor sem vídeo / câmera indisponível) */}
           {callActive && (!videoSupported || !isVideoOn) && (
-            <div className="absolute left-3 top-3 rounded-full bg-foreground/50 px-2 py-0.5 text-[10px] font-medium text-white/80">{/* @ds-ignore: badge sobre vídeo */}
+            <div className="absolute left-3 top-3 rounded-full bg-foreground/50 px-2 py-0.5 text-[10px] font-medium text-white/80">
+              {/* @ds-ignore: badge sobre vídeo */}
               Chamada de voz
             </div>
           )}
 
           {/* Status / timer */}
-          <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-foreground/50 px-3 py-0.5 text-xs text-white/90">{/* @ds-ignore: status sobre vídeo */}
-            {callActive
-              ? `${contact.name} · ${formatTime(callDuration)}`
-              : contact.name}
+          <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-foreground/50 px-3 py-0.5 text-xs text-white/90">
+            {/* @ds-ignore: status sobre vídeo */}
+            {callActive ? `${contact.name} · ${formatTime(callDuration)}` : contact.name}
           </div>
 
           {/* Controles */}
@@ -306,8 +319,8 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
                 variant="outline"
                 size="icon"
                 className={cn(
-                  'h-12 w-12 rounded-full border-border/20 bg-foreground/40 text-white hover:bg-foreground/60 hover:text-white', /* @ds-ignore: controles de vídeo — branco/preto sobre vídeo */
-                  isMuted && 'bg-destructive/80 border-destructive hover:bg-destructive'
+                  'h-12 w-12 rounded-full border-border/20 bg-foreground/40 text-white hover:bg-foreground/60 hover:text-white' /* @ds-ignore: controles de vídeo — branco/preto sobre vídeo */,
+                  isMuted && 'border-destructive bg-destructive/80 hover:bg-destructive'
                 )}
                 onClick={toggleMute}
                 disabled={!callActive}
@@ -323,17 +336,13 @@ export function VideoCallDialog({ open, onOpenChange, contact }: VideoCallDialog
                   variant="outline"
                   size="icon"
                   className={cn(
-                    'h-12 w-12 rounded-full border-border/20 bg-foreground/40 text-white hover:bg-foreground/60 hover:text-white', /* @ds-ignore: controles de vídeo — branco/preto sobre vídeo */
-                    !isVideoOn && 'bg-warning/70 border-warning hover:bg-warning'
+                    'h-12 w-12 rounded-full border-border/20 bg-foreground/40 text-white hover:bg-foreground/60 hover:text-white' /* @ds-ignore: controles de vídeo — branco/preto sobre vídeo */,
+                    !isVideoOn && 'border-warning bg-warning/70 hover:bg-warning'
                   )}
                   onClick={toggleVideo}
                   disabled={!callActive}
                 >
-                  {isVideoOn ? (
-                    <Video className="h-5 w-5" />
-                  ) : (
-                    <VideoOff className="h-5 w-5" />
-                  )}
+                  {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
                 </Button>
               </motion.div>
             )}

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 interface SparklineProps {
   data: number[];
@@ -9,7 +9,13 @@ interface SparklineProps {
 }
 
 /** Sparkline component for the ui section. */
-export function Sparkline({ data, color = 'currentColor', width = 80, height = 24, className }: SparklineProps) {
+export function Sparkline({
+  data,
+  color = 'currentColor',
+  width = 80,
+  height = 24,
+  className,
+}: SparklineProps) {
   if (data.length < 2) return null;
 
   const min = Math.min(...data);
@@ -20,16 +26,24 @@ export function Sparkline({ data, color = 'currentColor', width = 80, height = 2
   const innerW = width - padding * 2;
   const innerH = height - padding * 2;
 
-  const points = data.map((v, i) => {
-    const x = padding + (i / (data.length - 1)) * innerW;
-    const y = padding + innerH - ((v - min) / range) * innerH;
-    return `${x},${y}`;
-  }).join(' ');
+  const points = data
+    .map((v, i) => {
+      const x = padding + (i / (data.length - 1)) * innerW;
+      const y = padding + innerH - ((v - min) / range) * innerH;
+      return `${x},${y}`;
+    })
+    .join(' ');
 
   const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
 
   return (
-    <svg width={width} height={height} className={className} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <svg
+      width={width}
+      height={height}
+      className={className}
+      viewBox={`0 0 ${width} ${height}`}
+      aria-hidden="true"
+    >
       <motion.polygon
         points={areaPoints}
         fill={color}

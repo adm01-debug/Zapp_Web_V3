@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { X, Play, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -39,7 +39,8 @@ export const WelcomeModal = forwardRef<HTMLDivElement, WelcomeModalProps>(functi
           </div>
 
           {/* Close button */}
-          <button type="button"
+          <button
+            type="button"
             onClick={onClose}
             className="absolute right-4 top-4 z-10 rounded-full p-2 transition-colors hover:bg-muted"
           >

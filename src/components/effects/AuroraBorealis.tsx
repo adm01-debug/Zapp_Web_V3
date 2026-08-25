@@ -1,27 +1,28 @@
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from '@/components/ui/motion';
 
 /** Aurora Borealis component for the effects section. */
 export function AuroraBorealis() {
   const prefersReducedMotion = useReducedMotion();
-  
+
   if (prefersReducedMotion) {
     return (
-      <div className="absolute inset-x-0 top-0 h-64 overflow-hidden pointer-events-none z-0">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-64 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-secondary/10 via-transparent to-transparent opacity-30" />
       </div>
     );
   }
 
   return (
-    <div className="absolute inset-x-0 top-0 h-64 overflow-hidden pointer-events-none z-0">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-64 overflow-hidden">
       {/* Base gradient layer */}
       <div className="absolute inset-0 bg-gradient-to-b from-secondary/5 via-transparent to-transparent" />
-      
+
       {/* Aurora waves */}
       <motion.div
         className="absolute inset-x-0 top-0 h-48"
         style={{
-          background: 'linear-gradient(180deg, hsl(var(--secondary) / 0.15) 0%, hsl(var(--primary) / 0.1) 30%, transparent 100%)',
+          background:
+            'linear-gradient(180deg, hsl(var(--secondary) / 0.15) 0%, hsl(var(--primary) / 0.1) 30%, transparent 100%)',
           filter: 'blur(40px)',
         }}
         animate={{
@@ -34,13 +35,14 @@ export function AuroraBorealis() {
           ease: 'easeInOut',
         }}
       />
-      
+
       {/* Purple wave 1 */}
       <motion.div
         className="absolute h-32 w-full"
         style={{
           top: '10%',
-          background: 'radial-gradient(ellipse 80% 50% at 20% 50%, hsl(var(--secondary) / 0.25), transparent)',
+          background:
+            'radial-gradient(ellipse 80% 50% at 20% 50%, hsl(var(--secondary) / 0.25), transparent)',
           filter: 'blur(30px)',
         }}
         animate={{
@@ -54,13 +56,14 @@ export function AuroraBorealis() {
           ease: 'easeInOut',
         }}
       />
-      
+
       {/* Purple wave 2 */}
       <motion.div
         className="absolute h-24 w-full"
         style={{
           top: '5%',
-          background: 'radial-gradient(ellipse 60% 40% at 70% 50%, hsl(var(--secondary) / 0.3), transparent)',
+          background:
+            'radial-gradient(ellipse 60% 40% at 70% 50%, hsl(var(--secondary) / 0.3), transparent)',
           filter: 'blur(25px)',
         }}
         animate={{
@@ -75,13 +78,14 @@ export function AuroraBorealis() {
           delay: 1,
         }}
       />
-      
+
       {/* Green accent wave */}
       <motion.div
         className="absolute h-20 w-full"
         style={{
           top: '15%',
-          background: 'radial-gradient(ellipse 50% 30% at 50% 50%, hsl(var(--primary) / 0.2), transparent)',
+          background:
+            'radial-gradient(ellipse 50% 30% at 50% 50%, hsl(var(--primary) / 0.2), transparent)',
           filter: 'blur(20px)',
         }}
         animate={{
@@ -95,14 +99,15 @@ export function AuroraBorealis() {
           delay: 2,
         }}
       />
-      
+
       {/* Teal shimmer */}
       <motion.div
         className="absolute h-16 w-1/2"
         style={{
           top: '8%',
           left: '25%',
-          background: 'radial-gradient(ellipse 100% 50% at 50% 50%, hsl(180 60% 50% / 0.15), transparent)',
+          background:
+            'radial-gradient(ellipse 100% 50% at 50% 50%, hsl(180 60% 50% / 0.15), transparent)',
           filter: 'blur(15px)',
         }}
         animate={{
@@ -117,12 +122,12 @@ export function AuroraBorealis() {
           delay: 0.5,
         }}
       />
-      
+
       {/* Sparkle particles */}
       {[...Array(8)].map((_, i) => (
         <motion.div
           key={i}
-          className="absolute w-1 h-1 rounded-full bg-secondary/60"
+          className="absolute h-1 w-1 rounded-full bg-secondary/60"
           style={{
             left: `${10 + i * 12}%`,
             top: `${15 + (i % 3) * 10}%`,
@@ -141,12 +146,13 @@ export function AuroraBorealis() {
           }}
         />
       ))}
-      
+
       {/* Top edge glow line */}
       <motion.div
-        className="absolute top-0 inset-x-0 h-px"
+        className="absolute inset-x-0 top-0 h-px"
         style={{
-          background: 'linear-gradient(90deg, transparent 0%, hsl(var(--secondary) / 0.5) 20%, hsl(var(--primary) / 0.4) 50%, hsl(var(--secondary) / 0.5) 80%, transparent 100%)',
+          background:
+            'linear-gradient(90deg, transparent 0%, hsl(var(--secondary) / 0.5) 20%, hsl(var(--primary) / 0.4) 50%, hsl(var(--secondary) / 0.5) 80%, transparent 100%)',
         }}
         animate={{
           opacity: [0.3, 0.8, 0.5, 0.3],

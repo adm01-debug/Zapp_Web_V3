@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useConnectionsManager } from '@/features/connections';
 import { Badge } from '@/components/ui/badge';
 import { Wifi, AlertCircle, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 
 /** Whats App Connection Status component. */
 export function WhatsAppConnectionStatus() {

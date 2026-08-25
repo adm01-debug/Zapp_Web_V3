@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Shield, Loader2 } from 'lucide-react';
 import { useMFA } from '@/features/auth';
 import { Button } from '@/components/ui/button';

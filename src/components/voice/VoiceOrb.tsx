@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from '@/components/ui/motion';
 import { Mic, Volume2, Loader2, Zap } from 'lucide-react';
 import type { VoiceAgentPhase } from '@/features/inbox';
 import { usePhaseColors } from './usePhaseColors';
@@ -29,16 +29,24 @@ export function VoiceOrb({ phase, size = 200 }: VoiceOrbProps) {
           background: `radial-gradient(circle, ${colors.glow1} 0%, ${colors.glow2} 50%, transparent 70%)`,
           filter: 'blur(25px)',
         }}
-        animate={prefersReduced ? {} : {
-          scale: isActive ? [1, 1.15, 1] : [1, 1.05, 1],
-          opacity: isActive ? [0.6, 0.8, 0.6] : [0.3, 0.4, 0.3],
-        }}
+        animate={
+          prefersReduced
+            ? {}
+            : {
+                scale: isActive ? [1, 1.15, 1] : [1, 1.05, 1],
+                opacity: isActive ? [0.6, 0.8, 0.6] : [0.3, 0.4, 0.3],
+              }
+        }
         transition={pulseTransition}
       />
 
       {/* Flowing wave rings — skip if reduced motion */}
       {!prefersReduced && (
-        <svg className="absolute inset-0" viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
+        <svg
+          className="absolute inset-0"
+          viewBox={`0 0 ${size} ${size}`}
+          style={{ overflow: 'visible' }}
+        >
           <defs>
             <filter id="voiceOrbWaveBlur">
               <feGaussianBlur stdDeviation="1" />
@@ -113,10 +121,18 @@ export function VoiceOrb({ phase, size = 200 }: VoiceOrbProps) {
             inset 0 0 ${size * 0.1}px rgba(255,255,255,0.1)
           `,
         }}
-        animate={prefersReduced ? {} : {
-          scale: isActive ? [1, 1.08, 1] : [1, 1.03, 1],
-        }}
-        transition={prefersReduced ? {} : { duration: isActive ? 1.5 : 3, repeat: Infinity, ease: 'easeInOut' }}
+        animate={
+          prefersReduced
+            ? {}
+            : {
+                scale: isActive ? [1, 1.08, 1] : [1, 1.03, 1],
+              }
+        }
+        transition={
+          prefersReduced
+            ? {}
+            : { duration: isActive ? 1.5 : 3, repeat: Infinity, ease: 'easeInOut' }
+        }
       />
 
       {/* Specular highlight */}
@@ -141,18 +157,16 @@ export function VoiceOrb({ phase, size = 200 }: VoiceOrbProps) {
           top: (size - coreSize) / 2,
         }}
       >
-        {phase === 'idle' && (
-          <Mic className="w-6 h-6 text-primary-foreground drop-shadow-lg" />
-        )}
+        {phase === 'idle' && <Mic className="h-6 w-6 text-primary-foreground drop-shadow-lg" />}
         {phase === 'booting' && (
-          <Loader2 className="w-6 h-6 text-primary-foreground animate-spin drop-shadow-lg" />
+          <Loader2 className="h-6 w-6 animate-spin text-primary-foreground drop-shadow-lg" />
         )}
         {phase === 'listening' && (
           <motion.div
             animate={prefersReduced ? {} : { scale: [1, 1.2, 1] }}
             transition={{ duration: 1, repeat: Infinity }}
           >
-            <Mic className="w-6 h-6 text-primary-foreground drop-shadow-lg" />
+            <Mic className="h-6 w-6 text-primary-foreground drop-shadow-lg" />
           </motion.div>
         )}
         {phase === 'processing' && (
@@ -160,7 +174,7 @@ export function VoiceOrb({ phase, size = 200 }: VoiceOrbProps) {
             animate={prefersReduced ? {} : { rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
           >
-            <Zap className="w-6 h-6 text-primary-foreground drop-shadow-lg" />
+            <Zap className="h-6 w-6 text-primary-foreground drop-shadow-lg" />
           </motion.div>
         )}
         {phase === 'speaking' && (
@@ -168,7 +182,7 @@ export function VoiceOrb({ phase, size = 200 }: VoiceOrbProps) {
             animate={prefersReduced ? {} : { scale: [1, 1.15, 1] }}
             transition={{ duration: 0.8, repeat: Infinity }}
           >
-            <Volume2 className="w-6 h-6 text-primary-foreground drop-shadow-lg" />
+            <Volume2 className="h-6 w-6 text-primary-foreground drop-shadow-lg" />
           </motion.div>
         )}
         {phase === 'error' && (
@@ -176,7 +190,7 @@ export function VoiceOrb({ phase, size = 200 }: VoiceOrbProps) {
             animate={prefersReduced ? {} : { rotate: [0, 10, -10, 0] }}
             transition={{ duration: 0.5, repeat: Infinity }}
           >
-            <Mic className="w-6 h-6 text-destructive drop-shadow-lg" />
+            <Mic className="h-6 w-6 text-destructive drop-shadow-lg" />
           </motion.div>
         )}
       </div>

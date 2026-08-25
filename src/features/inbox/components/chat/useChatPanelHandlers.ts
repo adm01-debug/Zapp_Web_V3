@@ -256,6 +256,16 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         }
       }
 
+      // Guard: autenticação antes de alterar qualquer estado (preserva texto do usuário).
+      if (isWhisperRef.current && !profile?.id) {
+        toast({
+          title: 'Erro ao enviar sussurro',
+          description: 'Usuário não autenticado. Faça login e tente novamente.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       // Só aplica assinatura quando há texto real.
       const trimmedInput = currentInput.trim();
       const messageContent = trimmedInput ? applySignature(trimmedInput) : '';
@@ -281,8 +291,6 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         }
 
         if (isWhisperRef.current) {
-          if (!profile?.id) throw new Error('Usuario nao autenticado');
-
           const { error } = await insertWhisperMessage({
             contact_id: contactId,
             sender_id: profile.id,
@@ -345,6 +353,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
     },
     [
       contactId,
+      contactPhone,
       conversationId,
       instanceName,
       editMessageApi,
@@ -621,6 +630,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
       throw new Error('Nao foi possivel arquivar: acao nao configurada.');
     }
     await opts.onArchive();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- opts.onArchive é a única propriedade usada; opts inteiro não é necessário
   }, [contactId, opts.onArchive]);
 
   const { handleInputChange, handleKeyDown, handleSlashCommand } = useInputHandlers({

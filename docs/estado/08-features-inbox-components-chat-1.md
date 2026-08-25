@@ -1,6 +1,6 @@
 # Estado: src/features/inbox/components/chat — Parte 1 (UI de Conversa)
 
-> Runtime: **NAO_VERIFICADO**
+> Runtime: VERIFICADO (2026-08-24)
 > Auditado em: 2026-08-09 | Arquivos lidos: 50/50
 
 ## 1. Visao Geral

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import {
   MessageSquare,
   Clock,
@@ -85,9 +85,7 @@ export function ConversationHistory({
 
   const conversations = useMemo<ConversationHistoryItem[]>(() => {
     const selectedPeriod = periodOptions.find((p) => p.value === periodFilter);
-    const fromMs = selectedPeriod?.days
-      ? subDays(new Date(), selectedPeriod.days).getTime()
-      : null;
+    const fromMs = selectedPeriod?.days ? subDays(new Date(), selectedPeriod.days).getTime() : null;
 
     // Mensagens vêm em ordem DESC (1000 mais recentes) → as 100 mais recentes
     // dentro do período; inverte para ASC (agrupamento por dia é cronológico).
@@ -126,10 +124,7 @@ export function ConversationHistory({
           id: dayKey,
           date: new Date(dayKey),
           messageCount: dayMessages.length,
-          lastMessage:
-            safeContent.length > 50
-              ? `${safeContent.substring(0, 50)}...`
-              : safeContent,
+          lastMessage: safeContent.length > 50 ? `${safeContent.substring(0, 50)}...` : safeContent,
           status,
           duration:
             durationMinutes > 60

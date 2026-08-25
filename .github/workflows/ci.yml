@@ -401,6 +401,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Chat UI unit tests (feat/chat-ui-100 gate)
+        # E94 — subset rápido dos testes do chat para feedback rápido no PR
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: bun run test:chat
+
       - name: Unit tests (blocking)
         # Stable after quarantining the infinite-loop useMessages test and fixing
         # the flaky waitFor>testTimeout mismatch: 2088 passed / 0 failed, no OOM,

@@ -20,7 +20,7 @@ import { Plus, Calendar, Trash2, CheckCircle2, Clock, AlertTriangle } from 'luci
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 
 interface Task {
   id: string;
@@ -54,27 +54,33 @@ export function ConversationTasksPanel({ contactId, profileId }: ConversationTas
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
 
-  const loadTasks = useCallback(async () => {
-    setLoading(true);
-    const data = await fetchConversationTasks(contactId);
-    setTasks(
-      data.map((t) => ({
-        id: t.id,
-        title: t.title ?? '',
-        description: t.description,
-        priority: t.priority ?? 'medium',
-        status: t.status ?? 'pending',
-        due_date: t.due_date,
-        assigned_to: t.assigned_to,
-        completed_at: t.completed_at,
-        created_at: t.created_at ?? '',
-      }))
-    );
-    setLoading(false);
-  }, [contactId]);
+  const loadTasks = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      const data = await fetchConversationTasks(contactId, signal);
+      if (signal?.aborted) return;
+      setTasks(
+        data.map((t) => ({
+          id: t.id,
+          title: t.title ?? '',
+          description: t.description,
+          priority: t.priority ?? 'medium',
+          status: t.status ?? 'pending',
+          due_date: t.due_date,
+          assigned_to: t.assigned_to,
+          completed_at: t.completed_at,
+          created_at: t.created_at ?? '',
+        }))
+      );
+      setLoading(false);
+    },
+    [contactId]
+  );
 
   useEffect(() => {
-    loadTasks();
+    const ctrl = new AbortController();
+    loadTasks(ctrl.signal);
+    return () => ctrl.abort();
   }, [contactId, loadTasks]);
 
   const addTask = async () => {

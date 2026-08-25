@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { resolvePublicMediaUrl } from '@/lib/useMediaUrl';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

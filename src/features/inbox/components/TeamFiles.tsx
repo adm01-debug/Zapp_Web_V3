@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/features/auth';
 import { getSignedMediaUrl } from '@/lib/storageSignedUrls';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { isValidUUID } from '@/utils/uuid';
@@ -44,6 +45,7 @@ interface TeamFilesProps {
 
 export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) {
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth(); // BUG-E: evita supabase.auth.getUser() HTTP por upload
   const [isUploading, setIsUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -65,6 +67,7 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!isValidUUID(contactId)) throw new Error('Invalid contact ID');
+      if (!authUser) throw new Error('Usuário não autenticado');
       setIsUploading(true);
       const fileExt = file.name.split('.').pop();
       const filePath = `team-files/${contactId}/${Math.random()}.${fileExt}`;
@@ -75,24 +78,38 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
 
       if (uploadError) throw uploadError;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // A partir daqui o arquivo existe no Storage.
+      // Se o INSERT falhar (RLS, FK, rede), deletamos o arquivo para evitar
+      // acúmulo silencioso de objetos órfãos no bucket whatsapp-media.
+      try {
+        const fileUrl = (await getSignedMediaUrl('whatsapp-media', filePath, 604800)) ?? '';
 
-      const fileUrl = (await getSignedMediaUrl('whatsapp-media', filePath, 604800)) ?? '';
+        const { error: dbError } = await safeClient.from('whisper_files', (q) =>
+          q.insert({
+            contact_id: contactId,
+            file_name: file.name,
+            file_url: fileUrl,
+            file_size: file.size,
+            file_type: file.type,
+            sender_id: authUser?.id,
+          })
+        );
 
-      const { error: dbError } = await safeClient.from('whisper_files', (q) =>
-        q.insert({
-          contact_id: contactId,
-          file_name: file.name,
-          file_url: fileUrl,
-          file_size: file.size,
-          file_type: file.type,
-          sender_id: user?.id,
-        })
-      );
-
-      if (dbError) throw dbError;
+        if (dbError) throw dbError;
+      } catch (err) {
+        // Best-effort: tenta remover o arquivo órfão do Storage.
+        // Falha de remoção é logada mas não relançada — o erro original chega ao usuário.
+        supabase.storage
+          .from('whatsapp-media')
+          .remove([filePath])
+          .then(({ error: rmErr }) => {
+            if (rmErr) {
+              console.error('[TeamFiles] Storage orphan cleanup failed', { filePath, rmErr });
+            }
+          })
+          .catch(() => { /* best-effort: silencia falha de cleanup */ });
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-files', contactId] });

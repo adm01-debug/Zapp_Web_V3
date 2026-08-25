@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Check, X, AlertTriangle, Shield, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
 import { getLogger } from '@/lib/logger';
 import { isAbortLikeError } from '@/lib/retry';

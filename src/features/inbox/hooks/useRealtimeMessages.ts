@@ -23,6 +23,39 @@ import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { isValidUUID } from '@/utils/uuid';
 export type { MessageBatcherStatus } from './realtime/useMessageUpdateBatcher';
 
+/**
+ * Determina se um evento UPDATE do realtime deve invalidar o cache de uma
+ * conversa específica.
+ *
+ * @param payload    - Payload do evento Postgres realtime (new/old rows)
+ * @param candidateContactId - contact_id que você quer testar. No handler de
+ *   UPDATE do inbox este parâmetro é SEMPRE payload.new.contact_id (o que torna
+ *   a chamada uma tautologia de null-guard). A utility existe para que componentes
+ *   com um "active contact" externo consigam filtrar eventos com precisão.
+ *
+ * @example
+ *   // Uso correto (filtro real por contact ativo):
+ *   if (shouldInvalidateOnUpdate(payload, activeContactId)) {
+ *     scheduleConversationCacheInvalidation(payload.new?.contact_id);
+ *   }
+ *
+ *   // Uso atual no handler (equivale a null-guard: if (updContactId)):
+ *   const updContactId = payload.new?.contact_id;
+ *   if (updContactId && shouldInvalidateOnUpdate(payload, updContactId)) { ... }
+ */
+export function shouldInvalidateOnUpdate(
+  payload: {
+    new?: { contact_id?: string | null } | null;
+    old?: { contact_id?: string | null } | null;
+  },
+  candidateContactId: string
+): boolean {
+  return (
+    payload.new?.contact_id === candidateContactId ||
+    payload.old?.contact_id === candidateContactId
+  );
+}
+
 const log = getLogger('RealtimeMessages');
 // F4-01: paginação por cursor — os limites fixos SEEDED_CONTACT_LIMIT=500 /
 // RECENT_MESSAGES_LIMIT=1000 (que carregavam o inbox inteiro a cada
@@ -573,10 +606,7 @@ export function useRealtimeMessages() {
       }
 
       commitConversations(
-        buildConversations(
-          [...contactsPage, ...messageContacts],
-          normalizedMessages
-        )
+        buildConversations([...contactsPage, ...messageContacts], normalizedMessages)
       );
     } catch (err) {
       log.error('Error fetching conversations:', err);
@@ -601,16 +631,17 @@ export function useRealtimeMessages() {
     setLoadingMoreConversations(true);
     try {
       const [contactsPage, messagesPage] = await Promise.all([
-        hasMoreContactsRef.current ? fetchContactsPage(contactsCursorRef.current) : Promise.resolve([] as ConversationContact[]),
-        hasMoreMessagesRef.current ? fetchMessagesPage(messagesCursorRef.current) : Promise.resolve([] as RealtimeMessage[]),
+        hasMoreContactsRef.current
+          ? fetchContactsPage(contactsCursorRef.current)
+          : Promise.resolve([] as ConversationContact[]),
+        hasMoreMessagesRef.current
+          ? fetchMessagesPage(messagesCursorRef.current)
+          : Promise.resolve([] as RealtimeMessage[]),
       ]);
       if (!isMountedRef.current) return;
 
       if (contactsPage.length > 0) {
-        loadedContactsRef.current = dedupeContacts([
-          ...loadedContactsRef.current,
-          ...contactsPage,
-        ]);
+        loadedContactsRef.current = dedupeContacts([...loadedContactsRef.current, ...contactsPage]);
         contactsCursorRef.current =
           contactsPage.length === CONTACTS_PAGE_SIZE
             ? cursorFromContact(contactsPage[contactsPage.length - 1])
@@ -621,10 +652,7 @@ export function useRealtimeMessages() {
       hasMoreContactsRef.current = contactsCursorRef.current !== null;
 
       if (messagesPage.length > 0) {
-        loadedMessagesRef.current = dedupeMessages([
-          ...loadedMessagesRef.current,
-          ...messagesPage,
-        ]);
+        loadedMessagesRef.current = dedupeMessages([...loadedMessagesRef.current, ...messagesPage]);
         messagesCursorRef.current =
           messagesPage.length === MESSAGES_PAGE_SIZE
             ? cursorFromMessage(messagesPage[messagesPage.length - 1])
@@ -647,9 +675,7 @@ export function useRealtimeMessages() {
         ]);
       }
 
-      commitConversations(
-        buildConversations(loadedContactsRef.current, loadedMessagesRef.current)
-      );
+      commitConversations(buildConversations(loadedContactsRef.current, loadedMessagesRef.current));
     } catch (err) {
       log.error('Error loading more conversations:', err);
       if (isMountedRef.current) {
@@ -742,10 +768,16 @@ export function useRealtimeMessages() {
                 handleMessageUpdateRef.current(p)
             )(adaptEvoPayload(payload as RealtimePostgresChangesPayload<Record<string, unknown>>));
           // QA12-GAP1 + RCA 2026-08-20: direcionada + coalescida (ver INSERT).
+          // shouldInvalidateOnUpdate: garante que só invalidamos se o payload
+          // realmente carrega contact_id (não é ruído do cron de TTL).
           if (active) {
-            scheduleConversationCacheInvalidation(
-              (payload.new as { contact_id?: string | null } | null)?.contact_id
-            );
+            const updContactId = (payload.new as { contact_id?: string | null } | null)?.contact_id;
+            if (updContactId && shouldInvalidateOnUpdate(
+              payload as Parameters<typeof shouldInvalidateOnUpdate>[0],
+              updContactId
+            )) {
+              scheduleConversationCacheInvalidation(updContactId);
+            }
           }
         }
       )
@@ -766,7 +798,12 @@ export function useRealtimeMessages() {
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // E31: classifica CHANNEL_ERROR/TIMED_OUT (transiente vs real) com o
           // mesmo padrão dos hooks irmãos (useMessagesCursor/useIncomingCallBroadcast).
-          void logChannelError(log, '[useRealtimeMessages] subscription status:', lastConnectedAtMs, status);
+          void logChannelError(
+            log,
+            '[useRealtimeMessages] subscription status:',
+            lastConnectedAtMs,
+            status
+          );
           log.debug('Subscription status', { status });
         } else {
           log.debug('Subscription status', { status });
@@ -777,10 +814,10 @@ export function useRealtimeMessages() {
       active = false;
       void dbRemoveChannel('messages', channel);
     };
+  // scheduleConversationCacheInvalidation é useCallback([queryClient]) — estável;
+  // não é adicionado para manter a semântica de re-subscribe somente em queryClient.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, queryClient]);
-  // ^^ Only depend on fetchConversations (stable) + queryClient (estável); handlers
-  // are accessed via refs above to prevent re-subscriptions when notification
-  // settings load/change.
 
   const sendMessage = async (
     contactId: string,

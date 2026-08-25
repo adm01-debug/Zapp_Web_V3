@@ -14,10 +14,11 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { queryKeys } from '@/services/api/queryKeys';
 import { supabase } from '@/integrations/supabase/client';
 import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
-import { Loader2, Lock, ChevronDown, Clock } from 'lucide-react';
+import { Lock, ChevronDown, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getLogger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { buildGroupInfo } from './chatGroupInfo';
 import { EmptyState } from '@/components/ui/empty-states';
 import { ChatWatermark } from './ChatWatermark';
 import { COPY } from './copy';
@@ -29,6 +30,7 @@ import { useConversationReactionsRealtime } from '../../hooks/reactions/useConve
 import { ReactionsBatchProvider } from '../../hooks/reactions/usePreloadConversationReactions';
 
 import type { LoadOlderProps } from './loadOlderTypes';
+import { ChatShimmer } from '@/components/ui/chat-shimmer';
 
 const log = getLogger('ChatMessagesArea');
 
@@ -240,25 +242,7 @@ export const ChatMessagesArea = memo(
         };
       }, [contactJid, queryClient]);
 
-      const SAME_GROUP_MS = 5 * 60 * 1000;
-      const groupInfo = useMemo(
-        () =>
-          messages.map((msg, i) => {
-            const prev = messages[i - 1];
-            const next = messages[i + 1];
-            const ts = new Date(msg.timestamp ?? 0).getTime();
-            const isFirstInGroup =
-              !prev ||
-              prev.sender !== msg.sender ||
-              ts - new Date(prev.timestamp ?? 0).getTime() > SAME_GROUP_MS;
-            const isLastInGroup =
-              !next ||
-              next.sender !== msg.sender ||
-              new Date(next.timestamp ?? 0).getTime() - ts > SAME_GROUP_MS;
-            return { isFirstInGroup, isLastInGroup };
-          }),
-        [messages] // eslint-disable-line react-hooks/exhaustive-deps
-      );
+      const groupInfo = useMemo(() => buildGroupInfo(messages), [messages]);
 
       const getItemSize = useCallback(
         (index: number) => {
@@ -274,7 +258,7 @@ export const ChatMessagesArea = memo(
             const lines = Math.ceil(content.length / 60);
             h = Math.max(80, 70 + lines * 22);
           }
-          // BUG-21: incrementos para recursos que aumentam a altura do bubble
+          // BUG-21 (E43): incrementos calibrados conforme plano
           if (item.replyTo) h += 56; // citação (reply) no topo do bubble
           if (Array.isArray(item.reactions) && item.reactions.length > 0) {
             h += 24; // linha de reações
@@ -295,7 +279,7 @@ export const ChatMessagesArea = memo(
         count: messages.length,
         getScrollElement: () => scrollContainerRef.current,
         estimateSize: getItemSize,
-        overscan: 12,
+        overscan: 8, // E88 — reduzido de 12 (padrão recomendado TanStack 5-10)
         measureElement: (el) => el.getBoundingClientRect().height,
         // scrollMargin informa ao tanstack-virtual o offset entre o topo do
         // scroll container e o inicio do bloco virtual, ajustando o calculo de
@@ -380,16 +364,16 @@ export const ChatMessagesArea = memo(
         <ReactionsBatchProvider messageIds={messageIds}>
           <div
             ref={scrollContainerRef}
+            id="chat-messages"
+            role="log"
+            aria-live="polite"
+            aria-label={COPY.messages.regionLabel}
             onScroll={handleScroll}
             className="scrollbar-none relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-background/20 px-4 py-6 md:px-24"
           >
             <ChatWatermark />
 
-            {isLoading && (
-              <div className="p-10 text-center">
-                <Loader2 className="mx-auto animate-spin text-primary" />
-              </div>
-            )}
+            {isLoading && <ChatShimmer />}
 
             {messages.length === 0 && !isLoading && (
               <div className="flex h-full items-center justify-center">

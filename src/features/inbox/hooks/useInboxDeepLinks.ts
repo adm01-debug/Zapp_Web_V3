@@ -26,7 +26,8 @@ export function useInboxDeepLinks({ setPendingContactId, setPendingMessageId }: 
 
     // 1) Handle URL search params
     const urlContact = searchParams.get('contact');
-    const urlMessage = searchParams.get('message');
+    // E45: suporta ?message= (canônico) e ?msg= (shorthand)
+    const urlMessage = searchParams.get('message') ?? searchParams.get('msg');
 
     if (urlContact?.trim() && consumedContactRef.current !== urlContact.trim()) {
       consumedContactRef.current = urlContact.trim();
@@ -49,8 +50,7 @@ export function useInboxDeepLinks({ setPendingContactId, setPendingMessageId }: 
     // 3) Custom events
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { contactId?: string; remoteJid?: string; messageId?: string }
-        | undefined;
+        { contactId?: string; remoteJid?: string; messageId?: string } | undefined;
       const resolvedId = detail?.contactId;
       if (resolvedId) {
         setPendingContactId(resolvedId);

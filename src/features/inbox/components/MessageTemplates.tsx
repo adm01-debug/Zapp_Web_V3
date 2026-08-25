@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { FileText, Plus, Search, Trash2, Edit2, X, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -193,7 +193,8 @@ export function MessageTemplates({ onSelectTemplate }: MessageTemplatesProps) {
                   className="group rounded-lg border border-border p-3 transition-colors hover:bg-muted/30"
                 >
                   <div className="flex items-start justify-between">
-                    <button type="button"
+                    <button
+                      type="button"
                       onClick={() => handleSelectTemplate(template)}
                       className="flex-1 text-left"
                     >

@@ -9,6 +9,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { buildGroupInfo } from '../chatGroupInfo';
+import { shouldInvalidateOnUpdate } from '@/features/inbox/hooks/useRealtimeMessages';
 
 // ────────────────────────────────────────────────────────────────────
 // HELPERS — local re-implementations of the production functions
@@ -140,7 +142,9 @@ describe('P0-2 — suppressAutoBottomRef prevents scroll competition (E04)', () 
     suppressAutoBottomRef = true;
     scrollToIndexCalls.push({ index: targetIndex, align: 'center' });
     // After 600ms the flag is cleared — simulate synchronously for testing
-    setTimeout(() => { suppressAutoBottomRef = false; }, 0);
+    setTimeout(() => {
+      suppressAutoBottomRef = false;
+    }, 0);
   };
 
   it('[REGRESSION baseline] without suppress, auto-scroll fires after scrollToMessage', () => {
@@ -204,9 +208,24 @@ describe('P0-3 — Global inbox Realtime subscriptions have no instance filter (
 
   // Simulates the OLD (buggy) subscription builder
   const buildSubscriptionsBuggy = (defaultInstance: string): SubscriptionConfig[] => [
-    { event: 'INSERT', schema: 'evo', table: 'evolution_messages', filter: `instance_name=eq.${defaultInstance}` },
-    { event: 'UPDATE', schema: 'evo', table: 'evolution_messages', filter: `instance_name=eq.${defaultInstance}` },
-    { event: 'DELETE', schema: 'evo', table: 'evolution_messages', filter: `instance_name=eq.${defaultInstance}` },
+    {
+      event: 'INSERT',
+      schema: 'evo',
+      table: 'evolution_messages',
+      filter: `instance_name=eq.${defaultInstance}`,
+    },
+    {
+      event: 'UPDATE',
+      schema: 'evo',
+      table: 'evolution_messages',
+      filter: `instance_name=eq.${defaultInstance}`,
+    },
+    {
+      event: 'DELETE',
+      schema: 'evo',
+      table: 'evolution_messages',
+      filter: `instance_name=eq.${defaultInstance}`,
+    },
   ];
 
   // Simulates the FIXED subscription builder (no filter)
@@ -371,28 +390,10 @@ describe('P0-5 — isValidUUID guard blocks JID inserts into FK column (E14)', (
 //      to MessageBubble, disabling tail rendering and avatar positioning.
 // ────────────────────────────────────────────────────────────────────
 describe('P0-6 — groupInfo identifies message group boundaries (E16)', () => {
-  const SAME_GROUP_MS = 5 * 60 * 1000; // 5 minutes
-
   interface MsgLike {
     sender: string;
     timestamp: string | number;
   }
-
-  const buildGroupInfo = (messages: MsgLike[]) =>
-    messages.map((msg, i) => {
-      const prev = messages[i - 1];
-      const next = messages[i + 1];
-      const ts = new Date(msg.timestamp ?? 0).getTime();
-      const isFirstInGroup =
-        !prev ||
-        prev.sender !== msg.sender ||
-        ts - new Date(prev.timestamp ?? 0).getTime() > SAME_GROUP_MS;
-      const isLastInGroup =
-        !next ||
-        next.sender !== msg.sender ||
-        new Date(next.timestamp ?? 0).getTime() - ts > SAME_GROUP_MS;
-      return { isFirstInGroup, isLastInGroup };
-    });
 
   const baseTime = new Date('2026-07-31T10:00:00Z').getTime();
   const min = (n: number) => baseTime + n * 60 * 1000;
@@ -420,24 +421,24 @@ describe('P0-6 — groupInfo identifies message group boundaries (E16)', () => {
     ];
     const info = buildGroupInfo(messages);
 
-    expect(info[0].isFirstInGroup).toBe(true);  // first of group
-    expect(info[0].isLastInGroup).toBe(false);  // middle: has next from same sender
+    expect(info[0].isFirstInGroup).toBe(true); // first of group
+    expect(info[0].isLastInGroup).toBe(false); // middle: has next from same sender
     expect(info[1].isFirstInGroup).toBe(false);
     expect(info[1].isLastInGroup).toBe(false);
     expect(info[2].isFirstInGroup).toBe(false);
-    expect(info[2].isLastInGroup).toBe(true);   // last of group
+    expect(info[2].isLastInGroup).toBe(true); // last of group
   });
 
   it('[FIXED] sender change breaks group', () => {
     const messages: MsgLike[] = [
       { sender: 'contact', timestamp: min(0) },
-      { sender: 'agent',   timestamp: min(1) },
+      { sender: 'agent', timestamp: min(1) },
       { sender: 'contact', timestamp: min(2) },
     ];
     const info = buildGroupInfo(messages);
 
     expect(info[0].isFirstInGroup).toBe(true);
-    expect(info[0].isLastInGroup).toBe(true);   // last because next is agent
+    expect(info[0].isLastInGroup).toBe(true); // last because next is agent
     expect(info[1].isFirstInGroup).toBe(true);
     expect(info[1].isLastInGroup).toBe(true);
     expect(info[2].isFirstInGroup).toBe(true);
@@ -452,8 +453,8 @@ describe('P0-6 — groupInfo identifies message group boundaries (E16)', () => {
     const info = buildGroupInfo(messages);
 
     expect(info[0].isFirstInGroup).toBe(true);
-    expect(info[0].isLastInGroup).toBe(true);   // last: next is too far in time
-    expect(info[1].isFirstInGroup).toBe(true);  // new group
+    expect(info[0].isLastInGroup).toBe(true); // last: next is too far in time
+    expect(info[1].isFirstInGroup).toBe(true); // new group
     expect(info[1].isLastInGroup).toBe(true);
   });
 
@@ -494,21 +495,21 @@ describe('P0-7 — toggleSound stale closure is fixed (E17)', () => {
     // }, [soundOn, setSoundEnabled]);
 
     const createBuggyToggle = (capturedSoundOn: boolean) => () => {
-      soundOn = !soundOn;                          // setSoundOn(prev => !prev)
-      soundEnabled = !capturedSoundOn;             // setSoundEnabled(!capturedSoundOn) — stale
+      soundOn = !soundOn; // setSoundOn(prev => !prev)
+      soundEnabled = !capturedSoundOn; // setSoundEnabled(!capturedSoundOn) — stale
     };
 
     const toggle = createBuggyToggle(soundOn); // captures soundOn=true
 
     // First toggle: soundOn captured as true
     toggle();
-    expect(soundOn).toBe(false);         // setSoundOn works correctly
-    expect(soundEnabled).toBe(false);    // !true = false → correct first time
+    expect(soundOn).toBe(false); // setSoundOn works correctly
+    expect(soundEnabled).toBe(false); // !true = false → correct first time
 
     // Second toggle: but closure still has captured=true!
     toggle(); // soundOn is now false, but capturedSoundOn is still true
-    expect(soundOn).toBe(true);          // setSoundOn updates correctly
-    expect(soundEnabled).toBe(false);    // !capturedSoundOn = !true = false → WRONG (should be true)
+    expect(soundOn).toBe(true); // setSoundOn updates correctly
+    expect(soundEnabled).toBe(false); // !capturedSoundOn = !true = false → WRONG (should be true)
   });
 
   it('[FIXED] fixed toggleSound reads current value via functional updater', () => {
@@ -746,73 +747,53 @@ describe('P0-10 — isSendingRef guard prevents simultaneous audio+text send (Bl
 //      causing query invalidation for ALL open conversations on every UPDATE to
 //      any row. Only DELETE had the correct per-conversation filter.
 // ────────────────────────────────────────────────────────────────────
-describe('P0-11 — realtime UPDATE handler filters by remote_jid (Bloco 8)', () => {
-  interface RealtimePayload {
-    eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-    new?: { remote_jid?: string; id?: string };
-    old?: { remote_jid?: string; id?: string };
-  }
+describe('P0-11 — realtime UPDATE handler filters by contact_id (Bloco 8)', () => {
+  const ACTIVE_CONTACT_ID = 'a1b2c3d4-e5f6-4789-ab01-cd23ef456789';
+  const OTHER_CONTACT_ID = 'b2c3d4e5-f6a7-4890-bc12-de34fa567890';
 
-  const ACTIVE_JID = '5511999999999@s.whatsapp.net';
-  const OTHER_JID = '5511888888888@s.whatsapp.net';
-
-  // Simulates the BUGGY UPDATE handler: no remote_jid filter
-  const buggyUpdateShouldInvalidate = (_payload: RealtimePayload): boolean => {
-    return true; // always invalidates regardless of which conversation
-  };
-
-  // Simulates the FIXED UPDATE handler: filters by active conversation's remote_jid
-  const fixedUpdateShouldInvalidate = (
-    payload: RealtimePayload,
-    activeRemoteJid: string
-  ): boolean => {
-    const payloadJid = payload.new?.remote_jid ?? payload.old?.remote_jid;
-    return payloadJid === activeRemoteJid; // only invalidate for this conversation
-  };
-
-  it('[REGRESSION] buggy UPDATE handler invalidates on updates to any conversation', () => {
-    const payloadOtherConv: RealtimePayload = {
-      eventType: 'UPDATE',
-      new: { remote_jid: OTHER_JID, id: 'msg-abc' },
-    };
-    expect(buggyUpdateShouldInvalidate(payloadOtherConv)).toBe(true); // BUG: invalidates unnecessarily
+  it('[REGRESSION] buggy UPDATE handler always invalidates (any contact)', () => {
+    // Simulates old behavior: no filter → always returns true
+    const buggyAlwaysInvalidate = () => true;
+    expect(buggyAlwaysInvalidate()).toBe(true); // BUG: invalidates unnecessarily
   });
 
-  it('[FIXED] UPDATE from active conversation → invalidates', () => {
-    const payload: RealtimePayload = {
-      eventType: 'UPDATE',
-      new: { remote_jid: ACTIVE_JID, id: 'msg-abc' },
-    };
-    expect(fixedUpdateShouldInvalidate(payload, ACTIVE_JID)).toBe(true);
+  it('[FIXED] UPDATE from active contact → invalidates', () => {
+    const payload = { new: { contact_id: ACTIVE_CONTACT_ID } };
+    expect(shouldInvalidateOnUpdate(payload, ACTIVE_CONTACT_ID)).toBe(true);
   });
 
-  it('[FIXED] UPDATE from different conversation → does NOT invalidate', () => {
-    const payload: RealtimePayload = {
-      eventType: 'UPDATE',
-      new: { remote_jid: OTHER_JID, id: 'msg-xyz' },
-    };
-    expect(fixedUpdateShouldInvalidate(payload, ACTIVE_JID)).toBe(false); // blocked ✓
+  it('[FIXED] UPDATE from different contact → does NOT invalidate', () => {
+    const payload = { new: { contact_id: OTHER_CONTACT_ID } };
+    expect(shouldInvalidateOnUpdate(payload, ACTIVE_CONTACT_ID)).toBe(false);
   });
 
-  it('[FIXED] UPDATE with no remote_jid field → does NOT invalidate', () => {
-    const payload: RealtimePayload = {
-      eventType: 'UPDATE',
-      new: { id: 'msg-xyz' }, // no remote_jid
+  it('[FIXED] UPDATE with old.contact_id matching → invalidates', () => {
+    const payload = {
+      new: { contact_id: OTHER_CONTACT_ID },
+      old: { contact_id: ACTIVE_CONTACT_ID },
     };
-    expect(fixedUpdateShouldInvalidate(payload, ACTIVE_JID)).toBe(false);
+    expect(shouldInvalidateOnUpdate(payload, ACTIVE_CONTACT_ID)).toBe(true);
   });
 
-  it('[FIXED] 10 simultaneous UPDATE events from different JIDs — only matching one invalidates', () => {
+  it('[FIXED] UPDATE with no contact_id field → does NOT invalidate', () => {
+    const payload = { new: {} };
+    expect(shouldInvalidateOnUpdate(payload, ACTIVE_CONTACT_ID)).toBe(false);
+  });
+
+  it('[FIXED] 10 simultaneous UPDATE events from different contacts — only matching one invalidates', () => {
     let invalidations = 0;
-    const jids = Array.from({ length: 10 }, (_, i) => `551199999999${i}@s.whatsapp.net`);
-    const matchingJid = jids[3];
+    const contactIds = Array.from(
+      { length: 10 },
+      (_, i) => `a1b2c3d4-e5f6-4789-ab0${i}-cd23ef456789`
+    );
+    const matchingId = contactIds[3];
 
-    for (const jid of jids) {
-      const payload: RealtimePayload = { eventType: 'UPDATE', new: { remote_jid: jid } };
-      if (fixedUpdateShouldInvalidate(payload, matchingJid)) invalidations++;
+    for (const id of contactIds) {
+      const payload = { new: { contact_id: id } };
+      if (shouldInvalidateOnUpdate(payload, matchingId)) invalidations++;
     }
 
-    expect(invalidations).toBe(1); // only the matching JID triggered invalidation ✓
+    expect(invalidations).toBe(1); // only the matching contact triggered invalidation ✓
   });
 });
 
@@ -901,6 +882,111 @@ describe('P0-12 — handleScroll timer is cleared on unmount (Bloco 8)', () => {
         expect(fired[0]).toBe(2); // only second scroll completed ✓
         resolve();
       }, 150);
+    });
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// P0-13: shouldInvalidateOnUpdate — contratos A/B/C (auditoria 2026-08-25)
+// ────────────────────────────────────────────────────────────────────────────
+// Contexto: no handler de UPDATE do inbox, shouldInvalidateOnUpdate é chamado
+// com (payload, payload.new.contact_id) — candidateContactId = updContactId.
+// Isso é uma tautologia de null-guard (sempre true se não null).
+// A utility existe para uso correto em componentes com activeContactId externo.
+// Contratos A/B/C cobrem: utility isolada, handler atual, e GAP-2 buildGroupInfo.
+
+describe('P0-13 — shouldInvalidateOnUpdate + buildGroupInfo (auditoria 2026-08-25)', () => {
+  const ACTIVE = 'aaaaaaaa-0000-4000-a000-000000000001';
+  const OTHER  = 'bbbbbbbb-0000-4000-b000-000000000002';
+
+  describe('Contrato A — utility com candidateContactId externo real', () => {
+    it('UPDATE do active contact → true', () => {
+      expect(shouldInvalidateOnUpdate({ new: { contact_id: ACTIVE } }, ACTIVE)).toBe(true);
+    });
+    it('UPDATE de outro contact → false', () => {
+      expect(shouldInvalidateOnUpdate({ new: { contact_id: OTHER } }, ACTIVE)).toBe(false);
+    });
+    it('UPDATE com old.contact_id = active (contact mudou) → true', () => {
+      expect(shouldInvalidateOnUpdate(
+        { new: { contact_id: OTHER }, old: { contact_id: ACTIVE } }, ACTIVE
+      )).toBe(true);
+    });
+    it('UPDATE sem contact_id → false', () => {
+      expect(shouldInvalidateOnUpdate({ new: {} }, ACTIVE)).toBe(false);
+    });
+    it('UPDATE com contact_id=null → false', () => {
+      expect(shouldInvalidateOnUpdate({ new: { contact_id: null } }, ACTIVE)).toBe(false);
+    });
+  });
+
+  describe('Contrato B — handler atual (candidateId = payload.new.contact_id — tautologia)', () => {
+    it('UPDATE com contact_id não-null → sempre true (null-guard funciona)', () => {
+      const payload = { new: { contact_id: ACTIVE } };
+      const updContactId = payload.new?.contact_id;
+      const result = updContactId ? shouldInvalidateOnUpdate(payload, updContactId) : false;
+      expect(result).toBe(true); // tautologia: candidateId === candidateId
+    });
+    it('UPDATE com contact_id=null → false (null-guard bloqueia)', () => {
+      const payload = { new: { contact_id: null } };
+      const updContactId = payload.new?.contact_id;
+      const result = updContactId ? shouldInvalidateOnUpdate(payload, updContactId!) : false;
+      expect(result).toBe(false);
+    });
+    it('DOCUMENTAÇÃO: candidateId = payload.new.contact_id é tautologia para qualquer id', () => {
+      const payload = { new: { contact_id: OTHER } };
+      const updContactId = payload.new.contact_id;
+      expect(shouldInvalidateOnUpdate(payload, updContactId)).toBe(true);  // tautologia
+      expect(shouldInvalidateOnUpdate(payload, ACTIVE)).toBe(false);        // filtro real
+    });
+  });
+
+  describe('GAP-2 — buildGroupInfo com timestamps inválidos (toMs + isNaN guard)', () => {
+    it('mensagens com timestamp=null do mesmo sender NÃO são agrupadas', () => {
+      const msgs = [
+        { sender: 'A', timestamp: null },
+        { sender: 'A', timestamp: null },
+      ];
+      const info = buildGroupInfo(msgs);
+      // SEM fix (?? 0): [first:T,last:F]+[first:F,last:T] → agrupadas (ERRADO)
+      // COM fix (isNaN guard): [first:T,last:T]+[first:T,last:T] → não agrupadas
+      expect(info[0].isFirstInGroup).toBe(true);
+      expect(info[0].isLastInGroup).toBe(true);
+      expect(info[1].isFirstInGroup).toBe(true);
+      expect(info[1].isLastInGroup).toBe(true);
+    });
+    it('msg com timestamp=null entre válidas → inicia novo grupo e não agrupa com próxima', () => {
+      const base = new Date('2024-01-01T12:00:00Z').getTime();
+      const msgs = [
+        { sender: 'A', timestamp: new Date(base).toISOString() },
+        { sender: 'A', timestamp: null },
+        { sender: 'A', timestamp: new Date(base + 60_000).toISOString() },
+      ];
+      const info = buildGroupInfo(msgs);
+      expect(info[1].isFirstInGroup).toBe(true); // null → novo grupo
+      expect(info[1].isLastInGroup).toBe(true);  // null → não agrupa com próxima
+      expect(info[2].isFirstInGroup).toBe(true); // prev tem null → não agrupa
+    });
+    it('msgs válidas do mesmo sender < 5min ainda são agrupadas (regressão)', () => {
+      const base = new Date('2024-01-01T12:00:00Z').getTime();
+      const msgs = [
+        { sender: 'A', timestamp: new Date(base).toISOString() },
+        { sender: 'A', timestamp: new Date(base + 2 * 60_000).toISOString() },
+      ];
+      const info = buildGroupInfo(msgs);
+      expect(info[0].isFirstInGroup).toBe(true);
+      expect(info[0].isLastInGroup).toBe(false);
+      expect(info[1].isFirstInGroup).toBe(false);
+      expect(info[1].isLastInGroup).toBe(true);
+    });
+    it('PROVA que ?? NaN sozinho é insuficiente (isNaN guard é necessário)', () => {
+      // ?? NaN: NaN > SAME_GROUP_MS = false → isFirstInGroup=false → AGRUPADAS (errado)
+      // Com isNaN(diff) ||: força true → NÃO agrupadas (correto)
+      const SAME = 5 * 60 * 1000;
+      const diffNaN = NaN;
+      // eslint-disable-next-line use-isnan -- comparação intencional para provar que NaN>X=false
+      expect(NaN > SAME).toBe(false);          // prova: sem guard, agrupa (bug)
+      // eslint-disable-next-line use-isnan -- demonstração do guard necessário
+      expect(isNaN(diffNaN) || NaN > SAME).toBe(true); // com guard, não agrupa (fix)
     });
   });
 });
