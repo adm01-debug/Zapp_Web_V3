@@ -70,7 +70,9 @@ describe('useTypingPresence', () => {
     vi.mocked(supabase.channel).mockReturnValue({
       on: vi.fn().mockReturnThis(),
       subscribe: subscribeMock,
-      track: vi.fn(),
+      // track precisa retornar uma Promise: hook chama channel.track({...}).catch(() => {})
+      // vi.fn() retorna undefined por padrão → undefined.catch() = TypeError
+      track: vi.fn().mockResolvedValue(undefined),
       untrack: vi.fn(),
       unsubscribe: vi.fn(),
     } as never);
