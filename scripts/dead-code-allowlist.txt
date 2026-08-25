@@ -184,7 +184,7 @@ src/_archive/healthCheck.archived.ts  # V3: health check direto arquivado; saúd
 src/domain/messaging/index.ts  # barrel do modelo canônico ADR-008; consumido por normalizers/testes fora do grafo estático
 src/features/inbox/hooks/useVirtualRows.ts  # E53 — abstração de virtualização planejada; ChatScrollerV2 usa useVirtualizer inline por ora; pendente adoção no TeamChatPanel na próxima sprint
 
-src/features/inbox/components/ai/AIResponseCard.tsx  # P20 — scaffolding AI layer; integração pendente no AIPanel (próxima sprint); componente validado com ts e Bubble
+src/features/inbox/components/ai/AIChatResponseCard.tsx  # P20 — scaffolding AI layer; integração pendente no AIPanel (próxima sprint); componente validado com ts e Bubble
 src/features/inbox/components/chat/AudioTranscription.tsx  # P22 — scaffolding AI layer; AudioMessagePlayer usa AudioTranscriptionPanel separado; integrar quando AI panel for montado
 src/components/ui/prompt-kit/PromptInput.tsx  # P19 — scaffolding prompt-kit manual (não disponível via shadcn TW3); integração pendente no AI chat panel
 src/components/ui/prompt-kit/PromptSuggestion.tsx  # P19 — idem PromptInput
