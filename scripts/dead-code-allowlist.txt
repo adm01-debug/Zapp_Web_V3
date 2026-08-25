@@ -182,3 +182,4 @@ src/hooks/useFollowupBridge.ts  # hook AUTOMACOES-09 (#851) pronto, sem consumid
 # Código morto INTENCIONAL: arquivados com banner @deprecated ou stubs de migração; sem importadores por design.
 src/_archive/healthCheck.archived.ts  # V3: health check direto arquivado; saúde agora via edge functions; preservado p/ histórico — nunca importar
 src/domain/messaging/index.ts  # barrel do modelo canônico ADR-008; consumido por normalizers/testes fora do grafo estático
+src/features/inbox/hooks/useVirtualRows.ts  # E53 — abstração de virtualização planejada; ChatScrollerV2 usa useVirtualizer inline por ora; pendente adoção no TeamChatPanel na próxima sprint
