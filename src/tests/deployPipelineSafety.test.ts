@@ -7,7 +7,7 @@ const dockerignore = readFileSync(".dockerignore", "utf8");
 
 describe("deploy production resource isolation", () => {
   it("never builds the frontend on the production VPS", () => {
-    const buildJob = workflow.match(/build-and-push:[\s\S]*?\n  deploy:/)?.[0];
+    const buildJob = workflow.match(/build-and-push:[\s\S]*?\n {2}deploy:/)?.[0];
     expect(buildJob).toContain("runs-on: ubuntu-latest");
     expect(buildJob).not.toMatch(/runs-on: \[Linux, X64, vps-zapp\]/);
   });
