@@ -1,4 +1,3 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
@@ -19,6 +18,10 @@ vi.mock('@/hooks/use-toast', () => ({
 }));
 
 vi.mock('@/lib/logger');
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'u-test' }, session: null })),
+}));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn(() => ({ user: { id: 'u-test' } })) }));
 
 import { useQueueGoals } from '@/hooks/useQueueGoals';
 
@@ -43,6 +46,17 @@ const mockGoals = [
   },
 ];
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+
+function createWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
+
 describe('useQueueGoals', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,13 +71,13 @@ describe('useQueueGoals', () => {
   });
 
   it('fetches goals on mount', async () => {
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(Object.keys(result.current.goals)).toHaveLength(2);
   });
 
   it('maps goals by queue_id', async () => {
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     const q1 = result.current.goals.find((g) => g.queue_id === 'q1');
     expect(q1).toBeDefined();
@@ -75,38 +89,38 @@ describe('useQueueGoals', () => {
       select: vi.fn().mockResolvedValue({ data: null, error: new Error('DB error') }),
     });
 
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   it('exposes saveGoal function', async () => {
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(typeof result.current.saveGoal).toBe('function');
   });
 
   it('exposes getDefaultGoal function', async () => {
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(typeof result.current.getDefaultGoal).toBe('function');
   });
 
   it('getDefaultGoal returns sensible defaults', async () => {
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     const defaults = result.current.getDefaultGoal();
     expect(defaults.max_waiting_contacts).toBeGreaterThan(0);
   });
 
   it('goals can be accessed by queue_id', async () => {
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.goals.find((g) => g.queue_id === 'q1')?.id).toBe('g1');
     expect(result.current.goals.find((g) => g.queue_id === 'unknown')).toBeUndefined();
   });
 
   it('subscribes to realtime changes', () => {
-    renderHook(() => useQueueGoals());
+    renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     expect(mockChannel).toHaveBeenCalled();
   });
 
@@ -116,7 +130,7 @@ describe('useQueueGoals', () => {
       on: vi.fn().mockReturnThis(),
       subscribe: vi.fn().mockReturnValue({ unsubscribe: unsubscribeMock }),
     });
-    const { unmount } = renderHook(() => useQueueGoals());
+    const { unmount } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     unmount();
     expect(unsubscribeMock).toHaveBeenCalledTimes(1);
   });
@@ -126,7 +140,7 @@ describe('useQueueGoals', () => {
       select: vi.fn().mockResolvedValue({ data: [], error: null }),
     });
 
-    const { result } = renderHook(() => useQueueGoals());
+    const { result } = renderHook(() => useQueueGoals(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(Object.keys(result.current.goals)).toHaveLength(0);
   });

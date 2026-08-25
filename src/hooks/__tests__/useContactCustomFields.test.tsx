@@ -10,8 +10,23 @@ vi.mock('@/integrations/supabase/client', () => ({
   supabase: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
 vi.mock('@/lib/logger');
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'u-test' }, session: null })),
+}));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn(() => ({ user: { id: 'u-test' } })) }));
 
 import { useContactCustomFields } from '@/hooks/useContactCustomFields';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+
+function createWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
 
 describe('useContactCustomFields', () => {
   beforeEach(() => {
@@ -41,28 +56,32 @@ describe('useContactCustomFields', () => {
   });
 
   it('fetches custom fields for a contact', async () => {
-    const { result } = renderHook(() => useContactCustomFields('c1'));
+    const { result } = renderHook(() => useContactCustomFields('c1'), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(mockFrom).toHaveBeenCalledWith('contact_custom_fields');
   });
 
   it('does not fetch when contactId is undefined', () => {
-    const { result } = renderHook(() => useContactCustomFields(undefined));
+    const { result } = renderHook(() => useContactCustomFields(undefined), {
+      wrapper: createWrapper(),
+    });
     expect(result.current.fields).toEqual([]);
   });
 
   it('exposes addField function', () => {
-    const { result } = renderHook(() => useContactCustomFields('c1'));
+    const { result } = renderHook(() => useContactCustomFields('c1'), { wrapper: createWrapper() });
     expect(typeof result.current.addField).toBe('function');
   });
 
   it('exposes removeField function', () => {
-    const { result } = renderHook(() => useContactCustomFields('c1'));
+    const { result } = renderHook(() => useContactCustomFields('c1'), { wrapper: createWrapper() });
     expect(typeof result.current.removeField).toBe('function');
   });
 
   it('isLoading starts as false for undefined contactId', () => {
-    const { result } = renderHook(() => useContactCustomFields(undefined));
+    const { result } = renderHook(() => useContactCustomFields(undefined), {
+      wrapper: createWrapper(),
+    });
     expect(result.current.isLoading).toBe(false);
   });
 });
