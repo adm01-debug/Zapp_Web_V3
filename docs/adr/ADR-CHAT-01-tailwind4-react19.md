@@ -16,8 +16,8 @@ blockers e o custo para habilitar o upgrade.
 
 | Pacote | Versão atual | Versão R19-ready | Blocker |
 |---|---|---|---|
-| `vaul` | 0.9.9 | 1.1.2 | peer `react "^16.8 || ^17.0 || ^18.0"` |
-| `@hello-pangea/dnd` | 17.0.0 | 18.0.1 | peer `"^18.0.0"` |
+| `vaul` | 0.9.9 | **1.1.2** | ~~peer~~ → agora suporta `^19.0.0` ✅ |
+| `@hello-pangea/dnd` | 17.0.0 | **18.0.1** | ~~peer~~ → agora suporta `^19.0.0` ✅ |
 
 Todos os demais deps do Zapp já declaram peer `^19` ou `>=16.8`.
 
