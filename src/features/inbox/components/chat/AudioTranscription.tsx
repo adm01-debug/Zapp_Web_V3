@@ -2,6 +2,8 @@
  * P22 — AudioTranscription
  * Componente de transcrição de áudio com 4 estados:
  * idle | loading | success | error
+ *
+ * 1a-fix: role="alert" no estado error (a11y WCAG 4.1.3 — Status Messages)
  */
 import { Mic, Copy, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -46,7 +48,7 @@ export function AudioTranscription({
       )}
 
       {status === 'loading' && (
-        <div className="flex flex-col gap-2">
+        <div role="status" aria-label="Transcrevendo áudio" className="flex flex-col gap-2">
           <ChatShimmer />
           <span className="text-[12px] text-muted-foreground">Transcrevendo...</span>
         </div>
@@ -70,7 +72,7 @@ export function AudioTranscription({
       )}
 
       {status === 'error' && (
-        <div className="flex flex-col gap-2">
+        <div role="alert" className="flex flex-col gap-2">
           <p className="text-[12px] text-destructive">
             {error ?? 'Erro ao transcrever. Tente novamente.'}
           </p>
