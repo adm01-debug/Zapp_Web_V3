@@ -99,19 +99,21 @@ export async function verifySvixWebhookSignature(
     // identificação e não participa do HMAC. Aceitar texto cru mantém
     // compatibilidade com instalações antigas que cadastraram uma chave
     // própria em vez do segredo gerado pelo provedor.
-    let keyBytes: Uint8Array;
+    let keyData: ArrayBuffer;
     if (secret.startsWith('whsec_')) {
       const encoded = secret.slice('whsec_'.length);
       const decoded = atob(encoded);
-      keyBytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
-      if (keyBytes.length === 0) return false;
+      if (decoded.length === 0) return false;
+      const bytes = new Uint8Array(decoded.length);
+      for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+      keyData = bytes.buffer;
     } else {
-      keyBytes = new TextEncoder().encode(secret);
+      keyData = new TextEncoder().encode(secret).buffer;
     }
 
     const key = await crypto.subtle.importKey(
       'raw',
-      keyBytes,
+      keyData,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign'],

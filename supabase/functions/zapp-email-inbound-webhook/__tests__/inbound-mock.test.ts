@@ -64,10 +64,16 @@ const call = (body: unknown, opts: { secret?: string; token?: string; svix?: Rec
   return h(new Request(url, { method: "POST", body: JSON.stringify(body), headers }));
 };
 const svixHeaders = async (raw: string, secret: string, ts = Math.floor(Date.now() / 1000)) => {
-  const keyBytes = secret.startsWith("whsec_")
-    ? Uint8Array.from(atob(secret.slice("whsec_".length)), (char) => char.charCodeAt(0))
-    : new TextEncoder().encode(secret);
-  const k = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  let keyData: ArrayBuffer;
+  if (secret.startsWith("whsec_")) {
+    const decoded = atob(secret.slice("whsec_".length));
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+    keyData = bytes.buffer;
+  } else {
+    keyData = new TextEncoder().encode(secret).buffer;
+  }
+  const k = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const mac = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(`svix-id-1.${ts}.${raw}`));
   const sig = btoa(String.fromCharCode(...new Uint8Array(mac)));
   return { "svix-id": "svix-id-1", "svix-timestamp": String(ts), "svix-signature": `v1,${sig}` };
