@@ -560,8 +560,12 @@ export function useEmail() {
         if (!fnErr && data?.ok) {
           await checkTokenStatus();
         }
-      } catch {
-        // Watch renewal is best-effort
+      } catch (err) {
+        // Watch renewal is best-effort (non-fatal) — etapa 82: warn em vez de silêncio.
+        console.warn(
+          '[useEmailManagement] renovação do watch Gmail falhou (não fatal):',
+          err instanceof Error ? err.message : err
+        );
       }
     },
     [activeAccountId, checkTokenStatus]
