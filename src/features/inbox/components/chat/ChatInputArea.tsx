@@ -24,7 +24,6 @@ import { useChatInputLogic, setNativeValue } from './useChatInputLogic';
 import { playNotificationSound } from '@/utils/notificationSounds';
 import { Plus } from 'lucide-react';
 
-
 interface QuickReplyItem {
   id: string;
   title: string;
@@ -146,7 +145,6 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
   useEffect(() => {
     inputRef.current?.focus();
   }, [editingMessage, inputRef]);
-
 
   useEffect(() => {
     if (isRecordingAudio && !prevRecordingRef.current) {
@@ -351,6 +349,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
               onInputChange={onInputChange}
               onKeyDown={onKeyDown}
               onEditStart={props.onEditStart}
+              onFileDrop={(files) => files.forEach(logic.handleFileSelect)}
             />
             {/* P12 (E61): extraído para ChatSendButtons */}
             <ChatSendButtons
