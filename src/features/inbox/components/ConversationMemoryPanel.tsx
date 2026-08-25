@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Brain, Plus, X, Save, Lightbulb, AlertCircle, Handshake, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Json } from '@/integrations/supabase/schema';
 
 interface MemoryData {
@@ -57,29 +57,32 @@ export function ConversationMemoryPanel({ contactId, profileId }: ConversationMe
   const [saving, setSaving] = useState(false);
   const [newItems, setNewItems] = useState<Record<string, string>>({});
 
-  const loadMemory = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    const data = await fetchConversationMemory(contactId, signal);
-    if (signal?.aborted) return;
-    if (data) {
-      setMemory({
-        id: data.id,
-        facts: Array.isArray(data.facts) ? (data.facts as Json[]).map(String) : [],
-        objections_handled: Array.isArray(data.objections_handled)
-          ? (data.objections_handled as Json[]).map(String)
-          : [],
-        promises_made: Array.isArray(data.promises_made)
-          ? (data.promises_made as Json[]).map(String)
-          : [],
-        pending_items: Array.isArray(data.pending_items)
-          ? (data.pending_items as Json[]).map(String)
-          : [],
-        commercial_summary: data.commercial_summary || '',
-        cumulative_summary: data.cumulative_summary || '',
-      });
-    }
-    setLoading(false);
-  }, [contactId]);
+  const loadMemory = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      const data = await fetchConversationMemory(contactId, signal);
+      if (signal?.aborted) return;
+      if (data) {
+        setMemory({
+          id: data.id,
+          facts: Array.isArray(data.facts) ? (data.facts as Json[]).map(String) : [],
+          objections_handled: Array.isArray(data.objections_handled)
+            ? (data.objections_handled as Json[]).map(String)
+            : [],
+          promises_made: Array.isArray(data.promises_made)
+            ? (data.promises_made as Json[]).map(String)
+            : [],
+          pending_items: Array.isArray(data.pending_items)
+            ? (data.pending_items as Json[]).map(String)
+            : [],
+          commercial_summary: data.commercial_summary || '',
+          cumulative_summary: data.cumulative_summary || '',
+        });
+      }
+      setLoading(false);
+    },
+    [contactId]
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();

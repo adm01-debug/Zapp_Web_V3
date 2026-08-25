@@ -16,7 +16,7 @@ import { Volume2, VolumeX, Play, Bell, RotateCcw } from 'lucide-react';
 import { useNotificationSettings } from '@/hooks/useNotificationSettings';
 import { previewSound, requestNotificationPermission, SoundType } from '@/utils/notificationSounds';
 import { toast } from '@/hooks/use-toast';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { PushNotificationCard } from './PushNotificationCard';
 import {

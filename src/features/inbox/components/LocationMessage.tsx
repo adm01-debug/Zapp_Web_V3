@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Navigation, ExternalLink, Radio } from 'lucide-react';
 import { getLogger } from '@/lib/logger';
 
@@ -71,7 +71,10 @@ export function LocationMessageDisplay({ location, isSent }: LocationMessageDisp
       svg.setAttribute('viewBox', '0 0 24 24');
 
       const path = document.createElementNS(svgNS, 'path');
-      path.setAttribute('d', 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z');
+      path.setAttribute(
+        'd',
+        'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'
+      );
 
       svg.appendChild(path);
       inner.appendChild(svg);
@@ -111,33 +114,35 @@ export function LocationMessageDisplay({ location, isSent }: LocationMessageDisp
     >
       {/* Live indicator */}
       {location.isLive && (
-        <div className={cn(
-          "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
-          isSent 
-            ? "bg-primary-foreground/20 text-primary-foreground" 
-            : "bg-success/10 text-success"
-        )}>
-          <Radio className="w-3 h-3 animate-pulse" />
+        <div
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium',
+            isSent
+              ? 'bg-primary-foreground/20 text-primary-foreground'
+              : 'bg-success/10 text-success'
+          )}
+        >
+          <Radio className="h-3 w-3 animate-pulse" />
           <span>Localização em tempo real</span>
           {location.liveUntil && (
             <span className="opacity-70">
-              · até {new Date(location.liveUntil).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              · até{' '}
+              {new Date(location.liveUntil).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
             </span>
           )}
         </div>
       )}
 
       {/* Map container */}
-      <div className="relative rounded-lg overflow-hidden">
-        <div 
-          ref={mapContainer} 
-          className="w-full h-32 bg-muted"
-          style={{ minWidth: '200px' }}
-        />
-        
+      <div className="relative overflow-hidden rounded-lg">
+        <div ref={mapContainer} className="h-32 w-full bg-muted" style={{ minWidth: '200px' }} />
+
         {!isMapLoaded && (
           <div className="absolute inset-0 flex items-center justify-center bg-muted">
-            <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         )}
       </div>
@@ -145,25 +150,31 @@ export function LocationMessageDisplay({ location, isSent }: LocationMessageDisp
       {/* Location info */}
       <div className="space-y-1">
         {location.name && (
-          <p className={cn(
-            "font-medium text-sm",
-            isSent ? "text-primary-foreground" : "text-foreground"
-          )}>
+          <p
+            className={cn(
+              'text-sm font-medium',
+              isSent ? 'text-primary-foreground' : 'text-foreground'
+            )}
+          >
             {location.name}
           </p>
         )}
         {location.address && (
-          <p className={cn(
-            "text-xs",
-            isSent ? "text-primary-foreground/70" : "text-muted-foreground"
-          )}>
+          <p
+            className={cn(
+              'text-xs',
+              isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            )}
+          >
             {location.address}
           </p>
         )}
-        <p className={cn(
-          "text-[10px] ",
-          isSent ? "text-primary-foreground/50" : "text-muted-foreground/70"
-        )}>
+        <p
+          className={cn(
+            'text-[10px]',
+            isSent ? 'text-primary-foreground/50' : 'text-muted-foreground/70'
+          )}
+        >
           {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
         </p>
       </div>
@@ -172,26 +183,28 @@ export function LocationMessageDisplay({ location, isSent }: LocationMessageDisp
       <div className="flex gap-2 pt-1">
         <Button
           size="sm"
-          variant={isSent ? "secondary" : "outline"}
+          variant={isSent ? 'secondary' : 'outline'}
           className={cn(
-            "flex-1 h-7 text-xs gap-1",
-            isSent && "bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0"
+            'h-7 flex-1 gap-1 text-xs',
+            isSent &&
+              'border-0 bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30'
           )}
           onClick={openInMaps}
         >
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className="h-3 w-3" />
           Abrir
         </Button>
         <Button
           size="sm"
-          variant={isSent ? "secondary" : "outline"}
+          variant={isSent ? 'secondary' : 'outline'}
           className={cn(
-            "flex-1 h-7 text-xs gap-1",
-            isSent && "bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0"
+            'h-7 flex-1 gap-1 text-xs',
+            isSent &&
+              'border-0 bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30'
           )}
           onClick={getDirections}
         >
-          <Navigation className="w-3 h-3" />
+          <Navigation className="h-3 w-3" />
           Rotas
         </Button>
       </div>

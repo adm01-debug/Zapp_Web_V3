@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { TrendingUp, TrendingDown, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -14,27 +14,51 @@ interface MetricCardProps {
 }
 
 /** War Room Metric Card component for the dashboard section. */
-export function WarRoomMetricCard({ icon: Icon, label, value, suffix, trend, alert, critical, positive }: MetricCardProps) {
+export function WarRoomMetricCard({
+  icon: Icon,
+  label,
+  value,
+  suffix,
+  trend,
+  alert,
+  critical,
+  positive,
+}: MetricCardProps) {
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
       className={cn(
-        "p-4 rounded-xl border bg-card transition-all",
-        critical && "border-destructive bg-destructive/10 animate-pulse",
-        alert && !critical && "border-warning bg-warning/10",
-        positive && "border-success/50"
+        'rounded-xl border bg-card p-4 transition-all',
+        critical && 'animate-pulse border-destructive bg-destructive/10',
+        alert && !critical && 'border-warning bg-warning/10',
+        positive && 'border-success/50'
       )}
     >
-      <div className="flex items-center justify-between mb-2">
-        <Icon className={cn("w-5 h-5", critical ? "text-destructive" : alert ? "text-warning" : positive ? "text-success" : "text-muted-foreground")} />
-        {trend === 'up' && <TrendingUp className={cn("w-4 h-4", positive ? "text-success" : "text-destructive")} />}
-        {trend === 'down' && <TrendingDown className={cn("w-4 h-4", positive ? "text-destructive" : "text-success")} />}
+      <div className="mb-2 flex items-center justify-between">
+        <Icon
+          className={cn(
+            'h-5 w-5',
+            critical
+              ? 'text-destructive'
+              : alert
+                ? 'text-warning'
+                : positive
+                  ? 'text-success'
+                  : 'text-muted-foreground'
+          )}
+        />
+        {trend === 'up' && (
+          <TrendingUp className={cn('h-4 w-4', positive ? 'text-success' : 'text-destructive')} />
+        )}
+        {trend === 'down' && (
+          <TrendingDown className={cn('h-4 w-4', positive ? 'text-destructive' : 'text-success')} />
+        )}
       </div>
-      <div className="text-2xl font-bold truncate">
+      <div className="truncate text-2xl font-bold">
         {value}
-        {suffix && <span className="text-sm font-normal text-muted-foreground ml-1">{suffix}</span>}
+        {suffix && <span className="ml-1 text-sm font-normal text-muted-foreground">{suffix}</span>}
       </div>
-      <div className="text-xs text-muted-foreground break-words">{label}</div>
+      <div className="break-words text-xs text-muted-foreground">{label}</div>
     </motion.div>
   );
 }

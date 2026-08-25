@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from '@/components/ui/motion';
 import { useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
@@ -56,7 +56,7 @@ export function PageTransition({
         animate="animate"
         exit="exit"
         transition={transition}
-        className={cn('w-full h-full will-change-transform', className)}
+        className={cn('h-full w-full will-change-transform', className)}
         style={usesFlip ? { perspective: 1200, transformStyle: 'preserve-3d' } : undefined}
       >
         {children}

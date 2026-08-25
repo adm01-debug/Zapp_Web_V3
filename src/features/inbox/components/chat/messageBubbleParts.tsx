@@ -1,4 +1,6 @@
 import { Suspense, lazy } from 'react';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import { bubbleVariants } from '@/components/ui/bubble';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { RefreshCw, ShieldAlert } from 'lucide-react';
@@ -73,8 +75,12 @@ export function MessageBubbleBody({
               ? 'px-3.5 py-2'
               : 'px-3 py-1.5',
         isSent
-          ? 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/20'
-          : 'rounded-2xl rounded-bl-md border border-border/70 bg-card text-card-foreground shadow-sm',
+          ? isFeatureEnabled('chat_bubble_v2')
+            ? bubbleVariants({ side: 'sent' })
+            : 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/20'
+          : isFeatureEnabled('chat_bubble_v2')
+            ? bubbleVariants({ side: 'received' })
+            : 'rounded-2xl rounded-bl-md border border-border/70 bg-card text-card-foreground shadow-sm',
         message.isWhisper &&
           'border-dashed border-warning/50 bg-warning font-bold text-warning-foreground ring-4 ring-warning/5',
         isFailedTerminal && 'border-destructive/40 ring-2 ring-destructive/50'
@@ -171,7 +177,9 @@ export function MessageBubbleBody({
             text={message.content}
             className={cn(
               'whitespace-pre-wrap text-[15px] leading-[1.6] tracking-tight',
-              highlightedMessageIds?.has(message.id) ? 'bg-primary/10 ring-1 ring-primary/30 rounded' : ''
+              highlightedMessageIds?.has(message.id)
+                ? 'rounded bg-primary/10 ring-1 ring-primary/30'
+                : ''
             )}
             showPreviews={!message.isWhisper}
             maxPreviews={1}

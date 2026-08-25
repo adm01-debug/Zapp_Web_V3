@@ -1,5 +1,5 @@
 import { useCallback, useRef, useMemo, useState, useEffect, type RefObject } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDensity } from '@/hooks/useDensity';
 import { useDebouncedValue } from '@/hooks/useDebounce';

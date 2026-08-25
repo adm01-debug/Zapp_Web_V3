@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Clock, AlertTriangle, Target, History, Settings2, Layers } from 'lucide-react';
 import { QueueSlaPanel } from './QueueSlaPanel';
 import { useSLAMetrics, PeriodFilter } from '@/features/sla';

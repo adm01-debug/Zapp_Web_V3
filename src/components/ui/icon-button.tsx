@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { motion, HTMLMotionProps } from 'framer-motion';
+import { motion, HTMLMotionProps } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
@@ -16,7 +16,8 @@ const iconButtonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_0_15px_hsl(var(--primary)/0.4)]',
+        default:
+          'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_0_15px_hsl(var(--primary)/0.4)]',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
@@ -39,8 +40,7 @@ const iconButtonVariants = cva(
 
 /** Icon Button Props interface definition. */
 export interface IconButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof iconButtonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof iconButtonVariants> {
   /** Required for accessibility - describes the button action */
   'aria-label': string;
   /** Optional tooltip text (defaults to aria-label) */
@@ -53,20 +53,23 @@ export interface IconButtonProps
 }
 
 const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ 
-    className, 
-    variant, 
-    size, 
-    'aria-label': ariaLabel,
-    tooltip,
-    showTooltip = true,
-    tooltipSide = 'top',
-    asChild = false,
-    children,
-    ...props 
-  }, ref) => {
+  (
+    {
+      className,
+      variant,
+      size,
+      'aria-label': ariaLabel,
+      tooltip,
+      showTooltip = true,
+      tooltipSide = 'top',
+      asChild = false,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const Comp = asChild ? Slot : 'button';
-    
+
     const button = (
       <Comp
         className={cn(iconButtonVariants({ variant, size, className }))}
@@ -81,9 +84,7 @@ const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     if (showTooltip) {
       return (
         <Tooltip delayDuration={300}>
-          <TooltipTrigger asChild>
-            {button}
-          </TooltipTrigger>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipContent side={tooltipSide}>
             <p>{tooltip || ariaLabel}</p>
           </TooltipContent>
@@ -98,8 +99,7 @@ IconButton.displayName = 'IconButton';
 
 // Motion variant with animations
 interface MotionIconButtonProps
-  extends Omit<HTMLMotionProps<'button'>, 'ref'>,
-    VariantProps<typeof iconButtonVariants> {
+  extends Omit<HTMLMotionProps<'button'>, 'ref'>, VariantProps<typeof iconButtonVariants> {
   'aria-label': string;
   tooltip?: string;
   showTooltip?: boolean;
@@ -107,17 +107,20 @@ interface MotionIconButtonProps
 }
 
 const MotionIconButton = React.forwardRef<HTMLButtonElement, MotionIconButtonProps>(
-  ({ 
-    className, 
-    variant, 
-    size,
-    'aria-label': ariaLabel,
-    tooltip,
-    showTooltip = true,
-    tooltipSide = 'top',
-    children,
-    ...props 
-  }, ref) => {
+  (
+    {
+      className,
+      variant,
+      size,
+      'aria-label': ariaLabel,
+      tooltip,
+      showTooltip = true,
+      tooltipSide = 'top',
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const button = (
       <motion.button
         ref={ref}
@@ -134,9 +137,7 @@ const MotionIconButton = React.forwardRef<HTMLButtonElement, MotionIconButtonPro
     if (showTooltip) {
       return (
         <Tooltip delayDuration={300}>
-          <TooltipTrigger asChild>
-            {button}
-          </TooltipTrigger>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipContent side={tooltipSide}>
             <p>{tooltip || ariaLabel}</p>
           </TooltipContent>

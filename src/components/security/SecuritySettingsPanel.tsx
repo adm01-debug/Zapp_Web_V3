@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Shield, 
-  Key, 
-  Smartphone, 
-  History, 
+import { motion } from '@/components/ui/motion';
+import {
+  Shield,
+  Key,
+  Smartphone,
+  History,
   AlertTriangle,
   CheckCircle,
   XCircle,
-  ChevronRight
+  ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,24 +28,24 @@ interface SecuritySettingsPanelProps {
 export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProps) {
   const { user } = useAuth();
   const { isMFAEnabled, factors } = useMFA();
-  const { 
-    showReauthDialog, 
-    pendingAction, 
-    requireReauth, 
-    confirmReauth, 
-    cancelReauth, 
+  const {
+    showReauthDialog,
+    pendingAction,
+    requireReauth,
+    confirmReauth,
+    cancelReauth,
     getActionLabel,
-    isReauthenticating 
+    isReauthenticating,
   } = useReauthentication();
-  
+
   const [showMFASettings, setShowMFASettings] = useState(false);
 
   const securityItems = [
     {
       icon: Smartphone,
       title: 'Autenticação em Dois Fatores (2FA)',
-      description: isMFAEnabled 
-        ? `${factors.filter(f => f.status === 'verified').length} método(s) configurado(s)` 
+      description: isMFAEnabled
+        ? `${factors.filter((f) => f.status === 'verified').length} método(s) configurado(s)`
         : 'Adicione uma camada extra de proteção',
       status: isMFAEnabled ? 'enabled' : 'disabled',
       action: () => {
@@ -93,15 +93,18 @@ export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProp
     switch (status) {
       case 'enabled':
         return (
-          <Badge variant="outline" className="bg-success/10 text-success border-success/30">
-            <CheckCircle className="w-3 h-3 mr-1" />
+          <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
+            <CheckCircle className="mr-1 h-3 w-3" />
             Ativo
           </Badge>
         );
       case 'disabled':
         return (
-          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
-            <XCircle className="w-3 h-3 mr-1" />
+          <Badge
+            variant="outline"
+            className="border-destructive/30 bg-destructive/10 text-destructive"
+          >
+            <XCircle className="mr-1 h-3 w-3" />
             Desativado
           </Badge>
         );
@@ -126,8 +129,8 @@ export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProp
       <Card className="border-border/50">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Shield className="w-5 h-5 text-primary" />
+            <div className="rounded-lg bg-primary/10 p-2">
+              <Shield className="h-5 w-5 text-primary" />
             </div>
             <div>
               <CardTitle>Segurança da Conta</CardTitle>
@@ -139,14 +142,14 @@ export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProp
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Security Score */}
-          <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center justify-between mb-2">
+          <div className="rounded-lg border border-border/50 bg-muted/30 p-4">
+            <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-medium">Nível de Segurança</span>
               <Badge variant={isMFAEnabled ? 'default' : 'secondary'}>
                 {isMFAEnabled ? 'Alto' : 'Médio'}
               </Badge>
             </div>
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: isMFAEnabled ? '100%' : '60%' }}
@@ -155,7 +158,7 @@ export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProp
               />
             </div>
             {!isMFAEnabled && (
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Ative o 2FA para aumentar a segurança da sua conta
               </p>
             )}
@@ -172,17 +175,17 @@ export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProp
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
                 onClick={item.action}
-                className="w-full flex items-center gap-4 p-4 rounded-lg hover:bg-muted/50 transition-colors text-left group"
+                className="group flex w-full items-center gap-4 rounded-lg p-4 text-left transition-colors hover:bg-muted/50"
               >
-                <div className="p-2 rounded-lg bg-muted">
-                  <item.icon className="w-5 h-5 text-muted-foreground" />
+                <div className="rounded-lg bg-muted p-2">
+                  <item.icon className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{item.title}</p>
                   <p className="text-sm text-muted-foreground">{item.description}</p>
                 </div>
                 {getStatusBadge(item.status)}
-                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
               </motion.button>
             ))}
           </div>
@@ -195,24 +198,22 @@ export function SecuritySettingsPanel({ onSwitchTab }: SecuritySettingsPanelProp
           <CardTitle className="text-base">Informações da Conta</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Email</span>
             <span className="text-sm font-medium">{user?.email}</span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Último login</span>
             <span className="text-sm font-medium">
-              {user?.last_sign_in_at 
+              {user?.last_sign_in_at
                 ? new Date(user.last_sign_in_at).toLocaleString('pt-BR')
                 : 'N/A'}
             </span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Conta criada em</span>
             <span className="text-sm font-medium">
-              {user?.created_at 
-                ? new Date(user.created_at).toLocaleDateString('pt-BR')
-                : 'N/A'}
+              {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'N/A'}
             </span>
           </div>
         </CardContent>

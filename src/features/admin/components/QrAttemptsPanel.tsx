@@ -27,7 +27,7 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { toast } from 'sonner';
 
 interface QrAttempt {

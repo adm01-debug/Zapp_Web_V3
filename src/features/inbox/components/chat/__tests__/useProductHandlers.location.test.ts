@@ -94,7 +94,7 @@ describe('useProductHandlers — handleSendLocation (BUG-06)', () => {
         }),
         message_type: 'location',
         sender: 'agent',
-        status: 'sent',
+        status: 'pending',
         whatsapp_connection_id: null,
       })
     );

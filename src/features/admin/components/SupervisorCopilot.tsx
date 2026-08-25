@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Brain, Send, Loader2, MessageSquare, Sparkles, ListOrdered } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { dbFrom } from '@/integrations/datasource/db';
 import { logger } from '@/lib/logger';
 import { SupervisorQueueBoard } from './SupervisorQueueBoard';
@@ -26,7 +26,12 @@ const QUICK_QUESTIONS = [
   'Quais são os motivos de encerramento mais comuns?',
 ];
 
-interface AgentRow { id: string; name: string; role: string; is_active: boolean }
+interface AgentRow {
+  id: string;
+  name: string;
+  role: string;
+  is_active: boolean;
+}
 
 /** Supervisor Copilot component. */
 export function SupervisorCopilot() {
@@ -150,7 +155,11 @@ Agentes: ${agents.map((a) => `${a.name} (${a.role})`).join(', ') || 'nenhum'}
                 onClick={() => askQuestion()}
                 disabled={loading || !question.trim()}
               >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
 

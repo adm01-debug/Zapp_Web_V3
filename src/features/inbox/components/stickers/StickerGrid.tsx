@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Star, Trash2, Sticker, Plus, Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -98,7 +98,8 @@ export function StickerGrid({
           Clique em <Plus className="inline h-3 w-3" aria-hidden="true" /> para adicionar
         </p>
         {!search && (
-          <button type="button"
+          <button
+            type="button"
             onClick={onAddClick}
             className="mt-3 rounded px-2 py-1 text-xs text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary"
           >
@@ -180,7 +181,8 @@ export function StickerGrid({
                         )}
                       >
                         <div className="flex w-full items-center justify-between">
-                          <button type="button"
+                          <button
+                            type="button"
                             onClick={(e) => onToggleFavorite(e, sticker)}
                             className="p-0.5 transition-transform hover:scale-110"
                             aria-label={
@@ -198,7 +200,8 @@ export function StickerGrid({
                               )}
                             />
                           </button>
-                          <button type="button"
+                          <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeleteTarget(sticker);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('PasswordResetRequestsPanel');
@@ -89,7 +89,9 @@ export function PasswordResetRequestsPanel() {
       if (emailSent) {
         toast.success('Solicitação aprovada! Email de reset enviado.');
       } else {
-        toast.warning('Solicitação aprovada, mas o envio do email falhou. Reenvie ou contate o usuário.');
+        toast.warning(
+          'Solicitação aprovada, mas o envio do email falhou. Reenvie ou contate o usuário.'
+        );
       }
       void fetchRequests();
     } catch (error) {

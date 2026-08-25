@@ -4,12 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Pencil, Trash2, TestTube, Loader2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import type { AIProvider } from './types';
 import { PROVIDER_LABELS, USE_FOR_OPTIONS } from './types';
 
@@ -23,7 +29,14 @@ interface AIProviderCardProps {
 }
 
 /** AIProvider Card component for the settings section. */
-export function AIProviderCard({ provider: p, testing, onTest, onEdit, onDelete, index }: AIProviderCardProps) {
+export function AIProviderCard({
+  provider: p,
+  testing,
+  onTest,
+  onEdit,
+  onDelete,
+  index,
+}: AIProviderCardProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const meta = PROVIDER_LABELS[p.provider_type] || PROVIDER_LABELS.custom_agent;
   const Icon = meta.icon;
@@ -35,47 +48,53 @@ export function AIProviderCard({ provider: p, testing, onTest, onEdit, onDelete,
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.05, duration: 0.3 }}
       >
-        <Card className={cn(
-          'transition-all duration-200 hover:shadow-md border-border/60',
-          !p.is_active && 'opacity-50 grayscale-[30%]'
-        )}>
+        <Card
+          className={cn(
+            'border-border/60 transition-all duration-200 hover:shadow-md',
+            !p.is_active && 'opacity-50 grayscale-[30%]'
+          )}
+        >
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
-                <div className={cn('p-2.5 rounded-xl shrink-0 transition-colors', meta.color)}>
-                  <Icon className="w-5 h-5" />
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className={cn('shrink-0 rounded-xl p-2.5 transition-colors', meta.color)}>
+                  <Icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-semibold truncate">{p.name}</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate font-semibold">{p.name}</h3>
                     {p.is_default && (
                       <Badge variant="secondary" className="gap-1 text-xs">
-                        <Star className="w-3 h-3" /> Padrão
+                        <Star className="h-3 w-3" /> Padrão
                       </Badge>
                     )}
                     <Badge variant="outline" className={cn('text-xs', meta.color)}>
                       {meta.label}
                     </Badge>
-                    {!p.is_active && <Badge variant="destructive" className="text-xs">Inativo</Badge>}
+                    {!p.is_active && (
+                      <Badge variant="destructive" className="text-xs">
+                        Inativo
+                      </Badge>
+                    )}
                   </div>
                   {p.description && (
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{p.description}</p>
+                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                      {p.description}
+                    </p>
                   )}
-                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                    {p.use_for.map(u => (
-                      <Badge key={u} variant="outline" className="text-[10px] px-1.5">
-                        {USE_FOR_OPTIONS.find(o => o.value === u)?.label || u}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {p.use_for.map((u) => (
+                      <Badge key={u} variant="outline" className="px-1.5 text-[10px]">
+                        {USE_FOR_OPTIONS.find((o) => o.value === u)?.label || u}
                       </Badge>
                     ))}
                     {p.model && (
-                      <span className="text-xs text-muted-foreground ml-2 ">
-                        {p.model}
-                      </span>
+                      <span className="ml-2 text-xs text-muted-foreground">{p.model}</span>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex shrink-0 items-center gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -86,7 +105,11 @@ export function AIProviderCard({ provider: p, testing, onTest, onEdit, onDelete,
                       className="rounded-xl"
                       aria-label="Testar conexão"
                     >
-                      {testing === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube className="w-4 h-4" />}
+                      {testing === p.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <TestTube className="h-4 w-4" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Testar conexão</TooltipContent>
@@ -100,7 +123,7 @@ export function AIProviderCard({ provider: p, testing, onTest, onEdit, onDelete,
                       className="rounded-xl"
                       aria-label="Editar provedor"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Editar</TooltipContent>
@@ -115,7 +138,7 @@ export function AIProviderCard({ provider: p, testing, onTest, onEdit, onDelete,
                         className="rounded-xl"
                         aria-label="Remover provedor"
                       >
-                        <Trash2 className="w-4 h-4 text-destructive" />
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Remover</TooltipContent>

@@ -1,5 +1,5 @@
 import { Mic, MicOff } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
 import { Button } from '@/components/ui/button';

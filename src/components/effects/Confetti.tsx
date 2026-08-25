@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { createPortal } from 'react-dom';
 
 interface Particle {
@@ -19,7 +19,7 @@ const COLORS = [
   'hsl(var(--primary))',
   'hsl(var(--secondary))',
   'hsl(142 76% 36%)', // green
-  'hsl(45 93% 47%)',  // gold
+  'hsl(45 93% 47%)', // gold
   'hsl(280 87% 65%)', // purple
   'hsl(199 89% 48%)', // cyan
   'hsl(340 82% 52%)', // pink
@@ -33,18 +33,18 @@ interface ConfettiProps {
 }
 
 /** Confetti component for the effects section. */
-export function Confetti({ 
-  isActive, 
-  duration = 3000, 
+export function Confetti({
+  isActive,
+  duration = 3000,
   particleCount = 100,
-  onComplete 
+  onComplete,
 }: ConfettiProps) {
   const [particles, setParticles] = useState<Particle[]>([]);
   const [showCelebration, setShowCelebration] = useState(false);
 
   const createParticles = useCallback(() => {
     const newParticles: Particle[] = [];
-    
+
     for (let i = 0; i < particleCount; i++) {
       newParticles.push({
         id: i,
@@ -58,7 +58,7 @@ export function Confetti({
         type: ['confetti', 'star', 'circle'][Math.floor(Math.random() * 3)] as Particle['type'],
       });
     }
-    
+
     return newParticles;
   }, [particleCount]);
 
@@ -66,13 +66,13 @@ export function Confetti({
     if (isActive) {
       setParticles(createParticles());
       setShowCelebration(true);
-      
+
       const timer = setTimeout(() => {
         setShowCelebration(false);
         setParticles([]);
         onComplete?.();
       }, duration);
-      
+
       return () => clearTimeout(timer);
     }
     return undefined;
@@ -81,7 +81,7 @@ export function Confetti({
   if (!showCelebration) return null;
 
   return createPortal(
-    <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
+    <div className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden">
       <AnimatePresence>
         {particles.map((particle) => (
           <motion.div
@@ -110,7 +110,7 @@ export function Confetti({
           >
             {particle.type === 'confetti' && (
               <div
-                className="w-full h-full"
+                className="h-full w-full"
                 style={{
                   backgroundColor: particle.color,
                   clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 80%)',
@@ -118,13 +118,13 @@ export function Confetti({
               />
             )}
             {particle.type === 'star' && (
-              <svg viewBox="0 0 24 24" className="w-full h-full" style={{ fill: particle.color }}>
+              <svg viewBox="0 0 24 24" className="h-full w-full" style={{ fill: particle.color }}>
                 <polygon points="12,2 15,9 22,9 17,14 19,22 12,17 5,22 7,14 2,9 9,9" />
               </svg>
             )}
             {particle.type === 'circle' && (
               <div
-                className="w-full h-full rounded-full"
+                className="h-full w-full rounded-full"
                 style={{ backgroundColor: particle.color }}
               />
             )}
@@ -147,10 +147,10 @@ interface CelebrationOverlayProps {
 /** Celebration Overlay component for the effects section. */
 export function CelebrationOverlay({
   isActive,
-  title = "Meta Alcançada!",
-  subtitle = "Parabéns pelo excelente trabalho!",
-  emoji = "🎉",
-  onComplete
+  title = 'Meta Alcançada!',
+  subtitle = 'Parabéns pelo excelente trabalho!',
+  emoji = '🎉',
+  onComplete,
 }: CelebrationOverlayProps) {
   const [show, setShow] = useState(false);
 
@@ -170,100 +170,102 @@ export function CelebrationOverlay({
     <>
       <Confetti isActive={isActive} />
       <AnimatePresence>
-        {show && createPortal(
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9998] flex items-center justify-center pointer-events-none"
-          >
+        {show &&
+          createPortal(
             <motion.div
-              initial={{ scale: 0, rotate: -180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 0, rotate: 180, opacity: 0 }}
-              transition={{ 
-                type: 'spring', 
-                stiffness: 200, 
-                damping: 15,
-                duration: 0.6 
-              }}
-              className="relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="pointer-events-none fixed inset-0 z-[9998] flex items-center justify-center"
             >
-              {/* Glow effect */}
               <motion.div
-                animate={{ 
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 0.8, 0.5]
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                exit={{ scale: 0, rotate: 180, opacity: 0 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 200,
+                  damping: 15,
+                  duration: 0.6,
                 }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="absolute inset-0 bg-primary/30 rounded-full blur-3xl"
-                style={{ transform: 'scale(2)' }}
-              />
-              
-              {/* Main content */}
-              <motion.div
-                className="relative bg-card/95 backdrop-blur-xl border border-primary/30 rounded-3xl p-8 shadow-2xl text-center"
-                style={{ 
-                  boxShadow: '0 0 60px hsl(var(--primary) / 0.3), 0 0 120px hsl(var(--primary) / 0.1)' 
-                }}
+                className="relative"
               >
+                {/* Glow effect */}
                 <motion.div
-                  animate={{ 
+                  animate={{
                     scale: [1, 1.2, 1],
-                    rotate: [0, 10, -10, 0]
+                    opacity: [0.5, 0.8, 0.5],
                   }}
-                  transition={{ duration: 0.5, repeat: 2 }}
-                  className="text-6xl mb-4"
-                >
-                  {emoji}
-                </motion.div>
-                
-                <motion.h2
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="font-display text-2xl font-bold text-foreground mb-2 bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent"
-                >
-                  {title}
-                </motion.h2>
-                
-                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="text-muted-foreground"
-                >
-                  {subtitle}
-                </motion.p>
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  className="absolute inset-0 rounded-full bg-primary/30 blur-3xl"
+                  style={{ transform: 'scale(2)' }}
+                />
 
-                {/* Sparkles around */}
-                {[...Array(8)].map((_, i) => (
+                {/* Main content */}
+                <motion.div
+                  className="relative rounded-3xl border border-primary/30 bg-card/95 p-8 text-center shadow-2xl backdrop-blur-xl"
+                  style={{
+                    boxShadow:
+                      '0 0 60px hsl(var(--primary) / 0.3), 0 0 120px hsl(var(--primary) / 0.1)',
+                  }}
+                >
                   <motion.div
-                    key={i}
-                    className="absolute w-2 h-2 bg-secondary rounded-full"
-                    style={{
-                      top: '50%',
-                      left: '50%',
-                    }}
                     animate={{
-                      x: [0, Math.cos(i * 45 * Math.PI / 180) * 120],
-                      y: [0, Math.sin(i * 45 * Math.PI / 180) * 120],
-                      scale: [0, 1.5, 0],
-                      opacity: [0, 1, 0],
+                      scale: [1, 1.2, 1],
+                      rotate: [0, 10, -10, 0],
                     }}
-                    transition={{
-                      duration: 1,
-                      delay: 0.3 + i * 0.05,
-                      repeat: 2,
-                      repeatDelay: 0.5,
-                    }}
-                  />
-                ))}
+                    transition={{ duration: 0.5, repeat: 2 }}
+                    className="mb-4 text-6xl"
+                  >
+                    {emoji}
+                  </motion.div>
+
+                  <motion.h2
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="mb-2 bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text font-display text-2xl font-bold text-foreground text-transparent"
+                  >
+                    {title}
+                  </motion.h2>
+
+                  <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-muted-foreground"
+                  >
+                    {subtitle}
+                  </motion.p>
+
+                  {/* Sparkles around */}
+                  {[...Array(8)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute h-2 w-2 rounded-full bg-secondary"
+                      style={{
+                        top: '50%',
+                        left: '50%',
+                      }}
+                      animate={{
+                        x: [0, Math.cos((i * 45 * Math.PI) / 180) * 120],
+                        y: [0, Math.sin((i * 45 * Math.PI) / 180) * 120],
+                        scale: [0, 1.5, 0],
+                        opacity: [0, 1, 0],
+                      }}
+                      transition={{
+                        duration: 1,
+                        delay: 0.3 + i * 0.05,
+                        repeat: 2,
+                        repeatDelay: 0.5,
+                      }}
+                    />
+                  ))}
+                </motion.div>
               </motion.div>
-            </motion.div>
-          </motion.div>,
-          document.body
-        )}
+            </motion.div>,
+            document.body
+          )}
       </AnimatePresence>
     </>
   );
@@ -279,14 +281,13 @@ export function useCelebration() {
     emoji?: string;
   }>({});
 
-  const celebrate = useCallback((options?: {
-    title?: string;
-    subtitle?: string;
-    emoji?: string;
-  }) => {
-    setCelebrationData(options || {});
-    setCelebrating(true);
-  }, []);
+  const celebrate = useCallback(
+    (options?: { title?: string; subtitle?: string; emoji?: string }) => {
+      setCelebrationData(options || {});
+      setCelebrating(true);
+    },
+    []
+  );
 
   const stopCelebrating = useCallback(() => {
     setCelebrating(false);

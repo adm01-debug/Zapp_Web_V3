@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { useMFA } from '@/features/auth';

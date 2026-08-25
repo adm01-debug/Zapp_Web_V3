@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useDensity } from '@/hooks/useDensity';
@@ -160,7 +160,8 @@ export const TicketTabs = memo(function TicketTabs({
           const Icon = tab.icon;
           const isActive = mainTab === tab.id;
           return (
-            <button type="button"
+            <button
+              type="button"
               key={tab.id}
               onClick={() => onMainTabChange(tab.id)}
               className={cn(
@@ -217,7 +218,8 @@ export const TicketTabs = memo(function TicketTabs({
             const Icon = tab.icon;
             const isActive = subTab === tab.id;
             return (
-              <button type="button"
+              <button
+                type="button"
                 key={tab.id}
                 onClick={() => onSubTabChange(tab.id)}
                 className={cn(

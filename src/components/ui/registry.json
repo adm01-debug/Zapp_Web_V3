@@ -94,6 +94,15 @@
       ]
     }
   },
+  "bubble": {
+    "name": "bubble",
+    "variants": {
+      "side": [
+        "sent",
+        "received"
+      ]
+    }
+  },
   "input": {
     "name": "input",
     "variants": {

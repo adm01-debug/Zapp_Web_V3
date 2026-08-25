@@ -791,10 +791,10 @@ export function useRealtimeMessages() {
       active = false;
       void dbRemoveChannel('messages', channel);
     };
+  // scheduleConversationCacheInvalidation é useCallback([queryClient]) — estável;
+  // não é adicionado para manter a semântica de re-subscribe somente em queryClient.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, queryClient]);
-  // ^^ Only depend on fetchConversations (stable) + queryClient (estável); handlers
-  // are accessed via refs above to prevent re-subscriptions when notification
-  // settings load/change.
 
   const sendMessage = async (
     contactId: string,

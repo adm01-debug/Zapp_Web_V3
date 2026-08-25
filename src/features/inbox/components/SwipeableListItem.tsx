@@ -1,5 +1,11 @@
 import { useState, useRef, ReactNode } from 'react';
-import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence } from 'framer-motion';
+import {
+  motion,
+  useMotionValue,
+  useTransform,
+  PanInfo,
+  AnimatePresence,
+} from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { DEFAULT_LEFT_ACTION, DEFAULT_RIGHT_ACTION } from './swipeActions';
 import type { SwipeAction } from './swipeActions';
@@ -41,7 +47,9 @@ export function SwipeableListItem({
   disabled = false,
 }: SwipeableListItemProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [triggeredAction, setTriggeredAction] = useState<'left' | 'right' | 'left-secondary' | 'right-secondary' | null>(null);
+  const [triggeredAction, setTriggeredAction] = useState<
+    'left' | 'right' | 'left-secondary' | 'right-secondary' | null
+  >(null);
   const [showHint, setShowHint] = useState(showHints);
   const constraintsRef = useRef(null);
   const x = useMotionValue(0);
@@ -58,35 +66,64 @@ export function SwipeableListItem({
     navigator.vibrate(intensity === 'light' ? 10 : intensity === 'medium' ? 25 : 50);
   };
 
-  const handleDragStart = () => { setIsDragging(true); setShowHint(false); };
+  const handleDragStart = () => {
+    setIsDragging(true);
+    setShowHint(false);
+  };
 
   const handleDrag = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const offsetX = info.offset.x;
-    if (leftSecondaryAction && offsetX > secondaryThreshold && triggeredAction !== 'left-secondary') {
-      setTriggeredAction('left-secondary'); triggerHaptic('heavy');
+    if (
+      leftSecondaryAction &&
+      offsetX > secondaryThreshold &&
+      triggeredAction !== 'left-secondary'
+    ) {
+      setTriggeredAction('left-secondary');
+      triggerHaptic('heavy');
     } else if (offsetX > threshold && offsetX <= secondaryThreshold && triggeredAction !== 'left') {
-      setTriggeredAction('left'); triggerHaptic('light');
-    } else if (rightSecondaryAction && offsetX < -secondaryThreshold && triggeredAction !== 'right-secondary') {
-      setTriggeredAction('right-secondary'); triggerHaptic('heavy');
-    } else if (offsetX < -threshold && offsetX >= -secondaryThreshold && triggeredAction !== 'right') {
-      setTriggeredAction('right'); triggerHaptic('light');
+      setTriggeredAction('left');
+      triggerHaptic('light');
+    } else if (
+      rightSecondaryAction &&
+      offsetX < -secondaryThreshold &&
+      triggeredAction !== 'right-secondary'
+    ) {
+      setTriggeredAction('right-secondary');
+      triggerHaptic('heavy');
+    } else if (
+      offsetX < -threshold &&
+      offsetX >= -secondaryThreshold &&
+      triggeredAction !== 'right'
+    ) {
+      setTriggeredAction('right');
+      triggerHaptic('light');
     } else if (Math.abs(offsetX) < threshold) {
       setTriggeredAction(null);
     }
   };
 
   const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    setIsDragging(false); setTriggeredAction(null);
+    setIsDragging(false);
+    setTriggeredAction(null);
     if (disabled) return;
     const { x: offsetX } = info.offset;
     const { x: velocityX } = info.velocity;
     const fastRight = velocityX > velocityThreshold && offsetX > threshold / 2;
     const fastLeft = velocityX < -velocityThreshold && offsetX < -threshold / 2;
 
-    if (leftSecondaryAction && offsetX > secondaryThreshold) { triggerHaptic('medium'); leftSecondaryAction.action(); }
-    else if (offsetX > threshold || fastRight) { triggerHaptic('medium'); leftAction.action(); }
-    else if (rightSecondaryAction && offsetX < -secondaryThreshold) { triggerHaptic('medium'); rightSecondaryAction.action(); }
-    else if (offsetX < -threshold || fastLeft) { triggerHaptic('medium'); rightAction.action(); }
+    if (leftSecondaryAction && offsetX > secondaryThreshold) {
+      triggerHaptic('medium');
+      leftSecondaryAction.action();
+    } else if (offsetX > threshold || fastRight) {
+      triggerHaptic('medium');
+      leftAction.action();
+    } else if (rightSecondaryAction && offsetX < -secondaryThreshold) {
+      triggerHaptic('medium');
+      rightSecondaryAction.action();
+    } else if (offsetX < -threshold || fastLeft) {
+      triggerHaptic('medium');
+      rightAction.action();
+    }
   };
 
   const effectiveLeft = triggeredAction === 'left-secondary' ? leftSecondaryAction : undefined;
@@ -105,26 +142,62 @@ export function SwipeableListItem({
   if (disabled) return <div className={className}>{children}</div>;
 
   return (
-    <div ref={constraintsRef} className={cn("relative overflow-hidden rounded-xl", className)}>
+    <div ref={constraintsRef} className={cn('relative overflow-hidden rounded-xl', className)}>
       {/* Left action */}
-      <motion.div className={cn("absolute inset-y-0 left-0 flex items-center justify-start pl-6 w-40 rounded-l-xl transition-colors", leftBg)} style={{ opacity: leftOpacity }}>
-        <motion.div style={{ scale: leftScale, x: leftIconX }} className="flex flex-col items-center gap-1">
+      <motion.div
+        className={cn(
+          'absolute inset-y-0 left-0 flex w-40 items-center justify-start rounded-l-xl pl-6 transition-colors',
+          leftBg
+        )}
+        style={{ opacity: leftOpacity }}
+      >
+        <motion.div
+          style={{ scale: leftScale, x: leftIconX }}
+          className="flex flex-col items-center gap-1"
+        >
           <AnimatePresence mode="wait">
-            <motion.div key={isLeftSec ? 'secondary' : 'primary'} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.15 }} className="flex flex-col items-center gap-1">
-              <LeftIcon className={cn("w-6 h-6", leftColor)} />
-              <span className={cn("text-xs font-medium whitespace-nowrap", leftColor)}>{leftLabel}</span>
+            <motion.div
+              key={isLeftSec ? 'secondary' : 'primary'}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.5, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex flex-col items-center gap-1"
+            >
+              <LeftIcon className={cn('h-6 w-6', leftColor)} />
+              <span className={cn('whitespace-nowrap text-xs font-medium', leftColor)}>
+                {leftLabel}
+              </span>
             </motion.div>
           </AnimatePresence>
         </motion.div>
       </motion.div>
 
       {/* Right action */}
-      <motion.div className={cn("absolute inset-y-0 right-0 flex items-center justify-end pr-6 w-40 rounded-r-xl transition-colors", rightBg)} style={{ opacity: rightOpacity }}>
-        <motion.div style={{ scale: rightScale, x: rightIconX }} className="flex flex-col items-center gap-1">
+      <motion.div
+        className={cn(
+          'absolute inset-y-0 right-0 flex w-40 items-center justify-end rounded-r-xl pr-6 transition-colors',
+          rightBg
+        )}
+        style={{ opacity: rightOpacity }}
+      >
+        <motion.div
+          style={{ scale: rightScale, x: rightIconX }}
+          className="flex flex-col items-center gap-1"
+        >
           <AnimatePresence mode="wait">
-            <motion.div key={isRightSec ? 'secondary' : 'primary'} initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ duration: 0.15 }} className="flex flex-col items-center gap-1">
-              <RightIcon className={cn("w-6 h-6", rightColor)} />
-              <span className={cn("text-xs font-medium whitespace-nowrap", rightColor)}>{rightLabel}</span>
+            <motion.div
+              key={isRightSec ? 'secondary' : 'primary'}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.5, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex flex-col items-center gap-1"
+            >
+              <RightIcon className={cn('h-6 w-6', rightColor)} />
+              <span className={cn('whitespace-nowrap text-xs font-medium', rightColor)}>
+                {rightLabel}
+              </span>
             </motion.div>
           </AnimatePresence>
         </motion.div>
@@ -133,15 +206,36 @@ export function SwipeableListItem({
       {/* Hint */}
       <AnimatePresence>
         {showHint && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-20 pointer-events-none">
-            <motion.div animate={{ x: [0, 30, 0, -30, 0] }} transition={{ duration: 2, repeat: 2, repeatDelay: 1 }} className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-16 bg-gradient-to-r from-transparent via-primary/10 to-transparent rounded-xl" />
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none absolute inset-0 z-20"
+          >
+            <motion.div
+              animate={{ x: [0, 30, 0, -30, 0] }}
+              transition={{ duration: 2, repeat: 2, repeatDelay: 1 }}
+              className="absolute inset-y-0 left-1/2 w-16 -translate-x-1/2 rounded-xl bg-gradient-to-r from-transparent via-primary/10 to-transparent"
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Draggable content */}
-      <motion.div drag="x" dragConstraints={{ left: -200, right: 200 }} dragElastic={0.1} onDragStart={handleDragStart} onDrag={handleDrag} onDragEnd={handleDragEnd} style={{ x }} whileDrag={{ cursor: 'grabbing' }}
-        className={cn("relative bg-card z-10 touch-pan-y rounded-xl", isDragging && "cursor-grabbing shadow-lg")}>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -200, right: 200 }}
+        dragElastic={0.1}
+        onDragStart={handleDragStart}
+        onDrag={handleDrag}
+        onDragEnd={handleDragEnd}
+        style={{ x }}
+        whileDrag={{ cursor: 'grabbing' }}
+        className={cn(
+          'relative z-10 touch-pan-y rounded-xl bg-card',
+          isDragging && 'cursor-grabbing shadow-lg'
+        )}
+      >
         {children}
       </motion.div>
     </div>
