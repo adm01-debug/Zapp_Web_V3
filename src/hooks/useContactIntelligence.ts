@@ -307,9 +307,15 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
           .limit(1)
           .abortSignal(signal)
           .maybeSingle();
-        if (error) log.warn('contact_intelligence lookup failed:', error.message);
+        if (error) {
+          // PostgREST devolve abort de fetch em `error` em vez de rejeitar.
+          // Não converta cancelamento em inteligência vazia cacheável.
+          if (signal.aborted && isAbortLikeError(error)) throw error;
+          log.warn('contact_intelligence lookup failed:', error.message);
+        }
         raw = (intel ?? null) as unknown as RawIntel | null; // ignore-audit — ponte intencional: Row do PostgREST (schema zapp fora do types gerado) → RawIntel verificado
       } catch (err) {
+        if (signal.aborted && isAbortLikeError(err)) throw err;
         log.warn('contact_intelligence lookup threw:', err);
       }
 
@@ -372,7 +378,9 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
             // contato/unmount) e cancelamento deliberado nosso, nao timeout
             // real — nao reclassifica como error mesmo casando com o regex.
             const isOwnSignalAbort = signal?.aborted && isAbortLikeError(error);
-            if (!isOwnSignalAbort && /timeout|aborted|fetch/i.test(error.message ?? '')) {
+            if (isOwnSignalAbort) {
+              throw error;
+            } else if (/timeout|aborted|fetch/i.test(error.message ?? '')) {
               log.error('messages stats lookup timed out (evolution_messages scan):', error);
             } else {
               log.warn('messages stats lookup failed:', error.message);
@@ -381,6 +389,7 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
           const rows = (msgs ?? []) as Array<{ created_at?: string }>;
           if (!lastAt && rows[0]?.created_at) lastAt = new Date(rows[0].created_at);
         } catch (err) {
+          if (signal.aborted && isAbortLikeError(err)) throw err;
           if (isTimeoutError(err, signal)) {
             log.error('messages stats lookup timed out (evolution_messages scan):', err);
           } else {
