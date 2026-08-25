@@ -13,10 +13,12 @@ import {
   forwardRef,
   useLayoutEffect,
   useState,
+  useEffect,
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/utils';
 import { ScrollFade } from '@/components/ui/scroll-fade';
+import { ArrowDown } from 'lucide-react';
 import { type Message } from '@/types/chat';
 
 export interface ChatScrollerV2Handle {
@@ -37,6 +39,10 @@ interface ChatScrollerV2Props {
   /** overscan — padrão 10. */
   overscan?: number;
   onNearTop?: () => void;
+  /** Número de mensagens novas fora da janela visível (P03). */
+  newMessageCount?: number;
+  /** Callback disparado quando o estado atBottom muda (P03). */
+  onAtBottomChange?: (atBottom: boolean) => void;
 }
 
 /**
@@ -45,13 +51,32 @@ interface ChatScrollerV2Props {
  */
 export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Props>(
   function ChatScrollerV2(
-    { messages, estimateSize, renderItem, header, className, overscan = 10, onNearTop },
+    {
+      messages,
+      estimateSize,
+      renderItem,
+      header,
+      className,
+      overscan = 10,
+      onNearTop,
+      newMessageCount = 0,
+      onAtBottomChange,
+    },
     ref
   ) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const listStartRef = useRef<HTMLDivElement>(null);
     const [scrollMargin, setScrollMargin] = useState(0);
     const [atBottom, setAtBottom] = useState(true);
+
+    // P03: notifica o pai quando atBottom muda (debounced 100ms)
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        onAtBottomChange?.(atBottom);
+      }, 100);
+      return () => clearTimeout(timer);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [atBottom]);
 
     // scrollMargin — offset entre topo do container e início do bloco virtual
     useLayoutEffect(() => {
@@ -63,7 +88,7 @@ export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Pro
       const ro = new ResizeObserver(measure);
       ro.observe(container);
       return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- expressão primitiva (bool), seguro
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- expressão primitiva (bool), seguro
     }, [messages.length > 0]);
 
     const virtualizer = useVirtualizer({
@@ -128,6 +153,22 @@ export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Pro
             );
           })}
         </div>
+
+        {/* P03: NewMessageIndicator — flutua acima do scroll quando há mensagens novas */}
+        {!atBottom && newMessageCount > 0 && (
+          <button
+            type="button"
+            className="animate-bounce-once absolute bottom-14 right-4 z-20 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => {
+              const c = scrollContainerRef.current;
+              if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+            }}
+            aria-label={`${newMessageCount} nova${newMessageCount !== 1 ? 's' : ''} mensagem${newMessageCount !== 1 ? 's' : ''} — pular para o fim`}
+          >
+            <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{newMessageCount > 99 ? '99+' : newMessageCount}</span>
+          </button>
+        )}
 
         <ScrollFade atBottom={atBottom} />
       </div>
