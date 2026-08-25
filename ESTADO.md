@@ -1,5 +1,9 @@
 # ESTADO.md — Registro do que esta LIGADO
 
+**Última verificação:** 2026-08-25 (pós-sprint feat/chat-ui-100 P01–P50)
+→ Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
+
+
 > **Nota pós-desacoplamento (2026-08-12):** A infraestrutura da Evolution API (servidor, consumer, stacks Swarm)
 > foi extraída para o repo separado [adm01-debug/evolution-stack](https://github.com/adm01-debug/evolution-stack).
 > O inventário abaixo reflete o estado do app zapp-web-v3 (edge functions, frontend, banco).
