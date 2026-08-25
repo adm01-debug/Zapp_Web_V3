@@ -360,6 +360,108 @@ export const ChatMessagesArea = memo(
         el.setAttribute('data-observer-id', messageId);
       }, []);
 
+      const handleReply = useCallback((message: Message) => onReply(message), [onReply]);
+      const handleForward = useCallback((message: Message) => onForward(message), [onForward]);
+      const handleCopy = useCallback((content: string) => onCopy(content), [onCopy]);
+      const handleScrollToMessage = useCallback(
+        (messageId: string) => onScrollToMessage(messageId),
+        [onScrollToMessage]
+      );
+      const handleInteractiveButtonClick = useCallback(
+        (button: InteractiveButton) => onInteractiveButtonClick(button),
+        [onInteractiveButtonClick]
+      );
+      const handleEditStart = useCallback(
+        (message: Message) => onEditStart?.(message),
+        [onEditStart]
+      );
+      const handleSnooze = useCallback(
+        (duration: '1h' | '3h' | 'tomorrow' | 'nextweek') => onSnoozeConversation?.(duration),
+        [onSnoozeConversation]
+      );
+
+      const renderItem = useCallback(
+        (virtualRow: import('@tanstack/react-virtual').VirtualItem) => {
+          const message = messages[virtualRow.index];
+          if (!message) return null;
+          const group = groupInfo[virtualRow.index] ?? {
+            isFirstInGroup: true,
+            isLastInGroup: true,
+          };
+          return (
+            <div
+              key={message.id ?? virtualRow.index}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                paddingBottom: '1rem',
+              }}
+            >
+              <MessageBubble
+                message={message}
+                isFirstInGroup={group.isFirstInGroup}
+                isLastInGroup={group.isLastInGroup}
+                contactAvatar={contactAvatar}
+                onSpeak={onSpeak}
+                onStop={onStop}
+                onReply={handleReply}
+                onForward={handleForward}
+                onCopy={handleCopy}
+                onScrollToMessage={handleScrollToMessage}
+                onInteractiveButtonClick={handleInteractiveButtonClick}
+                onEditStart={handleEditStart}
+                onMessageDeleted={handleMessageDeleted}
+                onSnoozeConversation={handleSnooze}
+                messageActions={messageActions}
+                ttsLoading={ttsLoading && ttsMessageId === message.id}
+                ttsPlaying={ttsPlaying && ttsMessageId === message.id}
+                ttsMessageId={ttsMessageId}
+                highlightedMessageIds={highlightedMessageIds}
+                activeHighlightId={activeHighlightId}
+                searchQuery={searchQuery}
+                onAudioVoiceChange={onAudioVoiceChange}
+                registerRef={registerRef}
+                instanceName={instanceName}
+                contactJid={contactJid}
+              />
+            </div>
+          );
+        },
+        [
+          messages,
+          groupInfo,
+          scrollMargin,
+          contactAvatar,
+          onSpeak,
+          onStop,
+          handleReply,
+          handleForward,
+          handleCopy,
+          handleScrollToMessage,
+          handleInteractiveButtonClick,
+          handleEditStart,
+          handleMessageDeleted,
+          handleSnooze,
+          messageActions,
+          ttsLoading,
+          ttsPlaying,
+          ttsMessageId,
+          highlightedMessageIds,
+          activeHighlightId,
+          searchQuery,
+          onAudioVoiceChange,
+          registerRef,
+          instanceName,
+          contactJid,
+          virtualizer.measureElement,
+        ]
+      );
+
       return (
         <ReactionsBatchProvider messageIds={messageIds}>
           <div
@@ -410,60 +512,7 @@ export const ChatMessagesArea = memo(
                 position: 'relative',
               }}
             >
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const message = messages[virtualRow.index];
-                if (!message) return null;
-                const group = groupInfo[virtualRow.index] ?? {
-                  isFirstInGroup: true,
-                  isLastInGroup: true,
-                };
-                return (
-                  <div
-                    key={message.id ?? virtualRow.index}
-                    data-index={virtualRow.index}
-                    ref={virtualizer.measureElement}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      // virtualRow.start e em coordenadas do scroll container;
-                      // subtraimos scrollMargin para obter a posicao relativa
-                      // ao container virtual (que comeca em scrollMargin px do topo).
-                      transform: `translateY(${virtualRow.start - scrollMargin}px)`,
-                      paddingBottom: '1rem',
-                    }}
-                  >
-                    <MessageBubble
-                      message={message}
-                      isFirstInGroup={group.isFirstInGroup}
-                      isLastInGroup={group.isLastInGroup}
-                      contactAvatar={contactAvatar}
-                      onSpeak={onSpeak}
-                      onStop={onStop}
-                      onReply={onReply}
-                      onForward={onForward}
-                      onCopy={onCopy}
-                      onScrollToMessage={onScrollToMessage}
-                      onInteractiveButtonClick={onInteractiveButtonClick}
-                      onEditStart={onEditStart}
-                      onMessageDeleted={handleMessageDeleted}
-                      onSnoozeConversation={onSnoozeConversation}
-                      messageActions={messageActions}
-                      ttsLoading={ttsLoading && ttsMessageId === message.id}
-                      ttsPlaying={ttsPlaying && ttsMessageId === message.id}
-                      ttsMessageId={ttsMessageId}
-                      highlightedMessageIds={highlightedMessageIds}
-                      activeHighlightId={activeHighlightId}
-                      searchQuery={searchQuery}
-                      onAudioVoiceChange={onAudioVoiceChange}
-                      registerRef={registerRef}
-                      instanceName={instanceName}
-                      contactJid={contactJid}
-                    />
-                  </div>
-                );
-              })}
+              {virtualizer.getVirtualItems().map(renderItem)}
             </div>
 
             {isContactTyping && (
