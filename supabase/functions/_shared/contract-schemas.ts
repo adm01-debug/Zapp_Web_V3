@@ -1208,17 +1208,6 @@ export const SentrySyncV1Schema = z.object({
 }).strict();
 
 /**
- * zapp-google-calendar-sync@v1 — status do contrato Google Calendar (G1).
- * GET (status) ou POST com body opcional { dryRun }. Resposta SEMPRE 200:
- * { synced:false, reason:'not_configured'|'disabled'|'error' } — nunca 500 e
- * nunca 'not_implemented' (ADR 2026-08-18: chamador de front removido; ver
- * supabase/functions/zapp-google-calendar-sync/ADR.md).
- */
-export const ZappGoogleCalendarSyncV1Schema = z.object({
-  dryRun: z.boolean().optional(),
-}).strict();
-
-/**
  /** warroom-monthly-test@v1 — teste mensal do pipeline de alerta Warroom.
   * Sem parâmetros de entrada: o handler IGNORA o body (saída fixa).
   */
@@ -1389,9 +1378,6 @@ export const InviteUserV1Schema = z.object({
   "download-wa-status-media":      { v1: DownloadWaStatusMediaV1Schema },
   "transcribe-audio-internal":     { v1: TranscribeAudioInternalV1Schema },
   "csat-dispatch":   { v1: CsatDispatchV1Schema },
-
-  // ─── GOOGLE CALENDAR (contrato honesto, ADR 2026-08-18) ───────────────────
-  "zapp-google-calendar-sync": { v1: ZappGoogleCalendarSyncV1Schema },
 
   // ─── OUTROS ────────────────────────────────────────────────────────────────
   // ─── CRM plugável (Etapa 66) ──────────────────────────────────────────────
