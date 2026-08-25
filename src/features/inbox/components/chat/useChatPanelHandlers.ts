@@ -345,6 +345,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
     },
     [
       contactId,
+      contactPhone,
       conversationId,
       instanceName,
       editMessageApi,
@@ -621,6 +622,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
       throw new Error('Nao foi possivel arquivar: acao nao configurada.');
     }
     await opts.onArchive();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- opts.onArchive é a única propriedade usada; opts inteiro não é necessário
   }, [contactId, opts.onArchive]);
 
   const { handleInputChange, handleKeyDown, handleSlashCommand } = useInputHandlers({

@@ -18,22 +18,23 @@ import {
 
 vi.mock('@/components/ui/motion', () => ({
   motion: new Proxy(
-    {},
+    {} as Record<string, unknown>,
     {
-      get: (_: any, prop: any) => (typeof prop === 'symbol' ? undefined : prop),
+      get: (_: unknown, prop: string | symbol) =>
+        typeof prop === 'symbol' ? undefined : prop,
     }
   ),
-  AnimatePresence: ({ children }: any) => children ?? null,
+  AnimatePresence: ({ children }: { children?: React.ReactNode }) => children ?? null,
 }));
 vi.mock('@/components/ui/tooltip', () => ({
-  TooltipProvider: ({ children }: any) => children ?? null,
-  Tooltip: ({ children }: any) => children ?? null,
-  TooltipTrigger: ({ children }: any) => children ?? null,
+  TooltipProvider: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  Tooltip: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  TooltipTrigger: ({ children }: { children?: React.ReactNode }) => children ?? null,
   TooltipContent: () => null,
 }));
 vi.mock('@/components/ui/popover', () => ({
-  Popover: ({ children }: any) => React.createElement(React.Fragment, null, children),
-  PopoverTrigger: ({ children }: any) => children ?? null,
+  Popover: ({ children }: { children?: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+  PopoverTrigger: ({ children }: { children?: React.ReactNode }) => children ?? null,
   PopoverContent: () => null,
 }));
 

@@ -63,6 +63,7 @@ export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Pro
       const ro = new ResizeObserver(measure);
       ro.observe(container);
       return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- expressão primitiva (bool), seguro
     }, [messages.length > 0]);
 
     const virtualizer = useVirtualizer({
