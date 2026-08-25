@@ -885,3 +885,108 @@ describe('P0-12 — handleScroll timer is cleared on unmount (Bloco 8)', () => {
     });
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// P0-13: shouldInvalidateOnUpdate — contratos A/B/C (auditoria 2026-08-25)
+// ────────────────────────────────────────────────────────────────────────────
+// Contexto: no handler de UPDATE do inbox, shouldInvalidateOnUpdate é chamado
+// com (payload, payload.new.contact_id) — candidateContactId = updContactId.
+// Isso é uma tautologia de null-guard (sempre true se não null).
+// A utility existe para uso correto em componentes com activeContactId externo.
+// Contratos A/B/C cobrem: utility isolada, handler atual, e GAP-2 buildGroupInfo.
+
+describe('P0-13 — shouldInvalidateOnUpdate + buildGroupInfo (auditoria 2026-08-25)', () => {
+  const ACTIVE = 'aaaaaaaa-0000-4000-a000-000000000001';
+  const OTHER  = 'bbbbbbbb-0000-4000-b000-000000000002';
+
+  describe('Contrato A — utility com candidateContactId externo real', () => {
+    it('UPDATE do active contact → true', () => {
+      expect(shouldInvalidateOnUpdate({ new: { contact_id: ACTIVE } }, ACTIVE)).toBe(true);
+    });
+    it('UPDATE de outro contact → false', () => {
+      expect(shouldInvalidateOnUpdate({ new: { contact_id: OTHER } }, ACTIVE)).toBe(false);
+    });
+    it('UPDATE com old.contact_id = active (contact mudou) → true', () => {
+      expect(shouldInvalidateOnUpdate(
+        { new: { contact_id: OTHER }, old: { contact_id: ACTIVE } }, ACTIVE
+      )).toBe(true);
+    });
+    it('UPDATE sem contact_id → false', () => {
+      expect(shouldInvalidateOnUpdate({ new: {} }, ACTIVE)).toBe(false);
+    });
+    it('UPDATE com contact_id=null → false', () => {
+      expect(shouldInvalidateOnUpdate({ new: { contact_id: null } }, ACTIVE)).toBe(false);
+    });
+  });
+
+  describe('Contrato B — handler atual (candidateId = payload.new.contact_id — tautologia)', () => {
+    it('UPDATE com contact_id não-null → sempre true (null-guard funciona)', () => {
+      const payload = { new: { contact_id: ACTIVE } };
+      const updContactId = payload.new?.contact_id;
+      const result = updContactId ? shouldInvalidateOnUpdate(payload, updContactId) : false;
+      expect(result).toBe(true); // tautologia: candidateId === candidateId
+    });
+    it('UPDATE com contact_id=null → false (null-guard bloqueia)', () => {
+      const payload = { new: { contact_id: null } };
+      const updContactId = payload.new?.contact_id;
+      const result = updContactId ? shouldInvalidateOnUpdate(payload, updContactId!) : false;
+      expect(result).toBe(false);
+    });
+    it('DOCUMENTAÇÃO: candidateId = payload.new.contact_id é tautologia para qualquer id', () => {
+      const payload = { new: { contact_id: OTHER } };
+      const updContactId = payload.new.contact_id;
+      expect(shouldInvalidateOnUpdate(payload, updContactId)).toBe(true);  // tautologia
+      expect(shouldInvalidateOnUpdate(payload, ACTIVE)).toBe(false);        // filtro real
+    });
+  });
+
+  describe('GAP-2 — buildGroupInfo com timestamps inválidos (toMs + isNaN guard)', () => {
+    it('mensagens com timestamp=null do mesmo sender NÃO são agrupadas', () => {
+      const msgs = [
+        { sender: 'A', timestamp: null },
+        { sender: 'A', timestamp: null },
+      ];
+      const info = buildGroupInfo(msgs);
+      // SEM fix (?? 0): [first:T,last:F]+[first:F,last:T] → agrupadas (ERRADO)
+      // COM fix (isNaN guard): [first:T,last:T]+[first:T,last:T] → não agrupadas
+      expect(info[0].isFirstInGroup).toBe(true);
+      expect(info[0].isLastInGroup).toBe(true);
+      expect(info[1].isFirstInGroup).toBe(true);
+      expect(info[1].isLastInGroup).toBe(true);
+    });
+    it('msg com timestamp=null entre válidas → inicia novo grupo e não agrupa com próxima', () => {
+      const base = new Date('2024-01-01T12:00:00Z').getTime();
+      const msgs = [
+        { sender: 'A', timestamp: new Date(base).toISOString() },
+        { sender: 'A', timestamp: null },
+        { sender: 'A', timestamp: new Date(base + 60_000).toISOString() },
+      ];
+      const info = buildGroupInfo(msgs);
+      expect(info[1].isFirstInGroup).toBe(true); // null → novo grupo
+      expect(info[1].isLastInGroup).toBe(true);  // null → não agrupa com próxima
+      expect(info[2].isFirstInGroup).toBe(true); // prev tem null → não agrupa
+    });
+    it('msgs válidas do mesmo sender < 5min ainda são agrupadas (regressão)', () => {
+      const base = new Date('2024-01-01T12:00:00Z').getTime();
+      const msgs = [
+        { sender: 'A', timestamp: new Date(base).toISOString() },
+        { sender: 'A', timestamp: new Date(base + 2 * 60_000).toISOString() },
+      ];
+      const info = buildGroupInfo(msgs);
+      expect(info[0].isFirstInGroup).toBe(true);
+      expect(info[0].isLastInGroup).toBe(false);
+      expect(info[1].isFirstInGroup).toBe(false);
+      expect(info[1].isLastInGroup).toBe(true);
+    });
+    it('PROVA que ?? NaN sozinho é insuficiente (isNaN guard é necessário)', () => {
+      // ?? NaN: NaN > SAME_GROUP_MS = false → isFirstInGroup=false → AGRUPADAS (errado)
+      // Com isNaN(diff) ||: força true → NÃO agrupadas (correto)
+      const SAME = 5 * 60 * 1000;
+      const diffNaN = NaN;
+      // eslint-disable-next-line use-isnan -- comparação intencional para provar que NaN>X=false
+      expect(NaN > SAME).toBe(false);          // prova: sem guard, agrupa (bug)
+      // eslint-disable-next-line use-isnan -- demonstração do guard necessário
+      expect(isNaN(diffNaN) || NaN > SAME).toBe(true); // com guard, não agrupa (fix)
+    });
+  });
+});
