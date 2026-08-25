@@ -71,7 +71,7 @@ ver pendências e tabela por etapa.)*
 | 6 | ✅ | Secret GitHub corrigido (incidente 2026-08-20) + blindagem tripla: preflight `check-deploy-secrets.mjs` (valida no Kong), gate pré-PUT, guard pós-deploy diário. ▶️ guard migrado de `ubuntu-latest` p/ runner `vps-zapp` (não fica preso em fila). |
 | 7 | ✅ | `vault.supabase_service_role_key` atualizado 2026-08-10 (pós-rotação). |
 | 8 | ✅ | Kong: anon canônica → `rest`=200/`auth`=200 (reproduzido nesta sessão); chaves de outro ambiente → 401 (reconciliação). A "inconsistência" era isso: o Kong valida assinatura — demo caiu. |
-| 9 | 🔧 | `.gitleaks.toml` + `security.yml` (histórico completo `fetch-depth:0`, semanal, hard-gate). Pendente: rodar `git filter-repo` p/ limpar histórico e remover os 33 SHAs + regex de allowlist (TODO no próprio arquivo). |
+| 9 | 🔧 | `.gitleaks.toml` + `security.yml` (histórico completo `fetch-depth:0`, semanal, hard-gate). Pendente: rodar `git filter-repo` p/ limpar histórico e remover os 33 SHAs + regex de allowlist (TODO no próprio arquivo). **Decisão do dono 2026-08-24: repo PERMANECE PÚBLICO** (dependência de runners `ubuntu-latest`/CodeQL gratuitos, que exigem repo público). Risco aceito e mitigado: token MCP supabase rotacionado e morto (404 verificado; PR #1407), token Portainer **nunca** esteve no histórico, 0 forks/0 stars. `filter-repo` mantido como hygienização futura, somente em janela de freeze coordenada (reescrita de histórico exige re-clone na VPS/Portainer/runners). |
 | 10 | ✅ | PAT do stack 210 **saiu do compose**: Docker secret `gh_runner_pat_v2` (v4.7, 2026-08-18 — stack file conferido). |
 | 11 | 🔧 | Implementada a opção "Swarm secret" (das duas propostas). GitHub App fica como evolução opcional. |
 | 12 | ✅ | Vault ao vivo: **37 secrets, zero DEPRECATED/minio_*** (a faxina já ocorreu; plano citava 44). |
@@ -224,4 +224,4 @@ ver pendências e tabela por etapa.)*
 | P2 | Rate-limit nas 19 públicas sem limiter / unificação CORS / HMAC ad-hoc ×8 | Janela de edge functions (mapas prontos nas etapas 27–29) |
 | P2 | `evo.idx_recon_coverage_daily_snapshot_date` duplicado | DROP no repo **evolution-stack** (fronteira de DDL) |
 | P2 | Rebuild do graphify pós-merge | ✅ **CONCLUÍDO em 2026-08-24** (commit `c3e3c01c7`) — ver etapa 98 |
-| P3 | Consolidação de watchdogs (55) · redução de runners (51) · filter-repo do histórico (9) · endurecer ai-agent-pr-policy (70) | Decisões do dono com desenho registrado nesta matriz |
+| P3 | Consolidação de watchdogs (55) · redução de runners (51) · filter-repo do histórico (9) · endurecer ai-agent-pr-policy (70) | Decisões do dono com desenho registrado nesta matriz. **(9) decidido 2026-08-24: repo permanece público, risco aceito — ver etapa 9** |
