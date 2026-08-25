@@ -7,14 +7,7 @@ import { useAuth } from '@/features/auth';
 import { TeamConversation } from '@/hooks/useTeamChat';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  ArrowDown,
-  X,
-  Search,
-  Lock,
-  Shield,
-  Link2,
-} from 'lucide-react';
+import { ArrowDown, X, Search, Lock, Shield, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,7 +20,6 @@ import { TeamChatInputArea } from './TeamChatInputArea';
 import { useTeamChatPanel } from './useTeamChatPanel';
 import { useTeamMessageReactions } from '@/features/inbox/hooks/team-chat/useTeamMessageReactions';
 import { TeamMessageItem } from './TeamMessageItem';
-import { isFeatureEnabled } from '@/lib/featureFlags';
 import {
   ChatScrollerV2,
   type ChatScrollerV2Handle,
@@ -69,7 +61,6 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
     updateStatusMutation,
     isNearBottomRef,
     scrollRef,
-    listRef,
     searchInputRef,
   } = s;
   const { profile: liveProfile } = useAuth();
@@ -82,7 +73,7 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
     filteredMessages,
     supabase as unknown as Parameters<typeof useSignedMediaUrlBatch>[1]
   );
-  // E50: ref para ChatScrollerV2 quando team_chat_tanstack está ativo
+  // E50: ref para ChatScrollerV2 (único componente de scroll do team-chat)
   const tanstackScrollerRef = useRef<ChatScrollerV2Handle>(null);
 
   // Keyboard shortcuts for chat
@@ -144,15 +135,12 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
 
   useEffect(() => {
     // If we are at the bottom, stay at the bottom
+    // E50: ChatScrollerV2 é sempre o componente — usa tanstackScrollerRef diretamente
     if (!isNearBottomRef.current) return;
     const lastIndex = filteredMessages.length - 1;
     if (lastIndex < 0) return;
-    if (isFeatureEnabled('team_chat_tanstack')) {
-      tanstackScrollerRef.current?.scrollToIndex(lastIndex);
-    } else if (listRef.current) {
-      listRef.current.scrollToRow({ index: lastIndex, align: 'end' });
-    }
-  }, [filteredMessages, conversation.id, isNearBottomRef, listRef]);
+    tanstackScrollerRef.current?.scrollToIndex(lastIndex);
+  }, [filteredMessages, conversation.id, isNearBottomRef]);
 
   // Handle incoming messages while reading old ones
   useEffect(() => {
