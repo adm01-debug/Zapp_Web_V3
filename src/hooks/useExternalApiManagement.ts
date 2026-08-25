@@ -27,7 +27,7 @@ import { log } from '@/lib/logger';
 import { tanstackRetry } from '@/lib/errors/queryErrors';
 import { queryKeys } from '@/services/api/queryKeys';
 import { ACTIVE_WHATSAPP_INSTANCE } from '@/lib/constants/whatsappInstances';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 
 /** Strips all non-numeric characters from a phone string so it can be used as a consistent lookup key. */
 function cleanPhone(phone: string): string {
@@ -88,6 +88,10 @@ export function useExternalContact360(phone: string | undefined) {
       );
 
       if (error) {
+        // O postgrest-js transforma o AbortError do fetch em `{ error }`.
+        // Repassar o cancelamento ao TanStack evita registrar um falso erro e
+        // cachear `null` para uma consulta apenas cancelada na troca de tela.
+        if (signal.aborted && isAbortLikeError(error)) throw error;
         log.error('Error fetching external 360:', {
           message: (error as { message?: string })?.message ?? String(error),
           code: (error as { code?: string })?.code,
@@ -131,6 +135,8 @@ export function useExternalContact360Batch(phones: string[]) {
       );
 
       if (error) {
+        // Cancelamento do conjunto anterior não é resposta vazia do CRM.
+        if (signal.aborted && isAbortLikeError(error)) throw error;
         log.error('Batch CRM lookup error:', {
           message: (error as { message?: string })?.message ?? String(error),
           code: (error as { code?: string })?.code,

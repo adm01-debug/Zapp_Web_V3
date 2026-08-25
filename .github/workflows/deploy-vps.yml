@@ -34,10 +34,10 @@ env:
 jobs:
   build-and-push:
     name: Build & push image
-    # 2026-08-06: runners GitHub-hosted (ubuntu-latest) sem alocação na conta —
-    # fila inteira travada em pending. Build no runner self-hosted da VPS
-    # (online, Docker disponível) — mesmo padrão dos workflows E2E-VPS.
-    runs-on: [Linux, X64, vps-zapp]
+    # Build isolado da VPS de produção. Nunca adicionar fallback automático
+    # para vps-zapp: uma indisponibilidade do runner deve parar o deploy, não
+    # disputar CPU/RAM/I/O com Supabase, Traefik, Evolution e o app.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     # 2026-08-06 20:30: environment removido — runs com `environment:`
     # ficavam em pending SEM jobs (resolução travada na conta); todos os
@@ -85,25 +85,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ⚡ Pull previous assets para retencao entre deploys
+      - name: ⚡ Preparar assets N-1 (manifesto estrito)
         run: |
-          # Extrair /usr/share/nginx/html/assets/ do deploy N-1 antes de buildar N.
-          # production-latest = tag do deploy atual, que sera sobrescrita pelo push novo.
-          # Sessoes vivas com tab aberta do deploy anterior nao recebem 404 nos chunks JS/CSS.
+          set -euo pipefail
+          rm -rf ./previous-assets /tmp/prev-assets /tmp/prev-manifest
           mkdir -p ./previous-assets
           docker rm -f prev-zapp 2>/dev/null || true
           if docker pull ghcr.io/${{ env.IMAGE_NAME }}:production-latest 2>/dev/null; then
-            docker create --name prev-zapp ghcr.io/${{ env.IMAGE_NAME }}:production-latest
-            mkdir -p /tmp/prev-assets
-            # Usar src/. garante copia de CONTEUDO (nunca cria assets/ aninhado)
-            docker cp prev-zapp:/usr/share/nginx/html/assets/. /tmp/prev-assets/ 2>/dev/null || true
-            docker rm prev-zapp 2>/dev/null || true
-            if [ -d /tmp/prev-assets ]; then
-              cp -r /tmp/prev-assets/. ./previous-assets/
-              rm -rf /tmp/prev-assets
+            docker create --name prev-zapp ghcr.io/${{ env.IMAGE_NAME }}:production-latest >/dev/null
+            if ! docker cp prev-zapp:/usr/share/nginx/html/current-assets.txt /tmp/prev-manifest 2>/dev/null; then
+              echo "Imagem legada sem manifesto: retenção ignorada para eliminar o acúmulo histórico"
+              docker rm -f prev-zapp >/dev/null
+              exit 0
             fi
-            COUNT=$(ls ./previous-assets | wc -l | tr -d ' ')
-            echo "Assets retidos: ${COUNT} arquivos do build anterior"
+            mkdir -p /tmp/prev-assets
+            docker cp prev-zapp:/usr/share/nginx/html/assets/. /tmp/prev-assets/
+            docker rm -f prev-zapp >/dev/null
+
+            COUNT=$(wc -l < /tmp/prev-manifest | tr -d ' ')
+            [ "$COUNT" -le 5000 ] || { echo "::error::ASSET_RETENTION_FILES=${COUNT} (limite 5000)"; exit 1; }
+            while IFS= read -r asset; do
+              case "$asset" in ""|/*|*".."*) echo "::error::Manifesto contém caminho inválido: $asset"; exit 1 ;; esac
+              [ -f "/tmp/prev-assets/$asset" ] || { echo "::error::Asset ausente no build anterior: $asset"; exit 1; }
+              mkdir -p "./previous-assets/$(dirname "$asset")"
+              cp "/tmp/prev-assets/$asset" "./previous-assets/$asset"
+            done < /tmp/prev-manifest
+            SIZE_KB=$(du -sk ./previous-assets | awk '{print $1}')
+            [ "$SIZE_KB" -le 153600 ] || { echo "::error::ASSET_RETENTION_SIZE=${SIZE_KB}KB (limite 150MB)"; exit 1; }
+            echo "Assets retidos: ${COUNT} arquivos, ${SIZE_KB}KB, exclusivamente do build N-1"
           else
             echo "Sem imagem anterior (1o deploy ou production-latest indisponivel) — ok"
           fi
@@ -119,6 +128,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-contexts: |
+            previous_assets=./previous-assets
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}
@@ -132,6 +143,8 @@ jobs:
             VITE_SENTRY_ENVIRONMENT=production
             VITE_APP_ENV=production
             VITE_ENABLE_CLIENT_OBSERVABILITY=true
+          cache-from: type=gha,scope=zapp-web-production
+          cache-to: type=gha,mode=max,scope=zapp-web-production
 
       - name: 📋 Ler tags de rollback protegidas (infra/ghcr-protected-tags.txt)
         id: protect
@@ -379,27 +392,18 @@ jobs:
   # ============================================================
   # Health check pós-deploy DETERMINÍSTICO (DP-09, 2026-08-06):
   # post-deploy-check.yml (workflow_run) não disparava de forma confiável;
-  # este job roda SEMPRE que o deploy concluir (if: always()), sem depender
-  # de webhooks. Checagens: TTM www.zappweb.app.br < 3.0s (000/timeout =
-  # falha), PostgREST vivo (4xx ok; 5xx/000 = falha), edge function
-  # get-media-base64 viva (4xx ok; 5xx/000 = falha).
+  # este job roda somente após rollout confirmado, sem depender de webhooks.
+  # Checagens: TTM, PostgREST, edge function e preflight CORS dos endpoints
+  # que falharam juntos no incidente de 25/08/2026.
   # ============================================================
   post-deploy-health:
     name: 🩺 Health check pós-deploy (determinístico)
     needs: deploy
-    if: always()
+    if: ${{ needs.deploy.result == 'success' }}
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 10
     steps:
-      - name: "🔧 Preparação — garante bc no runner (fail-closed)"
-        run: |
-          if ! command -v bc >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq bc
-          fi
-          command -v bc >/dev/null 2>&1 || { echo "::error::BC_UNAVAILABLE — não foi possível obter bc; abortando (fail-closed)"; exit 1; }
-          bc --version | head -1
-
-      - name: "1/3 — TTM www.zappweb.app.br (< 3.0s)"
+      - name: "1/4 — TTM www.zappweb.app.br (< 3.0s)"
         run: |
           RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
           CODE=$(echo "$RESP" | awk '{print $1}')
@@ -411,13 +415,13 @@ jobs:
             echo "::error::SITE_DEAD — conexão falhou/timeout (HTTP 000)"
             exit 1
           fi
-          if [ "$(echo "$TTM > 3.0" | bc -l)" = "1" ]; then
+          if ! awk -v t="$TTM" 'BEGIN { exit !(t <= 3.0) }'; then
             echo "::error::TTM_TOO_SLOW — ${TTM}s > 3.0s (limite)"
             exit 1
           fi
           echo "✅ Site OK — TTM ${TTM}s (< 3.0s)"
 
-      - name: "2/3 — Supabase PostgREST vivo (4xx ok; 5xx/timeout = falha)"
+      - name: "2/4 — Supabase PostgREST vivo (4xx ok; 5xx/timeout = falha)"
         if: always()
         run: |
           CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://supabase.atomicabr.com.br/rest/v1/ || true)
@@ -432,7 +436,7 @@ jobs:
           esac
           echo "✅ PostgREST vivo — HTTP ${CODE} (401/4xx sem apikey é esperado)"
 
-      - name: "3/3 — Edge Function get-media-base64 viva (4xx ok; 5xx/timeout = falha)"
+      - name: "3/4 — Edge Function get-media-base64 viva (4xx ok; 5xx/timeout = falha)"
         if: always()
         run: |
           CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST https://supabase.atomicabr.com.br/functions/v1/evolution-api/get-media-base64 || true)
@@ -446,3 +450,22 @@ jobs:
             5*) echo "::error::EDGE_FUNCTION_DEAD — HTTP ${CODE} (5xx = função fora)"; exit 1 ;;
           esac
           echo "✅ Edge Function viva — HTTP ${CODE} (4xx sem body é esperado)"
+
+      - name: "4/4 — Preflight CORS dos endpoints críticos"
+        if: always()
+        run: |
+          set -euo pipefail
+          ORIGIN="https://zapp.atomicabr.com.br"
+          for URL in \
+            "https://supabase.atomicabr.com.br/rest/v1/whatsapp_connections" \
+            "https://supabase.atomicabr.com.br/functions/v1/evolution-api/status"; do
+            HEADERS=$(curl -sS -D - -o /dev/null --max-time 15 -X OPTIONS "$URL" \
+              -H "Origin: ${ORIGIN}" \
+              -H "Access-Control-Request-Method: GET")
+            CODE=$(printf '%s\n' "$HEADERS" | awk 'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }')
+            ALLOW=$(printf '%s\n' "$HEADERS" | awk -F': *' 'tolower($1)=="access-control-allow-origin" { gsub("\\r", "", $2); print $2 }' | tail -1)
+            echo "$URL → HTTP ${CODE:-000}, ACAO=${ALLOW:-ausente}"
+            case "${CODE:-000}" in 2*|4*) ;; *) echo "::error::CORS_PREFLIGHT_HTTP=${CODE:-000} em $URL"; exit 1 ;; esac
+            case "$ALLOW" in "*"|"$ORIGIN") ;; *) echo "::error::CORS_HEADER_AUSENTE em $URL"; exit 1 ;; esac
+          done
+          echo "✅ CORS crítico disponível para o frontend"
