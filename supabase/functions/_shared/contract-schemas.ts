@@ -510,20 +510,45 @@ export const ConnectionHealthCheckV1Schema = z.object({
 }).strict();
 
 /**
+ * SEC-4 em 2 camadas (decisão simulada 2026-08-25; direção ajustada pela
+ * coordenação na execução) — divisão de responsabilidades do baseUrl:
+ *   - SINTAXE (esta camada, no schema): duas formas aceitas —
+ *     (a) URL COM esquema (`\w+://`): delega ao z.string().url() do Zod;
+ *     (b) bare hostname SEM esquema: `/^[a-z0-9.-]+(:\d+)?$/i` apenas —
+ *         sem espaços, sem path, sem query (o handler prefixa https://).
+ *     Texto livre sem estrutura de URL ("not a url at all", "foo bar") cai
+ *     no gate 422. Whitespace-only passa: o handler responde 400
+ *     "baseUrl is required" (mensagem melhor que 422 genérico — behavioral B5).
+ *     Nota Zod 3.23.8: z.string().url() usa new URL() e REJEITA host sem
+ *     esquema — por isso o refine de 2 formas em vez de .url() direto.
+ *   - SEGURANÇA (handler): isSafeHttpsUrl (https-only + RFC-1918/SSRF) roda
+ *     no handleConfigure PÓS-normalização — mover para o schema quebraria
+ *     URLs normalizáveis ("n8n.example.com" viraria 422 antes do https://).
+ */
+const n8nBaseUrlSintaxe = (raw: string): boolean => {
+  const t = raw.trim();
+  if (t === "") return true; // behavioral B5: 400 "baseUrl is required" no handler
+  if (/^\w+:\/\//.test(t)) return z.string().url().safeParse(t).success;
+  return /^[a-z0-9.-]+(:\d+)?$/i.test(t);
+};
+
+/**
  * zapp-n8n-sync@v1 — POST interno (requireAdminOrSupervisor). Actions:
  *   - { action: 'status' } → estado real da integração n8n (not_configured
  *     honesto quando não há config em zapp.n8n_config);
  *   - { action: 'configure', baseUrl } → persiste a URL base (enabled
  *     permanece false — contrato desligado; ativação é passo futuro).
  * Estrito: endpoint interno da UI — falhar cedo em payload fora do contrato.
+ * baseUrl: min/max mantidos + gate sintático SEC-4 (ver n8nBaseUrlSintaxe).
  */
 export const ZappN8nSyncV1Schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status") }).strict(),
-  // SEC-4 (Bloco 0, 2026-08-21): baseUrl aceita host sem protocolo no
-  // contrato (o handler normaliza com https:// antes de persistir — ver
-  // normalizeBaseUrl/handleConfigure) — isSafeHttpsUrl roda no handler,
-  // DEPOIS da normalização, não aqui (senão rejeitaria "n8n.example.com").
-  z.object({ action: z.literal("configure"), baseUrl: z.string().min(1).max(2048) }).strict(),
+  z.object({
+    action: z.literal("configure"),
+    baseUrl: z.string().min(1).max(2048).refine(n8nBaseUrlSintaxe, {
+      message: "baseUrl deve ser uma URL http(s) válida ou host sem esquema (host[:porta] — o handler prefixa https://)",
+    }),
+  }).strict(),
 ]);
 
 /** health-check@v1 — probe GET; sem body. */
@@ -1050,6 +1075,12 @@ export const EvolutionApiV1Schema = z.object({
   remoteJid: z.string().optional(),
   chat: z.string().optional(),
   readMessages: z.boolean().optional(),
+  // PLANO-100 etapa 49 (NO-GO documentado, 2026-08-25): validação efetiva de
+  // key/message é por-action no handler com 422 canônico superior (ex.:
+  // get-media-base64 em evolution-api/index.ts reprovando INVALID_MESSAGE_KEY
+  // com path detalhado); o schema permanece no mínimo "objeto" por design
+  // multi-action — o shape real varia por action e apertar aqui duplicaria
+  // regra por action no lugar errado.
   key: z.record(z.unknown()).optional(),
   message: z.record(z.unknown()).optional(),
 }).passthrough();
@@ -1401,3 +1432,7 @@ export {
   ContractLifecycles,
 } from './edge-contract-schemas.ts';
 export { CloudWebhookV1Schema, CloudSendV1Schema } from './edge-contract-schemas.ts';
+// Etapa 34 (PLANO-100, 2026-08-25): version-map canônico da variante JSON
+// (fila/queue) de voice-changer@v1 — definido em contract-schemas-infra.ts ao
+// lado da variante multipart; handlers importam daqui (ponto unificado).
+export { VoiceChangerQueueContractMap } from './contract-schemas-infra.ts';

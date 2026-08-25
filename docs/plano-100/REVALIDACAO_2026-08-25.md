@@ -191,7 +191,8 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
 | Threshold w5-401 (88) | decisão de infra | dono |
 | `ai-agent-pr-policy` (70) | decisão de infra | dono |
 | Índice `evo` duplicado → repo `evolution-stack` | dono | quando evolution-stack absorver |
-| PLANO-CONTRATOS-EDGE — blocos restantes: guards de shape; allowlist main/mcp (exceção no-op documentada — **superada por design**, ver etapa 91) | dono | incremental |
+| PLANO-CONTRATOS-EDGE — **etapas 54/68/90 EXECUTADAS em 25/08** (sessão de melhorias pós-revisão, branch `feat/plano100-melhorias-2026-08-25`): **54** `respondWithContract` + migração de 6 handlers; **68** padrão de integração fetch contra handlers reais (2 cobertos); **90** ratchet de shape `scripts/check-error-shapes.mjs` (teto 82) no `contract-guards.yml` — PR #1420 | dono | fechado nesta branch |
+| PLANO-CONTRATOS-EDGE — **decisões de não-mudança (25/08, registradas)**: mcp-server/mcp-query NÃO viram `.strict()` (etapa 50 — protocolo MCP/JSON-RPC externo, campos arbitrários por design); evolution-api `key`/`message` permanecem permissivos no schema (etapa 49 — validação por-action canônica no handler é superior); etapas 24 (shape pré-gate no whatsapp-cloud-webhook) e 47 (data permissiva no evolution-webhook) aceitas como **exceções documentadas de fronteira** com sistema externo que evolui; etapa 65 (eixo `undefined`) — limitação física do transporte JSON, documentada; etapa 91 allowlist=2 (main/mcp no-op) **congelada por decisão** | dono | DECIDIDO — sem ação futura |
 
 ---
 
@@ -202,6 +203,8 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
 | **Plano-100 de melhorias** (`docs/plano-100/VALIDACAO_PLANO_100_2026-08-20.md`) | 100 etapas auditadas em 20/08 | 50 ✅ · 20 🔧 · 14 🟡 · 14 ▶️ · 2 N/A | **P0/P1 e etapas 65/98/99 fechados; etapa 9 decidida; CORS/drift-gate/contratos/CI fechados** — remanescentes: tabela da seção 4 (~10 itens, majoritariamente decisões de infra e janelas) |
 | **PLANO-100-CONTRATOS-EDGE** (`docs/PLANO-100-CONTRATOS-EDGE-20260821.md`) | 100 etapas, blocos 0–10 | 21/08: 125/124 contratos (drift), 25 suítes, gate CI `failure` | **Registry 123=123 alinhado; matriz central universal (123/123); 110/121 com `parseOrReject`; multipart + piso de cobertura vigentes; arquivamentos email-health (22/08) e google-calendar-sync (25/08)** — restam guards de shape e fecho documental (97–100 parcial: graphify/docs já em #1401) |
 | **Plano-100 da auditoria** (`docs/audit-2026-08-06/VALIDATION_PLAN_100_STEPS.md`) | 100 etapas de reconciliação container×Supabase (read-only, 06/08) | 114 ✅ · 12 ❌ drift · 24 ⚠️ risco · 1 🟡 | **Concluída** — drifts/risco consolidados em `RECONCILIATION_MATRIX.md` + `reconciliation.json`; achados alimentaram o plano-100 de melhorias e o decoupling (evolution-stack) |
+| **PLANO_100_ETAPAS_CHAT_UI** (`docs/PLANO_100_ETAPAS_CHAT_UI.md`) | Migração chat-ui em etapas (24/08) | Sprint 1 (24/08) | **Sprint 1 concluída** conforme `docs/chat-ui/MIGRACAO-CONCLUIDA.md`; pendências E61–E98 registradas no próprio plano; finalização **em andamento por outra sessão** via `docs/PLANO_50_ETAPAS_FINALIZACAO_CHAT_UI.md` |
+| **PLANO-100-ETAPAS da auditoria funcional 16/08** (`docs/audit-2026-08-16/PLANO-100-ETAPAS.md`) | Plano funcional 100 etapas × 10 subetapas (16/08) | Aprovado em 3 rodadas de validação | **Superado/absorvido** pelos planos de 20–21/08 (plano-100 de melhorias da auditoria RELATORIO-20260820 + PLANO-100-CONTRATOS-EDGE) — fases temáticas 1–10 mapeiam para os blocos dos planos novos; decisão registrada em 25/08 na nota "Status" do README da pasta — **manter como registro histórico, não executar deste ponto** |
 
 > Fonte das contagens: `grep` forense nos três documentos na branch `feat/plano100-fechamento-2026-08-25`
 > (25/08). Percentuais exatos por plano podem ser refinados pelo coordenador ao fechar as frentes —
@@ -224,3 +227,19 @@ com suíte local; `zapp-email-inbound-webhook` e demais via matriz central.
 | YAML (`deploy-vps.yml`, `contract-guards.yml`) | Válidos (pyyaml + js-yaml) |
 | `bash -n` scripts shell | OK |
 | Deno local | Não instalado na WSL; usado binário 2.9.5 em `/tmp` (mesma major do CI) |
+
+---
+
+## 7. Revisão exaustiva 25/08 (pós-fechamento) — sessão de melhorias
+
+- **Verificação código-a-código dos 100 itens** do plano-100 de melhorias executada em
+  25/08 na branch `feat/plano100-melhorias-2026-08-25` (pós-fechamento das 5 frentes):
+  placar consolidado **~76 ✅ · 18 🟡 · 4 executados nesta sessão · 4 decisões de
+  não-mudança** (ver §4).
+- **Executados agora:** etapas **54/68/90** do CONTRATOS-EDGE (§4) e **82-D** — 4 catches
+  de invoke silenciados no front: `sla-alert-forward` (useSLAAlerts) e renovação do watch
+  Gmail (useEmail + useEmailManagement) corrigidos; speech-to-text (2 sites) já logavam e
+  batch-fetch-avatars tem tratamento completo/fora de custódia (reportados sem edição).
+- **Decisões registradas:** etapas 49/50/65/91 + exceções de fronteira 24/47 (§4, sem
+  ação futura).
+- PR desta branch: **#1420** (empilhado no #1417 — mergear o #1417 primeiro).

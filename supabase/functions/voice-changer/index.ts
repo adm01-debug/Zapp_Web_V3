@@ -3,8 +3,7 @@ import { requireUser, requireServiceRoleOrCron } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import { getStoragePublicUrl } from "../_shared/storage-url.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
-import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
-import { VoiceChangerV1Schema } from "../_shared/schemas.ts";
+import { CONTRACT_SCHEMAS, VoiceChangerQueueContractMap } from "../_shared/contract-schemas.ts";
 
 const VOICE_PRESETS: Record<string, { voiceId: string; label: string; isCloned?: boolean }> = {
   // Masculinas
@@ -84,10 +83,13 @@ Deno.serve(async (req) => {
       authorized = body.authorized === true || body.authorized === 'true';
     } else if (contentType.includes('application/json')) {
       const json = await req.json().catch(() => null);
-      // Ramo JSON (fila/queue): CONTRACT_SCHEMAS['voice-changer'] é o schema
-      // MULTIPART (audio File obrigatório) — usar a variante JSON registrada
-      // (VoiceChangerV1Schema) para não 422ar todos os requests de fila.
-      const parsed = parseOrReject('voice-changer', { v1: VoiceChangerV1Schema }, req, json, { extraHeaders: getCorsHeaders(req) });
+      // Ramo JSON (fila/queue): variante JSON do contrato voice-changer@v1.
+      // Etapa 34 (PLANO-100, 2026-08-25): o version-map vem do módulo de
+      // registro (contract-schemas-infra.ts — VoiceChangerQueueContractMap),
+      // nunca inline. O registro canônico CONTRACT_SCHEMAS['voice-changer']
+      // aponta a variante multipart (ramo acima); usar a multipart aqui
+      // 422aria todos os requests de fila (exigiria audio File).
+      const parsed = parseOrReject('voice-changer', VoiceChangerQueueContractMap, req, json, { extraHeaders: getCorsHeaders(req) });
       if (parsed.ok === false) return parsed.response;
       const body = parsed.data as Record<string, any>;
       taskId = (body.task_id as string | null) ?? null;
