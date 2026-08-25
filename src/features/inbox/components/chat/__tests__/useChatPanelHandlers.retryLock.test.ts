@@ -158,6 +158,6 @@ describe('useChatPanelHandlers — retry preso à conversa (etapa 44)', () => {
     expect(result.current.isRecordingAudio).toBe(false); // etapa 45
     expect(result.current.replyToMessage).toBeNull(); // etapa 40
     expect(result.current.sendProgress).toBe(0); // etapa 46
-    expect(result.current.inputStore.get()).toBe(''); // sem rascunho salvo p/ B
+    expect(result.current.inputValue).toBe(''); // sem rascunho salvo p/ B
   });
 });

@@ -29,6 +29,7 @@ export function useVirtualRows<T>({
     const ro = new ResizeObserver(measure);
     ro.observe(container);
     return () => ro.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length > 0]);
 
   const virtualizer = useVirtualizer({

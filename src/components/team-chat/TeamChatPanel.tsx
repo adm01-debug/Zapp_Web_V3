@@ -1,33 +1,23 @@
-import { useEffect, useMemo, useState, useRef, memo } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSignedMediaUrlBatch } from '@/lib/useMediaUrl';
 import { ErrorBoundary } from 'react-error-boundary';
 import { getLogger } from '@/lib/logger';
 import { useAuth } from '@/features/auth';
 import { TeamConversation } from '@/hooks/useTeamChat';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   ArrowDown,
   X,
-  Check,
-  Image as ImageIcon,
-  Music,
-  FileText,
-  Video,
-  Copy,
-  Loader2,
   Search,
   Lock,
   Shield,
   Link2,
-  SmilePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MarkdownPreview } from '@/features/inbox';
 import { AnimatePresence, motion } from '@/components/ui/motion';
 import { AddMembersDialog } from './AddMembersDialog';
 import { TeamChatHeader } from './TeamChatHeader';
@@ -37,92 +27,11 @@ import { TeamChatInputArea } from './TeamChatInputArea';
 import { useTeamChatPanel } from './useTeamChatPanel';
 import { useTeamMessageReactions } from '@/features/inbox/hooks/team-chat/useTeamMessageReactions';
 import { TeamMessageItem } from './TeamMessageItem';
-import { TeamMessage } from '@/hooks/useTeamChat';
-import { isToday, isYesterday } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { MessageStatus } from '@/features/inbox/components/MessageStatus';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { bubbleVariants } from '@/components/ui/bubble';
 import {
   ChatScrollerV2,
   type ChatScrollerV2Handle,
 } from '@/features/inbox/components/chat/ChatScrollerV2';
-
-function formatTime(dateStr: string) {
-  return format(new Date(dateStr), 'HH:mm');
-}
-function formatDateSep(dateStr: string) {
-  const d = new Date(dateStr);
-  if (isToday(d)) return 'Hoje';
-  if (isYesterday(d)) return 'Ontem';
-  return format(d, "d 'de' MMMM", { locale: ptBR });
-}
-
-const MediaContent = memo(function MediaContent({
-  msg,
-  resolvedUrl,
-}: {
-  msg: TeamMessage;
-  resolvedUrl?: string | null;
-}) {
-  const url = resolvedUrl ?? msg.media_url;
-  if (!url) return null;
-  switch (msg.media_type) {
-    case 'image':
-    case 'sticker':
-    case 'emoji':
-      return (
-        <img
-          src={url}
-          alt="media"
-          className={cn(
-            'max-h-48 cursor-pointer rounded-lg object-contain',
-            msg.media_type === 'sticker' || msg.media_type === 'emoji' ? 'h-24 w-24' : 'max-w-full'
-          )}
-          onClick={() => {
-            if (url) window.open(url, '_blank', 'noopener,noreferrer');
-          }}
-        />
-      );
-    case 'video':
-      return <video src={url} controls className="max-h-48 max-w-full rounded-lg" />;
-    case 'audio':
-    case 'audio_meme':
-      return <audio src={url} controls className="max-w-full" />;
-    case 'document':
-      return (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-lg bg-muted/30 p-2 transition-colors hover:bg-muted/50"
-        >
-          <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm text-foreground underline">
-            {msg.content || 'Documento'}
-          </span>
-        </a>
-      );
-    default:
-      return null;
-  }
-});
-
-const MediaTypeIcon = memo(function MediaTypeIcon({ type }: { type: string | null }) {
-  switch (type) {
-    case 'image':
-      return <ImageIcon className="h-3 w-3" />;
-    case 'video':
-      return <Video className="h-3 w-3" />;
-    case 'audio':
-    case 'audio_meme':
-      return <Music className="h-3 w-3" />;
-    case 'document':
-      return <FileText className="h-3 w-3" />;
-    default:
-      return null;
-  }
-});
 
 interface Props {
   conversation: TeamConversation;

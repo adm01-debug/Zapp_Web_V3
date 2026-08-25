@@ -17,7 +17,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Send, Mic, Plus, Loader2, Check } from 'lucide-react';
 // i18n-todo: mover copy.ts para src/lib/chat-copy.ts quando ComposerCore sair do escopo inbox
 import { COPY } from '@/features/inbox/components/chat/copy';
-import { COPY } from '@/features/inbox/components/chat/copy';
 
 export interface ComposerCoreProps {
   // ─── Valor e callbacks obrigatórios ────────────────────────────────────────
@@ -106,7 +105,6 @@ export const ComposerCore = forwardRef<HTMLDivElement, ComposerCoreProps>(functi
     canSend = false,
     isEditing = false,
     isMicActive = false,
-    isRecordingAudio = false,
     isWhisper = false,
     disabled = false,
     isMobile = false,

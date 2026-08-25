@@ -59,7 +59,8 @@ export const MessageReactions = memo(function MessageReactions({
       if (!map.has(r.emoji)) {
         map.set(r.emoji, { count: 0, users: [], reactedByMe: false });
       }
-      const g = map.get(r.emoji)!;
+      const g = map.get(r.emoji);
+      if (!g) continue;
       g.count++;
       g.users.push(r.user_name || 'Usuário');
       if (r.user_id === currentProfileId) g.reactedByMe = true;

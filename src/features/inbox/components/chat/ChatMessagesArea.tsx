@@ -259,9 +259,9 @@ export const ChatMessagesArea = memo(
             h = Math.max(80, 70 + lines * 22);
           }
           // BUG-21 (E43): incrementos calibrados conforme plano
-          if (item.replyTo) h += 52; // citação (reply) no topo do bubble
+          if (item.replyTo) h += 56; // citação (reply) no topo do bubble
           if (Array.isArray(item.reactions) && item.reactions.length > 0) {
-            h += 28; // linha de reações (inclui padding top)
+            h += 24; // linha de reações
           }
           if (
             item.interactive &&

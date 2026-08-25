@@ -2,8 +2,6 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { ComposerCore } from '@/features/composer';
 import { useTeamChatDraft } from '@/hooks/useTeamChatDraft';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from '@/components/ui/motion';
 import { RichTextToolbar, RichTextToggle } from '@/features/inbox';
 import { AIRewriteButton } from '@/features/inbox';
@@ -19,8 +17,7 @@ import { VoiceDictationButton } from '@/components/mobile/VoiceDictationButton';
 import { TeamFileUploader } from './TeamFileUploader';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TeamMessage } from '@/hooks/useTeamChat';
-import { Send, Mic, Reply, X, Loader2, Plus } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Reply, X } from 'lucide-react';
 
 interface TeamChatInputAreaProps {
   conversationId: string;
@@ -60,7 +57,7 @@ export function TeamChatInputArea({
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showRichToolbar, setShowRichToolbar] = useState(false);
   const [showMarkdownPreview, _setShowMarkdownPreview] = useState(false);
-  const [sendAnimation, setSendAnimation] = useState(false);
+  const [, setSendAnimation] = useState(false);
   const isMobile = useIsMobile();
 
   const draft = useTeamChatDraft({ conversationId, text, setText, onFileSent });
