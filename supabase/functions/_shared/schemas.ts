@@ -562,7 +562,12 @@ export const VoiceAgentV1Schema = z.object({
 
 /**
  * voice-changer@v1 — rota JSON (fila/queue). index.ts consome task_id e
- * authorized. Rota multipart/form-data (áudio) não passa por contrato JSON.
+ * authorized. Rota multipart/form-data usa VoiceChangerMultipartV1Schema
+ * (contract-schemas-infra.ts) no registro canônico. Etapa 34 (PLANO-100,
+ * 2026-08-25): o version-map DESTA variante é VoiceChangerQueueContractMap,
+ * exportado de contract-schemas-infra.ts — o handler importa de lá (nunca
+ * monta o map inline). Definição física fica aqui porque
+ * contract-schemas-ai.ts também re-exporta este símbolo.
  */
 export const VoiceChangerV1Schema = z.object({
   task_id: z.string().min(1).max(100).optional(),
