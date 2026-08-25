@@ -174,7 +174,7 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
   }, [s.filteredMessages]);
 
   return (
-    <div className="relative flex h-full w-full flex-col">
+    <div className="relative flex h-full w-full flex-col @container/team-chat">
       <TeamChatHeader
         conversation={conversation}
         showDetails={showDetails}

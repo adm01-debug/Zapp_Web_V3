@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/context-menu';
 import { MarkdownPreview } from '@/features/inbox';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import { bubbleVariants } from '@/components/ui/bubble';
+import { bubbleVariants, Bubble } from '@/components/ui/bubble';
 import { WHATSAPP_EMOJIS } from '@/components/ui/message-reactions';
 import { TeamReactionBar, TeamQuickReactionBarWrapper } from './TeamMessageReactionsWrapper';
 import {
@@ -164,7 +164,10 @@ export function TeamMessageItem({
   return (
     <ContextMenu key={msg.id}>
       <ContextMenuTrigger asChild>
-        <div data-testid={`message-container-${msg.id}`} className="group/msg relative px-4">
+        <div
+          data-testid={`message-container-${msg.id}`}
+          className="group/msg relative px-4 @container/msg"
+        >
           {showDate && (
             <div className="flex justify-center py-2">
               <span className="rounded-full border border-border/10 bg-muted/20 px-3 py-1 text-[11px] font-medium text-muted-foreground">
@@ -193,15 +196,14 @@ export function TeamMessageItem({
                 reactions={reactions}
               />
 
+              {/* P06 (E55): usa <Bubble side> direto quando chat_bubble_v2=true */}
               <div
                 className={cn(
                   'relative rounded-2xl px-3.5 py-2 shadow-none',
-                  isMine
-                    ? isFeatureEnabled('chat_bubble_v2')
-                      ? bubbleVariants({ side: 'sent' })
-                      : 'rounded-br-md bg-primary text-primary-foreground'
-                    : isFeatureEnabled('chat_bubble_v2')
-                      ? bubbleVariants({ side: 'received' })
+                  isFeatureEnabled('chat_bubble_v2')
+                    ? bubbleVariants({ side: isMine ? 'sent' : 'received' })
+                    : isMine
+                      ? 'rounded-br-md bg-primary text-primary-foreground'
                       : 'rounded-bl-md border border-border/20 bg-muted/30 text-foreground'
                 )}
               >
