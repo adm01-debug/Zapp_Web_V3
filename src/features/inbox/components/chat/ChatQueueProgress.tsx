@@ -7,7 +7,12 @@
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from '@/components/ui/motion';
 import { Loader2, X, Check, Clock } from 'lucide-react';
-import { getQueueErrorMessage, normalizeAttempts, getLastAttemptDuration } from './chatInputGuards';
+import {
+  getQueueErrorMessage,
+  normalizeAttempts,
+  getLastAttemptDuration,
+  getQueueLength,
+} from './chatInputGuards';
 import type { QueueItem } from '../../hooks/useMessageQueue';
 
 interface ChatQueueProgressProps {
