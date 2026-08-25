@@ -88,3 +88,47 @@
 - E92–E93 — Playwright e2e
 - E96–E98 — Spike React 19 + TW4 (branch separada `feat/upgrade-r19-tw4`)
 - E41 — Remover VirtualMessageBubble quando `chat_bubble_v2: true` em prod
+
+---
+
+## Auditoria pós-sprint — 5 agentes (2026-08-25)
+
+Bugs detectados e corrigidos na auditoria exaustiva após encerramento da sprint:
+
+### Bugs de produção corrigidos
+
+**BUG-P1 — Whisper: texto perdido quando usuário não autenticado**
+- `useChatPanelHandlers.ts` linha ~284
+- Guard `!profile?.id` estava **dentro** do `try/catch`, após `setInputValue('')` — o texto do campo era limpo e `lastSendError` recebia `'Usuario nao autenticado'` mesmo antes de iniciar o envio
+- Fix: guard movido para **antes** de `setIsSending(true)`, junto com os outros guards antecipados de whisper
+- Impacto: qualquer usuário com sessão expirada perderia o texto digitado ao tentar enviar sussurro
+
+### Regressões de teste corrigidas
+
+| Teste | Falha | Causa raiz | Fix |
+|-------|-------|-----------|-----|
+| `ChatMessagesArea.getItemSize` | `expected 148, received 144` | E43 (`69bd07eff`) inverteu `replyTo: 56→52`, `reactions: 24→28` vs original `3113d3ac0` | Revertido ao valor original |
+| `ChatInputArea.arrowUp` | `onEditStart` chamado com input preenchido | `baseProps.inputStore` ignorado — componente usa `inputValue: string` | `inputStore` → `inputValue` |
+| `chatpanel.simulation` CENARIO 3 | `TypeError: inputStore.get()` | Mesmo schema drift | `inputStore.get()` → `inputValue` |
+| `useChatPanelHandlers.retryLock` | `TypeError: inputStore.get()` linha 161 | Mesmo schema drift | `inputStore.get()` → `inputValue` |
+| `useProductHandlers.location` | `expected 'sent', received 'pending'` | Commit `73afca976` mudou status para fluxo otimista; teste não atualizado | `'sent'` → `'pending'` |
+
+### Gate final pós-auditoria
+
+```
+test:chat          350/350 ✅  (era 345/350 antes da auditoria)
+test:ui/composer    77/77  ✅
+test:motion         83/83  ✅
+TypeScript           0 erros ✅
+ESLint               5 warnings (teto 6) ✅
+check-schema-usage   0 violações ✅
+```
+
+### Validações de segurança e a11y
+
+- `dangerouslySetInnerHTML`: 0 ocorrências nos novos componentes
+- Skip link `href="#chat-messages"` → `id="chat-messages"`: ciclo fechado ✅
+- `role=log` + `aria-live="polite"` em `ChatMessagesArea` ✅
+- `motion-reduce:transition-none` em `Bubble` ✅
+- RLS whisper usa `profile.id` (não `auth.uid()`) — alinhado com `20260818221000` ✅
+- `isUuidRef` guard JID → protege FK `messages.contact_id` ✅
