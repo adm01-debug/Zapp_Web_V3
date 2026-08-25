@@ -85,6 +85,7 @@ interface ChatInputAreaProps {
   queue?: QueueItem[];
   onRetry?: (id: string) => void;
   onRemoveFromQueue?: (id: string) => void;
+  showSearch?: boolean;
 }
 
 /** Chat Input Area component for the chat section. */
@@ -107,7 +108,7 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
     sendProgress = 0,
     onInputChange,
     onKeyDown,
-    _onBlur: onBlur,
+    onBlur,
     onSend,
     onCancelReply,
     onCancelEdit,
@@ -137,13 +138,14 @@ function ChatInputAreaInner(props: ChatInputAreaProps) {
     inputRef,
     onOpenTeamFiles,
     queue: _queue,
+    showSearch = false,
   } = props;
 
   const prevRecordingRef = useRef(isRecordingAudio);
-  // P25 (E76): foco automático no textarea ao entrar/sair de edição ou fechar busca
+  // P25 (E76): foco automático no textarea ao entrar/sair de edição
   useEffect(() => {
     inputRef.current?.focus();
-  }, [editingMessage, showSearch, inputRef]);
+  }, [editingMessage, inputRef]);
 
 
   useEffect(() => {
