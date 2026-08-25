@@ -31,6 +31,31 @@ const checks = [
     "falta o gate CORS pós-deploy",
   ],
   [
+    /✅ Convergência verificada \(Swarm × imagem do deploy\)/,
+    workflow,
+    "falta o gate explícito de convergência Swarm×imagem",
+  ],
+  [
+    /docker service ps "\$SVC" --filter desired-state=running --no-trunc --format '\{\{\.ID\}\}\|\{\{\.CurrentState\}\}\|\{\{\.Error\}\}\|\{\{\.Image\}\}'/,
+    workflow,
+    "convergência não valida as tasks desired-state=running",
+  ],
+  [
+    /CONVERGENCE_TASK_IMAGE_MISMATCH/,
+    workflow,
+    "convergência não falha quando task running fica em imagem divergente",
+  ],
+  [
+    /CONVERGENCE_TASK_NOT_RUNNING/,
+    workflow,
+    "convergência não falha quando task desired-state=running não está Running",
+  ],
+  [
+    /CONVERGENCE_TASK_ERROR/,
+    workflow,
+    "convergência não falha quando task desired-state=running reporta erro",
+  ],
+  [
     /if: \$\{\{ needs\.deploy\.result == 'success' \}\}/,
     workflow,
     "health pós-deploy não pode rodar após deploy ignorado/falho",

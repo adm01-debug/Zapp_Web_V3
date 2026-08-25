@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useWebAuthn } from '@/hooks/useWebAuthn';
 import { toast } from '@/hooks/use-toast';
@@ -50,11 +50,30 @@ export interface LockStatus {
 /** Hook: use Auth Form. */
 export function useAuthForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  // Preserve OAuth consent redirect (or any post-login target) across sign-in
-  // flows. Only accept same-origin relative paths ("/...") to avoid open-redirect.
+  // Preserve o destino pós-auth em duas fontes:
+  //  1) ?next=... (OAuth/links explícitos)
+  //  2) state.from (redirect vindo do ProtectedRoute, ex.: /crm expirada)
+  // Ambas aceitam SOMENTE paths relativos same-origin.
   const rawNext = searchParams.get('next');
-  const nextPath = rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
+  const stateFrom = (
+    location.state as
+      | {
+          from?: { pathname?: string; search?: string; hash?: string };
+        }
+      | null
+  )?.from;
+  const rawStatePath = stateFrom?.pathname
+    ? `${stateFrom.pathname}${stateFrom.search ?? ''}${stateFrom.hash ?? ''}`
+    : null;
+  const isSafeRelativePath = (path: string | null | undefined): path is string =>
+    typeof path === 'string' && path.startsWith('/') && !path.startsWith('//');
+  const nextPath = isSafeRelativePath(rawNext)
+    ? rawNext
+    : isSafeRelativePath(rawStatePath)
+      ? rawStatePath
+      : '/';
   const { user, signIn, signUp } = useAuth();
   const {
     isSupported,

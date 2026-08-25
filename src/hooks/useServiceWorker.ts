@@ -5,6 +5,40 @@ import { setupOnlineListener } from '@/lib/offlineQueue';
 const log = getLogger('useServiceWorker');
 
 const CACHE_RESET_FLAG = 'sw-cache-reset-done';
+const SW_SKIP_CLEANUP_STATE_KEY = '__zappSwCleanup';
+
+type SwSkipCleanupState = {
+  phase: 'idle' | 'running' | 'done' | 'error';
+  startedAt: number | null;
+  finishedAt: number | null;
+  registrations: string[];
+  staleCaches: string[];
+  controllerUrl: string | null;
+  error: string | null;
+};
+
+function setSwSkipCleanupState(
+  update:
+    | SwSkipCleanupState
+    | ((prev: SwSkipCleanupState) => SwSkipCleanupState)
+): void {
+  if (typeof window === 'undefined') return;
+  const globalWindow = window as typeof window & {
+    [SW_SKIP_CLEANUP_STATE_KEY]?: SwSkipCleanupState;
+  };
+  const previous =
+    globalWindow[SW_SKIP_CLEANUP_STATE_KEY] ?? {
+      phase: 'idle',
+      startedAt: null,
+      finishedAt: null,
+      registrations: [],
+      staleCaches: [],
+      controllerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null,
+      error: null,
+    };
+  globalWindow[SW_SKIP_CLEANUP_STATE_KEY] =
+    typeof update === 'function' ? update(previous) : update;
+}
 
 /**
  * Cleanup de caches legados (workbox / versoes antigas do SW) que podem
@@ -117,8 +151,28 @@ function shouldSkipServiceWorker(): boolean {
 
 async function unregisterAllServiceWorkers(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
+  const startedAt = Date.now();
+  setSwSkipCleanupState({
+    phase: 'running',
+    startedAt,
+    finishedAt: null,
+    registrations: [],
+    staleCaches: [],
+    controllerUrl: navigator.serviceWorker.controller?.scriptURL ?? null,
+    error: null,
+  });
   try {
     const regs = await navigator.serviceWorker.getRegistrations?.();
+    const registrations = (regs ?? [])
+      .map(
+        (r) =>
+          r.active?.scriptURL ||
+          r.waiting?.scriptURL ||
+          r.installing?.scriptURL ||
+          r.scope
+      )
+      .filter(Boolean);
+    let staleCaches: string[] = [];
     if (regs && regs.length) {
       log.info('[ServiceWorker] Unregistering existing workers', regs.map((r) => r.scope));
       await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
@@ -127,8 +181,8 @@ async function unregisterAllServiceWorkers(): Promise<void> {
     // activate handler em sw.js), nao o HTTP cache do browser.
     if (typeof caches !== 'undefined') {
       const keys = await caches.keys();
-      const staleKeys = keys.filter((k) => /^(workbox-|zapp-)/i.test(k));
-      await Promise.all(staleKeys.map((k) => caches.delete(k).catch(() => false)));
+      staleCaches = keys.filter((k) => /^(workbox-|zapp-)/i.test(k));
+      await Promise.all(staleCaches.map((k) => caches.delete(k).catch(() => false)));
     }
     // Limpa flags para permitir que uma futura mudanca de versao volte a
     // funcionar sem ficar presa em "ja purguei nesta sessao".
@@ -140,8 +194,24 @@ async function unregisterAllServiceWorkers(): Promise<void> {
       sessionStorage.removeItem('sw-cache-reset-done');
       localStorage.removeItem('sw-cache-reset-done');
     } catch { /* noop */ }
-  } catch {
-    /* noop */
+    setSwSkipCleanupState({
+      phase: 'done',
+      startedAt,
+      finishedAt: Date.now(),
+      registrations,
+      staleCaches,
+      controllerUrl: navigator.serviceWorker.controller?.scriptURL ?? null,
+      error: null,
+    });
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err ?? 'unknown');
+    setSwSkipCleanupState((prev) => ({
+      ...prev,
+      phase: 'error',
+      finishedAt: Date.now(),
+      controllerUrl: navigator.serviceWorker.controller?.scriptURL ?? null,
+      error,
+    }));
   }
 }
 

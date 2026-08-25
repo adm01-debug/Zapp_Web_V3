@@ -140,47 +140,13 @@ export function ProtectedRoute({
     };
   }, [authLoading, user, requiredPermission]);
 
-  // Stale-session guard: verify JWT is still valid after auth state settles.
-  // Must run inside useEffect — calling getSession() in the render body fires
-  // twice under React StrictMode and can trigger a spurious logout when the
-  // first call transiently returns null before GoTrue cache is warm.
-  useEffect(() => {
-    if (authLoading || !user) return;
-    let cancelled = false;
-    void supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data.session) {
-          log.warn('[ProtectedRoute] Stale session detected — forcing redirect to /auth');
-          void supabase.auth
-            .signOut()
-            .catch(() => {
-              // Fallback: rede fora / GoTrue com erro — limpa a sessão local
-              // mesmo assim para o usuário não ficar preso numa sessão inválida.
-              try {
-                Object.keys(localStorage).forEach((k) => {
-                  if (k.startsWith('sb-') || k.startsWith('zapp')) localStorage.removeItem(k);
-                });
-                sessionStorage.clear();
-              } catch {
-                /* noop */
-              }
-            })
-            .finally(() => {
-              window.location.replace('/auth');
-            });
-        }
-      })
-      .then(undefined, (err: unknown) => {
-        // getSession pode rejeitar por rede/timeout — sem este handler,
-        // vira unhandled promise rejection no bootstrap de toda rota protegida.
-        log.warn('[ProtectedRoute] getSession falhou na checagem de sessão:', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user]);
+  // AuthProvider é a fonte ÚNICA de verdade para sessão expirada/corrompida.
+  // Duplicar um getSession()+signOut aqui criava duas autoridades concorrentes:
+  //  1) forceUnauthenticated/SIGNED_OUT no AuthProvider
+  //  2) signOut()+window.location.replace('/auth') neste guard
+  // Isso gerava navegações duplicadas e perdia o destino original (`from`)
+  // durante page.goto('/rota-protegida') com sessão inválida. O guard deve
+  // apenas reagir ao estado derivado (`user`, `authLoading`) já reconciliado.
 
   // Tela de erro quando o backend nao respondeu no boot.
   // Precede o "loading" para evitar spinner infinito ou redirect que so vai
