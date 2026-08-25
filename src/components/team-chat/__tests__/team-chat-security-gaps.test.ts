@@ -348,14 +348,16 @@ describe('Team Chat — Missing Features (current state)', () => {
   }
 
   it('FIXED: message editing UI exists (edit mode + is_edited)', () => {
-    const panel = read('TeamChatPanel.tsx');
-    expect(panel).toContain('Editar');
-    expect(panel).toContain("msg.is_edited && ' · editado'");
+    // E52: lógica de render de mensagem movida para TeamMessageItem.tsx
+    const item = read('TeamMessageItem.tsx');
+    expect(item).toContain('Editar');
+    expect(item).toContain("msg.is_edited && ' · editado'");
   });
 
   it('FIXED: message deletion UI exists', () => {
-    const panel = read('TeamChatPanel.tsx');
-    expect(panel).toContain('Excluir');
+    // E52: ContextMenu movido para TeamMessageItem.tsx
+    const item = read('TeamMessageItem.tsx');
+    expect(item).toContain('Excluir');
   });
 
   it('FIXED: file/image sharing exists (TeamFileUploader)', () => {
@@ -466,10 +468,11 @@ describe('Team Chat — UX & Accessibility Gaps (current state)', () => {
     expect(mutations).toContain('setQueriesData');
   });
 
-  it('GAP real: textarea não auto-resize (rows=1 + resize-none)', () => {
+  it('FIXED: textarea auto-resize via ComposerCore + textareaRef (gap anterior era rows=1 + resize-none)', () => {
+    // E52: TeamChatInputArea agora usa ComposerCore com textareaRef e auto-grow
     const input = read('TeamChatInputArea.tsx');
-    expect(input).toContain('rows={1}');
-    expect(input).toContain('resize-none');
+    expect(input).toContain('textareaRef');    // ref para auto-grow
+    expect(input).toContain('ComposerCore');   // componente que wraps o textarea
   });
 
   it('FIXED: keyboard navigation between conversations exists (ArrowUp/ArrowDown + Cmd/Ctrl+F)', () => {
@@ -574,12 +577,13 @@ describe('Team Chat — Edge Cases', () => {
   });
 
   it('EDGE: XSS prevenido — conteúdo renderizado como texto, sem dangerouslySetInnerHTML', () => {
-    const panel = readFileSync(
-      path.join(process.cwd(), 'src/components/team-chat/TeamChatPanel.tsx'),
+    // E52: render de conteúdo movido para TeamMessageItem.tsx
+    const item = readFileSync(
+      path.join(process.cwd(), 'src/components/team-chat/TeamMessageItem.tsx'),
       'utf-8'
     );
-    expect(panel).toContain('{msg.content}');
-    expect(panel).not.toContain('dangerouslySetInnerHTML');
+    expect(item).toContain('{msg.content}');
+    expect(item).not.toContain('dangerouslySetInnerHTML');
   });
 
   it('EDGE: conversa com usuário desativado persiste (sem filtro de is_active nos membros)', () => {
@@ -679,14 +683,14 @@ describe('Team Chat — Integration Validation', () => {
   });
 
   it('formatDateSep renders Hoje/Ontem/ptBR (função real do painel)', () => {
-    // Mesma implementação usada no TeamChatPanel (isToday/isYesterday + ptBR)
-    const panel = readFileSync(
-      path.join(process.cwd(), 'src/components/team-chat/TeamChatPanel.tsx'),
+    // Implementação canônica em teamChatParts.tsx (exportada e usada por TeamMessageItem)
+    const parts = readFileSync(
+      path.join(process.cwd(), 'src/components/team-chat/teamChatParts.tsx'),
       'utf-8'
     );
-    expect(panel).toContain("if (isToday(d)) return 'Hoje'");
-    expect(panel).toContain("if (isYesterday(d)) return 'Ontem'");
-    expect(panel).toContain('ptBR');
+    expect(parts).toContain("if (isToday(d)) return 'Hoje'");
+    expect(parts).toContain("if (isYesterday(d)) return 'Ontem'");
+    expect(parts).toContain('ptBR');
   });
 
   it('TeamConversationList mostra badge de unread apenas quando unread_count > 0', () => {

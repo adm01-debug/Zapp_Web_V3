@@ -10,6 +10,10 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 vi.mock('@/lib/logger');
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'u-test' }, session: null })),
+}));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn(() => ({ user: { id: 'u-test' } })) }));
 
 import { useQueueAnalytics } from '@/hooks/useQueueAnalytics';
 
@@ -17,6 +21,17 @@ const dateRange = {
   from: new Date('2024-01-01'),
   to: new Date('2024-01-07'),
 };
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+
+function createWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
 
 describe('useQueueAnalytics', () => {
   beforeEach(() => {
@@ -77,30 +92,40 @@ describe('useQueueAnalytics', () => {
   });
 
   it('fetches analytics data', async () => {
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   it('returns daily data array', async () => {
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(Array.isArray(result.current.dailyData)).toBe(true);
   });
 
   it('returns hourly data array', async () => {
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(Array.isArray(result.current.hourlyData)).toBe(true);
   });
 
   it('returns status data', async () => {
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(Array.isArray(result.current.statusData)).toBe(true);
   });
 
   it('returns agent performance', async () => {
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(Array.isArray(result.current.agentPerformance)).toBe(true);
   });
@@ -117,7 +142,9 @@ describe('useQueueAnalytics', () => {
       return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
     });
 
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.dailyData.length).toBeGreaterThan(0); // empty daily placeholders
   });
@@ -129,12 +156,16 @@ describe('useQueueAnalytics', () => {
       }),
     });
 
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   it('initializes with loading true', () => {
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     expect(result.current.loading).toBe(true);
   });
 
@@ -150,7 +181,9 @@ describe('useQueueAnalytics', () => {
       return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
     });
 
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange));
+    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     result.current.statusData.forEach((s) => {
