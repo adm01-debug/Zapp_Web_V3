@@ -78,20 +78,38 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
 
       if (uploadError) throw uploadError;
 
-      const fileUrl = (await getSignedMediaUrl('whatsapp-media', filePath, 604800)) ?? '';
+      // A partir daqui o arquivo existe no Storage.
+      // Se o INSERT falhar (RLS, FK, rede), deletamos o arquivo para evitar
+      // acúmulo silencioso de objetos órfãos no bucket whatsapp-media.
+      try {
+        const fileUrl = (await getSignedMediaUrl('whatsapp-media', filePath, 604800)) ?? '';
 
-      const { error: dbError } = await safeClient.from('whisper_files', (q) =>
-        q.insert({
-          contact_id: contactId,
-          file_name: file.name,
-          file_url: fileUrl,
-          file_size: file.size,
-          file_type: file.type,
-          sender_id: authUser?.id,
-        })
-      );
+        const { error: dbError } = await safeClient.from('whisper_files', (q) =>
+          q.insert({
+            contact_id: contactId,
+            file_name: file.name,
+            file_url: fileUrl,
+            file_size: file.size,
+            file_type: file.type,
+            sender_id: authUser?.id,
+          })
+        );
 
-      if (dbError) throw dbError;
+        if (dbError) throw dbError;
+      } catch (err) {
+        // Best-effort: tenta remover o arquivo órfão do Storage.
+        // Falha de remoção é logada mas não relançada — o erro original chega ao usuário.
+        supabase.storage
+          .from('whatsapp-media')
+          .remove([filePath])
+          .then(({ error: rmErr }) => {
+            if (rmErr) {
+              console.error('[TeamFiles] Storage orphan cleanup failed', { filePath, rmErr });
+            }
+          })
+          .catch(() => { /* best-effort: silencia falha de cleanup */ });
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-files', contactId] });

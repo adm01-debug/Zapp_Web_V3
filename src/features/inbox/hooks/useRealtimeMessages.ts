@@ -23,14 +23,37 @@ import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { isValidUUID } from '@/utils/uuid';
 export type { MessageBatcherStatus } from './realtime/useMessageUpdateBatcher';
 
+/**
+ * Determina se um evento UPDATE do realtime deve invalidar o cache de uma
+ * conversa específica.
+ *
+ * @param payload    - Payload do evento Postgres realtime (new/old rows)
+ * @param candidateContactId - contact_id que você quer testar. No handler de
+ *   UPDATE do inbox este parâmetro é SEMPRE payload.new.contact_id (o que torna
+ *   a chamada uma tautologia de null-guard). A utility existe para que componentes
+ *   com um "active contact" externo consigam filtrar eventos com precisão.
+ *
+ * @example
+ *   // Uso correto (filtro real por contact ativo):
+ *   if (shouldInvalidateOnUpdate(payload, activeContactId)) {
+ *     scheduleConversationCacheInvalidation(payload.new?.contact_id);
+ *   }
+ *
+ *   // Uso atual no handler (equivale a null-guard: if (updContactId)):
+ *   const updContactId = payload.new?.contact_id;
+ *   if (updContactId && shouldInvalidateOnUpdate(payload, updContactId)) { ... }
+ */
 export function shouldInvalidateOnUpdate(
   payload: {
     new?: { contact_id?: string | null } | null;
     old?: { contact_id?: string | null } | null;
   },
-  activeContactId: string
+  candidateContactId: string
 ): boolean {
-  return payload.new?.contact_id === activeContactId || payload.old?.contact_id === activeContactId;
+  return (
+    payload.new?.contact_id === candidateContactId ||
+    payload.old?.contact_id === candidateContactId
+  );
 }
 
 const log = getLogger('RealtimeMessages');
