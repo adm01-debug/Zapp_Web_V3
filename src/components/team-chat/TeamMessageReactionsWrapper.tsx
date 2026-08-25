@@ -1,25 +1,25 @@
 /**
  * @file TeamMessageReactionsWrapper.tsx
- * @description Wrapper do team-chat: adapta AggregatedReaction → ReactionSummary
- * e re-exporta ReactionBar + QuickReactionBar do canônico.
- *
- * E58 — feat/chat-ui-100
+ * @description Wrapper do team-chat: adapta AggregatedReaction → ReactionGroup
+ * e usa MessageReactionBar + QuickReactionStrip do canônico.
+ * Corrigido para alinhar com a interface de message-reactions.tsx — E58.
  */
+import { useCallback } from 'react';
 import {
-  ReactionBar,
-  QuickReactionBar,
-  ReactionSummary,
+  MessageReactionBar,
+  QuickReactionStrip,
   EXTENDED_EMOJIS,
 } from '@/components/ui/message-reactions';
+import type { ReactionGroup } from '@/components/ui/message-reactions';
 import type { AggregatedReaction } from '@/features/inbox/hooks/team-chat/useTeamMessageReactions';
 
-/** Converte AggregatedReaction (team-chat) → ReactionSummary (canônico). */
-function toSummary(r: AggregatedReaction): ReactionSummary {
+/** Converte AggregatedReaction (team-chat) → ReactionGroup (canônico). */
+function toGroup(r: AggregatedReaction): ReactionGroup {
   return {
     emoji: r.emoji,
     count: r.count,
     reactedByMe: r.reactedByMe,
-    // AggregatedReaction não carrega nomes — tooltip omitido
+    // AggregatedReaction não carrega nomes — tooltip desabilitado
   };
 }
 
@@ -34,25 +34,18 @@ interface TeamReactionBarProps {
 }
 
 /**
- * Substitui o MessageReactions do team-chat.
- * Usa ReactionBar canônico, posicionado abaixo da bolha (-bottom-3).
+ * Barra de reações posicionada abaixo da bolha (-bottom-3).
+ * Usa MessageReactionBar canônico.
  */
 export function TeamReactionBar({ messageId, reactions, isMine, onToggle }: TeamReactionBarProps) {
   return (
-    <div
-      className="absolute -bottom-3 z-10"
-      data-is-toggling={false}
-      data-testid={`reactions-container-${messageId}`}
-    >
-      <ReactionBar
-        messageId={messageId}
-        reactions={reactions.map(toSummary)}
-        onToggle={onToggle}
-        isSent={isMine}
-        pickerEmojis={EXTENDED_EMOJIS}
-        className="mt-0 flex-nowrap"
-      />
-    </div>
+    <MessageReactionBar
+      messageId={messageId}
+      reactions={reactions.map(toGroup)}
+      isSent={isMine}
+      onReact={onToggle}
+      availableEmojis={EXTENDED_EMOJIS}
+    />
   );
 }
 
@@ -66,7 +59,7 @@ interface TeamQuickBarProps {
 }
 
 /**
- * Substitui o TeamQuickReactionBar do team-chat.
+ * Strip flutuante de emojis rápidos. Usa QuickReactionStrip canônico.
  */
 export function TeamQuickReactionBarWrapper({
   messageId,
@@ -74,12 +67,17 @@ export function TeamQuickReactionBarWrapper({
   onToggle,
   reactions = [],
 }: TeamQuickBarProps) {
+  const hasReacted = useCallback(
+    (emoji: string) => reactions.some((r) => r.emoji === emoji && r.reactedByMe),
+    [reactions]
+  );
+
   return (
-    <QuickReactionBar
+    <QuickReactionStrip
       messageId={messageId}
-      reactions={reactions.map(toSummary)}
-      onToggle={onToggle}
       isSent={isMine}
+      onReact={onToggle}
+      hasReacted={hasReacted}
     />
   );
 }
