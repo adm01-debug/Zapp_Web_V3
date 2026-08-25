@@ -356,27 +356,58 @@ jobs:
           SVC="zapp-web-prod_web"
           EXPECTED_SHA="${EXPECTED_IMAGE##*:}"
           DEADLINE=$((SECONDS + 300))
-          IMG="?"; REPL="0/1"
+          IMG="?"; REPL="0/1"; TASKS=""
           while :; do
             STATUS=$(docker service inspect "$SVC" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}' 2>/dev/null || echo "inspect_fail")
             REPL=$(docker service ls --filter "name=${SVC}" --format '{{.Replicas}}' | head -1)
             IMG=$(docker service inspect "$SVC" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "?")
+            TASKS=$(docker service ps "$SVC" --filter desired-state=running --no-trunc --format '{{.ID}}|{{.CurrentState}}|{{.Error}}|{{.Image}}' 2>/dev/null || true)
             echo "estado=${STATUS} replicas=${REPL:-?} image=${IMG}"
+            printf '%s\n' "${TASKS:-<sem tasks desejadas>}"
             case "$STATUS" in
               rollback_completed|rollback_paused|paused)
                 echo "::error::CONVERGENCE_FAIL — UpdateStatus=${STATUS} (Swarm reverteu/pausou o rollout; a imagem nova NÃO está servindo)"; exit 1 ;;
             esac
             REPL_OK=$(echo "${REPL:-0/1}" | awk -F/ '{print ($1==$2 && $2!="0") ? "1" : "0"}')
+            TASKS_PRESENT=$(printf '%s\n' "$TASKS" | awk 'NF { found=1 } END { print found ? "1" : "0" }')
+            TASKS_RUNNING_OK=$(printf '%s\n' "$TASKS" | awk -F'|' '
+              NF < 4 { next }
+              $2 !~ /^Running / { bad=1 }
+              END { print bad ? "0" : "1" }
+            ')
+            TASKS_ERROR_FREE=$(printf '%s\n' "$TASKS" | awk -F'|' '
+              NF < 4 { next }
+              length($3) > 0 { bad=1 }
+              END { print bad ? "0" : "1" }
+            ')
+            TASKS_IMAGE_OK=$(printf '%s\n' "$TASKS" | grep -Fq -- "$EXPECTED_SHA" && \
+              printf '%s\n' "$TASKS" | awk -F'|' -v sha="$EXPECTED_SHA" '
+                NF < 4 { next }
+                index($4, sha) == 0 { bad=1 }
+                END { print bad ? "0" : "1" }
+              ' || echo "0")
             if { [ "$STATUS" = "completed" ] || [ "$STATUS" = "none" ]; } \
               && echo "$IMG" | grep -Fq -- "$EXPECTED_SHA" \
-              && [ "$REPL_OK" = "1" ]; then
+              && [ "$REPL_OK" = "1" ] \
+              && [ "$TASKS_PRESENT" = "1" ] \
+              && [ "$TASKS_RUNNING_OK" = "1" ] \
+              && [ "$TASKS_ERROR_FREE" = "1" ] \
+              && [ "$TASKS_IMAGE_OK" = "1" ]; then
               break
             fi
             if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              [ "$TASKS_PRESENT" = "1" ] || echo "::error::CONVERGENCE_TASKS_MISSING — ${SVC} sem tasks desired-state=running"
+              [ "$TASKS_RUNNING_OK" = "1" ] || echo "::error::CONVERGENCE_TASK_NOT_RUNNING — há task desired-state=running fora de estado Running"
+              [ "$TASKS_ERROR_FREE" = "1" ] || echo "::error::CONVERGENCE_TASK_ERROR — há task desired-state=running com erro reportado"
+              [ "$TASKS_IMAGE_OK" = "1" ] || echo "::error::CONVERGENCE_TASK_IMAGE_MISMATCH — task desired-state=running ainda não usa a imagem esperada"
               echo "::error::CONVERGENCE_TIMEOUT — rollout não convergiu em 300s (estado=${STATUS} image=${IMG} replicas=${REPL})"; exit 1
             fi
             sleep 15
           done
+          [ "$TASKS_PRESENT" = "1" ] || { echo "::error::CONVERGENCE_TASKS_MISSING — ${SVC} sem tasks desired-state=running"; exit 1; }
+          [ "$TASKS_RUNNING_OK" = "1" ] || { echo "::error::CONVERGENCE_TASK_NOT_RUNNING — há task desired-state=running fora de estado Running"; exit 1; }
+          [ "$TASKS_ERROR_FREE" = "1" ] || { echo "::error::CONVERGENCE_TASK_ERROR — há task desired-state=running com erro reportado"; exit 1; }
+          [ "$TASKS_IMAGE_OK" = "1" ] || { echo "::error::CONVERGENCE_TASK_IMAGE_MISMATCH — task desired-state=running ainda não usa a imagem esperada"; exit 1; }
           echo "✅ Convergência verificada: ${SVC} @ ${IMG} (replicas ${REPL})"
 
       - name: 🧹 Prune dangling images pós-deploy (manutenção disco VPS)

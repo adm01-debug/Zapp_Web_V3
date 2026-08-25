@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ProtectedRoute, __resetDevBypassBlockLogForTest } from '../ProtectedRoute';
 
 /**
@@ -88,6 +88,12 @@ function renderProtected(ui: ReactElement, initialPath = '/admin') {
       </Routes>
     </MemoryRouter>
   );
+}
+
+function AuthStateProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? 'none';
+  return <div>{`AUTH_FROM:${from}`}</div>;
 }
 
 beforeEach(() => {
@@ -299,6 +305,33 @@ describe('ProtectedRoute — contrato RBAC do bypass dev (E51)', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('preservação do destino original', () => {
+    it('redirect para /auth preserva state.from da rota protegida', async () => {
+      authState.user = null;
+      authState.loading = false;
+      applyAuthState();
+
+      render(
+        <MemoryRouter initialEntries={['/crm']}>
+          <Routes>
+            <Route
+              path="/crm"
+              element={
+                <ProtectedRoute>
+                  <div>CRM_CHILDREN</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/auth" element={<AuthStateProbe />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByText('AUTH_FROM:/crm')).toBeInTheDocument();
+      expect(screen.queryByText('CRM_CHILDREN')).not.toBeInTheDocument();
     });
   });
 });

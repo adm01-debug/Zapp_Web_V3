@@ -62,6 +62,12 @@ function createWrapper() {
   };
 }
 
+function makeWrapper(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function crmRow(overrides: Record<string, unknown>) {
   return {
@@ -75,6 +81,49 @@ function crmRow(overrides: Record<string, unknown>) {
     rfm_score: 88,
     ...overrides,
   };
+}
+
+function cleanPhone(phone: string) {
+  return phone.replace(/[^0-9]/g, '');
+}
+
+function batchKey(phones: string[]) {
+  const cleaned = [...new Set(phones.map(cleanPhone).filter((p) => p.length >= 8))];
+  return ['external-contact-360-batch', cleaned.sort().join(',')] as const;
+}
+
+function makeBuilder(
+  mode: 'resolve' | 'hold',
+  payload: unknown = [{ phone: '5511912345678', company_name: 'ACME' }]
+) {
+  let signalRef: AbortSignal | undefined;
+  const abortSignalSpy = vi.fn();
+  const builder = {
+    abortSignal: (s: AbortSignal) => {
+      signalRef = s;
+      abortSignalSpy(s);
+      return builder;
+    },
+    then: (onFulfilled: (v: unknown) => unknown, onRejected: (e: unknown) => unknown) => {
+      const p = new Promise((resolve, _reject) => {
+        const abortError = () => {
+          const e = new Error('The operation was aborted.');
+          e.name = 'AbortError';
+          resolve({ data: null, error: e });
+        };
+        if (signalRef?.aborted) {
+          abortError();
+          return;
+        }
+        signalRef?.addEventListener('abort', abortError, { once: true });
+        if (mode === 'resolve') {
+          setTimeout(() => resolve({ data: payload, error: null }), 5);
+        }
+      });
+      return p.then(onFulfilled, onRejected);
+    },
+  };
+  return { builder, abortSignalSpy, getSignal: () => signalRef };
 }
 
 async function renderBatch(phones: string[]) {
@@ -216,5 +265,79 @@ describe('useExternalContact360Batch — parse defensivo do Map (BUG #9)', () =>
     expect(batchData.size).toBe(1);
     expect(batchData.has('')).toBe(false);
     expect(lookup('5511912345678')?.company_name).toBe('ACME');
+  });
+
+  it('abort da query em voo cancela silenciosamente e não cacheia Map vazio', async () => {
+    const { builder, abortSignalSpy, getSignal } = makeBuilder('hold');
+    mockRpc.mockReturnValue(builder);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useExternalContact360Batch(['5511912345678']), {
+      wrapper: makeWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(abortSignalSpy).toHaveBeenCalledTimes(1));
+    const captured = getSignal();
+    expect(captured).toBeInstanceOf(AbortSignal);
+    expect(captured?.aborted).toBe(false);
+
+    queryClient.cancelQueries({ queryKey: batchKey(['5511912345678']) });
+    await waitFor(() => expect(captured?.aborted).toBe(true));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.batchData.size).toBe(0);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(batchKey(['5511912345678']))).toBeUndefined();
+  });
+
+  it('troca de lote preserva só a interseção no placeholder e remove CRM stale do lote anterior', async () => {
+    mockRpc
+      .mockResolvedValueOnce({
+        data: [
+          { phone: '5511912345678', company_name: 'ACME A' },
+          { phone: '5511988888888', company_name: 'BETA B' },
+        ],
+        error: null,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  data: [
+                    { phone: '5511988888888', company_name: 'BETA B2' },
+                    { phone: '5511977777777', company_name: 'GAMMA C' },
+                  ],
+                  error: null,
+                }),
+              20
+            );
+          })
+      );
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, rerender } = renderHook(
+      ({ phones }: { phones: string[] }) => useExternalContact360Batch(phones),
+      {
+        initialProps: { phones: ['5511912345678', '5511988888888'] },
+        wrapper: makeWrapper(queryClient),
+      }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.lookup('5511912345678')?.company_name).toBe('ACME A');
+    expect(result.current.lookup('5511988888888')?.company_name).toBe('BETA B');
+
+    rerender({ phones: ['5511988888888', '5511977777777'] });
+
+    expect(result.current.lookup('5511988888888')?.company_name).toBe('BETA B');
+    expect(result.current.lookup('5511912345678')).toBeUndefined();
+    expect(result.current.lookup('5511977777777')).toBeUndefined();
+
+    await waitFor(() => expect(result.current.lookup('5511988888888')?.company_name).toBe('BETA B2'));
+    expect(result.current.lookup('5511977777777')?.company_name).toBe('GAMMA C');
   });
 });

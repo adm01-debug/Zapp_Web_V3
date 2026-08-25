@@ -6,8 +6,8 @@
  * sem entrar em loop de redirect:
  *
  *   1. Sem sessão            → redirect único para `/auth`.
- *   2. Sessão expirada       → redirect único para `/auth` + storage limpo.
- *   3. Sessão corrompida     → redirect único para `/auth` + storage limpo.
+ *   2. Sessão expirada       → redirect único para `/auth` + destino original preservado.
+ *   3. Sessão corrompida     → redirect único para `/auth` + destino original preservado.
  *   4. Alternância entre as três em sequência, na MESMA aba, navegando por
  *      várias rotas protegidas: nunca mais que 3 navegações a `/auth` no
  *      total (1 por transição) e nunca 2 redirects consecutivos idênticos
@@ -23,7 +23,14 @@ import { test, expect, type Page } from '@playwright/test';
 
 const STRICT = process.env.E2E_STRICT_AUTH_LOOP === '1';
 
-const PROTECTED_ROUTES = ['/inbox', '/crm', '/admin'];
+// Use only routes that are actually wrapped by ProtectedRoute. `/crm` and the
+// bare `/admin` currently fall through to NotFound and cannot validate auth.
+const PROTECTED_ROUTES = ['/inbox', '/', '/admin/roles'];
+const SUPABASE_PROJECT_REF = new URL(
+  // Must stay aligned with playwright.config.ts webServer.env fallback.
+  process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321',
+).hostname.split('.')[0];
+const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
 
 type NavRecord = { url: string; at: number };
 
@@ -49,15 +56,12 @@ async function setSessionState(
   page: Page,
   mode: 'none' | 'expired' | 'corrupted',
 ): Promise<void> {
-  await page.evaluate((m) => {
+  await page.evaluate(({ mode: m, storageKey }) => {
     // Limpa qualquer sb-*-auth-token existente.
     const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
     for (const k of keys) localStorage.removeItem(k);
 
     if (m === 'none') return;
-
-    // Usa a primeira chave conhecida ou cria uma sintética baseada no host do Supabase.
-    const storageKey = keys[0] ?? 'sb-e2e-auth-token';
 
     if (m === 'expired') {
       const expired = {
@@ -72,24 +76,43 @@ async function setSessionState(
     } else if (m === 'corrupted') {
       localStorage.setItem(storageKey, '{not-valid-json');
     }
-  }, mode);
+  }, { mode, storageKey: AUTH_STORAGE_KEY });
+
+  if (mode !== 'none') {
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), AUTH_STORAGE_KEY))
+      .not.toBeNull();
+  }
 }
 
 function countPathHits(navs: NavRecord[], path: RegExp): number {
   return navs.filter((n) => path.test(new URL(n.url).pathname)).length;
 }
 
-function hasConsecutiveDuplicates(navs: NavRecord[], within = 500): boolean {
-  for (let i = 1; i < navs.length; i++) {
-    const a = navs[i - 1];
-    const b = navs[i];
+function hasConsecutiveAuthRedirects(navs: NavRecord[], within = 500): boolean {
+  // Browsers may emit two main-frame navigation events for the source URL
+  // during page.goto/reload. The regression contract is specifically that the
+  // application must not redirect to /auth twice for one invalid session.
+  const authNavs = navs.filter((n) => /^\/auth/.test(new URL(n.url).pathname));
+  for (let i = 1; i < authNavs.length; i++) {
+    const a = authNavs[i - 1];
+    const b = authNavs[i];
     if (a.url === b.url && b.at - a.at < within) return true;
   }
   return false;
 }
 
+async function readRedirectSource(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const state = window.history.state as
+      | { usr?: { from?: { pathname?: string } } }
+      | null;
+    return state?.usr?.from?.pathname ?? null;
+  });
+}
+
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
-  test('cada modo de sessão inválida redireciona uma única vez para /auth', async ({ page }) => {
+  test('cada modo de sessão inválida redireciona uma única vez para /auth preservando a rota de origem', async ({ page }) => {
     const navs = await collectAuthNavigations(page);
 
     // Bootstrap: carrega a app na landing pública para inicializar localStorage/SDK.
@@ -114,19 +137,24 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       const stepNavs = navs.slice(navsBefore);
       const authHits = countPathHits(stepNavs, /^\/auth/);
 
-      // 1 hit de bootstrap não conta pq testamos por etapa; permitimos até 2
-      // (SPA route + redirect), mas nunca mais que isso — 3+ indica loop.
       expect(
         authHits,
         `[${mode}] Redirects para /auth durante navegação a ${route}: ${authHits} (${JSON.stringify(
           stepNavs.map((n) => n.url),
         )})`,
-      ).toBeLessThanOrEqual(2);
+      ).toBe(1);
 
       expect(
-        hasConsecutiveDuplicates(stepNavs, 500),
-        `[${mode}] Detectado loop (mesma URL <500ms) em ${route}: ${JSON.stringify(stepNavs)}`,
+        hasConsecutiveAuthRedirects(stepNavs, 500),
+        `[${mode}] Detectado redirect /auth duplicado (<500ms) em ${route}: ${JSON.stringify(stepNavs)}`,
       ).toBe(false);
+
+      await expect
+        .poll(() => readRedirectSource(page), {
+          timeout: 5_000,
+          message: `[${mode}] history.state.usr.from deve preservar a rota ${route}`,
+        })
+        .toBe(route);
 
       // Storage inválido deve ter sido limpo pelo SDK Supabase.
       if (mode !== 'none') {
