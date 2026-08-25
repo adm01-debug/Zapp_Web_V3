@@ -10,6 +10,10 @@
 #   2. check-invoke-migration.mjs: ratchet anti-regressao da migracao para
 #      src/lib/invokeEdge.ts -- nenhum call-site NOVO de
 #      supabase.functions.invoke direto; o numero so diminui.
+#   3. check-error-shapes.mjs: ratchet anti-regressao de shapes de erro
+#      ad-hoc (`{ error: "..." }`) em supabase/functions -- nenhum shape
+#      NOVO fora do envelope canonico (errorEnvelope/422 contract-kit);
+#      decaimento incremental ate o helper cobrir tudo.
 #
 # Gatilho: PR que toca os arquivos vigiados + diario (catch de drift fora
 # do horario cheio, na tradicao do bundle-secret-guard) + manual.
@@ -55,3 +59,6 @@ jobs:
 
       - name: "Etapa 88: ratchet da migracao para invokeEdge"
         run: node scripts/check-invoke-migration.mjs
+
+      - name: "Etapa 90: ratchet de shapes de erro ad-hoc em Edge Functions"
+        run: node scripts/check-error-shapes.mjs
