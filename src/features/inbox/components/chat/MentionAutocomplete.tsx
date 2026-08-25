@@ -91,6 +91,8 @@ export function MentionAutocomplete({
               >
                 {agent.avatar_url ? (
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={agent.avatar_url}
                     alt=""
                     className="h-6 w-6 rounded-full object-cover"

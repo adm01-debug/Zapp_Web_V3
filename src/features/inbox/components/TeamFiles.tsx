@@ -107,7 +107,9 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
               console.error('[TeamFiles] Storage orphan cleanup failed', { filePath, rmErr });
             }
           })
-          .catch(() => { /* best-effort: silencia falha de cleanup */ });
+          .catch(() => {
+            /* best-effort: silencia falha de cleanup */
+          });
         throw err;
       }
     },
@@ -252,7 +254,9 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
                 </p>
                 <p className="text-[9px] uppercase text-warning-foreground/60">
                   {formatSize(file.file_size || 0)} •{' '}
-                  {format(new Date(file.created_at ?? Date.now()), 'dd MMM HH:mm', { locale: ptBR })}
+                  {format(new Date(file.created_at ?? Date.now()), 'dd MMM HH:mm', {
+                    locale: ptBR,
+                  })}
                 </p>
               </div>
               <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -276,6 +280,8 @@ export const TeamFiles = memo(function TeamFiles({ contactId }: TeamFilesProps) 
                       </DialogHeader>
                       <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl bg-warning/20 p-2">
                         <img
+                          loading="lazy"
+                          decoding="async"
                           src={file.file_url}
                           alt={file.file_name}
                           className="max-h-[70vh] max-w-full rounded-lg object-contain shadow-lg"

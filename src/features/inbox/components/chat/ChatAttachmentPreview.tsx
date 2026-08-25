@@ -35,6 +35,8 @@ export function ChatAttachmentPreview({ attachments, onRemove }: ChatAttachmentP
             >
               {att.preview ? (
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={att.preview}
                   alt="Pré-visualização do anexo"
                   className="h-full w-full object-cover"

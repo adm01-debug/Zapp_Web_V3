@@ -126,6 +126,8 @@ function UploadPreview({
       <div className="flex items-center gap-3">
         <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/30 bg-muted/30">
           <img
+            loading="lazy"
+            decoding="async"
             src={pending.imageUrl}
             alt="Pré-visualização do emoji"
             className="h-full w-full object-contain p-0.5"
@@ -553,6 +555,8 @@ export function CustomEmojiPicker({ onSendEmoji, disabled }: CustomEmojiPickerPr
                           title={`${emoji.name} • ${CATEGORY_LABELS[emoji.category]?.label || emoji.category}`}
                         >
                           <img
+                            loading="lazy"
+                            decoding="async"
                             src={emoji.image_url}
                             alt={emoji.name}
                             className="h-full w-full object-contain p-1"

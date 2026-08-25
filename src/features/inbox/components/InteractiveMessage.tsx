@@ -81,6 +81,8 @@ export function InteractiveMessageDisplay({
             )}
             {interactive.header.type === 'image' && interactive.header.mediaUrl && (
               <img
+                loading="lazy"
+                decoding="async"
                 src={interactive.header.mediaUrl}
                 alt="Imagem do cabeçalho da mensagem"
                 className="mb-2 h-auto max-w-full rounded-lg"

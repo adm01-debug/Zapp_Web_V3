@@ -141,6 +141,8 @@ export function StickerGrid({
                       )}
                     >
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={sticker.image_url}
                         alt={sticker.name || 'Figurinha'}
                         className="h-full w-full object-contain p-1"
@@ -248,6 +250,8 @@ export function StickerGrid({
               {deleteTarget && (
                 <span className="mt-2 flex items-center gap-3">
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={deleteTarget.image_url}
                     alt=""
                     className="h-12 w-12 rounded bg-muted object-contain p-1"

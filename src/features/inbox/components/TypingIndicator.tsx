@@ -60,6 +60,8 @@ export function TypingIndicator({
                 className="relative z-10"
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={avatarUrl}
                   alt={userName}
                   className="h-8 w-8 rounded-full object-cover ring-2 ring-primary/20"

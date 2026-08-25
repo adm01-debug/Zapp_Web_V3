@@ -75,6 +75,8 @@ export const MediaCard = memo(function MediaCard({
             )}
             {!hasError ? (
               <img
+                loading="lazy"
+                decoding="async"
                 src={item.url}
                 alt={item.filename}
                 loading="lazy"

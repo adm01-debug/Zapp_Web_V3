@@ -163,6 +163,8 @@ export function MessageBubbleBody({
       {message.type === 'sticker' && message.mediaUrl && (
         <div className="group/sticker relative mb-1">
           <img
+            loading="lazy"
+            decoding="async"
             src={message.mediaUrl}
             alt="Figurinha"
             className="max-h-[160px] max-w-[160px] object-contain drop-shadow-lg"

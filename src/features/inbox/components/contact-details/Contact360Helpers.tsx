@@ -173,6 +173,8 @@ export function CompanyCard({ company }: { company: Contact360Company }) {
       <div className="flex items-start gap-3">
         {company.logo_url ? (
           <img
+            loading="lazy"
+            decoding="async"
             src={company.logo_url}
             alt={displayName || ''}
             className="h-10 w-10 rounded-lg border border-border/30 bg-background object-contain"

@@ -162,6 +162,8 @@ export function PersonalStickers({ onSend }: PersonalStickersProps) {
                         )}
                       >
                         <img
+                          loading="lazy"
+                          decoding="async"
                           src={sticker.image_url}
                           alt={sticker.name || 'Figurinha pessoal'}
                           className="h-full w-full rounded-lg object-cover"
@@ -242,6 +244,8 @@ export function PersonalStickers({ onSend }: PersonalStickersProps) {
               {deleteTarget && (
                 <span className="mt-2 flex items-center gap-3">
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={deleteTarget.image_url}
                     alt=""
                     className="h-12 w-12 rounded-lg bg-muted object-cover"

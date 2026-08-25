@@ -77,6 +77,8 @@ export function ReplyPreview({ message, onCancel }: ReplyPreviewProps) {
           {/* Show thumbnail for images */}
           {message.mediaUrl && (message.type === 'image' || message.message_type === 'image') && (
             <img
+              loading="lazy"
+              decoding="async"
               src={message.mediaUrl}
               alt="Imagem citada"
               className="mt-1.5 h-12 w-12 rounded object-cover"
