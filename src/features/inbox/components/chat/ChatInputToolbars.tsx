@@ -8,7 +8,7 @@ import { StickerPicker } from '../StickerPicker';
 import { AudioMemePicker } from '../AudioMemePicker';
 import { VoiceChangerPicker } from '../VoiceChangerPicker';
 import { CustomEmojiPicker } from '../CustomEmojiPicker';
-import { EmojiPicker } from '../EmojiPicker';
+import { EmojiPicker } from '@/components/ui/emoji-picker';
 import { FileUploader, FileUploaderRef } from '../FileUploader';
 import { TextToAudioButton } from '../TextToAudioButton';
 import { AISuggestions } from '../AISuggestions';
@@ -144,7 +144,11 @@ export function SecondaryToolbar({
         contactName={contactName}
       />
       <StickerPicker onSendSticker={onSendSticker} />
-      <AudioMemePicker onSendAudioMeme={(meme) => { if (meme.audio_url) onSendAudioMeme(meme.audio_url); }} />
+      <AudioMemePicker
+        onSendAudioMeme={(meme) => {
+          if (meme.audio_url) onSendAudioMeme(meme.audio_url);
+        }}
+      />
       <VoiceChangerPicker onSendAudio={onSendAudioMeme} />
       <CustomEmojiPicker onSendEmoji={onSendCustomEmoji} />
       <EmojiPicker
@@ -359,8 +363,12 @@ export function TertiaryToolsMenu({
           </div>
           <div className="max-h-64 space-y-1 overflow-y-auto p-2">
             {quickReplies.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma resposta rápida cadastrada</p>
-            ) : quickRepliesList}
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                Nenhuma resposta rápida cadastrada
+              </p>
+            ) : (
+              quickRepliesList
+            )}
           </div>
         </PopoverContent>
       </Popover>
