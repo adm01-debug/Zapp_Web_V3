@@ -189,3 +189,51 @@ export function formatDuration(seconds: number): string {
 export function formatPercentage(value: number, decimals = 1): string {
   return `${(value * 100).toFixed(decimals)}%`;
 }
+
+// ─── WhatsApp Text Formatting ────────────────────────────────────────
+
+/**
+ * Converte marcações de formatação do WhatsApp em HTML.
+ *
+ * Regras suportadas:
+ *   *bold*   → <strong>bold</strong>
+ *   _italic_ → <em>italic</em>
+ *   ~strike~ → <del>strike</del>
+ *   `code`   → <code>code</code>
+ *
+ * Escape: \* \_ \~ \` → preserva o caractere literal sem aplicar a tag.
+ * Aninhamento: aplicado na ordem bold → italic → strike → code.
+ * Segurança: não usa innerHTML — retorna string; o consumidor controla dangerouslySetInnerHTML.
+ */
+export function formatWhatsAppText(text: string): string {
+  // 1. Escapar sequências \X → placeholder temporário para preservar literais
+  const ESCAPE_MAP: Record<string, string> = {
+    '\\*': '\x00STAR\x00',
+    '\\_': '\x00UNDER\x00',
+    '\\~': '\x00TILDE\x00',
+    '\\`': '\x00TICK\x00',
+  };
+  let result = text;
+  for (const [seq, placeholder] of Object.entries(ESCAPE_MAP)) {
+    result = result.replaceAll(seq, placeholder);
+  }
+
+  // 2. Aplicar substituições (ordem importa: mais específico primeiro)
+  result = result.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
+  result = result.replace(/_([^_]+)_/g, '<em>$1</em>');
+  result = result.replace(/~([^~]+)~/g, '<del>$1</del>');
+  result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // 3. Restaurar literais escapados
+  const RESTORE_MAP: Record<string, string> = {
+    '\x00STAR\x00': '*',
+    '\x00UNDER\x00': '_',
+    '\x00TILDE\x00': '~',
+    '\x00TICK\x00': '`',
+  };
+  for (const [placeholder, char] of Object.entries(RESTORE_MAP)) {
+    result = result.replaceAll(placeholder, char);
+  }
+
+  return result;
+}
