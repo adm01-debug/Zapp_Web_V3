@@ -209,7 +209,7 @@ requerem Edge Functions.
 |-----|-----------------------|--------------------|
 | `initiate_gmail_oauth` | RAISE P0001 | Edge Function OAuth Google |
 | `complete_gmail_oauth` | RAISE P0001 | Edge Function OAuth callback |
-| `sync_to_crm` | RAISE P0001 | Edge Function + API CRM |
+| `sync_to_crm` | Retorna `{synced:false,error:'CRM sync not yet implemented'}` | Edge Function + API CRM |
 | `export_user_data` | Retorna perfil básico (JSON) | Edge Function export completo |
 | `import_user_data` | RAISE P0001 | Edge Function com validação |
 | `enrich_contact` | Retorna `{enriched: false}` | Integração API enriquecimento |

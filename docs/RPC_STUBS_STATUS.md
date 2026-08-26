@@ -31,7 +31,9 @@
 
 ### `initiate_gmail_oauth` 🔴
 
-**Chamador:** `src/hooks/useIntegrationManagement.ts:54`
+**Chamador atual:** sem uso direto via `supabase.rpc(...)` no frontend vivo.
+O fluxo atual inicia OAuth pela Edge Function `gmail-oauth` em
+`src/hooks/useGmailOAuthFlow.ts`.
 **Assinatura atual do catálogo gerado:** `initiate_gmail_oauth() RETURNS JSONB`
 **Comportamento atual:**
 ```sql
@@ -51,7 +53,9 @@ USING ERRCODE = 'P0001';
 
 ### `complete_gmail_oauth` 🔴
 
-**Chamador:** `src/hooks/useIntegrationManagement.ts:69`
+**Chamador atual:** sem uso direto via `supabase.rpc(...)` no frontend vivo.
+O callback/troca de code também foi movido para a Edge Function `gmail-oauth`
+via `src/hooks/useGmailOAuthFlow.ts`.
 **Assinatura atual do catálogo gerado:** `complete_gmail_oauth(p_code TEXT, p_state TEXT DEFAULT NULL) RETURNS JSONB`
 **Comportamento atual:** RAISE EXCEPTION P0001 (igual ao anterior)
 
@@ -67,12 +71,13 @@ USING ERRCODE = 'P0001';
 
 ### `sync_to_crm` 🟡
 
-**Chamador:** `src/hooks/useIntegrationManagement.ts:156`
-**Assinatura atual do catálogo gerado:** `sync_to_crm(p_contact_id UUID, p_crm_type TEXT DEFAULT NULL) RETURNS JSONB`
-**Comportamento atual:** RAISE EXCEPTION P0001
+**Chamador atual:** sem uso direto via `supabase.rpc(...)` no frontend vivo.
+**Assinatura atual do catálogo gerado:** `sync_to_crm(p_contact_id UUID, p_crm_type TEXT DEFAULT 'bitrix24') RETURNS JSONB`
+**Comportamento atual:** retorna payload stub/parcial
+`{"synced": false, "error": "CRM sync not yet implemented"}`
 
 **Implementação real necessária:**
-- Disparar Edge Function `crm-sync` com `p_workspace_id` e `p_crm_type`
+- Disparar integração assíncrona/Edge Function `crm-sync` com `p_contact_id` e `p_crm_type`
 - Suporte inicial: HubSpot, Pipedrive, RD Station
 - Resultado assíncrono via `zapp.app_notifications`
 
