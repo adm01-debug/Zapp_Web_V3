@@ -18,16 +18,16 @@ afterEach(() => {
   }
 });
 
-const createScenario = (scenario: 'success' | 'boot_error' | 'no_http') => {
+const createScenario = (scenario: 'success' | 'boot_error' | 'no_http', functionName = 'alpha') => {
   const root = mkdtempSync(resolve(tmpdir(), 'edge-gate-'));
   tempDirs.push(root);
   const functionsDir = resolve(root, 'functions');
-  const alphaDir = resolve(functionsDir, 'alpha');
+  const functionDir = resolve(functionsDir, functionName);
   const binDir = resolve(root, 'bin');
   const stateDir = resolve(root, 'state');
-  execFileSync('mkdir', ['-p', alphaDir, binDir, stateDir]);
+  execFileSync('mkdir', ['-p', functionDir, binDir, stateDir]);
 
-  writeFileSync(resolve(alphaDir, 'index.ts'), "Deno.serve(() => new Response('ok'));\n", {
+  writeFileSync(resolve(functionDir, 'index.ts'), "Deno.serve(() => new Response('ok'));\n", {
     encoding: 'utf8',
     flag: 'wx',
   });
@@ -127,12 +127,17 @@ esac
   return { root, functionsDir, stateDir };
 };
 
-const runScenario = (
-  scenario: 'success' | 'boot_error' | 'no_http',
-  scope: 'root' | 'single' = 'root'
-) => {
-  const { functionsDir, stateDir } = createScenario(scenario);
-  const targetDir = scope === 'single' ? resolve(functionsDir, 'alpha') : functionsDir;
+const runScenario = ({
+  scenario,
+  scope = 'root',
+  functionName = 'alpha',
+}: {
+  scenario: 'success' | 'boot_error' | 'no_http';
+  scope?: 'root' | 'single';
+  functionName?: string;
+}) => {
+  const { functionsDir, stateDir } = createScenario(scenario, functionName);
+  const targetDir = scope === 'single' ? resolve(functionsDir, functionName) : functionsDir;
   try {
     const stdout = execFileSync('bash', [scriptPath, targetDir], {
       cwd: repoRoot,
@@ -171,7 +176,10 @@ describe('production Edge Runtime compatibility gate', () => {
     expect(checker).toContain('if [ -f "${functions_mount%/}/index.ts" ]; then');
     expect(checker).toContain('-mindepth 2 -maxdepth 2 -name index.ts');
     expect(checker).toContain('start --main-service "/home/deno/functions/${function_name}"');
-    expect(checker).toContain('http://127.0.0.1:${host_port}/functions/v1/${function_name}');
+    expect(checker).toContain('local probe_path="/functions/v1/${function_name}"');
+    expect(checker).toContain('http://127.0.0.1:${host_port}${probe_path}');
+    expect(checker).toContain('if [ "$function_name" = "main" ]; then');
+    expect(checker).toContain('probe_path="/"');
   });
 
   it('removes runtime containers and temp evidence even after each probe', () => {
@@ -188,7 +196,7 @@ describe('production Edge Runtime compatibility gate', () => {
   });
 
   it('passes only when the fake runtime stays running, maps port 9000 and answers HTTP', () => {
-    const result = runScenario('success');
+    const result = runScenario({ scenario: 'success' });
 
     expect(result.ok).toBe(true);
     expect(result.stdout).toContain('OK alpha (HTTP 422)');
@@ -200,15 +208,23 @@ describe('production Edge Runtime compatibility gate', () => {
   });
 
   it('also accepts a single function directory as input', () => {
-    const result = runScenario('success', 'single');
+    const result = runScenario({ scenario: 'success', scope: 'single' });
 
     expect(result.ok).toBe(true);
     expect(result.stdout).toContain('OK alpha (HTTP 422)');
     expect(result.stdout).toContain('Todas as 1 Edge Functions responderam HTTP');
   });
 
+  it('proves the shared main router by probing root instead of /functions/v1/main', () => {
+    const result = runScenario({ scenario: 'success', scope: 'single', functionName: 'main' });
+
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toContain('OK main (HTTP 422)');
+    expect(result.ops).toContain('curl http://127.0.0.1:41000/');
+  });
+
   it('fails even with an HTTP status when boot logs contain a real worker boot error', () => {
-    const result = runScenario('boot_error');
+    const result = runScenario({ scenario: 'boot_error' });
 
     expect(result.ok).toBe(false);
     expect(result.stdout).toContain('FAIL alpha (boot error no runtime)');
@@ -217,7 +233,7 @@ describe('production Edge Runtime compatibility gate', () => {
   });
 
   it('fails when no HTTP response arrives before the deadline', () => {
-    const result = runScenario('no_http');
+    const result = runScenario({ scenario: 'no_http' });
 
     expect(result.ok).toBe(false);
     expect(result.stdout).toContain('FAIL alpha (sem prova HTTP positiva em 1s)');

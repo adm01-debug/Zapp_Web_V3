@@ -37,6 +37,7 @@ check_edge_function() {
   local running=""
   local host_port=""
   local http_code=""
+  local probe_path="/functions/v1/${function_name}"
   local deadline
   local boot_succeeded=false
 
@@ -78,6 +79,12 @@ check_edge_function() {
   fi
 
   printf 'container_id=%s\n' "$container_id" >"$meta_file"
+  if [ "$function_name" = "main" ]; then
+    # O entrypoint main já é o roteador compartilhado: a URL "/functions/v1/main"
+    # tenta despachar para uma function inexistente chamada "functions". O health
+    # do boot é provado pelo 400 estruturado em "/".
+    probe_path="/"
+  fi
   deadline=$(( $(date +%s) + boot_timeout ))
 
   while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -117,7 +124,7 @@ check_edge_function() {
         --dump-header "$headers_file" \
         --write-out '%{http_code}' \
         --max-time 5 \
-        "http://127.0.0.1:${host_port}/functions/v1/${function_name}"
+        "http://127.0.0.1:${host_port}${probe_path}"
     )
     local curl_status=$?
     set -e
@@ -131,7 +138,7 @@ check_edge_function() {
         return 0
       fi
       {
-        printf '\nHTTP %s em /functions/v1/%s\n' "$http_code" "$function_name"
+        printf '\nHTTP %s em %s\n' "$http_code" "$probe_path"
         printf 'porta=%s\n' "$host_port"
         printf '\n--- headers ---\n'
         sed -n '1,20p' "$headers_file"
