@@ -163,7 +163,7 @@ export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Pro
               const c = scrollContainerRef.current;
               if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
             }}
-            aria-label={`${newMessageCount} nova${newMessageCount !== 1 ? 's' : ''} mensagem${newMessageCount !== 1 ? 's' : ''} — pular para o fim`}
+            aria-label={`${newMessageCount} nova${newMessageCount !== 1 ? 's' : ''} ${newMessageCount !== 1 ? 'mensagens' : 'mensagem'} — pular para o fim`}
           >
             <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{newMessageCount > 99 ? '99+' : newMessageCount}</span>
