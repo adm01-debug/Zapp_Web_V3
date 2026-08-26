@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -42,10 +42,12 @@ ops_file="$state_dir/ops.log"
 case "$cmd" in
   run)
     name=""
+    mount_src=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --name) name="$2"; shift 2 ;;
-        -p|-v|-e) shift 2 ;;
+        -v) mount_src="\${2%%:*}"; shift 2 ;;
+        -p|-e) shift 2 ;;
         -d|--rm) shift ;;
         *) shift ;;
       esac
@@ -59,6 +61,7 @@ case "$cmd" in
       boot_error) printf '%s\\n' "main worker boot error: parse failed" > "$state_dir/logs" ;;
     esac
     echo "run $cid" >> "$ops_file"
+    echo "mount $mount_src" >> "$ops_file"
     printf '%s\\n' "$cid"
     ;;
   inspect)
@@ -133,11 +136,17 @@ const runScenario = ({
   functionName = 'alpha',
 }: {
   scenario: 'success' | 'boot_error' | 'no_http';
-  scope?: 'root' | 'single';
+  scope?: 'root' | 'single' | 'single-relative';
   functionName?: string;
 }) => {
   const { functionsDir, stateDir } = createScenario(scenario, functionName);
-  const targetDir = scope === 'single' ? resolve(functionsDir, functionName) : functionsDir;
+  const absoluteTargetDir = resolve(functionsDir, functionName);
+  const targetDir =
+    scope === 'single'
+      ? absoluteTargetDir
+      : scope === 'single-relative'
+        ? relative(repoRoot, absoluteTargetDir)
+        : functionsDir;
   try {
     const stdout = execFileSync('bash', [scriptPath, targetDir], {
       cwd: repoRoot,
@@ -153,7 +162,13 @@ const runScenario = ({
         EDGE_TEST_STATE_DIR: stateDir,
       },
     });
-    return { ok: true as const, stdout, ops: readFileSync(resolve(stateDir, 'ops.log'), 'utf8') };
+    return {
+      ok: true as const,
+      stdout,
+      ops: readFileSync(resolve(stateDir, 'ops.log'), 'utf8'),
+      functionsDir,
+      functionDir: absoluteTargetDir,
+    };
   } catch (error) {
     const err = error as {
       stdout?: string | Buffer;
@@ -164,6 +179,8 @@ const runScenario = ({
       stdout: String(err.stdout ?? ''),
       stderr: String(err.stderr ?? ''),
       ops: readFileSync(resolve(stateDir, 'ops.log'), 'utf8'),
+      functionsDir,
+      functionDir: absoluteTargetDir,
     };
   }
 };
@@ -173,9 +190,12 @@ describe('production Edge Runtime compatibility gate', () => {
     expect(workflow).toContain('supabase/edge-runtime:v1.74.0');
     expect(workflow).toContain('scripts/check-edge-runtime-functions.sh');
     expect(workflow).not.toContain('denoland/deno:2.2.8');
-    expect(checker).toContain('if [ -f "${functions_mount%/}/index.ts" ]; then');
+    expect(checker).toContain('functions_target="${PWD%/}/${functions_target#./}"');
+    expect(checker).toContain('functions_mount_root="$(dirname "${functions_target}")"');
+    expect(checker).toContain('if [ -f "${functions_target}/index.ts" ]; then');
     expect(checker).toContain('-mindepth 2 -maxdepth 2 -name index.ts');
     expect(checker).toContain('start --main-service "/home/deno/functions/${function_name}"');
+    expect(checker).toContain('-v "${functions_mount_root}:/home/deno/functions:ro"');
     expect(checker).toContain('local probe_path="/functions/v1/${function_name}"');
     expect(checker).toContain('http://127.0.0.1:${host_port}${probe_path}');
     expect(checker).toContain('if [ "$function_name" = "main" ]; then');
@@ -202,6 +222,7 @@ describe('production Edge Runtime compatibility gate', () => {
     expect(result.stdout).toContain('OK alpha (HTTP 422)');
     expect(result.stdout).toContain('Todas as 1 Edge Functions responderam HTTP');
     expect(result.ops).toMatch(/run cid-edge-http-local-alpha-[0-9]+/);
+    expect(result.ops).toContain(`mount ${result.functionsDir}`);
     expect(result.ops).toMatch(/port cid-edge-http-local-alpha-[0-9]+/);
     expect(result.ops).toContain('curl http://127.0.0.1:41000/functions/v1/alpha');
     expect(result.ops).toMatch(/rm -f cid-edge-http-local-alpha-[0-9]+/);
@@ -213,6 +234,16 @@ describe('production Edge Runtime compatibility gate', () => {
     expect(result.ok).toBe(true);
     expect(result.stdout).toContain('OK alpha (HTTP 422)');
     expect(result.stdout).toContain('Todas as 1 Edge Functions responderam HTTP');
+    expect(result.ops).toContain(`mount ${result.functionsDir}`);
+  });
+
+  it('also accepts a relative single function directory as input', () => {
+    const result = runScenario({ scenario: 'success', scope: 'single-relative' });
+
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toContain('OK alpha (HTTP 422)');
+    expect(result.stdout).toContain('Todas as 1 Edge Functions responderam HTTP');
+    expect(result.ops).toContain(`mount ${result.functionsDir}`);
   });
 
   it('proves the shared main router by probing root instead of /functions/v1/main', () => {

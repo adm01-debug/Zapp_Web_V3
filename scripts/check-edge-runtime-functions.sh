@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-functions_mount="${1:-$PWD/supabase/functions}"
+functions_target="${1:-$PWD/supabase/functions}"
+if [ "${functions_target#/}" = "$functions_target" ]; then
+  functions_target="${PWD%/}/${functions_target#./}"
+fi
+functions_target="${functions_target%/}"
+functions_target="$(cd "$(dirname "$functions_target")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$functions_target")")"
 runtime_image="${EDGE_RUNTIME_IMAGE:-supabase/edge-runtime:v1.74.0}"
 boot_timeout="${EDGE_BOOT_TIMEOUT_SECONDS:-12}"
 parallelism="${EDGE_BOOT_PARALLELISM:-4}"
@@ -10,6 +15,11 @@ log_parent="${RUNNER_TEMP:-/tmp}"
 log_dir="${EDGE_LOG_DIR:-$(mktemp -d "${log_parent%/}/edge-runtime-functions.XXXXXX")}"
 docker_bin="${EDGE_DOCKER_BIN:-docker}"
 curl_bin="${EDGE_CURL_BIN:-curl}"
+
+if [ ! -d "$functions_target" ]; then
+  echo "Diretório de Edge Functions não encontrado: ${functions_target}" >&2
+  exit 1
+fi
 
 cleanup_main() {
   if [ "${EDGE_KEEP_LOG_DIR:-0}" != "1" ]; then
@@ -59,7 +69,7 @@ check_edge_function() {
     "$docker_bin" run -d \
       --name "$container_name" \
       -p 127.0.0.1::9000 \
-      -v "${functions_mount}:/home/deno/functions:ro" \
+      -v "${functions_mount_root}:/home/deno/functions:ro" \
       -e SUPABASE_URL=http://localhost:8000 \
       -e SUPABASE_ANON_KEY=test-anon-key \
       -e SUPABASE_SERVICE_ROLE_KEY=test-service-role-key \
@@ -174,19 +184,21 @@ check_edge_function() {
 }
 
 trap cleanup_main EXIT
-export functions_mount runtime_image boot_timeout poll_interval log_dir docker_bin curl_bin
+export functions_mount_root runtime_image boot_timeout poll_interval log_dir docker_bin curl_bin
 export -f contains_boot_error check_edge_function
 
-if [ -f "${functions_mount%/}/index.ts" ]; then
-  function_dirs=("${functions_mount%/}")
+if [ -f "${functions_target}/index.ts" ]; then
+  functions_mount_root="$(dirname "${functions_target}")"
+  function_dirs=("${functions_target}")
 else
+  functions_mount_root="${functions_target}"
   mapfile -d '' function_dirs < <(
-    find "$functions_mount" -mindepth 2 -maxdepth 2 -name index.ts -printf '%h\0' | sort -z
+    find "$functions_target" -mindepth 2 -maxdepth 2 -name index.ts -printf '%h\0' | sort -z
   )
 fi
 
 if [ "${#function_dirs[@]}" -eq 0 ]; then
-  echo "Nenhuma Edge Function com index.ts encontrada em ${functions_mount}." >&2
+  echo "Nenhuma Edge Function com index.ts encontrada em ${functions_target}." >&2
   exit 1
 fi
 
