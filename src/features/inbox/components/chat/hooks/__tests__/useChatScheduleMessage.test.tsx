@@ -4,6 +4,7 @@ import { render, renderHook, act, fireEvent, screen, waitFor } from '@testing-li
 
 const mockUpload = vi.hoisted(() => vi.fn());
 const mockCreateSignedUrl = vi.hoisted(() => vi.fn());
+const mockRemove = vi.hoisted(() => vi.fn());
 const mockToast = vi.hoisted(() => vi.fn());
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -12,6 +13,7 @@ vi.mock('@/integrations/supabase/client', () => ({
       from: vi.fn().mockReturnValue({
         upload: mockUpload,
         createSignedUrl: mockCreateSignedUrl,
+        remove: mockRemove,
       }),
     },
   },
@@ -84,12 +86,17 @@ function renderDialogIntegration(scheduleImpl = mockScheduleMessage) {
   return { onOpenChange };
 }
 
-describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockScheduleMessage.mockResolvedValue({ id: 'sm1' });
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUpload.mockReset();
+  mockCreateSignedUrl.mockReset();
+  mockRemove.mockReset();
+  mockScheduleMessage.mockReset();
+  mockScheduleMessage.mockResolvedValue({ id: 'sm1' });
+  mockRemove.mockResolvedValue({ error: null });
+});
 
+describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
   it('schedules text message with exact args and calls onDone once', async () => {
     const { result, onDone } = renderScheduleHook();
 
@@ -108,6 +115,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
       mediaUrl: undefined,
     });
     expect(onDone).toHaveBeenCalledTimes(1);
+    expect(mockRemove).not.toHaveBeenCalled();
     expect(mockToast).not.toHaveBeenCalled();
   });
 
@@ -161,6 +169,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
     expect(mockScheduleMessage).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+    expect(mockRemove).not.toHaveBeenCalled();
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Erro no upload', variant: 'destructive' })
     );
@@ -203,6 +212,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
     expect(mockScheduleMessage).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+    expect(mockRemove).toHaveBeenCalledWith([expect.stringMatching(/^scheduled_/)]);
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Erro no upload',
@@ -224,6 +234,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
     expect(mockScheduleMessage).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+    expect(mockRemove).toHaveBeenCalledWith([expect.stringMatching(/^scheduled_/)]);
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Erro no upload',
@@ -238,6 +249,30 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
     const first = result.current;
     rerender();
     expect(result.current).toBe(first);
+  });
+
+  it('removes an uploaded attachment when persisting the schedule fails', async () => {
+    mockUpload.mockResolvedValue({ error: null });
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed/url' },
+      error: null,
+    });
+    mockScheduleMessage.mockRejectedValue(new Error('database unavailable'));
+    const { result, onDone } = renderScheduleHook();
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+
+    await act(async () => {
+      await result.current('Legenda', future(), file);
+    });
+
+    expect(onDone).not.toHaveBeenCalled();
+    expect(mockRemove).toHaveBeenCalledWith([expect.stringMatching(/^scheduled_/)]);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Erro ao agendar mensagem',
+        variant: 'destructive',
+      })
+    );
   });
 });
 
