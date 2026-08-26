@@ -31,8 +31,6 @@ const SUPABASE_PROJECT_REF = new URL(
   process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321'
 ).hostname.split('.')[0];
 const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
-const HISTORY_PROBE_STORAGE_KEY = '__zappAuthRedirectProbe';
-const HISTORY_PROBE_STAGE_KEY = '__zappAuthRedirectStage';
 
 type FrameNavRecord = {
   url: string;
@@ -42,13 +40,6 @@ type FrameNavRecord = {
 type MainFrameRequestRecord = {
   url: string;
   at: number;
-};
-
-type HistoryProbeRecord = {
-  stage: string;
-  kind: 'pushState' | 'replaceState';
-  url: string;
-  stateFrom: string | null;
 };
 
 async function collectMainFrameNavigations(page: Page): Promise<FrameNavRecord[]> {
@@ -71,93 +62,6 @@ async function collectMainFrameNavigationRequests(page: Page): Promise<MainFrame
   return requests;
 }
 
-async function installHistoryProbe(page: Page): Promise<void> {
-  await page.addInitScript(
-    ({ recordsKey, stageKey }) => {
-      const win = window as typeof window & { __zappAuthRedirectProbeInstalled?: boolean };
-      if (win.__zappAuthRedirectProbeInstalled) return;
-      win.__zappAuthRedirectProbeInstalled = true;
-
-      const readRecords = (): HistoryProbeRecord[] => {
-        try {
-          const raw = sessionStorage.getItem(recordsKey);
-          const parsed: unknown = raw ? JSON.parse(raw) : [];
-          return Array.isArray(parsed) ? (parsed as HistoryProbeRecord[]) : [];
-        } catch {
-          return [];
-        }
-      };
-
-      const record = (
-        kind: HistoryProbeRecord['kind'],
-        state: unknown,
-        url?: string | URL | null
-      ) => {
-        const stage = sessionStorage.getItem(stageKey);
-        if (!stage) return;
-
-        const stateFrom =
-          state && typeof state === 'object'
-            ? (state as { usr?: { from?: { pathname?: unknown } } }).usr?.from?.pathname
-            : null;
-        const next = readRecords();
-        next.push({
-          stage,
-          kind,
-          url: new URL(url == null ? window.location.href : String(url), window.location.href).href,
-          stateFrom: typeof stateFrom === 'string' ? stateFrom : null,
-        });
-        sessionStorage.setItem(recordsKey, JSON.stringify(next));
-      };
-
-      const originalPushState = history.pushState.bind(history);
-      history.pushState = ((state: unknown, unused: string, url?: string | URL | null) => {
-        originalPushState(state, unused, url);
-        record('pushState', state, url);
-      }) as History['pushState'];
-
-      const originalReplaceState = history.replaceState.bind(history);
-      history.replaceState = ((state: unknown, unused: string, url?: string | URL | null) => {
-        originalReplaceState(state, unused, url);
-        record('replaceState', state, url);
-      }) as History['replaceState'];
-    },
-    { recordsKey: HISTORY_PROBE_STORAGE_KEY, stageKey: HISTORY_PROBE_STAGE_KEY }
-  );
-}
-
-async function beginHistoryProbeStage(page: Page, stage: string): Promise<void> {
-  await page.evaluate(
-    ({ recordsKey, stageKey, nextStage }) => {
-      sessionStorage.setItem(recordsKey, '[]');
-      sessionStorage.setItem(stageKey, nextStage);
-    },
-    { recordsKey: HISTORY_PROBE_STORAGE_KEY, stageKey: HISTORY_PROBE_STAGE_KEY, nextStage: stage }
-  );
-}
-
-async function readHistoryProbeStage(page: Page, stage: string): Promise<HistoryProbeRecord[]> {
-  return page.evaluate(
-    ({ recordsKey, stageKey, expectedStage }) => {
-      try {
-        if (sessionStorage.getItem(stageKey) !== expectedStage) return [];
-        const raw = sessionStorage.getItem(recordsKey);
-        const records: unknown = raw ? JSON.parse(raw) : [];
-        return Array.isArray(records)
-          ? (records as HistoryProbeRecord[]).filter((record) => record.stage === expectedStage)
-          : [];
-      } catch {
-        return [];
-      }
-    },
-    {
-      recordsKey: HISTORY_PROBE_STORAGE_KEY,
-      stageKey: HISTORY_PROBE_STAGE_KEY,
-      expectedStage: stage,
-    }
-  );
-}
-
 async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000): Promise<void> {
   await expect.poll(() => new URL(page.url()).pathname, { timeout }).toMatch(expectedPath);
   // 1.5s idle: se um loop existir, ele dispara aqui.
@@ -166,7 +70,9 @@ async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000
 
 async function gotoProtectedRoute(page: Page, route: string): Promise<void> {
   try {
-    await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    // `commit` confirms that the protected document really started loading
+    // without racing React Router's immediate client-side redirect in WebKit.
+    await page.goto(route, { waitUntil: 'commit', timeout: 20_000 });
   } catch (error) {
     // WebKit reports both variants below when React Router redirects during a
     // document navigation. The interruption is accepted only after proving
@@ -174,7 +80,8 @@ async function gotoProtectedRoute(page: Page, route: string): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     const isExpectedInterruption =
       message.includes('is interrupted by another navigation') ||
-      message.includes('Frame load interrupted');
+      message.includes('Frame load interrupted') ||
+      message.includes('NS_BINDING_ABORTED');
     if (!isExpectedInterruption) {
       throw error;
     }
@@ -260,15 +167,17 @@ async function readRedirectSource(page: Page): Promise<string | null> {
   });
 }
 
-async function readRedirectSourceForStage(page: Page, stage: string): Promise<string | null> {
-  const records = await readHistoryProbeStage(page, stage);
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index];
-    if (/^\/auth/.test(new URL(record.url).pathname) && record.stateFrom) {
-      return record.stateFrom;
-    }
-  }
-  return readRedirectSource(page);
+async function clearPreviousRedirectSource(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const state = window.history.state;
+    if (!state || typeof state !== 'object' || !('usr' in state)) return;
+
+    const { usr: _previousRedirectSource, ...withoutRedirectSource } = state as Record<
+      string,
+      unknown
+    >;
+    window.history.replaceState(withoutRedirectSource, '', window.location.href);
+  });
 }
 
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
@@ -286,17 +195,16 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       throw err;
     }
     await waitForSettled(page, /^\/auth/, 20_000);
-    // Must be installed after the bootstrap document: it persists to every
-    // navigation in the test without changing how the initial auth page boots.
-    await installHistoryProbe(page);
 
     const modes: Array<'none' | 'expired' | 'corrupted'> = ['none', 'expired', 'corrupted'];
 
     for (const [idx, mode] of modes.entries()) {
       const route = PROTECTED_ROUTES[idx % PROTECTED_ROUTES.length];
+      // page.goto() creates a document navigation. WebKit retains the prior
+      // entry's React Router `usr` payload unless we reset it between stages;
+      // preserve router metadata but remove only the previous redirect source.
+      await clearPreviousRedirectSource(page);
       await setSessionState(page, mode);
-      const stage = `${mode}-${idx}-${Date.now()}`;
-      await beginHistoryProbeStage(page, stage);
 
       const frameNavsBefore = frameNavs.length;
       const navigationRequestsBefore = navigationRequests.length;
@@ -322,7 +230,10 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       ).toBe(1);
 
       await expect
-        .poll(() => readRedirectSourceForStage(page, stage), {
+        // This is read only after the current stage emitted both its request
+        // and its main-frame /auth transition above, so a prior stage cannot
+        // satisfy this assertion.
+        .poll(() => readRedirectSource(page), {
           timeout: 5_000,
           message: `[${mode}] redirect para /auth deve preservar a rota ${route}`,
         })
