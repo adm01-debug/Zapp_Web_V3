@@ -35,6 +35,13 @@ const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
 
 type NavRecord = { url: string; at: number };
 
+type HistoryCallRecord = {
+  kind: 'pushState' | 'replaceState';
+  fromUrl: string;
+  url: string;
+  stateFrom: string | null;
+};
+
 async function collectAuthNavigations(page: Page): Promise<NavRecord[]> {
   const navs: NavRecord[] = [];
   page.on('framenavigated', (frame) => {
@@ -43,6 +50,62 @@ async function collectAuthNavigations(page: Page): Promise<NavRecord[]> {
     }
   });
   return navs;
+}
+
+async function resetHistoryCallRecorder(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type Recorder = {
+      records: HistoryCallRecord[];
+    };
+    const win = window as typeof window & { __zappAuthHistoryRecorder?: Recorder };
+
+    if (!win.__zappAuthHistoryRecorder) {
+      const recorder: Recorder = { records: [] };
+      const record = (
+        kind: HistoryCallRecord['kind'],
+        fromUrl: string,
+        state: unknown,
+        url?: string | URL | null
+      ) => {
+        const stateFrom =
+          state && typeof state === 'object'
+            ? (state as { usr?: { from?: { pathname?: unknown } } }).usr?.from?.pathname
+            : null;
+        recorder.records.push({
+          kind,
+          fromUrl,
+          url: new URL(url == null ? window.location.href : String(url), window.location.href).href,
+          stateFrom: typeof stateFrom === 'string' ? stateFrom : null,
+        });
+      };
+
+      const originalPushState = history.pushState.bind(history);
+      history.pushState = ((state: unknown, unused: string, url?: string | URL | null) => {
+        const fromUrl = window.location.href;
+        originalPushState(state, unused, url);
+        record('pushState', fromUrl, state, url);
+      }) as History['pushState'];
+
+      const originalReplaceState = history.replaceState.bind(history);
+      history.replaceState = ((state: unknown, unused: string, url?: string | URL | null) => {
+        const fromUrl = window.location.href;
+        originalReplaceState(state, unused, url);
+        record('replaceState', fromUrl, state, url);
+      }) as History['replaceState'];
+      win.__zappAuthHistoryRecorder = recorder;
+    }
+
+    win.__zappAuthHistoryRecorder.records.length = 0;
+  });
+}
+
+async function readHistoryCallRecorder(page: Page): Promise<HistoryCallRecord[]> {
+  return page.evaluate(() => {
+    const win = window as typeof window & {
+      __zappAuthHistoryRecorder?: { records: HistoryCallRecord[] };
+    };
+    return win.__zappAuthHistoryRecorder?.records ?? [];
+  });
 }
 
 async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000): Promise<void> {
@@ -97,6 +160,38 @@ async function reloadPublicAuthRoute(page: Page): Promise<void> {
   await waitForSettled(page, /^\/auth/);
 }
 
+function isExpectedNavigationInterruption(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('is interrupted by another navigation') ||
+    message.includes('Frame load interrupted') ||
+    message.includes('NS_BINDING_ABORTED')
+  );
+}
+
+async function bootInvalidSessionOnProtectedRoute(page: Page, route: string): Promise<void> {
+  let observedAuthDocument = false;
+  const observeMainFrame = (frame: { url: () => string }) => {
+    if (frame === page.mainFrame() && new URL(frame.url()).pathname === '/auth') {
+      observedAuthDocument = true;
+    }
+  };
+  page.on('framenavigated', observeMainFrame);
+
+  try {
+    await page.goto(route, { waitUntil: 'commit', timeout: 20_000 });
+  } catch (error) {
+    if (!isExpectedNavigationInterruption(error)) throw error;
+    // Only a verified final /auth document can make this browser interruption
+    // expected; otherwise the original navigation error remains a failure.
+    await expect.poll(() => observedAuthDocument, { timeout: 5_000 }).toBe(true);
+  } finally {
+    page.off('framenavigated', observeMainFrame);
+  }
+
+  await waitForSettled(page, /^\/auth/);
+}
+
 async function setSessionState(page: Page, mode: 'none' | 'expired' | 'corrupted'): Promise<void> {
   await page.evaluate(
     ({ mode: m, storageKey }) => {
@@ -128,10 +223,6 @@ async function setSessionState(page: Page, mode: 'none' | 'expired' | 'corrupted
       .poll(() => page.evaluate((key) => localStorage.getItem(key), AUTH_STORAGE_KEY))
       .not.toBeNull();
   }
-}
-
-function countPathHits(navs: NavRecord[], path: RegExp): number {
-  return navs.filter((n) => path.test(new URL(n.url).pathname)).length;
 }
 
 function countPathTransitions(navs: NavRecord[], path: RegExp): number {
@@ -177,12 +268,16 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       const route = PROTECTED_ROUTES[idx % PROTECTED_ROUTES.length];
       await setSessionState(page, mode);
       await reloadPublicAuthRoute(page);
+      // Reset only after the public reload: the records below describe this
+      // protected SPA transition and cannot inherit another stage's redirect.
+      await resetHistoryCallRecorder(page);
 
       const navsBefore = navs.length;
       await navigateProtectedRoute(page, route);
       await waitForSettled(page, /^\/auth/);
 
       const stepNavs = navs.slice(navsBefore);
+      const historyCalls = await readHistoryCallRecorder(page);
       const authTransitions = countPathTransitions(stepNavs, /^\/auth/);
 
       expect(
@@ -199,12 +294,17 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
         )})`
       ).toBe(1);
 
-      // WebKit may emit a duplicate frame notification for one replaceState.
-      // Three or more notifications means the app re-entered the guard loop.
+      const authRedirectTransitions = historyCalls.filter(
+        (call) =>
+          call.kind === 'replaceState' &&
+          new URL(call.fromUrl).pathname !== '/auth' &&
+          new URL(call.url).pathname === '/auth'
+      );
       expect(
-        countPathHits(stepNavs, /^\/auth/) <= 2,
-        `[${mode}] eventos /auth além da duplicação permitida: ${JSON.stringify(stepNavs)}`
-      ).toBe(true);
+        authRedirectTransitions,
+        `[${mode}] redirects reais para /auth: ${JSON.stringify(historyCalls)}`
+      ).toHaveLength(1);
+      expect(authRedirectTransitions[0]?.stateFrom).toBe(route);
 
       await expect
         .poll(() => readRedirectSource(page), {
@@ -223,6 +323,27 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
         // já foi verificado pelo redirect para /auth.
         expect(Array.isArray(remaining)).toBe(true);
       }
+    }
+  });
+
+  test('sessões expirada e corrompida são tratadas no bootstrap de rota protegida', async ({
+    page,
+  }) => {
+    // Carrega uma rota pública antes de gravar o payload, para que localStorage
+    // exista na mesma origem do documento protegido que será iniciado depois.
+    try {
+      await page.goto('/auth', { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    } catch (err) {
+      test.skip(!STRICT, `Localhost inacessível: ${(err as Error).message}`);
+      throw err;
+    }
+    await waitForSettled(page, /^\/auth/);
+
+    const bootstrapModes: Array<'expired' | 'corrupted'> = ['expired', 'corrupted'];
+    for (const [index, mode] of bootstrapModes.entries()) {
+      await setSessionState(page, mode);
+      await bootInvalidSessionOnProtectedRoute(page, PROTECTED_ROUTES[index]);
+      await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/auth/);
     }
   });
 });
