@@ -269,7 +269,7 @@ Regenerar (via container claude-code, ~2,5 min, sem custo de API) + wiki:
 ```
 Consultar: `graphify explain "<no>"` · `graphify path "A" "B"`
 
-`graph.json` (35 MB), `graph.html` e `wiki/` **não** são versionados — só `GRAPH_REPORT.md` e `manifest.json`.
+`graph.json` (35 MB), `graph.html` e `wiki/` **não** são versionados — `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json` e `.graphify_labels.json.sig` são preservados.
 
 ---
 
