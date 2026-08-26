@@ -28,7 +28,7 @@ const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
 const FAKE_AUTH_EMAIL = 'e2e-auth@test.local';
 const FAKE_AUTH_PASSWORD = 'SenhaFake123!';
 const FAKE_AUTH_USER_ID = '00000000-0000-0000-0000-00000000ea11';
-const AUTH_RESET_QUERY = '__e2e_reset_auth=1';
+const AUTH_BOOTSTRAP_MARKER = '__e2e_auth_bootstrap_done';
 const EXPECTED_REDIRECT_ABORT_FRAGMENTS = [
   'is interrupted by another navigation',
   'NS_BINDING_ABORTED',
@@ -291,37 +291,30 @@ async function clearSessionState(page: Page): Promise<void> {
 }
 
 async function bootstrapPublicAuth(page: Page, nextPath?: string): Promise<string> {
-  await page.addInitScript(({ storageKey, resetQuery }) => {
+  await page.addInitScript(({ storageKey, markerKey }) => {
     try {
-      if (!window.location.search.includes(resetQuery)) return;
+      if (sessionStorage.getItem(markerKey) === '1') return;
       const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
       for (const k of keys) localStorage.removeItem(k);
       localStorage.removeItem(storageKey);
       sessionStorage.clear();
+      sessionStorage.setItem(markerKey, '1');
     } catch {
       // noop: o próprio teste validará o bootstrap logo após a navegação.
     }
-  }, { storageKey: AUTH_STORAGE_KEY, resetQuery: AUTH_RESET_QUERY });
+  }, { storageKey: AUTH_STORAGE_KEY, markerKey: AUTH_BOOTSTRAP_MARKER });
 
-  const resetParams = new URLSearchParams(AUTH_RESET_QUERY);
-  if (nextPath) resetParams.set('next', nextPath);
-  await page.goto(`/auth?${resetParams.toString()}`, {
+  const authUrl = nextPath
+    ? `/auth?${new URLSearchParams({ next: nextPath }).toString()}`
+    : '/auth';
+  await page.goto(authUrl, {
     waitUntil: 'domcontentloaded',
     timeout: 20_000,
   });
   await waitForSettled(page, /^\/auth/);
   await clearSessionState(page);
-  await page.evaluate((resetQuery) => {
-    const url = new URL(window.location.href);
-    if (!url.search.includes(resetQuery)) return;
-    url.searchParams.delete(resetQuery.split('=')[0] ?? resetQuery);
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  }, AUTH_RESET_QUERY);
-  const expectedLocation = nextPath
-    ? `/auth?${new URLSearchParams({ next: nextPath }).toString()}`
-    : '/auth';
-  await waitForLocation(page, expectedLocation);
-  return expectedLocation;
+  await waitForLocation(page, authUrl);
+  return authUrl;
 }
 
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
