@@ -15,6 +15,7 @@ import {
   Trash2,
   MoreVertical,
 } from 'lucide-react';
+import type { SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -71,8 +72,13 @@ export function ConnectionCardMenu({
   onSyncHistory,
   onDelete: _onDelete,
 }: ConnectionCardMenuProps) {
+  const blockUnavailableDelete = (event: Event | SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   return (
-    <TooltipProvider delayDuration={150}>
+    <TooltipProvider delayDuration={0}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button aria-label="Opções da conexão" variant="ghost" size="icon" className="h-8 w-8">
@@ -169,18 +175,20 @@ export function ConnectionCardMenu({
           <DropdownMenuSeparator />
           <Tooltip>
             <TooltipTrigger asChild>
-              <div
+              <DropdownMenuItem
                 aria-describedby="connection-delete-unavailable-reason"
-                title="Indisponível: a exclusão ponta a ponta da instância Evolution ainda não está habilitada."
+                aria-disabled="true"
+                data-disabled
+                className="text-destructive/60 focus:text-destructive/60"
+                onClick={blockUnavailableDelete}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') blockUnavailableDelete(event);
+                }}
+                onSelect={blockUnavailableDelete}
               >
-                <DropdownMenuItem
-                  disabled
-                  className="text-destructive/60 focus:text-destructive/60"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Excluir conexão indisponível
-                </DropdownMenuItem>
-              </div>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Excluir conexão indisponível
+              </DropdownMenuItem>
             </TooltipTrigger>
             <TooltipContent side="left" className="max-w-64 text-xs">
               A remoção completa da instância Evolution ainda não está habilitada.

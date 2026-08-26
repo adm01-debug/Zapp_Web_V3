@@ -43,37 +43,52 @@ function setup() {
     />
   );
 
-  fireEvent.pointerDown(screen.getByRole('button', { name: 'Opções da conexão' }), {
-    button: 0,
-    ctrlKey: false,
-  });
+  const trigger = screen.getByRole('button', { name: 'Opções da conexão' });
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: 'Enter' });
 
   return { onDelete };
 }
 
 describe('<ConnectionCardMenu /> — exclusão indisponível', () => {
-  it('comunica que a exclusão está indisponível sem prometer sucesso', () => {
+  it('mantém a ação alcançável por teclado e comunica o motivo sem prometer sucesso', () => {
     setup();
 
-    expect(
-      screen.getByRole('menuitem', { name: 'Excluir conexão indisponível' })
-    ).toHaveAttribute('data-disabled');
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'End' });
+
+    const deleteAction = screen.getByRole('menuitem', {
+      name: 'Excluir conexão indisponível',
+    });
+    expect(deleteAction).toHaveFocus();
+    expect(deleteAction).toHaveAttribute('aria-disabled', 'true');
+    expect(deleteAction).toHaveAttribute(
+      'aria-describedby',
+      'connection-delete-unavailable-reason'
+    );
     expect(
       screen.getByText(
         'Indisponível no momento: a exclusão ponta a ponta da instância Evolution ainda não está habilitada.'
       )
     ).toBeInTheDocument();
+
+    fireEvent.focus(deleteAction);
+
     expect(
-      screen.getByTitle(
-        'Indisponível: a exclusão ponta a ponta da instância Evolution ainda não está habilitada.'
-      )
+      screen.getByText('A remoção completa da instância Evolution ainda não está habilitada.')
     ).toBeInTheDocument();
   });
 
-  it('não dispara o callback de exclusão quando o item desabilitado é clicado', () => {
+  it('bloqueia Enter e Space sem disparar o callback de exclusão', () => {
     const { onDelete } = setup();
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'End' });
+    const deleteAction = screen.getByRole('menuitem', {
+      name: 'Excluir conexão indisponível',
+    });
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir conexão indisponível' }));
+    fireEvent.keyDown(deleteAction, { key: 'Enter' });
+    fireEvent.keyDown(deleteAction, { key: ' ' });
 
     expect(onDelete).not.toHaveBeenCalled();
   });
