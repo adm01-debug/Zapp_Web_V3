@@ -326,9 +326,11 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
     }
   });
 
-  test('sessões expirada e corrompida são tratadas no bootstrap de rota protegida', async ({
+  test('cold boot em rota protegida redireciona uma vez para toda sessão inválida', async ({
     page,
   }) => {
+    const navs = await collectAuthNavigations(page);
+
     // Carrega uma rota pública antes de gravar o payload, para que localStorage
     // exista na mesma origem do documento protegido que será iniciado depois.
     try {
@@ -339,11 +341,25 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
     }
     await waitForSettled(page, /^\/auth/);
 
-    const bootstrapModes: Array<'expired' | 'corrupted'> = ['expired', 'corrupted'];
+    const bootstrapModes: Array<'none' | 'expired' | 'corrupted'> = [
+      'none',
+      'expired',
+      'corrupted',
+    ];
     for (const [index, mode] of bootstrapModes.entries()) {
+      const route = PROTECTED_ROUTES[index % PROTECTED_ROUTES.length];
+      const navsBefore = navs.length;
       await setSessionState(page, mode);
-      await bootInvalidSessionOnProtectedRoute(page, PROTECTED_ROUTES[index]);
-      await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/auth/);
+      await bootInvalidSessionOnProtectedRoute(page, route);
+
+      const stepNavs = navs.slice(navsBefore);
+      const authTransitions = countPathTransitions(stepNavs, /^\/auth/);
+      expect(
+        authTransitions,
+        `[${mode}] Cold boot para ${route} deve transicionar uma única vez para /auth: ${JSON.stringify(
+          stepNavs.map((n) => n.url)
+        )})`
+      ).toBe(1);
     }
   });
 });
