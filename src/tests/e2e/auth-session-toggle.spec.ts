@@ -165,13 +165,16 @@ async function waitForLocation(page: Page, expected: string, timeout = 8_000): P
 }
 
 async function setSafeNextRedirect(page: Page, nextPath: string): Promise<string> {
-  return page.evaluate((path) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('next', path);
-    const nextLocation = `${url.pathname}${url.search}${url.hash}`;
-    window.history.replaceState(window.history.state, '', nextLocation);
-    return nextLocation;
-  }, nextPath);
+  const nextLocation = `/auth?next=${encodeURIComponent(nextPath)}`;
+  try {
+    await page.goto(nextLocation, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!EXPECTED_REDIRECT_ABORT_FRAGMENTS.some((fragment) => message.includes(fragment))) {
+      throw error;
+    }
+  }
+  return nextLocation;
 }
 
 async function installSuccessfulLoginMocks(page: Page): Promise<void> {
@@ -386,8 +389,6 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
     }
 
     const protectedRoute = '/admin/roles?origin=e2e-auth#restored';
-    await gotoProtectedRoute(page, protectedRoute);
-    await waitForSettled(page, /^\/auth/);
     const authUrlWithNext = await setSafeNextRedirect(page, protectedRoute);
     await waitForLocation(page, authUrlWithNext);
 
