@@ -141,8 +141,6 @@ export function StickerGrid({
                       )}
                     >
                       <img
-                        loading="lazy"
-                        decoding="async"
                         src={sticker.image_url}
                         alt={sticker.name || 'Figurinha'}
                         className="h-full w-full object-contain p-1"

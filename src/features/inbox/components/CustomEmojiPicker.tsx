@@ -555,8 +555,6 @@ export function CustomEmojiPicker({ onSendEmoji, disabled }: CustomEmojiPickerPr
                           title={`${emoji.name} • ${CATEGORY_LABELS[emoji.category]?.label || emoji.category}`}
                         >
                           <img
-                            loading="lazy"
-                            decoding="async"
                             src={emoji.image_url}
                             alt={emoji.name}
                             className="h-full w-full object-contain p-1"

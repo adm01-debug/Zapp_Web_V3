@@ -162,8 +162,6 @@ export function PersonalStickers({ onSend }: PersonalStickersProps) {
                         )}
                       >
                         <img
-                          loading="lazy"
-                          decoding="async"
                           src={sticker.image_url}
                           alt={sticker.name || 'Figurinha pessoal'}
                           className="h-full w-full rounded-lg object-cover"

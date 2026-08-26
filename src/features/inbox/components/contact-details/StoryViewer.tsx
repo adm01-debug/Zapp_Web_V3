@@ -228,8 +228,6 @@ export function StoryViewer({ messages, initialIndex, open, onClose, pushName }:
                   </div>
                 ) : resolvedMedia.src ? (
                   <img
-                    loading="lazy"
-                    decoding="async"
                     src={resolvedMedia.src}
                     alt={
                       textContent
