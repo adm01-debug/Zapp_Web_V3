@@ -15,7 +15,7 @@ import {
   Trash2,
   MoreVertical,
 } from 'lucide-react';
-import type { SyntheticEvent } from 'react';
+import { useState, type SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -72,6 +72,8 @@ export function ConnectionCardMenu({
   onSyncHistory,
   onDelete: _onDelete,
 }: ConnectionCardMenuProps) {
+  const [isDeleteTooltipOpen, setIsDeleteTooltipOpen] = useState(false);
+
   const blockUnavailableDelete = (event: Event | SyntheticEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -173,18 +175,30 @@ export function ConnectionCardMenu({
           )}
 
           <DropdownMenuSeparator />
-          <Tooltip>
+          <Tooltip open={isDeleteTooltipOpen} onOpenChange={setIsDeleteTooltipOpen}>
             <TooltipTrigger asChild>
               <DropdownMenuItem
                 aria-describedby="connection-delete-unavailable-reason"
                 aria-disabled="true"
-                data-disabled
-                className="text-destructive/60 focus:text-destructive/60"
-                onClick={blockUnavailableDelete}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') blockUnavailableDelete(event);
+                className="cursor-not-allowed text-destructive/60 focus:text-destructive/60"
+                onBlur={() => setIsDeleteTooltipOpen(false)}
+                onClick={(event) => {
+                  setIsDeleteTooltipOpen(true);
+                  blockUnavailableDelete(event);
                 }}
-                onSelect={blockUnavailableDelete}
+                onFocus={() => setIsDeleteTooltipOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    setIsDeleteTooltipOpen(true);
+                    blockUnavailableDelete(event);
+                  }
+                }}
+                onPointerLeave={() => setIsDeleteTooltipOpen(false)}
+                onPointerMove={() => setIsDeleteTooltipOpen(true)}
+                onSelect={(event) => {
+                  setIsDeleteTooltipOpen(true);
+                  blockUnavailableDelete(event);
+                }}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Excluir conexão indisponível

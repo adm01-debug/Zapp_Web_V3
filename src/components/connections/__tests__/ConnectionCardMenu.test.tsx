@@ -16,7 +16,7 @@ const connection: WhatsAppConnection = {
   updated_at: '2026-08-26T12:00:00.000Z',
 };
 
-function setup() {
+function setup(openWith: 'keyboard' | 'mouse' = 'keyboard') {
   const onDelete = vi.fn();
   render(
     <ConnectionCardMenu
@@ -43,8 +43,12 @@ function setup() {
   );
 
   const trigger = screen.getByRole('button', { name: 'Opções da conexão' });
-  trigger.focus();
-  fireEvent.keyDown(trigger, { key: 'Enter' });
+  if (openWith === 'keyboard') {
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+  } else {
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  }
 
   return { onDelete };
 }
@@ -76,6 +80,28 @@ describe('<ConnectionCardMenu /> — exclusão indisponível', () => {
     expect(
       screen.getByText('A remoção completa da instância Evolution ainda não está habilitada.')
     ).toBeInTheDocument();
+  });
+
+  it('mantém tooltip acessível por hover e bloqueia click do mouse sem disparar exclusão', () => {
+    const { onDelete } = setup('mouse');
+    const deleteAction = screen.getByRole('menuitem', {
+      name: 'Excluir conexão indisponível',
+    });
+
+    expect(
+      screen.queryByText('A remoção completa da instância Evolution ainda não está habilitada.')
+    ).not.toBeInTheDocument();
+
+    fireEvent.pointerMove(deleteAction);
+
+    expect(
+      screen.getByText('A remoção completa da instância Evolution ainda não está habilitada.')
+    ).toBeInTheDocument();
+
+    fireEvent.click(deleteAction);
+
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('menu')).toBeInTheDocument();
   });
 
   it('bloqueia Enter e Space sem disparar o callback de exclusão', () => {
