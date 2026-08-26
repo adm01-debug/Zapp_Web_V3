@@ -181,19 +181,6 @@ async function waitForLocation(page: Page, expected: string, timeout = 8_000): P
     .toBe(expected);
 }
 
-async function setSafeNextRedirect(page: Page, nextPath: string): Promise<string> {
-  const nextLocation = `/auth?next=${encodeURIComponent(nextPath)}`;
-  try {
-    await page.goto(nextLocation, { waitUntil: 'domcontentloaded', timeout: 20_000 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!EXPECTED_REDIRECT_ABORT_FRAGMENTS.some((fragment) => message.includes(fragment))) {
-      throw error;
-    }
-  }
-  return nextLocation;
-}
-
 async function installSuccessfulLoginMocks(page: Page): Promise<void> {
   const fakeSession = buildFakeSession();
   const fakeUser = fakeSession.user;
@@ -303,7 +290,7 @@ async function clearSessionState(page: Page): Promise<void> {
   }, AUTH_STORAGE_KEY);
 }
 
-async function bootstrapPublicAuth(page: Page): Promise<void> {
+async function bootstrapPublicAuth(page: Page, nextPath?: string): Promise<string> {
   await page.addInitScript(({ storageKey, resetQuery }) => {
     try {
       if (!window.location.search.includes(resetQuery)) return;
@@ -316,7 +303,12 @@ async function bootstrapPublicAuth(page: Page): Promise<void> {
     }
   }, { storageKey: AUTH_STORAGE_KEY, resetQuery: AUTH_RESET_QUERY });
 
-  await page.goto(`/auth?${AUTH_RESET_QUERY}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  const resetParams = new URLSearchParams(AUTH_RESET_QUERY);
+  if (nextPath) resetParams.set('next', nextPath);
+  await page.goto(`/auth?${resetParams.toString()}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 20_000,
+  });
   await waitForSettled(page, /^\/auth/);
   await clearSessionState(page);
   await page.evaluate((resetQuery) => {
@@ -325,7 +317,9 @@ async function bootstrapPublicAuth(page: Page): Promise<void> {
     url.searchParams.delete(resetQuery.split('=')[0] ?? resetQuery);
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }, AUTH_RESET_QUERY);
-  await waitForLocation(page, '/auth');
+  const expectedLocation = nextPath ? `/auth?next=${encodeURIComponent(nextPath)}` : '/auth';
+  await waitForLocation(page, expectedLocation);
+  return expectedLocation;
 }
 
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
@@ -397,11 +391,8 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
 
     await installSuccessfulLoginMocks(page);
 
-    await bootstrapPublicAuth(page);
-
     const protectedRoute = '/admin/roles?origin=e2e-auth#restored';
-    const authUrlWithNext = await setSafeNextRedirect(page, protectedRoute);
-    await waitForLocation(page, authUrlWithNext);
+    await bootstrapPublicAuth(page, protectedRoute);
 
     const navsBeforeLogin = navs.length;
 
