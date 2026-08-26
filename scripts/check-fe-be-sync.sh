@@ -8,9 +8,11 @@
 # Faz TRÊS verificações, cada uma capaz de quebrar a app ou um `supabase db reset`:
 #
 #   [A] RPC ÓRFÃ:     supabase.rpc('X') chamado no frontend para um X que NÃO
-#                     tem CREATE FUNCTION em supabase/migrations.
+#                     tem CREATE FUNCTION nem nas migrations ATIVAS nem no
+#                     snapshot canônico do schema zapp.
 #   [B] TABELA ÓRFÃ:  supabase.from('Y') (client principal) para um Y que NÃO
-#                     tem CREATE TABLE/VIEW/MATERIALIZED VIEW em migrations.
+#                     tem CREATE TABLE/VIEW/MATERIALIZED VIEW nem nas migrations
+#                     ATIVAS nem no snapshot canônico do schema zapp.
 #   [C] ALTER SEM CREATE: migration faz ALTER FUNCTION em uma função que nunca
 #                     teve CREATE FUNCTION.
 #
@@ -20,12 +22,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC_DIR="src"
-# Fonte da verdade das definições: migrations ativas + snapshot do schema
-# (migrations-from-lovable/ foi removido na limpeza de 2026-08-03; o snapshot
-#  pg_dump consolidado ficou como referência canônica das definições base).
-MIG_DIRS=(supabase/migrations)
-IGNORE_FILE="scripts/.sync-ignore"
+SRC_DIR="${SRC_DIR:-src}"
+# Fonte da verdade das definições: migrations ativas + snapshot do schema zapp.
+# O snapshot existe para cobrir objetos VIVOS no runtime cujo CREATE saiu da fila
+# viva durante o cleanup de migrations, sem transformar esse drift histórico em
+# "objeto ausente em produção". Arquivo de archive não entra aqui: archive é
+# histórico humano; o contrato reproduzível do guard é migrations ativas +
+# snapshot canônico.
+MIG_DIRS_STR="${MIG_DIRS:-supabase/migrations}"
+IFS=' ' read -r -a MIG_DIRS <<< "$MIG_DIRS_STR"
+SNAPSHOT_FILE="${SNAPSHOT_FILE:-scripts/decouple/snapshots/zapp_schema_snapshot.sql}"
+IGNORE_FILE="${IGNORE_FILE:-scripts/.sync-ignore}"
+SQL_SOURCES=("${MIG_DIRS[@]}")
+if [[ -f "$SNAPSHOT_FILE" ]]; then
+  SQL_SOURCES+=("$SNAPSHOT_FILE")
+fi
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fail=0
@@ -48,11 +59,11 @@ fi
 # "create ... function [chars]+ " (com espaco) falharia em nomes sem espaco
 # antes de '(' como fn_foo() — capturaria zero nomes, zerando fn_defined.txt
 # e gerando centenas de falsos-positivos.
-grep -rhoiE "create (or replace )?function [a-zA-Z0-9_.\"]+[a-zA-Z0-9_\"]" "${MIG_DIRS[@]}" 2>/dev/null \
+grep -rhoiE "create (or replace )?function [a-zA-Z0-9_.\"]+[a-zA-Z0-9_\"]" "${SQL_SOURCES[@]}" 2>/dev/null \
   | sed -E 's/[Cc][Rr][Ee][Aa][Tt][Ee]( [Oo][Rr] [Rr][Ee][Pp][Ll][Aa][Cc][Ee])? [Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn] //' \
   | norm | sort -u > "$TMP/fn_defined.txt"
 
-grep -rhoiE "create (or replace )?(table|view|materialized view)( if not exists)? [a-zA-Z0-9_.\"]+[a-zA-Z0-9_\"]" "${MIG_DIRS[@]}" 2>/dev/null \
+grep -rhoiE "create (or replace )?(table|view|materialized view)( if not exists)? [a-zA-Z0-9_.\"]+[a-zA-Z0-9_\"]" "${SQL_SOURCES[@]}" 2>/dev/null \
   | sed -E 's/[Cc][Rr][Ee][Aa][Tt][Ee] ([Oo][Rr] [Rr][Ee][Pp][Ll][Aa][Cc][Ee] )?([Tt][Aa][Bb][Ll][Ee]|[Vv][Ii][Ee][Ww]|[Mm][Aa][Tt][Ee][Rr][Ii][Aa][Ll][Ii][Zz][Ee][Dd] [Vv][Ii][Ee][Ww])( [Ii][Ff] [Nn][Oo][Tt] [Ee][Xx][Ii][Ss][Tt][Ss])? //' \
   | norm | sort -u > "$TMP/rel_defined.txt"
 
@@ -71,7 +82,7 @@ comm -23 "$TMP/rpc_called.txt" "$TMP/fn_defined.txt" \
 
 if [[ -s "$TMP/rpc_orphans.txt" ]]; then
   fail=1
-  echo "❌ [A] RPCs chamadas no frontend SEM CREATE FUNCTION em migrations:" >&2
+  echo "❌ [A] RPCs chamadas no frontend SEM CREATE FUNCTION em migrations ativas/snapshot:" >&2
   sed 's/^/     - /' "$TMP/rpc_orphans.txt" >&2
   echo "" >&2
 fi
@@ -92,8 +103,8 @@ comm -23 "$TMP/from_all.txt" "$TMP/from_storage.txt" \
 
 if [[ -s "$TMP/tbl_orphans.txt" ]]; then
   fail=1
-  echo "❌ [B] Tabelas/views referenciadas no frontend SEM definição em migrations:" >&2
-  echo "       (se a relação vive em banco externo, adicione em scripts/.sync-ignore)" >&2
+  echo "❌ [B] Tabelas/views referenciadas no frontend SEM definição em migrations ativas/snapshot:" >&2
+  echo "       (se a relação vive em banco externo, adicione em $IGNORE_FILE)" >&2
   sed 's/^/     - /' "$TMP/tbl_orphans.txt" >&2
   echo "" >&2
 fi
@@ -109,7 +120,7 @@ fi
 #   Passo 2: extrai ALTER FUNCTION nome (para antes do '(')
 #   Passo 3: remove o prefixo e normaliza (strip schema, lowercase)
 # O [C] também filtra pelo .sync-ignore (igual a [A] e [B]).
-grep -rihE 'alter function |DO[[:space:]]*(\$\$|\$[A-Za-z0-9_]*\$)|(\$\$|\$[A-Za-z0-9_]*\$);' "${MIG_DIRS[@]}" 2>/dev/null \
+grep -rihE 'alter function |DO[[:space:]]*(\$\$|\$[A-Za-z0-9_]*\$)|(\$\$|\$[A-Za-z0-9_]*\$);' "${SQL_SOURCES[@]}" 2>/dev/null \
   | awk 'BEGIN{in_do=0} /DO[[:space:]]*(\$\$|\$[A-Za-z0-9_]*\$)/{in_do=1} in_do==0{print} /(\$\$|\$[A-Za-z0-9_]*\$);/{in_do=0}' \
   | grep -viE '^\s*--' \
   | grep -viE 'alter function if (exists|not exists)' \
@@ -130,11 +141,11 @@ fi
 
 # =============================================================================
 if [[ "$fail" -ne 0 ]]; then
-  echo "💥 FE/BE DESSINCRONIZADO. Crie as migrations faltantes (ou allowlist se externo)." >&2
+  echo "💥 FE/BE DESSINCRONIZADO. Corrija o contrato no repo (migration viva, snapshot canônico ou allowlist externa)." >&2
   exit 1
 fi
 
 echo "✅ FE/BE em sincronismo:"
-echo "   - $(wc -l < "$TMP/rpc_called.txt" | tr -d ' ') RPCs chamadas, todas com migration"
-echo "   - $(comm -23 "$TMP/from_all.txt" "$TMP/from_storage.txt" | wc -l | tr -d ' ') relações de DB referenciadas, todas resolvidas"
+echo "   - $(wc -l < "$TMP/rpc_called.txt" | tr -d ' ') RPCs chamadas, todas com migrations ativas/snapshot"
+echo "   - $(comm -23 "$TMP/from_all.txt" "$TMP/from_storage.txt" | wc -l | tr -d ' ') relações de DB referenciadas, todas resolvidas por migrations ativas/snapshot"
 echo "   - 0 ALTER FUNCTION órfão"

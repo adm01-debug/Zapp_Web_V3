@@ -1,7 +1,10 @@
 # STATUS DOS RPC STUBS — ZAPP-WEB
 
-> **Referência ativa para stubs de RPC.** Atualizado em: 2026-08-04
-> Migration de stubs: `supabase/migrations/20260717000002_create_missing_rpcs_stubs.sql`
+> **Referência ativa para stubs e contratos parciais de RPC.** Atualizado em: 2026-08-26
+> A migration original `20260717000002_create_missing_rpcs_stubs.sql` NÃO está mais no repo
+> após o cleanup; o contrato vivo deve ser lido em `src/integrations/supabase/types.ts`,
+> no snapshot canônico `scripts/decouple/snapshots/zapp_schema_snapshot.sql` e nas
+> migrations vivas que substituíram consumidores específicos.
 > Plano de implementação: `docs/AUDIT_MIGRATION_VS_DB_50_STEPS.md` (Etapa 20)
 
 ---
@@ -16,10 +19,11 @@
 | `export_user_data` | `zapp` | Retorna dados básicos de perfil (JSON apenas) | Edge Function com export completo | 🟡 Média |
 | `import_user_data` | `zapp` | RAISE EXCEPTION P0001 | Edge Function com validação + import | 🟡 Média |
 | `enrich_contact` | `zapp` | Retorna dados do contato com `enriched: false` | Integração com API de enriquecimento | 🟢 Baixa |
-| `get_latest_analysis` | `zapp` | Retorna avg de `contact_intelligence.engagement_score` | Analytics completo por contato | 🟢 Baixa |
+| `get_latest_analysis` | `zapp` | Legado/parcial; UI nova não usa mais este caminho | Analytics completo por contato | 🟢 Baixa |
 
 > `check_download_permission` — **NÃO é stub**. Função intencionalmente ausente.
-> Frontend faz fail-open via SQLSTATE 42883. Ver `20260720000001`.
+> O design original era fail-open via SQLSTATE `42883`, mas o hook atual do frontend
+> está em fail-closed quando a RPC não existe. Ver `src/hooks/useMediaManagement.ts`.
 
 ---
 
@@ -28,7 +32,7 @@
 ### `initiate_gmail_oauth` 🔴
 
 **Chamador:** `src/hooks/useIntegrationManagement.ts:54`
-**Assinatura:** `initiate_gmail_oauth(p_workspace_id UUID) RETURNS JSONB`
+**Assinatura atual do catálogo gerado:** `initiate_gmail_oauth() RETURNS JSONB`
 **Comportamento atual:**
 ```sql
 RAISE EXCEPTION 'initiate_gmail_oauth: OAuth Gmail não implementado. Use Edge Function.' 
@@ -48,7 +52,7 @@ USING ERRCODE = 'P0001';
 ### `complete_gmail_oauth` 🔴
 
 **Chamador:** `src/hooks/useIntegrationManagement.ts:69`
-**Assinatura:** `complete_gmail_oauth(p_workspace_id UUID, p_code TEXT, p_state TEXT) RETURNS JSONB`
+**Assinatura atual do catálogo gerado:** `complete_gmail_oauth(p_code TEXT, p_state TEXT DEFAULT NULL) RETURNS JSONB`
 **Comportamento atual:** RAISE EXCEPTION P0001 (igual ao anterior)
 
 **Implementação real necessária:**
@@ -64,7 +68,7 @@ USING ERRCODE = 'P0001';
 ### `sync_to_crm` 🟡
 
 **Chamador:** `src/hooks/useIntegrationManagement.ts:156`
-**Assinatura:** `sync_to_crm(p_workspace_id UUID, p_crm_type TEXT) RETURNS VOID`
+**Assinatura atual do catálogo gerado:** `sync_to_crm(p_contact_id UUID, p_crm_type TEXT DEFAULT NULL) RETURNS JSONB`
 **Comportamento atual:** RAISE EXCEPTION P0001
 
 **Implementação real necessária:**
@@ -77,8 +81,8 @@ USING ERRCODE = 'P0001';
 ### `export_user_data` 🟡
 
 **Chamador:** `src/hooks/useMediaManagement.ts:93`
-**Assinatura:** `export_user_data(p_user_id UUID, p_format TEXT) RETURNS JSONB`
-**Comportamento atual:** Retorna dados de perfil básico (somente `format='json'`; outros formatos → RAISE)
+**Assinatura atual do catálogo gerado:** `export_user_data(p_user_id UUID DEFAULT NULL) RETURNS JSONB`
+**Comportamento atual:** Retorna dados básicos de perfil em JSON
 
 **Implementação real necessária:**
 - Exportar TODOS os dados do usuário: perfil, mensagens, contatos, settings
@@ -90,7 +94,7 @@ USING ERRCODE = 'P0001';
 ### `import_user_data` 🟡
 
 **Chamador:** `src/hooks/useMediaManagement.ts:128`
-**Assinatura:** `import_user_data(p_user_id UUID, p_data JSONB) RETURNS JSONB`
+**Assinatura atual do catálogo gerado:** `import_user_data(p_data JSONB) RETURNS JSONB`
 **Comportamento atual:** RAISE EXCEPTION P0001
 
 **Implementação real necessária:**
@@ -115,9 +119,9 @@ USING ERRCODE = 'P0001';
 
 ### `get_latest_analysis` 🟢
 
-**Chamador:** `src/hooks/useAnalyticsManagement.ts:168`
-**Assinatura:** `get_latest_analysis(p_contact_id UUID) RETURNS JSONB`
-**Comportamento atual:** Retorna `{avg_engagement: float}` calculado da tabela `contact_intelligence`
+**Chamador legado:** `src/hooks/useAnalyticsManagement.ts:168`
+**Assinatura atual do catálogo gerado:** `get_latest_analysis(p_contact_id UUID, p_analysis_type TEXT DEFAULT NULL) RETURNS JSONB`
+**Comportamento atual:** existe como caminho legado/parcial; o consumidor principal de UI foi migrado para `rpc_latest_contact_analysis(p_contact_id UUID)` pela migration `20260817230000_etapa66_latest_analysis_rpc.sql`
 
 **Implementação real necessária:**
 - Análise completa: sentiment trend, response time, engagement score
@@ -155,7 +159,9 @@ GRANT EXECUTE ON FUNCTION zapp.nome_da_funcao(...) TO authenticated;
 
 ## Referências
 
-- Migration de stubs: `supabase/migrations/20260717000002_create_missing_rpcs_stubs.sql`
+- Catálogo gerado: `src/integrations/supabase/types.ts`
+- Snapshot canônico: `scripts/decouple/snapshots/zapp_schema_snapshot.sql`
+- Substituição do consumidor de UI de analytics: `supabase/migrations/20260817230000_etapa66_latest_analysis_rpc.sql`
 - Plano de migração: `docs/AUDIT_MIGRATION_VS_DB_50_STEPS.md` Etapa 20
 - Histórico de bugs de stubs: `docs/CHANGELOG_SESSIONS.md` (BUG-11, GAP-2 a GAP-6)
-- Fail-open pattern: `supabase/migrations/20260720000001_stub_check_download_permission.sql`
+- Caminho atual de permissão de download: `src/hooks/useMediaManagement.ts`

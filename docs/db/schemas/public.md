@@ -56,11 +56,11 @@ Funções chamadas pelo app TypeScript via `supabase.rpc('nome')`:
 - `search_contacts_cursor` — busca de contatos com cursor
 - `add_contacts_to_campaign` — adicionar contatos a campanhas
 - `initiate_gmail_oauth` / `complete_gmail_oauth` — OAuth Gmail (stubs)
-- `sync_to_crm` — sync CRM (stub)
-- `export_user_data` / `import_user_data` — LGPD (stubs)
-- `enrich_contact` — enriquecimento de contato (stub)
-- `get_latest_analysis` — analytics (stub)
-- `check_download_permission` — permissão de download
+- `sync_to_crm` — sync CRM (stub/parcial)
+- `export_user_data` / `import_user_data` — LGPD (parcial/stub)
+- `enrich_contact` — enriquecimento de contato (parcial)
+- `get_latest_analysis` — analytics legado/parcial; consumidor novo usa `rpc_latest_contact_analysis`
+- `check_download_permission` — função ausente por design; consumidor atual está fail-closed
 
 ### Candidatas a Remoção / Migração
 
