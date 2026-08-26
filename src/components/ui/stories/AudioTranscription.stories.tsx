@@ -39,7 +39,7 @@ type Story = StoryObj<typeof AudioTranscription>;
 export const Idle: Story = {
   args: {
     status: 'idle',
-    onTranscribe: () => console.log('transcribe clicked'),
+    onTranscribe: () => {},
   },
 };
 
@@ -60,7 +60,7 @@ export const Success: Story = {
     status: 'success',
     transcription:
       'O cliente relatou que o produto chegou com embalagem danificada e solicita reenvio ou reembolso.',
-    onCopy: (text) => console.log('copied:', text),
+    onCopy: (_text: string) => {},
   },
 };
 
@@ -72,7 +72,7 @@ export const Error: Story = {
   args: {
     status: 'error',
     error: 'Não foi possível transcrever o áudio. Verifique sua conexão e tente novamente.',
-    onRetry: () => console.log('retry clicked'),
+    onRetry: () => {},
   },
 };
 
@@ -80,6 +80,6 @@ export const Error: Story = {
 export const ErrorDefault: Story = {
   args: {
     status: 'error',
-    onRetry: () => console.log('retry clicked'),
+    onRetry: () => {},
   },
 };
