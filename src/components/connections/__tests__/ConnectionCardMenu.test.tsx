@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ConnectionCardMenu } from '../ConnectionCardMenu';
 import type { WhatsAppConnection } from '@/features/connections';
 
@@ -50,7 +50,7 @@ function setup(openWith: 'keyboard' | 'mouse' = 'keyboard') {
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
   }
 
-  return { onDelete };
+  return { onDelete, trigger };
 }
 
 describe('<ConnectionCardMenu /> — exclusão indisponível', () => {
@@ -116,5 +116,29 @@ describe('<ConnectionCardMenu /> — exclusão indisponível', () => {
     fireEvent.keyDown(deleteAction, { key: ' ' });
 
     expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('fecha o tooltip ao dispensar o menu e o reabre limpo', async () => {
+    const { trigger } = setup();
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'End' });
+
+    const deleteAction = screen.getByRole('menuitem', {
+      name: 'Excluir conexão indisponível',
+    });
+    fireEvent.focus(deleteAction);
+    expect(
+      screen.getByText('A remoção completa da instância Evolution ainda não está habilitada.')
+    ).toBeInTheDocument();
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+
+    expect(
+      screen.queryByText('A remoção completa da instância Evolution ainda não está habilitada.')
+    ).not.toBeInTheDocument();
   });
 });

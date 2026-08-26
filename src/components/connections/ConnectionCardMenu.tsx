@@ -81,7 +81,11 @@ export function ConnectionCardMenu({
 
   return (
     <TooltipProvider delayDuration={0}>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (!open) setIsDeleteTooltipOpen(false);
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <Button aria-label="Opções da conexão" variant="ghost" size="icon" className="h-8 w-8">
             <MoreVertical className="h-4 w-4" />
