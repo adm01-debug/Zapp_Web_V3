@@ -29,16 +29,20 @@ vi.mock('@/lib/logger', () => ({
 import { useChatScheduleMessage } from '@/features/inbox/components/chat/hooks/useChatScheduleMessage';
 import { ScheduleMessageDialog } from '@/features/inbox/components/ScheduleMessageDialog';
 
-const mockScheduleMessage = vi.fn<(args: {
-  contactId: string;
-  content: string;
-  scheduledAt: Date;
-  messageType: string;
-  mediaUrl?: string;
-}) => Promise<unknown>>();
+const mockScheduleMessage =
+  vi.fn<
+    (args: {
+      contactId: string;
+      content: string;
+      scheduledAt: Date;
+      messageType: string;
+      mediaUrl?: string;
+    }) => Promise<unknown>
+  >();
 
-type ChatDialogsScheduleHandler =
-  ComponentProps<typeof import('@/features/inbox/components/chat/ChatDialogs').ChatDialogs>['onScheduleMessage'];
+type ChatDialogsScheduleHandler = ComponentProps<
+  typeof import('@/features/inbox/components/chat/ChatDialogs').ChatDialogs
+>['onScheduleMessage'];
 
 function renderScheduleHook() {
   const onDone = vi.fn();
@@ -53,6 +57,15 @@ function renderScheduleHook() {
 }
 
 const future = () => new Date(Date.now() + 86_400_000);
+
+function tomorrowDateInput(): string {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function renderDialogIntegration(scheduleImpl = mockScheduleMessage) {
   const onOpenChange = vi.fn();
@@ -155,7 +168,10 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
   it('uploads attachment and schedules as media type with signed URL', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' }, error: null });
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed/url' },
+      error: null,
+    });
     const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
 
@@ -228,7 +244,10 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed URL 7d)', () => {
   it('E39.8 RED: agendamento com mídia para mais de 7 dias cria URL inválida — deve ser rejeitado', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' }, error: null });
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed/url' },
+      error: null,
+    });
     const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
     // 8 dias à frente > TTL da signed URL (604800s = 7 dias) → URL expira
@@ -254,7 +273,10 @@ describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed U
 
   it('E39.9 pin: agendamento com mídia DENTRO de 7 dias continua funcionando', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/ok' }, error: null });
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed/ok' },
+      error: null,
+    });
     const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
     const within7d = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
@@ -279,7 +301,7 @@ describe('useChatScheduleMessage + ScheduleMessageDialog integration', () => {
       target: { value: 'Olá' },
     });
     fireEvent.change(screen.getByLabelText('Data'), {
-      target: { value: '2026-08-27' },
+      target: { value: tomorrowDateInput() },
     });
     fireEvent.change(screen.getByLabelText('Hora'), {
       target: { value: '09:15' },

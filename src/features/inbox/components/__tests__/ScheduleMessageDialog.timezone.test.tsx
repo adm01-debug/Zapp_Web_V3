@@ -10,9 +10,21 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: (...args: unknown[]) => mockToast(...args),
 }));
 
-import {
-  ScheduleMessageDialog,
-} from '../ScheduleMessageDialog';
+import { ScheduleMessageDialog } from '../ScheduleMessageDialog';
+
+function tomorrowAt(hour: number, minute: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(hour, minute, 0, 0);
+  return date;
+}
+
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 describe('ScheduleMessageDialog timezone behavior', () => {
   beforeEach(() => {
@@ -37,27 +49,24 @@ describe('ScheduleMessageDialog timezone behavior', () => {
 
   it('uses the same local datetime for preview and submit', async () => {
     const onSchedule = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ScheduleMessageDialog open onOpenChange={vi.fn()} onSchedule={onSchedule} />
-    );
+    const dateInputValue = toDateInputValue(tomorrowAt(9, 15));
+    render(<ScheduleMessageDialog open onOpenChange={vi.fn()} onSchedule={onSchedule} />);
 
     fireEvent.change(screen.getByLabelText('Mensagem'), {
       target: { value: 'Enviar proposta' },
     });
     fireEvent.change(screen.getByLabelText('Data'), {
-      target: { value: '2026-08-27' },
+      target: { value: dateInputValue },
     });
     fireEvent.change(screen.getByLabelText('Hora'), {
       target: { value: '09:15' },
     });
 
-    const expectedDate = buildScheduledLocalDate('2026-08-27', '09:15');
+    const expectedDate = buildScheduledLocalDate(dateInputValue, '09:15');
     expect(expectedDate).not.toBeNull();
-    const expectedPreview = format(
-      expectedDate as Date,
-      "EEEE, dd 'de' MMMM 'às' HH:mm",
-      { locale: ptBR }
-    );
+    const expectedPreview = format(expectedDate as Date, "EEEE, dd 'de' MMMM 'às' HH:mm", {
+      locale: ptBR,
+    });
 
     expect(screen.getByText(expectedPreview)).toBeInTheDocument();
 
@@ -75,15 +84,14 @@ describe('ScheduleMessageDialog timezone behavior', () => {
   it('keeps the dialog open and skips the success toast when onSchedule returns false', async () => {
     const onOpenChange = vi.fn();
     const onSchedule = vi.fn().mockResolvedValue(false);
-    render(
-      <ScheduleMessageDialog open onOpenChange={onOpenChange} onSchedule={onSchedule} />
-    );
+    const dateInputValue = toDateInputValue(tomorrowAt(9, 15));
+    render(<ScheduleMessageDialog open onOpenChange={onOpenChange} onSchedule={onSchedule} />);
 
     fireEvent.change(screen.getByLabelText('Mensagem'), {
       target: { value: 'Enviar proposta' },
     });
     fireEvent.change(screen.getByLabelText('Data'), {
-      target: { value: '2026-08-27' },
+      target: { value: dateInputValue },
     });
     fireEvent.change(screen.getByLabelText('Hora'), {
       target: { value: '09:15' },
