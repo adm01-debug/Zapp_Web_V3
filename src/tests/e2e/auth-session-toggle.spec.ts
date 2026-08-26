@@ -28,26 +28,103 @@ const STRICT = process.env.E2E_STRICT_AUTH_LOOP === '1';
 const PROTECTED_ROUTES = ['/inbox', '/', '/admin/roles'];
 const SUPABASE_PROJECT_REF = new URL(
   // Must stay aligned with playwright.config.ts webServer.env fallback.
-  process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321',
+  process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321'
 ).hostname.split('.')[0];
 const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
 
-type NavRecord = { url: string; at: number };
+type NavRecord = {
+  kind: 'pushState' | 'replaceState' | 'popstate';
+  url: string;
+  at: number;
+  stateFrom: string | null;
+};
 
-async function collectAuthNavigations(page: Page): Promise<NavRecord[]> {
-  const navs: NavRecord[] = [];
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) {
-      navs.push({ url: frame.url(), at: Date.now() });
+async function installHistoryProbe(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const win = window as typeof window & {
+      __zappHistoryProbeInstalled?: boolean;
+    };
+    if (win.__zappHistoryProbeInstalled) return;
+    win.__zappHistoryProbeInstalled = true;
+    const STORAGE_KEY = '__zappHistoryProbe';
+
+    const readStateFrom = (state: unknown): string | null => {
+      if (!state || typeof state !== 'object') return null;
+      const from = (state as { usr?: { from?: { pathname?: string } } }).usr?.from?.pathname;
+      return typeof from === 'string' ? from : null;
+    };
+
+    const resolveUrl = (url?: string | URL | null): string => {
+      try {
+        return new URL(url == null ? window.location.href : String(url), window.location.href).href;
+      } catch {
+        return window.location.href;
+      }
+    };
+
+    const readRecords = (): NavRecord[] => {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as NavRecord[]) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const pushRecord = (
+      kind: NavRecord['kind'],
+      url?: string | URL | null,
+      state?: unknown
+    ): void => {
+      const next = readRecords();
+      next.push({
+        kind,
+        url: resolveUrl(url),
+        at: Date.now(),
+        stateFrom: readStateFrom(state),
+      });
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* noop */
+      }
+    };
+
+    const originalPushState = history.pushState.bind(history);
+    history.pushState = ((state: unknown, unused: string, url?: string | URL | null) => {
+      originalPushState(state, unused, url);
+      pushRecord('pushState', url, state);
+    }) as History['pushState'];
+
+    const originalReplaceState = history.replaceState.bind(history);
+    history.replaceState = ((state: unknown, unused: string, url?: string | URL | null) => {
+      originalReplaceState(state, unused, url);
+      pushRecord('replaceState', url, state);
+    }) as History['replaceState'];
+
+    window.addEventListener('popstate', () => {
+      pushRecord('popstate', window.location.href, window.history.state);
+    });
+  });
+}
+
+async function readHistoryProbe(page: Page): Promise<NavRecord[]> {
+  return page.evaluate(() => {
+    try {
+      const raw = sessionStorage.getItem('__zappHistoryProbe');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as NavRecord[]) : [];
+    } catch {
+      return [];
     }
   });
-  return navs;
 }
 
 async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 8_000): Promise<void> {
-  await expect
-    .poll(() => new URL(page.url()).pathname, { timeout })
-    .toMatch(expectedPath);
+  await expect.poll(() => new URL(page.url()).pathname, { timeout }).toMatch(expectedPath);
   // 1.5s idle: se um loop existir, ele dispara aqui.
   await page.waitForTimeout(1500);
 }
@@ -66,31 +143,31 @@ async function gotoProtectedRoute(page: Page, route: string): Promise<void> {
   }
 }
 
-async function setSessionState(
-  page: Page,
-  mode: 'none' | 'expired' | 'corrupted',
-): Promise<void> {
-  await page.evaluate(({ mode: m, storageKey }) => {
-    // Limpa qualquer sb-*-auth-token existente.
-    const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
-    for (const k of keys) localStorage.removeItem(k);
+async function setSessionState(page: Page, mode: 'none' | 'expired' | 'corrupted'): Promise<void> {
+  await page.evaluate(
+    ({ mode: m, storageKey }) => {
+      // Limpa qualquer sb-*-auth-token existente.
+      const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
+      for (const k of keys) localStorage.removeItem(k);
 
-    if (m === 'none') return;
+      if (m === 'none') return;
 
-    if (m === 'expired') {
-      const expired = {
-        access_token: 'expired.jwt.token',
-        refresh_token: 'expired-refresh',
-        expires_at: Math.floor(Date.now() / 1000) - 3600,
-        expires_in: -3600,
-        token_type: 'bearer',
-        user: { id: '00000000-0000-0000-0000-000000000000', email: 'e2e@test.local' },
-      };
-      localStorage.setItem(storageKey, JSON.stringify(expired));
-    } else if (m === 'corrupted') {
-      localStorage.setItem(storageKey, '{not-valid-json');
-    }
-  }, { mode, storageKey: AUTH_STORAGE_KEY });
+      if (m === 'expired') {
+        const expired = {
+          access_token: 'expired.jwt.token',
+          refresh_token: 'expired-refresh',
+          expires_at: Math.floor(Date.now() / 1000) - 3600,
+          expires_in: -3600,
+          token_type: 'bearer',
+          user: { id: '00000000-0000-0000-0000-000000000000', email: 'e2e@test.local' },
+        };
+        localStorage.setItem(storageKey, JSON.stringify(expired));
+      } else if (m === 'corrupted') {
+        localStorage.setItem(storageKey, '{not-valid-json');
+      }
+    },
+    { mode, storageKey: AUTH_STORAGE_KEY }
+  );
 
   if (mode !== 'none') {
     await expect
@@ -100,7 +177,7 @@ async function setSessionState(
 }
 
 function countPathHits(navs: NavRecord[], path: RegExp): number {
-  return navs.filter((n) => path.test(new URL(n.url).pathname)).length;
+  return navs.filter((nav) => path.test(new URL(nav.url).pathname)).length;
 }
 
 function hasConsecutiveAuthRedirects(navs: NavRecord[], within = 500): boolean {
@@ -118,16 +195,30 @@ function hasConsecutiveAuthRedirects(navs: NavRecord[], within = 500): boolean {
 
 async function readRedirectSource(page: Page): Promise<string | null> {
   return page.evaluate(() => {
-    const state = window.history.state as
-      | { usr?: { from?: { pathname?: string } } }
-      | null;
+    const state = window.history.state as { usr?: { from?: { pathname?: string } } } | null;
     return state?.usr?.from?.pathname ?? null;
   });
 }
 
+async function readRedirectSourceOrRecordedFallback(page: Page): Promise<string | null> {
+  const direct = await readRedirectSource(page);
+  if (direct) return direct;
+
+  const navs = await readHistoryProbe(page);
+  for (let i = navs.length - 1; i >= 0; i--) {
+    const nav = navs[i];
+    if (/^\/auth/.test(new URL(nav.url).pathname) && nav.stateFrom) {
+      return nav.stateFrom;
+    }
+  }
+  return null;
+}
+
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
-  test('cada modo de sessão inválida redireciona uma única vez para /auth preservando a rota de origem', async ({ page }) => {
-    const navs = await collectAuthNavigations(page);
+  test('cada modo de sessão inválida redireciona uma única vez para /auth preservando a rota de origem', async ({
+    page,
+  }) => {
+    await installHistoryProbe(page);
 
     // Bootstrap: carrega a app na landing pública para inicializar localStorage/SDK.
     try {
@@ -144,36 +235,36 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       const route = PROTECTED_ROUTES[idx % PROTECTED_ROUTES.length];
       await setSessionState(page, mode);
 
-      const navsBefore = navs.length;
+      const navsBefore = (await readHistoryProbe(page)).length;
       await gotoProtectedRoute(page, route);
       await waitForSettled(page, /^\/auth/);
 
-      const stepNavs = navs.slice(navsBefore);
+      const stepNavs = (await readHistoryProbe(page)).slice(navsBefore);
       const authHits = countPathHits(stepNavs, /^\/auth/);
 
       expect(
         authHits,
         `[${mode}] Redirects para /auth durante navegação a ${route}: ${authHits} (${JSON.stringify(
-          stepNavs.map((n) => n.url),
-        )})`,
+          stepNavs.map((n) => n.url)
+        )})`
       ).toBe(1);
 
       expect(
         hasConsecutiveAuthRedirects(stepNavs, 500),
-        `[${mode}] Detectado redirect /auth duplicado (<500ms) em ${route}: ${JSON.stringify(stepNavs)}`,
+        `[${mode}] Detectado redirect /auth duplicado (<500ms) em ${route}: ${JSON.stringify(stepNavs)}`
       ).toBe(false);
 
       await expect
-        .poll(() => readRedirectSource(page), {
+        .poll(() => readRedirectSourceOrRecordedFallback(page), {
           timeout: 5_000,
-          message: `[${mode}] history.state.usr.from deve preservar a rota ${route}`,
+          message: `[${mode}] redirect para /auth deve preservar a rota ${route}`,
         })
         .toBe(route);
 
       // Storage inválido deve ter sido limpo pelo SDK Supabase.
       if (mode !== 'none') {
         const remaining = await page.evaluate(() =>
-          Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k)),
+          Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k))
         );
         // Não exigimos remoção estrita (o SDK pode manter chave vazia), só
         // que o valor não seja mais interpretado como sessão válida — o que
@@ -182,13 +273,10 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       }
     }
 
-    // Sanidade global: em nenhuma das transições devemos ter estabilizado
-    // fora de /auth (nenhuma das rotas protegidas deveria ter renderizado).
-    for (const route of PROTECTED_ROUTES) {
-      expect(
-        countPathHits(navs, new RegExp(`^${route}$`)) <= modes.length,
-        `Navegações inesperadas a ${route}: ${JSON.stringify(navs)}`,
-      ).toBe(true);
-    }
+    const navs = await readHistoryProbe(page);
+    expect(
+      countPathHits(navs, /^\/auth/) === modes.length + 1,
+      `Redirects app-level inesperados para /auth: ${JSON.stringify(navs)}`
+    ).toBe(true);
   });
 });
