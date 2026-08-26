@@ -10,8 +10,11 @@ vi.mock('@/components/ui/chat-shimmer', () => ({
 }));
 vi.mock('@/lib/utils', () => ({ cn: (...a: unknown[]) => a.filter(Boolean).join(' ') }));
 vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, 'aria-label': al, ...p }: Record<string,unknown>) =>
-    <button onClick={onClick as never} aria-label={al as string} {...p}>{children as React.ReactNode}</button>,
+  Button: ({ children, onClick, 'aria-label': al, ...p }: Record<string, unknown>) => (
+    <button onClick={onClick as never} aria-label={al as string} {...p}>
+      {children as React.ReactNode}
+    </button>
+  ),
 }));
 
 import { AudioTranscription } from '../AudioTranscription';
@@ -82,6 +85,12 @@ describe('AudioTranscription', () => {
     it('exibe mensagem de erro customizada', () => {
       render(<AudioTranscription status="error" error="Serviço indisponível" />);
       expect(screen.getByText('Serviço indisponível')).toBeTruthy();
+    });
+
+    it('estado error tem role="alert" (WCAG 4.1.3 — Status Messages)', () => {
+      const { container } = render(<AudioTranscription status="error" />);
+      const alertEl = container.querySelector('[role="alert"]');
+      expect(alertEl).toBeTruthy();
     });
 
     it('botão Tentar novamente chama onRetry', () => {
