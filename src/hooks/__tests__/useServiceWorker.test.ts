@@ -3,6 +3,8 @@ import { renderHook } from '@testing-library/react';
 
 vi.mock('@/lib/logger');
 
+const SW_SKIP_CLEANUP_STATE_KEY = '__zappSwCleanup';
+
 const mockUnregister = vi.hoisted(() => vi.fn());
 const mockCaches = {
   keys: vi.fn().mockResolvedValue([]),
@@ -18,10 +20,16 @@ const mockRegistration = {
 
 describe('useServiceWorker', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
-    mockUnregister.mockResolvedValue(true);
+    mockUnregister.mockReset().mockResolvedValue(true);
+    mockCaches.keys.mockReset().mockResolvedValue([]);
+    mockCaches.delete.mockReset().mockResolvedValue(true);
     vi.useFakeTimers();
     sessionStorage.clear();
+    localStorage.clear();
+    window.history.replaceState({}, '', '/');
+    delete (window as typeof window & { [SW_SKIP_CLEANUP_STATE_KEY]?: unknown })[SW_SKIP_CLEANUP_STATE_KEY];
     // shouldSkipServiceWorker() retorna true se import.meta.env.DEV=true.
     // Em vitest com mode='test', DEV deveria ser false, mas vi.stubEnv garante
     // isso independentemente do modo configurado.
@@ -39,7 +47,7 @@ describe('useServiceWorker', () => {
         controller: null,
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-        getRegistrations: vi.fn().mockResolvedValue([{ unregister: mockUnregister }]),
+        getRegistrations: vi.fn().mockResolvedValue([{ scope: '/', unregister: mockUnregister }]),
       },
       writable: true,
       configurable: true,
@@ -142,5 +150,66 @@ describe('useServiceWorker', () => {
     
     const { useServiceWorker } = await import('@/hooks/useServiceWorker');
     expect(() => renderHook(() => useServiceWorker())).not.toThrow();
+  });
+
+  it('publishes observable cleanup state in localhost/dev skip mode', async () => {
+    vi.stubEnv('DEV', true);
+    mockCaches.keys.mockResolvedValueOnce(['workbox-precache-v2', 'zapp-runtime-v1']);
+
+    const { useServiceWorker } = await import('@/hooks/useServiceWorker');
+    renderHook(() => useServiceWorker());
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(navigator.serviceWorker.register).not.toHaveBeenCalled();
+    expect(navigator.serviceWorker.getRegistrations).toHaveBeenCalledTimes(1);
+    expect(mockUnregister).toHaveBeenCalledTimes(1);
+    expect(caches.delete).toHaveBeenCalledWith('workbox-precache-v2');
+    expect(caches.delete).toHaveBeenCalledWith('zapp-runtime-v1');
+    expect(
+      (window as typeof window & {
+        [SW_SKIP_CLEANUP_STATE_KEY]?: {
+          phase?: string;
+          error?: string | null;
+          registrations?: string[];
+          staleCaches?: string[];
+        };
+      })[SW_SKIP_CLEANUP_STATE_KEY],
+    ).toMatchObject({
+      phase: 'done',
+      error: null,
+      registrations: ['/'],
+      staleCaches: ['workbox-precache-v2', 'zapp-runtime-v1'],
+    });
+  });
+
+  it('publishes observable cleanup state when ?sw=off forces skip outside dev', async () => {
+    window.history.replaceState({}, '', '/?sw=off');
+    mockCaches.keys.mockResolvedValueOnce(['zapp-runtime-v1']);
+
+    const { useServiceWorker } = await import('@/hooks/useServiceWorker');
+    renderHook(() => useServiceWorker());
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(navigator.serviceWorker.register).not.toHaveBeenCalled();
+    expect(navigator.serviceWorker.getRegistrations).toHaveBeenCalledTimes(1);
+    expect(mockUnregister).toHaveBeenCalledTimes(1);
+    expect(caches.delete).toHaveBeenCalledWith('zapp-runtime-v1');
+    expect(
+      (window as typeof window & {
+        [SW_SKIP_CLEANUP_STATE_KEY]?: {
+          phase?: string;
+          error?: string | null;
+          registrations?: string[];
+          staleCaches?: string[];
+        };
+      })[SW_SKIP_CLEANUP_STATE_KEY],
+    ).toMatchObject({
+      phase: 'done',
+      error: null,
+      registrations: ['/'],
+      staleCaches: ['zapp-runtime-v1'],
+    });
   });
 });

@@ -48,15 +48,37 @@ describe("deploy production resource isolation", () => {
     expect(workflow).not.toContain("sudo apt-get");
   });
 
-  it("fails the deploy when Swarm converges only in spec but not in running tasks", () => {
+  it("pins deploys to the canonical digest identity emitted by the build", () => {
+    expect(workflow).toContain("image_digest: ${{ steps.release_identity.outputs.digest }}");
+    expect(workflow).toContain(
+      "canonical_image: ${{ steps.release_identity.outputs.canonical_image }}",
+    );
+    expect(workflow).toContain("id: build_push");
+    expect(workflow).toContain("steps.build_push.outputs.digest");
+    expect(workflow).toContain(
+      "ZAPP_IMAGE: ${{ needs.build-and-push.outputs.canonical_image }}",
+    );
+    expect(workflow).toContain("🧾 Release identity canônica confirmada");
+    expect(workflow).toContain("🌐 Release publicada corresponde ao commit");
+    expect(workflow).toContain("PUBLIC_RELEASE_SHA_MISMATCH");
+    expect(workflow).toContain("PUBLIC_RELEASE_ENTRY_MISMATCH");
+    expect(workflow).not.toContain("vars.ENFORCE_CONVERGENCE");
+  });
+
+  it("fails closed when Swarm converges only in spec or returns malformed task data", () => {
     expect(workflow).toContain("✅ Convergência verificada (Swarm × imagem do deploy)");
     expect(workflow).toContain(
       "docker service ps \"$SVC\" --filter desired-state=running --no-trunc",
     );
+    expect(workflow).toContain("--format '{{json .}}'");
+    expect(workflow).toContain("extract_digest()");
+    expect(workflow).toContain("CONVERGENCE_SPEC_IMAGE_MALFORMED");
+    expect(workflow).toContain("CONVERGENCE_SPEC_DIGEST_MISMATCH");
     expect(workflow).toContain("CONVERGENCE_TASKS_MISSING");
+    expect(workflow).toContain("CONVERGENCE_TASK_JSON_MALFORMED");
     expect(workflow).toContain("CONVERGENCE_TASK_NOT_RUNNING");
     expect(workflow).toContain("CONVERGENCE_TASK_ERROR");
-    expect(workflow).toContain("CONVERGENCE_TASK_IMAGE_MISMATCH");
-    expect(workflow).toContain("{{.ID}}|{{.CurrentState}}|{{.Error}}|{{.Image}}");
+    expect(workflow).toContain("CONVERGENCE_TASK_IMAGE_MALFORMED");
+    expect(workflow).toContain("CONVERGENCE_TASK_DIGEST_MISMATCH");
   });
 });

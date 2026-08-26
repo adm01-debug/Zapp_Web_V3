@@ -62,10 +62,22 @@ function resolveIdentifier(value?: string): ResolvedIdent | null {
  */
 function isTimeoutError(err: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted && isAbortLikeError(err)) return false;
-  if (!(err instanceof Error)) return false;
+  const name =
+    err instanceof Error
+      ? err.name
+      : typeof err === 'object' && err !== null && 'name' in err
+        ? String((err as { name?: unknown }).name ?? '')
+        : '';
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as { message?: unknown }).message ?? '')
+        : '';
+  if (!name && !message) return false;
   return (
-    err.name === 'TimeoutError' ||
-    /timeout|timed ?out|ETIMEDOUT|aborted?/i.test(err.message)
+    name === 'TimeoutError' ||
+    /timeout|timed ?out|ETIMEDOUT|aborted?|fetch/i.test(message)
   );
 }
 
@@ -380,7 +392,7 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
             const isOwnSignalAbort = signal?.aborted && isAbortLikeError(error);
             if (isOwnSignalAbort) {
               throw error;
-            } else if (/timeout|aborted|fetch/i.test(error.message ?? '')) {
+            } else if (isTimeoutError(error, signal)) {
               log.error('messages stats lookup timed out (evolution_messages scan):', error);
             } else {
               log.warn('messages stats lookup failed:', error.message);

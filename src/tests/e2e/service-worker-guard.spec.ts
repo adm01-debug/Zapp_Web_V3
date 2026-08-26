@@ -13,10 +13,12 @@
  * local. Isso preserva o hostname visto pelo `window.location`, permitindo
  * validar a lógica de guarda de forma real.
  */
-import { test, expect, type Route } from '@playwright/test';
+import { test, expect, type Route, type Page } from '@playwright/test';
 
 const PREVIEW_ORIGIN = 'https://id-preview--zapp-test.lovable.app';
 const DEV_ORIGIN = 'http://localhost:5173';
+const SW_SKIP_CLEANUP_STATE_KEY = '__zappSwCleanup';
+const STALE_CACHE_RE = /^(workbox-|zapp-)/i;
 
 async function proxyToDev(route: Route) {
   const url = new URL(route.request().url());
@@ -35,10 +37,145 @@ async function proxyToDev(route: Route) {
   }
 }
 
+type SkipCleanupState = {
+  cleanupPhase: string | null;
+  cleanupError: string | null;
+  registrations: string[];
+  staleCaches: string[];
+  controllerUrl: string | null;
+};
+
+async function readSkipCleanupState(page: Page): Promise<SkipCleanupState> {
+  return page.evaluate(
+    async ({ cleanupKey }) => {
+      const cleanup =
+        typeof window === 'undefined'
+          ? null
+          : ((window as typeof window & {
+              [key: string]:
+                | {
+                    phase?: string;
+                    error?: string | null;
+                  }
+                | undefined;
+            })[cleanupKey] ?? null);
+      const registrations =
+        !('serviceWorker' in navigator)
+          ? []
+          : (await navigator.serviceWorker.getRegistrations())
+              .map(
+                (r) =>
+                  r.active?.scriptURL ||
+                  r.waiting?.scriptURL ||
+                  r.installing?.scriptURL ||
+                  r.scope
+              )
+              .filter(Boolean);
+      const staleCaches =
+        typeof caches === 'undefined'
+          ? []
+          : (await caches.keys()).filter((key) => /^(workbox-|zapp-)/i.test(key));
+
+      return {
+        cleanupPhase: cleanup?.phase ?? null,
+        cleanupError: cleanup?.error ?? null,
+        registrations,
+        staleCaches,
+        controllerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null,
+      };
+    },
+    { cleanupKey: SW_SKIP_CLEANUP_STATE_KEY }
+  );
+}
+
+async function waitForSkipCleanup(page: Page, label: string): Promise<SkipCleanupState> {
+  return waitForSkipCleanupWithOptions(page, label);
+}
+
+async function waitForSkipCleanupWithOptions(
+  page: Page,
+  label: string,
+  options?: {
+    requireMarker?: boolean;
+  }
+): Promise<SkipCleanupState> {
+  const requireMarker = options?.requireMarker ?? true;
+  await expect
+    .poll(
+      async () => {
+        const state = await readSkipCleanupState(page);
+        return {
+          ...state,
+          ready:
+            (!requireMarker ||
+              state.cleanupPhase === 'done' ||
+              state.cleanupPhase === 'error') &&
+            state.registrations.length === 0 &&
+            state.staleCaches.length === 0,
+        };
+      },
+      {
+        timeout: 15_000,
+        message: `[${label}] aguardando cleanup real de SW/caches no modo skip`,
+      }
+    )
+    .toMatchObject({
+      ready: true,
+      registrations: [],
+      staleCaches: [],
+    });
+
+  return readSkipCleanupState(page);
+}
+
+async function seedLegacySwArtifacts(page: Page): Promise<{
+  registrations: string[];
+  staleCaches: string[];
+  controllerUrl: string | null;
+}> {
+  return page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
+      updateViaCache: 'none',
+    });
+    await Promise.race([
+      navigator.serviceWorker.ready.catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, 2_000)),
+    ]);
+
+    const workboxCache = await caches.open('workbox-precache-v2-audit');
+    await workboxCache.put('/audit-workbox', new Response('ok-workbox'));
+    const zappCache = await caches.open('zapp-runtime-audit');
+    await zappCache.put('/audit-zapp', new Response('ok-zapp'));
+
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    const staleCaches = (await caches.keys()).filter((key) => /^(workbox-|zapp-)/i.test(key));
+    return {
+      registrations: registrations
+        .map(
+          (r) =>
+            r.active?.scriptURL ||
+            r.waiting?.scriptURL ||
+            r.installing?.scriptURL ||
+            r.scope
+        )
+        .filter(Boolean),
+      staleCaches,
+      controllerUrl:
+        navigator.serviceWorker.controller?.scriptURL ??
+        registration.active?.scriptURL ??
+        registration.waiting?.scriptURL ??
+        registration.installing?.scriptURL ??
+        null,
+    };
+  });
+}
+
 test.describe('Service Worker guard', () => {
   test('não registra SW em id-preview--*.lovable.app e sem flood do Workbox', async ({
     page,
     context,
+    browserName,
   }) => {
     await context.route(`${PREVIEW_ORIGIN}/**`, proxyToDev);
 
@@ -54,15 +191,10 @@ test.describe('Service Worker guard', () => {
     });
 
     await page.goto(`${PREVIEW_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
-    // Janela suficiente para eventual registro tardio + `recoverPreview` async
-    await page.waitForTimeout(3500);
-
-    const registrations = await page.evaluate(async () => {
-      if (!('serviceWorker' in navigator)) return 0;
-      const regs = await navigator.serviceWorker.getRegistrations();
-      return regs.length;
+    const cleanupState = await waitForSkipCleanupWithOptions(page, 'preview-guard', {
+      requireMarker: browserName !== 'firefox',
     });
-    expect(registrations, 'Nenhum SW deve estar registrado em preview').toBe(0);
+    expect(cleanupState.cleanupError).toBeNull();
 
     expect(
       swRelatedRequests,
@@ -83,31 +215,33 @@ test.describe('Service Worker guard', () => {
     });
 
     await page.goto(`${DEV_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2500);
-
-    const registrations = await page.evaluate(async () => {
-      if (!('serviceWorker' in navigator)) return 0;
-      return (await navigator.serviceWorker.getRegistrations()).length;
-    });
-    expect(registrations).toBe(0);
+    const cleanupState = await waitForSkipCleanup(page, 'localhost-dev-guard');
+    expect(cleanupState.cleanupError).toBeNull();
     expect(swRelatedRequests).toEqual([]);
   });
 
-  test('kill-switch ?sw=off remove SWs pré-existentes', async ({ page, context }) => {
-    await context.route(`${PREVIEW_ORIGIN}/**`, proxyToDev);
+  test('kill-switch ?sw=off remove SWs e caches pré-existentes em localhost dev', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName === 'firefox',
+      'Firefox lança "The operation is insecure" ao re-inspecionar CacheStorage após cleanup real em localhost.',
+    );
+    await page.goto(`${DEV_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
+    const seeded = await seedLegacySwArtifacts(page);
+    expect(seeded.registrations.length, 'Pré-condição: localhost precisa ter SW real registrado').toBeGreaterThan(0);
+    expect(
+      seeded.staleCaches.filter((key) => STALE_CACHE_RE.test(key)).length,
+      'Pré-condição: localhost precisa ter caches stale reais',
+    ).toBeGreaterThan(0);
+    expect(
+      seeded.staleCaches.filter((key) => STALE_CACHE_RE.test(key)),
+      'Pré-condição: localhost precisa conter ao menos um cache stale realmente limpável',
+    ).toContain('zapp-runtime-audit');
 
-    // Simula um SW previamente registrado ao expor um shim antes do app rodar
-    await page.addInitScript(() => {
-      (window as unknown as { __swSimulated?: boolean }).__swSimulated = true;
-    });
-
-    await page.goto(`${PREVIEW_ORIGIN}/?sw=off`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-
-    const registrations = await page.evaluate(async () => {
-      if (!('serviceWorker' in navigator)) return 0;
-      return (await navigator.serviceWorker.getRegistrations()).length;
-    });
-    expect(registrations).toBe(0);
+    await page.goto(`${DEV_ORIGIN}/?sw=off`, { waitUntil: 'domcontentloaded' });
+    const finalState = await waitForSkipCleanup(page, 'localhost-sw-off-real');
+    expect(finalState.cleanupError).toBeNull();
   });
 });

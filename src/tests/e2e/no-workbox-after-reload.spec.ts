@@ -24,6 +24,11 @@ const PREVIEW_URL = process.env.E2E_PREVIEW_URL ?? 'http://localhost:5173/';
 const PUBLISHED_URL = process.env.E2E_PUBLISHED_URL ?? 'http://localhost:5173/';
 const STRICT = process.env.E2E_STRICT_WORKBOX === '1';
 const SW_SKIP_CLEANUP_STATE_KEY = '__zappSwCleanup';
+const SAME_AUDIT_URL = new URL(PREVIEW_URL).toString() === new URL(PUBLISHED_URL).toString();
+const PUBLISHED_TEST_TITLE = SAME_AUDIT_URL
+  ? `segundo alvo (${PUBLISHED_URL}) no mesmo URL do preview — não valida published real`
+  : `publicado (${PUBLISHED_URL}) sem workbox após reload`;
+const PUBLISHED_ASSERT_LABEL = SAME_AUDIT_URL ? 'segundo-alvo-mesmo-url' : 'publicado';
 
 type AuditResult = {
   workboxRequests: string[];
@@ -38,6 +43,8 @@ function expectsSkipCleanup(url: string): boolean {
   const parsed = new URL(url);
   const host = parsed.hostname;
   return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
     host.startsWith('id-preview--') ||
     host.startsWith('preview--') ||
     host === 'lovableproject.com' ||
@@ -186,15 +193,23 @@ function assertClean(result: AuditResult, label: string) {
 }
 
 test.describe('No Workbox após reload — preview + publicado', () => {
+  test.describe.configure({ mode: SAME_AUDIT_URL ? 'serial' : 'parallel' });
+
   test(`preview (${PREVIEW_URL}) sem workbox após reload`, async ({ page }) => {
     const result = await auditWorkbox(page, PREVIEW_URL);
     test.skip(result === null, 'Preview URL inacessível (rede/CI offline)');
     assertClean(result!, 'preview');
   });
 
-  test(`publicado (${PUBLISHED_URL}) sem workbox após reload`, async ({ page }) => {
+  test(PUBLISHED_TEST_TITLE, async ({ page }) => {
+    if (SAME_AUDIT_URL) {
+      test.info().annotations.push({
+        type: 'audit-note',
+        description: 'Preview e published usam o mesmo URL; este segundo alvo não representa deploy publicado real.',
+      });
+    }
     const result = await auditWorkbox(page, PUBLISHED_URL);
     test.skip(result === null, 'Published URL inacessível (rede/CI offline)');
-    assertClean(result!, 'publicado');
+    assertClean(result!, PUBLISHED_ASSERT_LABEL);
   });
 });

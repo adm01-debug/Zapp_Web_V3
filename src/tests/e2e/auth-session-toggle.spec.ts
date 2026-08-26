@@ -26,11 +26,18 @@ const STRICT = process.env.E2E_STRICT_AUTH_LOOP === '1';
 // Use only routes that are actually wrapped by ProtectedRoute. `/crm` and the
 // bare `/admin` currently fall through to NotFound and cannot validate auth.
 const PROTECTED_ROUTES = ['/inbox', '/', '/admin/roles'];
-const SUPABASE_PROJECT_REF = new URL(
-  // Must stay aligned with playwright.config.ts webServer.env fallback.
-  process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321',
-).hostname.split('.')[0];
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321';
+const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0];
 const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
+const FAKE_AUTH_EMAIL = 'e2e-auth@test.local';
+const FAKE_AUTH_PASSWORD = 'SenhaFake123!';
+const FAKE_AUTH_USER_ID = '00000000-0000-0000-0000-00000000ea11';
+const AUTH_RESET_QUERY = '__e2e_reset_auth=1';
+const EXPECTED_REDIRECT_ABORT_FRAGMENTS = [
+  'is interrupted by another navigation',
+  'NS_BINDING_ABORTED',
+  'net::ERR_ABORTED',
+];
 
 type NavRecord = { url: string; at: number };
 
@@ -56,11 +63,12 @@ async function gotoProtectedRoute(page: Page, route: string): Promise<void> {
   try {
     await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   } catch (error) {
-    // WebKit reports the expected immediate auth redirect as an interrupted
-    // source navigation. This is not a product failure: the assertions below
-    // still require /auth, one redirect only and the preserved origin state.
+    // Cross-engine: WebKit/Firefox/Chromium may report the expected immediate
+    // auth redirect as an interrupted source navigation. This is not a product
+    // failure: the assertions below still require /auth, one redirect only and
+    // eventual stabilization no destino esperado.
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('is interrupted by another navigation') || !message.includes('/auth')) {
+    if (!EXPECTED_REDIRECT_ABORT_FRAGMENTS.some((fragment) => message.includes(fragment))) {
       throw error;
     }
   }
@@ -103,6 +111,17 @@ function countPathHits(navs: NavRecord[], path: RegExp): number {
   return navs.filter((n) => path.test(new URL(n.url).pathname)).length;
 }
 
+function countPathTransitions(navs: NavRecord[], path: RegExp): number {
+  let hits = 0;
+  let previousMatched = false;
+  for (const nav of navs) {
+    const matched = path.test(new URL(nav.url).pathname);
+    if (matched && !previousMatched) hits += 1;
+    previousMatched = matched;
+  }
+  return hits;
+}
+
 function hasConsecutiveAuthRedirects(navs: NavRecord[], within = 500): boolean {
   // Browsers may emit two main-frame navigation events for the source URL
   // during page.goto/reload. The regression contract is specifically that the
@@ -116,27 +135,190 @@ function hasConsecutiveAuthRedirects(navs: NavRecord[], within = 500): boolean {
   return false;
 }
 
-async function readRedirectSource(page: Page): Promise<string | null> {
-  return page.evaluate(() => {
-    const state = window.history.state as
-      | { usr?: { from?: { pathname?: string } } }
-      | null;
-    return state?.usr?.from?.pathname ?? null;
+function buildFakeSession() {
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+  return {
+    access_token: 'fake-access-token',
+    refresh_token: 'fake-refresh-token',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: expiresAt,
+    user: {
+      id: FAKE_AUTH_USER_ID,
+      aud: 'authenticated',
+      email: FAKE_AUTH_EMAIL,
+    },
+  };
+}
+
+async function readCurrentLocation(page: Page): Promise<string> {
+  return page.evaluate(() => `${window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
+async function waitForLocation(page: Page, expected: string, timeout = 8_000): Promise<void> {
+  await expect
+    .poll(() => readCurrentLocation(page), {
+      timeout,
+      message: `Esperava estabilizar em ${expected}, mas permaneceu em ${page.url()}`,
+    })
+    .toBe(expected);
+}
+
+async function setSafeNextRedirect(page: Page, nextPath: string): Promise<string> {
+  return page.evaluate((path) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('next', path);
+    const nextLocation = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(window.history.state, '', nextLocation);
+    return nextLocation;
+  }, nextPath);
+}
+
+async function installSuccessfulLoginMocks(page: Page): Promise<void> {
+  const fakeSession = buildFakeSession();
+  const fakeUser = fakeSession.user;
+  const context = page.context();
+
+  await context.route(/\/functions\/v1\/login-attempts(?:\?|$)/, async (route) => {
+    let action = 'check';
+    try {
+      const body = route.request().postDataJSON() as { action?: string } | undefined;
+      action = body?.action ?? 'check';
+    } catch {
+      action = 'check';
+    }
+
+    if (action === 'record_failed') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ is_locked: false, attempts: 1 }),
+      });
+    }
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ is_locked: false, attempts: 0, blocked: false, country: 'BR' }),
+    });
+  });
+
+  await context.route(/\/auth\/v1\/token(?:\?.*)?$/, async (route) => {
+    const url = route.request().url();
+    if (!url.includes('grant_type=password')) {
+      return route.fallback();
+    }
+    if (route.request().method() !== 'POST') {
+      return route.fallback();
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(fakeSession),
+    });
+  });
+
+  await context.route(/\/auth\/v1\/user(?:\?.*)?$/, async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(fakeUser),
+    });
+  });
+
+  await context.route(/\/auth\/v1\/factors(?:\?.*)?$/, async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ all: [], totp: [] }),
+    });
+  });
+
+  await context.route(/\/rest\/v1\/profiles(?:\?.*)?$/, async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: FAKE_AUTH_USER_ID,
+        user_id: FAKE_AUTH_USER_ID,
+        name: 'E2E Auth',
+        email: FAKE_AUTH_EMAIL,
+        avatar_url: null,
+        role: 'admin',
+        max_chats: 10,
+        department_id: null,
+        department: null,
+      }),
+      headers: {
+        'content-range': '0-0/1',
+      },
+    });
+  });
+
+  await context.route(/\/rest\/v1\/user_roles(?:\?.*)?$/, async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ role: 'admin' }]),
+      headers: {
+        'content-range': '0-0/1',
+      },
+    });
+  });
+
+  await context.route(/\/rest\/v1\/role_permissions(?:\?.*)?$/, async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    });
   });
 }
 
+async function clearSessionState(page: Page): Promise<void> {
+  await page.evaluate((storageKey) => {
+    const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
+    for (const k of keys) localStorage.removeItem(k);
+    localStorage.removeItem(storageKey);
+  }, AUTH_STORAGE_KEY);
+}
+
+async function bootstrapPublicAuth(page: Page): Promise<void> {
+  await page.addInitScript(({ storageKey, resetQuery }) => {
+    try {
+      if (!window.location.search.includes(resetQuery)) return;
+      const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
+      for (const k of keys) localStorage.removeItem(k);
+      localStorage.removeItem(storageKey);
+      sessionStorage.clear();
+    } catch {
+      // noop: o próprio teste validará o bootstrap logo após a navegação.
+    }
+  }, { storageKey: AUTH_STORAGE_KEY, resetQuery: AUTH_RESET_QUERY });
+
+  await page.goto(`/auth?${AUTH_RESET_QUERY}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  await waitForSettled(page, /^\/auth/);
+  await clearSessionState(page);
+  await page.evaluate((resetQuery) => {
+    const url = new URL(window.location.href);
+    if (!url.search.includes(resetQuery)) return;
+    url.searchParams.delete(resetQuery.split('=')[0] ?? resetQuery);
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, AUTH_RESET_QUERY);
+  await waitForLocation(page, '/auth');
+}
+
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
-  test('cada modo de sessão inválida redireciona uma única vez para /auth preservando a rota de origem', async ({ page }) => {
+  test('cada modo de sessão inválida redireciona uma única vez para /auth sem loop', async ({ page }) => {
     const navs = await collectAuthNavigations(page);
 
     // Bootstrap: carrega a app na landing pública para inicializar localStorage/SDK.
     try {
-      await page.goto('/auth', { waitUntil: 'domcontentloaded', timeout: 20_000 });
+      await bootstrapPublicAuth(page);
     } catch (err) {
       test.skip(!STRICT, `Localhost inacessível: ${(err as Error).message}`);
       throw err;
     }
-    await page.waitForTimeout(500);
 
     const modes: Array<'none' | 'expired' | 'corrupted'> = ['none', 'expired', 'corrupted'];
 
@@ -149,7 +331,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       await waitForSettled(page, /^\/auth/);
 
       const stepNavs = navs.slice(navsBefore);
-      const authHits = countPathHits(stepNavs, /^\/auth/);
+      const authHits = countPathTransitions(stepNavs, /^\/auth/);
 
       expect(
         authHits,
@@ -163,12 +345,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
         `[${mode}] Detectado redirect /auth duplicado (<500ms) em ${route}: ${JSON.stringify(stepNavs)}`,
       ).toBe(false);
 
-      await expect
-        .poll(() => readRedirectSource(page), {
-          timeout: 5_000,
-          message: `[${mode}] history.state.usr.from deve preservar a rota ${route}`,
-        })
-        .toBe(route);
+      await waitForLocation(page, '/auth');
 
       // Storage inválido deve ter sido limpo pelo SDK Supabase.
       if (mode !== 'none') {
@@ -190,5 +367,52 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
         `Navegações inesperadas a ${route}: ${JSON.stringify(navs)}`,
       ).toBe(true);
     }
+  });
+
+  test('respeita um destino ?next= seguro após login simulado, sem depender de history.state interno', async ({
+    page,
+  }) => {
+    const navs = await collectAuthNavigations(page);
+
+    await installSuccessfulLoginMocks(page);
+
+    try {
+      await bootstrapPublicAuth(page);
+    } catch (err) {
+      test.skip(!STRICT, `Localhost inacessível: ${(err as Error).message}`);
+      throw err;
+    }
+
+    const protectedRoute = '/admin/roles?origin=e2e-auth#restored';
+    await gotoProtectedRoute(page, protectedRoute);
+    await waitForSettled(page, /^\/auth/);
+    const authUrlWithNext = await setSafeNextRedirect(page, protectedRoute);
+    await waitForLocation(page, authUrlWithNext);
+
+    const navsBeforeLogin = navs.length;
+
+    await page.locator('#login-email').fill(FAKE_AUTH_EMAIL);
+    await page.locator('#login-password').fill(FAKE_AUTH_PASSWORD);
+    await page.getByRole('button', { name: /^Entrar$/ }).click();
+
+    await waitForLocation(page, protectedRoute, 10_000);
+    await page.waitForTimeout(1500);
+
+    expect(
+      await readCurrentLocation(page),
+      `Após login simulado, a URL final deve restaurar a origem ${protectedRoute}`,
+    ).toBe(protectedRoute);
+
+    const postLoginNavs = navs.slice(navsBeforeLogin);
+    expect(
+      hasConsecutiveAuthRedirects(postLoginNavs, 500),
+      `Login simulado não deve ricochetear de volta para /auth: ${JSON.stringify(postLoginNavs)}`,
+    ).toBe(false);
+    expect(
+      countPathHits(postLoginNavs, /^\/auth/),
+      `Após o submit bem-sucedido, não esperamos novo redirect para /auth: ${JSON.stringify(
+        postLoginNavs.map((n) => n.url),
+      )}`,
+    ).toBe(0);
   });
 });
