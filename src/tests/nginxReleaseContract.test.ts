@@ -42,9 +42,11 @@ describe("contrato de release do nginx", () => {
     const assets = nginx.match(/location\s+\/assets\/\s*\{([\s\S]*?)\}/)?.[1] ?? "";
 
     expect(assets).toContain(
-      'add_header Cache-Control "public, max-age=31536000, immutable" always;',
+      'add_header Cache-Control "public, max-age=31536000, immutable";',
     );
+    expect(assets).not.toContain('Cache-Control "public, max-age=31536000, immutable" always');
     expect(assets).not.toMatch(/\bexpires\b/);
+    expect(assets).toContain('add_header Strict-Transport-Security');
   });
 });
 

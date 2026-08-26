@@ -123,9 +123,16 @@ jobs:
 
       - name: Compute image tag
         id: meta
+        env:
+          REQUESTED_TAG: ${{ inputs.image_tag }}
         run: |
-          TAG="${{ inputs.image_tag }}"
+          set -euo pipefail
+          TAG="$REQUESTED_TAG"
           if [ -z "$TAG" ]; then TAG="production-${GITHUB_SHA::12}"; fi
+          if ! printf '%s' "$TAG" | grep -Eq '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'; then
+            echo "::error::IMAGE_TAG_INVALID — use apenas caracteres válidos de tag OCI"
+            exit 1
+          fi
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
@@ -153,20 +160,19 @@ jobs:
 
       - name: Derive canonical release identity
         id: release_identity
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.image }}
+          BUILD_DIGEST: ${{ steps.build_push.outputs.digest }}
         run: |
           set -euo pipefail
-          IMAGE_TAG="${{ steps.meta.outputs.image }}"
-          IMAGE_REPO="${IMAGE_TAG%:*}"
-          DIGEST="${{ steps.build_push.outputs.digest }}"
-          case "$DIGEST" in
-            sha256:*) ;;
-            *)
-              echo "::error::BUILD_DIGEST_MISSING — docker/build-push-action não retornou digest OCI válido"
-              exit 1
-              ;;
-          esac
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "canonical_image=${IMAGE_REPO}@${DIGEST}" >> "$GITHUB_OUTPUT"
+          if ! printf '%s' "$BUILD_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::BUILD_DIGEST_MISSING — docker/build-push-action não retornou digest OCI válido"
+            exit 1
+          fi
+          echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+          # tag@digest mantém a identidade imutável e preserva a tag local de
+          # rollback na VPS mesmo após docker image prune.
+          echo "canonical_image=${IMAGE_TAG}@${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "release_sha12=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           echo "release_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
@@ -389,7 +395,7 @@ jobs:
           }
           while :; do
             STATUS=$(docker service inspect "$SVC" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}' 2>/dev/null || echo "inspect_fail")
-            REPL=$(docker service ls --filter "name=${SVC}" --format '{{.Replicas}}' | head -1)
+            REPL=$(docker service ls --filter "name=${SVC}" --format '{{.Replicas}}' 2>/dev/null | head -1 || echo "0/1")
             IMG=$(docker service inspect "$SVC" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "?")
             TASKS=$(docker service ps "$SVC" --filter desired-state=running --no-trunc --format '{{json .}}' 2>/dev/null || true)
             echo "estado=${STATUS} replicas=${REPL:-?} image=${IMG}"
@@ -501,26 +507,38 @@ jobs:
           CACHE_BUSTER="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           VERSION_URL="${PUBLIC_ORIGIN}/version.json?release=${CACHE_BUSTER}"
           INDEX_URL="${PUBLIC_ORIGIN}/?release=${CACHE_BUSTER}"
-          VERSION=$(curl --fail --silent --show-error --max-time 20 \
-            -H 'Cache-Control: no-cache' "$VERSION_URL")
-          ACTUAL_SHA=$(printf '%s' "$VERSION" | jq -er '.gitSha')
-          ENTRY=$(printf '%s' "$VERSION" | jq -er '.entry')
-          [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] || {
-            echo "::error::PUBLIC_RELEASE_SHA_MISMATCH — esperado ${EXPECTED_SHA}, publicado ${ACTUAL_SHA}"
+          ACTUAL_SHA=""; ENTRY=""; PUBLIC_READY=0
+          for attempt in 1 2 3 4 5 6; do
+            VERSION=$(curl --fail --silent --show-error --max-time 20 \
+              -H 'Cache-Control: no-cache' "$VERSION_URL") || { sleep 10; continue; }
+            ACTUAL_SHA=$(printf '%s' "$VERSION" | jq -r '.gitSha // empty')
+            ENTRY=$(printf '%s' "$VERSION" | jq -r '.entry // empty')
+            [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] || {
+              echo "tentativa ${attempt}: publicado ${ACTUAL_SHA:-<vazio>}"
+              sleep 10
+              continue
+            }
+            case "$ENTRY" in assets/*.js) ;; *) sleep 10; continue ;; esac
+            INDEX=$(curl --fail --silent --show-error --max-time 20 \
+              -H 'Cache-Control: no-cache' "$INDEX_URL") || { sleep 10; continue; }
+            printf '%s' "$INDEX" | grep -Fq "/${ENTRY}" || { sleep 10; continue; }
+            curl --fail --silent --show-error --max-time 20 \
+              -o /dev/null "${PUBLIC_ORIGIN}/${ENTRY}" || { sleep 10; continue; }
+            PUBLIC_READY=1
+            break
+          done
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::PUBLIC_RELEASE_SHA_MISMATCH — esperado ${EXPECTED_SHA}, publicado ${ACTUAL_SHA:-<vazio>}"
             exit 1
-          }
+          fi
           case "$ENTRY" in
             assets/*.js) ;;
-            *) echo "::error::PUBLIC_RELEASE_ENTRY_INVALID — ${ENTRY}"; exit 1 ;;
+            *) echo "::error::PUBLIC_RELEASE_ENTRY_INVALID — ${ENTRY:-<vazio>}"; exit 1 ;;
           esac
-          INDEX=$(curl --fail --silent --show-error --max-time 20 \
-            -H 'Cache-Control: no-cache' "$INDEX_URL")
-          printf '%s' "$INDEX" | grep -Fq "/${ENTRY}" || {
-            echo "::error::PUBLIC_RELEASE_ENTRY_MISMATCH — index não referencia ${ENTRY}"
+          if [ "$PUBLIC_READY" != "1" ]; then
+            echo "::error::PUBLIC_RELEASE_ENTRY_MISMATCH — index/asset não confirmaram ${ENTRY} após 6 tentativas"
             exit 1
-          }
-          curl --fail --silent --show-error --max-time 20 \
-            -o /dev/null "${PUBLIC_ORIGIN}/${ENTRY}"
+          fi
           echo "✅ Release pública confirmada: ${ACTUAL_SHA} (${ENTRY})"
 
       - name: 🧹 Prune dangling images pós-deploy (manutenção disco VPS)

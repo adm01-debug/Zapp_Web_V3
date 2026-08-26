@@ -299,6 +299,7 @@ describe('nginx.conf — verificação estática (sem renderizar)', () => {
 
   it('serve /assets/ com Cache-Control anual e immutable', () => {
     const assetsBlock = NGINX_SOURCE.match(/location\s+\/assets\/\s*\{[\s\S]*?\}/)?.[0] ?? '';
-    expect(assetsBlock).toContain('Cache-Control "public, max-age=31536000, immutable"');
+    expect(assetsBlock).toContain('Cache-Control "public, max-age=31536000, immutable";');
+    expect(assetsBlock).not.toContain('Cache-Control "public, max-age=31536000, immutable" always');
   });
 });

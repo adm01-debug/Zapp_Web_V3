@@ -55,6 +55,9 @@ describe("deploy production resource isolation", () => {
     );
     expect(workflow).toContain("id: build_push");
     expect(workflow).toContain("steps.build_push.outputs.digest");
+    expect(workflow).toContain("canonical_image=${IMAGE_TAG}@${BUILD_DIGEST}");
+    expect(workflow).toContain("REQUESTED_TAG: ${{ inputs.image_tag }}");
+    expect(workflow).not.toContain('TAG="${{ inputs.image_tag }}"');
     expect(workflow).toContain(
       "ZAPP_IMAGE: ${{ needs.build-and-push.outputs.canonical_image }}",
     );
@@ -80,5 +83,6 @@ describe("deploy production resource isolation", () => {
     expect(workflow).toContain("CONVERGENCE_TASK_ERROR");
     expect(workflow).toContain("CONVERGENCE_TASK_IMAGE_MALFORMED");
     expect(workflow).toContain("CONVERGENCE_TASK_DIGEST_MISMATCH");
+    expect(workflow).toContain('|| echo "0/1"');
   });
 });

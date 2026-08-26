@@ -1,8 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createVersionPayload, resolveGitSha } from '../../vite.config';
 
 describe('version.json release identity', () => {
+  const originalGitSha = process.env.VITE_GIT_SHA;
+
+  beforeEach(() => {
+    delete process.env.VITE_GIT_SHA;
+  });
+
+  afterEach(() => {
+    if (originalGitSha === undefined) delete process.env.VITE_GIT_SHA;
+    else process.env.VITE_GIT_SHA = originalGitSha;
+  });
   it('binds gitSha and releaseId to the immutable CI revision', () => {
     const gitSha = '0123456789abcdef0123456789abcdef01234567';
     const payload = createVersionPayload('assets/index-release.js', {

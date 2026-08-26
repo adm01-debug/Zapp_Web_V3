@@ -316,7 +316,8 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
     try {
       await bootstrapPublicAuth(page);
     } catch (err) {
-      test.skip(!STRICT, `Localhost inacessível: ${(err as Error).message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      test.skip(!STRICT, `Localhost inacessível: ${message}`);
       throw err;
     }
 
@@ -379,7 +380,8 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
     try {
       await bootstrapPublicAuth(page);
     } catch (err) {
-      test.skip(!STRICT, `Localhost inacessível: ${(err as Error).message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      test.skip(!STRICT, `Localhost inacessível: ${message}`);
       throw err;
     }
 

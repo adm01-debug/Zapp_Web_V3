@@ -682,13 +682,16 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
 
     it('abort próprio no error-field → relança cancelamento, sem log.error nem log.warn', async () => {
       sb.setResult('contact_intelligence', { data: null, error: null });
-      sb.setResult('evolution_messages', {
+      const deferred = sb.setDeferred('evolution_messages');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+      await qc.cancelQueries({ queryKey: ['contact-intelligence-view', PHONE_13] });
+      expect(deferred.getSignal()?.aborted).toBe(true);
+      deferred.resolveResult({
         data: null,
         error: { name: 'AbortError', message: 'The operation was aborted.' },
       });
-
-      const { result, qc } = renderIntel(PHONE_13);
-      await qc.cancelQueries({ queryKey: ['contact-intelligence-view', PHONE_13] });
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(logMock.error).not.toHaveBeenCalled();

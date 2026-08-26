@@ -46,6 +46,16 @@ const checks = [
     "falta capturar o digest OCI produzido pelo build",
   ],
   [
+    /canonical_image=\$\{IMAGE_TAG\}@\$\{BUILD_DIGEST\}/,
+    workflow,
+    "imagem canônica deve preservar tag de rollback e fixar o digest",
+  ],
+  [
+    /REQUESTED_TAG:\s*\$\{\{ inputs\.image_tag \}\}[\s\S]*TAG="\$REQUESTED_TAG"/,
+    workflow,
+    "image_tag deve chegar ao shell via env, sem interpolação direta",
+  ],
+  [
     /ZAPP_IMAGE:\s*\$\{\{ needs\.build-and-push\.outputs\.canonical_image \}\}/,
     workflow,
     "deploy ainda não usa a imagem canônica pinada por digest",
