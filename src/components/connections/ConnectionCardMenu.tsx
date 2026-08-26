@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WhatsAppConnection } from '@/features/connections';
 
 interface ConnectionCardMenuProps {
@@ -68,108 +69,131 @@ export function ConnectionCardMenu({
   onOpenAuditLog,
   onCopyId,
   onSyncHistory,
-  onDelete,
+  onDelete: _onDelete,
 }: ConnectionCardMenuProps) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button aria-label="Opções da conexão" variant="ghost" size="icon" className="h-8 w-8">
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Conexão
-        </DropdownMenuLabel>
-        <DropdownMenuItem disabled={recheckingHealth || !evoName} onClick={onRecheckNow}>
-          {recheckingHealth ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Activity className="mr-2 h-4 w-4" />
-          )}
-          Verificar agora
-        </DropdownMenuItem>
-        {!isOfficial && (
-          <DropdownMenuItem onClick={onShowQrCode}>
-            <QrCode className="mr-2 h-4 w-4" />
-            Gerar QR Code
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem onClick={onSetDefault}>
-          <Star className="mr-2 h-4 w-4" />
-          Definir como principal
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Configuração
-        </DropdownMenuLabel>
-        <DropdownMenuItem onClick={onBusinessHours}>
-          <Clock className="mr-2 h-4 w-4" />
-          Horário de Atendimento
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onQueues}>
-          <Link2 className="mr-2 h-4 w-4" />
-          Vincular Filas
-        </DropdownMenuItem>
-        {evoName && (
-          <>
-            <DropdownMenuItem onClick={onSettings}>
-              <Settings className="mr-2 h-4 w-4" />
-              Configurações & Perfil
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onIntegrations}>
-              <Boxes className="mr-2 h-4 w-4" />
-              Integrações (IA/Bots)
-            </DropdownMenuItem>
-          </>
-        )}
-        {hasSetApiType && (
-          <DropdownMenuItem onClick={onToggleApiType}>
-            {isOfficial ? (
-              <Zap className="mr-2 h-4 w-4" />
-            ) : (
-              <ShieldCheck className="mr-2 h-4 w-4" />
-            )}
-            Mudar para {isOfficial ? 'QR Code' : 'API Oficial'}
-          </DropdownMenuItem>
-        )}
-        {isOfficial && (
-          <DropdownMenuItem onClick={onOpenOfficialConfig}>
-            <ShieldCheck className="mr-2 h-4 w-4" />
-            Configurar Cloud API
-          </DropdownMenuItem>
-        )}
-
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Avançado
-        </DropdownMenuLabel>
-        <DropdownMenuItem onClick={onOpenAuditLog}>
-          <ListChecks className="mr-2 h-4 w-4" />
-          Log de Auditoria
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCopyId}>
-          <Copy className="mr-2 h-4 w-4" />
-          Copiar ID
-        </DropdownMenuItem>
-        {connection.instance_id && (
-          <DropdownMenuItem disabled={syncingHistory === connection.id} onClick={onSyncHistory}>
-            {syncingHistory === connection.id ? (
+    <TooltipProvider delayDuration={150}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button aria-label="Opções da conexão" variant="ghost" size="icon" className="h-8 w-8">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Conexão
+          </DropdownMenuLabel>
+          <DropdownMenuItem disabled={recheckingHealth || !evoName} onClick={onRecheckNow}>
+            {recheckingHealth ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <History className="mr-2 h-4 w-4" />
+              <Activity className="mr-2 h-4 w-4" />
             )}
-            Sincronizar Histórico
+            Verificar agora
           </DropdownMenuItem>
-        )}
+          {!isOfficial && (
+            <DropdownMenuItem onClick={onShowQrCode}>
+              <QrCode className="mr-2 h-4 w-4" />
+              Gerar QR Code
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={onSetDefault}>
+            <Star className="mr-2 h-4 w-4" />
+            Definir como principal
+          </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
-          <Trash2 className="mr-2 h-4 w-4" />
-          Excluir conexão
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Configuração
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={onBusinessHours}>
+            <Clock className="mr-2 h-4 w-4" />
+            Horário de Atendimento
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onQueues}>
+            <Link2 className="mr-2 h-4 w-4" />
+            Vincular Filas
+          </DropdownMenuItem>
+          {evoName && (
+            <>
+              <DropdownMenuItem onClick={onSettings}>
+                <Settings className="mr-2 h-4 w-4" />
+                Configurações & Perfil
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onIntegrations}>
+                <Boxes className="mr-2 h-4 w-4" />
+                Integrações (IA/Bots)
+              </DropdownMenuItem>
+            </>
+          )}
+          {hasSetApiType && (
+            <DropdownMenuItem onClick={onToggleApiType}>
+              {isOfficial ? (
+                <Zap className="mr-2 h-4 w-4" />
+              ) : (
+                <ShieldCheck className="mr-2 h-4 w-4" />
+              )}
+              Mudar para {isOfficial ? 'QR Code' : 'API Oficial'}
+            </DropdownMenuItem>
+          )}
+          {isOfficial && (
+            <DropdownMenuItem onClick={onOpenOfficialConfig}>
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              Configurar Cloud API
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Avançado
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={onOpenAuditLog}>
+            <ListChecks className="mr-2 h-4 w-4" />
+            Log de Auditoria
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onCopyId}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copiar ID
+          </DropdownMenuItem>
+          {connection.instance_id && (
+            <DropdownMenuItem disabled={syncingHistory === connection.id} onClick={onSyncHistory}>
+              {syncingHistory === connection.id ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <History className="mr-2 h-4 w-4" />
+              )}
+              Sincronizar Histórico
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuSeparator />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                aria-describedby="connection-delete-unavailable-reason"
+                title="Indisponível: a exclusão ponta a ponta da instância Evolution ainda não está habilitada."
+              >
+                <DropdownMenuItem
+                  disabled
+                  className="text-destructive/60 focus:text-destructive/60"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir conexão indisponível
+                </DropdownMenuItem>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-64 text-xs">
+              A remoção completa da instância Evolution ainda não está habilitada.
+            </TooltipContent>
+          </Tooltip>
+          <p
+            id="connection-delete-unavailable-reason"
+            className="px-2 pb-1 text-xs leading-relaxed text-muted-foreground"
+          >
+            Indisponível no momento: a exclusão ponta a ponta da instância Evolution ainda não está habilitada.
+          </p>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </TooltipProvider>
   );
 }
