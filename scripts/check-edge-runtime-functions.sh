@@ -15,12 +15,11 @@ check_edge_function() {
   local function_name="${function_dir##*/}"
   local log_file="${log_dir}/${function_name}.log"
   local container_name="edge-parse-${GITHUB_RUN_ID:-local}-${function_name}-${BASHPID}"
-  local started_at="$SECONDS"
-  local elapsed
   local status
+  local timeout_forced_kill=false
 
   set +e
-  timeout --signal=TERM --kill-after=3 "$boot_timeout" docker run --rm \
+  LC_ALL=C timeout --verbose --signal=TERM --kill-after=3 "$boot_timeout" docker run --rm \
     --name "$container_name" \
     -v "${functions_mount}:/home/deno/functions:ro" \
     -e SUPABASE_URL=http://localhost:8000 \
@@ -32,12 +31,15 @@ check_edge_function() {
     start --main-service "/home/deno/functions/${function_name}" \
     >"$log_file" 2>&1
   status=$?
-  elapsed=$((SECONDS - started_at))
   docker rm -f "$container_name" >/dev/null 2>&1 || true
   set -e
 
+  if grep -Fq 'timeout: sending signal KILL to command' "$log_file"; then
+    timeout_forced_kill=true
+  fi
+
   if [ "$status" -eq 124 ] ||
-    { [ "$status" -eq 137 ] && [ "$elapsed" -ge "$boot_timeout" ]; }; then
+    { [ "$status" -eq 137 ] && [ "$timeout_forced_kill" = true ]; }; then
     if grep -Eq 'worker boot error|could not be parsed|main worker boot error' "$log_file"; then
       printf '%s\n' "$status" >"${log_file}.failed"
       printf 'FAIL %s (erro de boot antes do timeout, exit %s)\n' "$function_name" "$status"

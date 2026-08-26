@@ -20,9 +20,16 @@ describe("production Edge Runtime compatibility gate", () => {
   });
 
   it("bounds and removes runtime containers even when shutdown ignores SIGTERM", () => {
-    expect(checker).toContain("timeout --signal=TERM --kill-after=3");
+    expect(checker).toContain("timeout --verbose --signal=TERM --kill-after=3");
     expect(checker).toContain('docker rm -f "$container_name"');
     expect(checker).toContain("worker boot error|could not be parsed|main worker boot error");
+  });
+
+  it("accepts SIGKILL only when timeout records that it sent the signal", () => {
+    expect(checker).toContain("timeout_forced_kill=false");
+    expect(checker).toContain("timeout: sending signal KILL to command");
+    expect(checker).toContain('[ "$status" -eq 137 ] && [ "$timeout_forced_kill" = true ]');
+    expect(checker).not.toContain('[ "$elapsed" -ge "$boot_timeout" ]');
   });
 
   it("inspects boot logs before accepting either timeout exit status", () => {

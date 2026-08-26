@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const repoRoot = resolve(import.meta.dirname, "../..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const nginx = readFileSync(resolve(repoRoot, "nginx.conf"), "utf8");
 const dockerfile = readFileSync(resolve(repoRoot, "Dockerfile"), "utf8");
 
