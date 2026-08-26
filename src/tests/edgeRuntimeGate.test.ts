@@ -24,4 +24,11 @@ describe("production Edge Runtime compatibility gate", () => {
     expect(checker).toContain('docker rm -f "$container_name"');
     expect(checker).toContain("worker boot error|could not be parsed|main worker boot error");
   });
+
+  it("inspects boot logs before accepting either timeout exit status", () => {
+    expect(checker).toMatch(
+      /if \[ "\$status" -eq 124 \][\s\S]*grep -Eq 'worker boot error\|could not be parsed\|main worker boot error'/,
+    );
+    expect(checker.indexOf("grep -Eq")).toBeLessThan(checker.indexOf("printf 'OK %s"));
+  });
 });

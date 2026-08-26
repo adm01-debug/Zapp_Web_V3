@@ -36,14 +36,18 @@ check_edge_function() {
   docker rm -f "$container_name" >/dev/null 2>&1 || true
   set -e
 
-  if [ "$status" -eq 124 ]; then
-    printf 'OK %s\n' "$function_name"
-    return 0
-  fi
-  if [ "$status" -eq 137 ] &&
-    [ "$elapsed" -ge "$boot_timeout" ] &&
-    ! grep -Eq 'worker boot error|could not be parsed|main worker boot error' "$log_file"; then
-    printf 'OK %s (runtime exigiu SIGKILL após a janela)\n' "$function_name"
+  if [ "$status" -eq 124 ] ||
+    { [ "$status" -eq 137 ] && [ "$elapsed" -ge "$boot_timeout" ]; }; then
+    if grep -Eq 'worker boot error|could not be parsed|main worker boot error' "$log_file"; then
+      printf '%s\n' "$status" >"${log_file}.failed"
+      printf 'FAIL %s (erro de boot antes do timeout, exit %s)\n' "$function_name" "$status"
+      return 0
+    fi
+    if [ "$status" -eq 137 ]; then
+      printf 'OK %s (runtime exigiu SIGKILL após a janela)\n' "$function_name"
+    else
+      printf 'OK %s\n' "$function_name"
+    fi
     return 0
   fi
 

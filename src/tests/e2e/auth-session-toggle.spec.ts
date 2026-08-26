@@ -317,7 +317,9 @@ async function bootstrapPublicAuth(page: Page, nextPath?: string): Promise<strin
     url.searchParams.delete(resetQuery.split('=')[0] ?? resetQuery);
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }, AUTH_RESET_QUERY);
-  const expectedLocation = nextPath ? `/auth?next=${encodeURIComponent(nextPath)}` : '/auth';
+  const expectedLocation = nextPath
+    ? `/auth?${new URLSearchParams({ next: nextPath }).toString()}`
+    : '/auth';
   await waitForLocation(page, expectedLocation);
   return expectedLocation;
 }

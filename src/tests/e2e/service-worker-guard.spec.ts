@@ -246,7 +246,15 @@ test.describe('Service Worker guard', () => {
     ).toContain('zapp-runtime-audit');
 
     await page.goto(`${DEV_ORIGIN}/?sw=off`, { waitUntil: 'domcontentloaded' });
-    const finalState = await waitForSkipCleanup(page, 'localhost-sw-off-real');
+    const cleanupState = await waitForSkipCleanup(page, 'localhost-sw-off-real');
+    expect(cleanupState.cleanupError).toBeNull();
+
+    // unregister() remove o registro, mas o documento atual continua controlado
+    // até uma nova navegação. O kill-switch só convergiu de verdade quando a
+    // página seguinte também nasce sem controller legado.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const finalState = await waitForSkipCleanup(page, 'localhost-sw-off-controller-release');
     expect(finalState.cleanupError).toBeNull();
+    expect(finalState.controllerUrl).toBeNull();
   });
 });
