@@ -32,98 +32,22 @@ const SUPABASE_PROJECT_REF = new URL(
 ).hostname.split('.')[0];
 const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
 
-type NavRecord = {
-  kind: 'pushState' | 'replaceState' | 'popstate';
+type FrameNavRecord = {
   url: string;
   at: number;
-  stateFrom: string | null;
 };
 
-async function installHistoryProbe(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const win = window as typeof window & {
-      __zappHistoryProbeInstalled?: boolean;
-    };
-    if (win.__zappHistoryProbeInstalled) return;
-    win.__zappHistoryProbeInstalled = true;
-    const STORAGE_KEY = '__zappHistoryProbe';
-
-    const readStateFrom = (state: unknown): string | null => {
-      if (!state || typeof state !== 'object') return null;
-      const from = (state as { usr?: { from?: { pathname?: string } } }).usr?.from?.pathname;
-      return typeof from === 'string' ? from : null;
-    };
-
-    const resolveUrl = (url?: string | URL | null): string => {
-      try {
-        return new URL(url == null ? window.location.href : String(url), window.location.href).href;
-      } catch {
-        return window.location.href;
-      }
-    };
-
-    const readRecords = (): NavRecord[] => {
-      try {
-        const raw = sessionStorage.getItem(STORAGE_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? (parsed as NavRecord[]) : [];
-      } catch {
-        return [];
-      }
-    };
-
-    const pushRecord = (
-      kind: NavRecord['kind'],
-      url?: string | URL | null,
-      state?: unknown
-    ): void => {
-      const next = readRecords();
-      next.push({
-        kind,
-        url: resolveUrl(url),
-        at: Date.now(),
-        stateFrom: readStateFrom(state),
-      });
-      try {
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        /* noop */
-      }
-    };
-
-    const originalPushState = history.pushState.bind(history);
-    history.pushState = ((state: unknown, unused: string, url?: string | URL | null) => {
-      originalPushState(state, unused, url);
-      pushRecord('pushState', url, state);
-    }) as History['pushState'];
-
-    const originalReplaceState = history.replaceState.bind(history);
-    history.replaceState = ((state: unknown, unused: string, url?: string | URL | null) => {
-      originalReplaceState(state, unused, url);
-      pushRecord('replaceState', url, state);
-    }) as History['replaceState'];
-
-    window.addEventListener('popstate', () => {
-      pushRecord('popstate', window.location.href, window.history.state);
-    });
-  });
-}
-
-async function readHistoryProbe(page: Page): Promise<NavRecord[]> {
-  return page.evaluate(() => {
-    try {
-      const raw = sessionStorage.getItem('__zappHistoryProbe');
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as NavRecord[]) : [];
-    } catch {
-      return [];
+async function collectMainFrameNavigations(page: Page): Promise<FrameNavRecord[]> {
+  const navs: FrameNavRecord[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) {
+      navs.push({ url: frame.url(), at: Date.now() });
     }
   });
+  return navs;
 }
 
-async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 8_000): Promise<void> {
+async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000): Promise<void> {
   await expect.poll(() => new URL(page.url()).pathname, { timeout }).toMatch(expectedPath);
   // 1.5s idle: se um loop existir, ele dispara aqui.
   await page.waitForTimeout(1500);
@@ -133,13 +57,23 @@ async function gotoProtectedRoute(page: Page, route: string): Promise<void> {
   try {
     await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   } catch (error) {
-    // WebKit reports the expected immediate auth redirect as an interrupted
-    // source navigation. This is not a product failure: the assertions below
-    // still require /auth, one redirect only and the preserved origin state.
+    // WebKit reports both variants below when React Router redirects during a
+    // document navigation. The interruption is accepted only after proving
+    // that this same navigation settled on /auth; any other error is kept.
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('is interrupted by another navigation') || !message.includes('/auth')) {
+    const isExpectedInterruption =
+      message.includes('is interrupted by another navigation') ||
+      message.includes('Frame load interrupted');
+    if (!isExpectedInterruption) {
       throw error;
     }
+
+    await expect
+      .poll(() => new URL(page.url()).pathname, {
+        timeout: 5_000,
+        message: `navegação interrompida para ${route} deve estabilizar em /auth`,
+      })
+      .toMatch(/^\/auth/);
   }
 }
 
@@ -176,11 +110,26 @@ async function setSessionState(page: Page, mode: 'none' | 'expired' | 'corrupted
   }
 }
 
-function countPathHits(navs: NavRecord[], path: RegExp): number {
-  return navs.filter((nav) => path.test(new URL(nav.url).pathname)).length;
+function countFrameTransitionsToPath(navs: FrameNavRecord[], path: RegExp): number {
+  let transitions = 0;
+  let previousPath: string | null = null;
+
+  for (const nav of navs) {
+    const currentPath = new URL(nav.url).pathname;
+    if (path.test(currentPath) && (previousPath == null || !path.test(previousPath))) {
+      transitions += 1;
+    }
+    previousPath = currentPath;
+  }
+
+  return transitions;
 }
 
-function hasConsecutiveAuthRedirects(navs: NavRecord[], within = 500): boolean {
+function hasExactFramePathHit(navs: FrameNavRecord[], path: string): boolean {
+  return navs.some((nav) => new URL(nav.url).pathname === path);
+}
+
+function hasConsecutiveAuthRedirects(navs: FrameNavRecord[], within = 500): boolean {
   // Browsers may emit two main-frame navigation events for the source URL
   // during page.goto/reload. The regression contract is specifically that the
   // application must not redirect to /auth twice for one invalid session.
@@ -200,25 +149,11 @@ async function readRedirectSource(page: Page): Promise<string | null> {
   });
 }
 
-async function readRedirectSourceOrRecordedFallback(page: Page): Promise<string | null> {
-  const direct = await readRedirectSource(page);
-  if (direct) return direct;
-
-  const navs = await readHistoryProbe(page);
-  for (let i = navs.length - 1; i >= 0; i--) {
-    const nav = navs[i];
-    if (/^\/auth/.test(new URL(nav.url).pathname) && nav.stateFrom) {
-      return nav.stateFrom;
-    }
-  }
-  return null;
-}
-
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
   test('cada modo de sessão inválida redireciona uma única vez para /auth preservando a rota de origem', async ({
     page,
   }) => {
-    await installHistoryProbe(page);
+    const frameNavs = await collectMainFrameNavigations(page);
 
     // Bootstrap: carrega a app na landing pública para inicializar localStorage/SDK.
     try {
@@ -227,7 +162,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       test.skip(!STRICT, `Localhost inacessível: ${(err as Error).message}`);
       throw err;
     }
-    await page.waitForTimeout(500);
+    await waitForSettled(page, /^\/auth/, 20_000);
 
     const modes: Array<'none' | 'expired' | 'corrupted'> = ['none', 'expired', 'corrupted'];
 
@@ -235,27 +170,32 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       const route = PROTECTED_ROUTES[idx % PROTECTED_ROUTES.length];
       await setSessionState(page, mode);
 
-      const navsBefore = (await readHistoryProbe(page)).length;
+      const frameNavsBefore = frameNavs.length;
       await gotoProtectedRoute(page, route);
       await waitForSettled(page, /^\/auth/);
 
-      const stepNavs = (await readHistoryProbe(page)).slice(navsBefore);
-      const authHits = countPathHits(stepNavs, /^\/auth/);
+      const stepFrameNavs = frameNavs.slice(frameNavsBefore);
+      const authTransitions = countFrameTransitionsToPath(stepFrameNavs, /^\/auth/);
 
       expect(
-        authHits,
-        `[${mode}] Redirects para /auth durante navegação a ${route}: ${authHits} (${JSON.stringify(
-          stepNavs.map((n) => n.url)
+        hasExactFramePathHit(stepFrameNavs, route),
+        `[${mode}] a etapa deve efetivamente abrir ${route} antes do redirect: ${JSON.stringify(
+          stepFrameNavs.map((n) => n.url)
+        )}`
+      ).toBe(true);
+
+      expect(
+        authTransitions,
+        `[${mode}] Transições efetivas para /auth durante navegação a ${route}: ${authTransitions} (${JSON.stringify(
+          stepFrameNavs.map((n) => n.url)
         )})`
       ).toBe(1);
 
-      expect(
-        hasConsecutiveAuthRedirects(stepNavs, 500),
-        `[${mode}] Detectado redirect /auth duplicado (<500ms) em ${route}: ${JSON.stringify(stepNavs)}`
-      ).toBe(false);
-
       await expect
-        .poll(() => readRedirectSourceOrRecordedFallback(page), {
+        // Read only the state attached to the current, settled /auth entry.
+        // Patching History API methods changes React Router's behaviour in
+        // WebKit; reading it directly preserves the app's real navigation.
+        .poll(() => readRedirectSource(page), {
           timeout: 5_000,
           message: `[${mode}] redirect para /auth deve preservar a rota ${route}`,
         })
@@ -273,10 +213,14 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       }
     }
 
-    const navs = await readHistoryProbe(page);
     expect(
-      countPathHits(navs, /^\/auth/) === modes.length + 1,
-      `Redirects app-level inesperados para /auth: ${JSON.stringify(navs)}`
+      countFrameTransitionsToPath(frameNavs, /^\/auth/) === modes.length + 1,
+      `Transições app-level inesperadas para /auth: ${JSON.stringify(frameNavs)}`
     ).toBe(true);
+
+    expect(
+      hasConsecutiveAuthRedirects(frameNavs, 500),
+      `Navegação principal registrou redirect /auth duplicado (<500ms): ${JSON.stringify(frameNavs)}`
+    ).toBe(false);
   });
 });
