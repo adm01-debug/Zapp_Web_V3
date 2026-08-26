@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 # Portado do harness de produção do zapp-web (v1) para o v3.
 
-FROM oven/bun:1.3-alpine AS deps
+FROM oven/bun:1.3.14-alpine AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
-# Removido --frozen-lockfile para compatibilidade com bun 1.3.x (floating tag)
-RUN bun install
+# Release Docker precisa ser determinística: sem drift silencioso do lockfile.
+RUN bun install --frozen-lockfile
 
 FROM deps AS builder
 WORKDIR /app
@@ -30,6 +30,12 @@ ENV VITE_GIT_SHA=${VITE_GIT_SHA}
 ENV VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT}
 ENV VITE_APP_ENV=${VITE_APP_ENV}
 ENV VITE_ENABLE_CLIENT_OBSERVABILITY=${VITE_ENABLE_CLIENT_OBSERVABILITY}
+
+RUN case "${VITE_GIT_SHA:-}" in \
+    ""|"dev") ;; \
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; \
+    *) echo "VITE_GIT_SHA inválido: esperado SHA git completo com 40 hex em release" >&2; exit 1 ;; \
+  esac
 
 # build direto pelo Vite (determinístico em CI/Docker; component-registry já versionado)
 RUN bunx vite build

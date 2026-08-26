@@ -56,9 +56,24 @@ const checks = [
     "image_tag deve chegar ao shell via env, sem interpolação direta",
   ],
   [
+    /RELEASE_SHA_INVALID/,
+    workflow,
+    "falta validar github.sha como SHA completo de 40 hex",
+  ],
+  [
     /ZAPP_IMAGE:\s*\$\{\{ needs\.build-and-push\.outputs\.canonical_image \}\}/,
     workflow,
     "deploy ainda não usa a imagem canônica pinada por digest",
+  ],
+  [
+    /deploy:[\s\S]*?uses:\s*actions\/checkout@v7/,
+    workflow,
+    "runner da VPS precisa fazer checkout do compose versionado antes do deploy",
+  ],
+  [
+    /Capturar release anterior para rollback explícito[\s\S]*PREVIOUS_IMAGE_INVALID[\s\S]*previous_image=\$\{PREVIOUS_IMAGE\}[\s\S]*previous_digest=\$\{PREVIOUS_DIGEST\}/,
+    workflow,
+    "falta capturar e validar a imagem anterior pinada por digest antes do PUT",
   ],
   [
     /Em main o gate é fail-closed: sem escape hatch silencioso por repo var\./,
@@ -66,7 +81,7 @@ const checks = [
     "falta documentar que a convergência em main é fail-closed",
   ],
   [
-    /docker service ps "\$SVC" --filter desired-state=running --no-trunc --format '\{\{json \.\}\}'/,
+    /docker service ps "\$SVC" --filter desired-state=running --no-trunc --format "\{\{json \.\}\}"/,
     workflow,
     "convergência não valida as tasks desired-state=running via JSON estruturado",
   ],
@@ -121,6 +136,37 @@ const checks = [
     "falta comprovar que version.json e index públicos correspondem ao commit implantado",
   ],
   [
+    /COMPOSE_PLACEHOLDER_COUNT_INVALID[\s\S]*COMPOSE_PLACEHOLDER_REMAINS[\s\S]*COMPOSE_IMAGE_COUNT_INVALID[\s\S]*docker stack config -c "\$compose_path"[\s\S]*COMPOSE_RENDERED_IMAGE_MISSING/,
+    workflow,
+    "falta validar placeholder/imagem renderizada do compose antes do PUT no Portainer",
+  ],
+  [
+    /curl -s -o \/tmp\/pr\.json -w "%\{http_code\}"[\s\S]*--connect-timeout 10[\s\S]*--max-time 60/,
+    workflow,
+    "curl do Portainer precisa ter timeouts explícitos",
+  ],
+  [
+    /Rollback automático explícito para a release anterior/,
+    workflow,
+    "falta a etapa de rollback automático explícito",
+  ],
+  [
+    /docker service update --image "\$\{PREVIOUS_IMAGE\}" "\$SVC"/,
+    workflow,
+    "rollback precisa usar docker service update --image com a release anterior explícita",
+  ],
+  [
+    /ROLLBACK_CONVERGENCE_TIMEOUT[\s\S]*DEPLOY_REVERTIDO/,
+    workflow,
+    "falta rollback automático explícito com convergência ao digest anterior",
+  ],
+  [
+    /docker service update --rollback/,
+    workflow,
+    "workflow ainda usa rollback cego do Swarm",
+    true,
+  ],
+  [
     /vars\.ENFORCE_CONVERGENCE/,
     workflow,
     "escape hatch ENFORCE_CONVERGENCE ainda existe no workflow",
@@ -135,6 +181,16 @@ const checks = [
     /COPY --from=previous_assets \/ \/usr\/share\/nginx\/html\/assets\//,
     dockerfile,
     "runtime não usa contexto N-1",
+  ],
+  [
+    /FROM oven\/bun:1\.3\.14-alpine AS deps[\s\S]*RUN bun install --frozen-lockfile/,
+    dockerfile,
+    "Dockerfile precisa pinar Bun 1.3.14 e usar install congelado",
+  ],
+  [
+    /VITE_GIT_SHA inválido/,
+    dockerfile,
+    "Dockerfile precisa validar o SHA de release injetado",
   ],
   [
     /dist\/current-assets\.txt/,

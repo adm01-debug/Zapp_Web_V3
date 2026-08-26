@@ -166,16 +166,22 @@ jobs:
           BUILD_DIGEST: ${{ steps.build_push.outputs.digest }}
         run: |
           set -euo pipefail
+          if ! printf '%s' "$GITHUB_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::RELEASE_SHA_INVALID — github.sha precisa ser um SHA completo de 40 hex"
+            exit 1
+          fi
           if ! printf '%s' "$BUILD_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
             echo "::error::BUILD_DIGEST_MISSING — docker/build-push-action não retornou digest OCI válido"
             exit 1
           fi
-          echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
           # tag@digest mantém a identidade imutável e preserva a tag local de
           # rollback na VPS mesmo após docker image prune.
-          echo "canonical_image=${IMAGE_TAG}@${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "release_sha12=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-          echo "release_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          {
+            echo "digest=${BUILD_DIGEST}"
+            echo "canonical_image=${IMAGE_TAG}@${BUILD_DIGEST}"
+            echo "release_sha12=${GITHUB_SHA::12}"
+            echo "release_sha=${GITHUB_SHA}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: 📋 Ler tags de rollback protegidas (infra/ghcr-protected-tags.txt)
         id: protect
@@ -186,11 +192,17 @@ jobs:
             exit 0
           fi
           # Normaliza: remove comentários e linhas vazias, trim, lowercase, remove CRLF
-          NORMALIZED="$(grep -v '^#' infra/ghcr-protected-tags.txt \
-            | grep -v '^[[:space:]]*$' \
-            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
-            | tr 'A-F' 'a-f' \
-            | tr -d '\r')"
+          NORMALIZED="$(
+            while IFS= read -r raw_line; do
+              case "$raw_line" in
+                ''|'#'*) continue ;;
+              esac
+              line="${raw_line#"${raw_line%%[![:space:]]*}"}"
+              line="${line%"${line##*[![:space:]]}"}"
+              line="$(printf '%s' "$line" | tr 'A-F' 'a-f' | tr -d '\r')"
+              [ -n "$line" ] && printf '%s\n' "$line"
+            done < infra/ghcr-protected-tags.txt
+          )"
           # Arquivo vazio → fallback (não é erro de digitação, só arquivo ainda não populado)
           if [ -z "$NORMALIZED" ]; then
             echo "AVISO: nenhuma SHA encontrada no arquivo — usando fallback hardcoded"
@@ -201,11 +213,14 @@ jobs:
           INVALID="$(echo "$NORMALIZED" | grep -Ev '^[0-9a-f]{12}$' || true)"
           if [ -n "$INVALID" ]; then
             echo "ERRO: infra/ghcr-protected-tags.txt contém entradas inválidas:" >&2
-            echo "$INVALID" | sed 's/^/  /' >&2
+            while IFS= read -r invalid_line; do
+              printf '  %s\n' "$invalid_line" >&2
+            done < <(printf '%s\n' "$INVALID")
             echo "Cada linha deve ser exatamente 12 dígitos hex lowercase (ex: fbd04bec303d)." >&2
             exit 1
           fi
-          TAGS="$(echo "$NORMALIZED" | tr '\n' '|' | sed 's/|$//')"
+          TAGS="${NORMALIZED//$'\n'/|}"
+          TAGS="${TAGS%|}"
           echo "regex=^production-(${TAGS})$" >> "$GITHUB_OUTPUT"
 
       # ============================================================
@@ -274,6 +289,10 @@ jobs:
       release_sha: ${{ needs.build-and-push.outputs.release_sha }}
     # environment removido (mesmo motivo do job build — ver acima)
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Verify required secrets
         run: |
           missing=""
@@ -306,19 +325,21 @@ jobs:
           ANON=""
           for f in /tmp/gate-assets/index-*.js; do
             [ -f "$f" ] || continue
-            for J in $(grep -oE 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' "$f" | sort -u); do
+            while IFS= read -r J; do
+              [ -n "$J" ] || continue
               ROLE=$(node -e "try{const p=Buffer.from(process.argv[1].split('.')[1].replace(/-/g,'+').replace(/_/g,'/'),'base64').toString();process.stdout.write(String((JSON.parse(p)||{}).role||''))}catch(e){}" "$J" 2>/dev/null || true)
               if [ "$ROLE" = "service_role" ] || [ "$ROLE" = "service" ]; then
                 echo "::error::SERVICE_ROLE_IN_BUILT_BUNDLE — $f embute role=$ROLE (abortando antes do deploy)"; exit 1
               fi
               [ "$ROLE" = "anon" ] && ANON="$J"
-            done
+            done < <(grep -oE 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' "$f" | sort -u)
           done
           if [ -z "$ANON" ]; then echo "::error::ANON_NAO_ENCONTRADA no bundle buildado (fail-closed)"; exit 1; fi
           CODE=000
-          for try in 1 2; do
+          for attempt in 1 2; do
             CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${KONG_URL}/auth/v1/settings" -H "apikey: $ANON" || echo 000)
             [ "$CODE" = "200" ] && break
+            echo "tentativa ${attempt}: auth/v1/settings=${CODE}"
             sleep 3
           done
           if [ "$CODE" != "200" ]; then
@@ -326,13 +347,31 @@ jobs:
           fi
           echo "Gate OK — anon do bundle aceita pelo Kong (200). Prosseguindo ao deploy."
 
+      - name: Capturar release anterior para rollback explícito
+        id: previous_release
+        run: |
+          set -euo pipefail
+          SVC="zapp-web-prod_web"
+          PREVIOUS_IMAGE=$(docker service inspect "$SVC" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+          if ! printf '%s' "$PREVIOUS_IMAGE" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
+            echo "::error::PREVIOUS_IMAGE_INVALID — serviço atual sem identidade tag@digest segura para rollback: ${PREVIOUS_IMAGE:-<vazio>}"
+            exit 1
+          fi
+          PREVIOUS_DIGEST=$(printf '%s\n' "$PREVIOUS_IMAGE" | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p')
+          echo "previous_image=${PREVIOUS_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "previous_digest=${PREVIOUS_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Release anterior: ${PREVIOUS_IMAGE}"
+
       - name: Deploy via Portainer API
+        id: deploy_portainer
+        continue-on-error: true
         env:
           PORTAINER_API_TOKEN: ${{ secrets.PORTAINER_API_TOKEN }}
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           ZAPP_IMAGE: ${{ needs.build-and-push.outputs.canonical_image }}
         run: |
           set -euo pipefail
+          echo "deploy_attempted=0" >> "$GITHUB_OUTPUT"
           echo "Deploying: ${ZAPP_IMAGE}"
 
           # ============================================================
@@ -341,24 +380,51 @@ jobs:
           # Fonte única de verdade: infra/docker-compose-zapp-web.yml
           # ETAPA 12 — VPS Disk Defense Plan (preservado: SHA-based tags)
           # ============================================================
-          cp infra/docker-compose-zapp-web.yml /tmp/compose.yml
+          compose_path="$(mktemp /tmp/zapp-compose.XXXXXX.yml)"
+          rendered_path="$(mktemp /tmp/zapp-compose-rendered.XXXXXX.yml)"
+          placeholder="\${ZAPP_IMAGE}"
+          cp infra/docker-compose-zapp-web.yml "$compose_path"
+
+          PLACEHOLDER_COUNT_BEFORE=$(grep -oF "$placeholder" "$compose_path" | wc -l | tr -d ' ')
+          [ "$PLACEHOLDER_COUNT_BEFORE" = "1" ] || {
+            echo "::error::COMPOSE_PLACEHOLDER_COUNT_INVALID — esperado exatamente 1 placeholder ZAPP_IMAGE, encontrado ${PLACEHOLDER_COUNT_BEFORE}"
+            exit 1
+          }
 
           # Substitui a variável ${ZAPP_IMAGE} pela release canônica pinada por digest
-          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}|g" /tmp/compose.yml
+          sed -i "s|$placeholder|${ZAPP_IMAGE}|g" "$compose_path"
+          PLACEHOLDER_COUNT_AFTER=$(grep -oF "$placeholder" "$compose_path" | wc -l | tr -d ' ')
+          [ "$PLACEHOLDER_COUNT_AFTER" = "0" ] || {
+            echo "::error::COMPOSE_PLACEHOLDER_REMAINS — placeholder ZAPP_IMAGE continuou no compose renderizado"
+            exit 1
+          }
+          IMAGE_COUNT_AFTER=$(grep -Fxc "    image: ${ZAPP_IMAGE}" "$compose_path" || true)
+          [ "$IMAGE_COUNT_AFTER" = "1" ] || {
+            echo "::error::COMPOSE_IMAGE_COUNT_INVALID — compose não contém exatamente 1 imagem canônica renderizada"
+            exit 1
+          }
+          docker stack config -c "$compose_path" > "$rendered_path"
+          grep -Fq "${ZAPP_IMAGE}" "$rendered_path" || {
+            echo "::error::COMPOSE_RENDERED_IMAGE_MISSING — docker stack config não preservou a imagem canônica"
+            exit 1
+          }
           echo "✅ Compose versionado usado: infra/docker-compose-zapp-web.yml"
-          echo "Image no compose: $(grep 'image:' /tmp/compose.yml | head -1 | xargs)"
+          echo "Image no compose: $(grep 'image:' "$compose_path" | head -1 | xargs)"
 
-          STACK_CONTENT=$(cat /tmp/compose.yml | jq -Rs .)
+          STACK_CONTENT=$(jq -Rs . < "$compose_path")
           PAYLOAD="{\"pullImage\":true,\"prune\":false,\"stackFileContent\":${STACK_CONTENT}}"
 
+          echo "deploy_attempted=1" >> "$GITHUB_OUTPUT"
           HTTP=$(curl -s -o /tmp/pr.json -w "%{http_code}" \
+            --connect-timeout 10 \
+            --max-time 60 \
             -X PUT "${PORTAINER_URL}/api/stacks/157?endpointId=1" \
             -H "X-API-Key: ${PORTAINER_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "${PAYLOAD}")
 
           echo "Portainer HTTP: ${HTTP}"
-          cat /tmp/pr.json | head -c 400 || true
+          head -c 400 /tmp/pr.json || true
           [ "${HTTP}" = "200" ] || { echo "::error::Deploy failed HTTP ${HTTP}"; exit 1; }
 
           # Aguardar além do start_period (30s) para checar o container novo, não o antigo
@@ -383,6 +449,9 @@ jobs:
       # Em main o gate é fail-closed: sem escape hatch silencioso por repo var.
       # ============================================================
       - name: ✅ Convergência verificada (Swarm × imagem do deploy)
+        id: convergence
+        if: ${{ steps.deploy_portainer.outputs.deploy_attempted == '1' && steps.deploy_portainer.outcome == 'success' }}
+        continue-on-error: true
         env:
           EXPECTED_IMAGE: ${{ needs.build-and-push.outputs.canonical_image }}
           EXPECTED_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
@@ -395,10 +464,10 @@ jobs:
             printf '%s\n' "$1" | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p'
           }
           while :; do
-            STATUS=$(docker service inspect "$SVC" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}' 2>/dev/null || echo "inspect_fail")
-            REPL=$(docker service ls --filter "name=${SVC}" --format '{{.Replicas}}' 2>/dev/null | head -1 || echo "0/1")
-            IMG=$(docker service inspect "$SVC" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "?")
-            TASKS=$(docker service ps "$SVC" --filter desired-state=running --no-trunc --format '{{json .}}' 2>/dev/null || true)
+            STATUS=$(docker service inspect "$SVC" --format "{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}" 2>/dev/null || echo "inspect_fail")
+            REPL=$(docker service ls --filter "name=${SVC}" --format "{{.Replicas}}" 2>/dev/null | head -1 || echo "0/1")
+            IMG=$(docker service inspect "$SVC" --format "{{.Spec.TaskTemplate.ContainerSpec.Image}}" 2>/dev/null || echo "?")
+            TASKS=$(docker service ps "$SVC" --filter desired-state=running --no-trunc --format "{{json .}}" 2>/dev/null || true)
             echo "estado=${STATUS} replicas=${REPL:-?} image=${IMG}"
             printf '%s\n' "${TASKS:-<sem tasks desejadas>}"
             case "$STATUS" in
@@ -482,6 +551,7 @@ jobs:
           echo "✅ Convergência verificada: ${SVC} @ ${IMG} (digest ${EXPECTED_DIGEST}, replicas ${REPL})"
 
       - name: 🧾 Release identity canônica confirmada
+        if: ${{ steps.deploy_portainer.outputs.deploy_attempted == '1' && steps.deploy_portainer.outcome == 'success' && steps.convergence.outcome == 'success' }}
         env:
           CANONICAL_IMAGE: ${{ needs.build-and-push.outputs.canonical_image }}
           EXPECTED_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
@@ -500,6 +570,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 🌐 Release publicada corresponde ao commit
+        id: public_release
+        if: ${{ steps.deploy_portainer.outputs.deploy_attempted == '1' && steps.deploy_portainer.outcome == 'success' && steps.convergence.outcome == 'success' }}
+        continue-on-error: true
         env:
           EXPECTED_SHA: ${{ needs.build-and-push.outputs.release_sha }}
           PUBLIC_ORIGIN: https://zapp.atomicabr.com.br
@@ -545,6 +618,94 @@ jobs:
             exit 1
           fi
           echo "✅ Release pública confirmada: ${ACTUAL_SHA} (${ENTRY})"
+
+      - name: ↩️ Rollback automático explícito para a release anterior
+        if: ${{ always() && steps.deploy_portainer.outputs.deploy_attempted == '1' && (steps.deploy_portainer.outcome == 'failure' || steps.convergence.outcome == 'failure' || steps.public_release.outcome == 'failure') }}
+        env:
+          PREVIOUS_IMAGE: ${{ steps.previous_release.outputs.previous_image }}
+          PREVIOUS_DIGEST: ${{ steps.previous_release.outputs.previous_digest }}
+        run: |
+          set -euo pipefail
+          SVC="zapp-web-prod_web"
+          extract_digest() {
+            printf '%s\n' "$1" | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p'
+          }
+          wait_for_digest() {
+            local expected_digest="$1"
+            local deadline=$((SECONDS + 300))
+            local status img repl tasks spec_digest repl_ok tasks_present tasks_json_ok tasks_running_ok tasks_error_free tasks_image_format_ok tasks_digest_ok
+            while :; do
+              status=$(docker service inspect "$SVC" --format "{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}" 2>/dev/null || echo "inspect_fail")
+              repl=$(docker service ls --filter "name=${SVC}" --format "{{.Replicas}}" 2>/dev/null | head -1 || echo "0/1")
+              img=$(docker service inspect "$SVC" --format "{{.Spec.TaskTemplate.ContainerSpec.Image}}" 2>/dev/null || echo "?")
+              tasks=$(docker service ps "$SVC" --filter desired-state=running --no-trunc --format "{{json .}}" 2>/dev/null || true)
+              echo "rollback estado=${status} replicas=${repl} image=${img}"
+              printf '%s\n' "${tasks:-<sem tasks desejadas>}"
+              case "$status" in
+                rollback_completed|rollback_paused|paused)
+                  echo "::error::ROLLBACK_CONVERGENCE_FAIL — UpdateStatus=${status}"; exit 1 ;;
+              esac
+              spec_digest=$(extract_digest "$img")
+              repl_ok=$(echo "${repl:-0/1}" | awk -F/ '{print ($1==$2 && $2!="0") ? "1" : "0"}')
+              tasks_present=0
+              tasks_json_ok=1
+              tasks_running_ok=1
+              tasks_error_free=1
+              tasks_image_format_ok=1
+              tasks_digest_ok=1
+              while IFS= read -r task; do
+                [ -n "$task" ] || continue
+                tasks_present=1
+                if ! printf '%s\n' "$task" | jq -e . >/dev/null 2>&1; then
+                  tasks_json_ok=0
+                  continue
+                fi
+                current_state=$(printf '%s\n' "$task" | jq -r '.CurrentState // empty')
+                error_field=$(printf '%s\n' "$task" | jq -r '.Error // empty')
+                task_image=$(printf '%s\n' "$task" | jq -r '.Image // empty')
+                case "$current_state" in
+                  Running\ *) ;;
+                  *) tasks_running_ok=0 ;;
+                esac
+                [ -z "$error_field" ] || tasks_error_free=0
+                task_digest=$(extract_digest "$task_image")
+                case "$task_digest" in
+                  sha256:*)
+                    [ "$task_digest" = "$expected_digest" ] || tasks_digest_ok=0
+                    ;;
+                  *)
+                    tasks_image_format_ok=0
+                    ;;
+                esac
+              done < <(printf '%s\n' "$tasks")
+              if { [ "$status" = "completed" ] || [ "$status" = "none" ]; } \
+                && [ "$spec_digest" = "$expected_digest" ] \
+                && [ "$repl_ok" = "1" ] \
+                && [ "$tasks_present" = "1" ] \
+                && [ "$tasks_json_ok" = "1" ] \
+                && [ "$tasks_running_ok" = "1" ] \
+                && [ "$tasks_error_free" = "1" ] \
+                && [ "$tasks_image_format_ok" = "1" ] \
+                && [ "$tasks_digest_ok" = "1" ]; then
+                break
+              fi
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "::error::ROLLBACK_CONVERGENCE_TIMEOUT — rollback não convergiu ao digest anterior ${expected_digest}"
+                exit 1
+              fi
+              sleep 15
+            done
+          }
+          echo "Rollback explícito para ${PREVIOUS_IMAGE}"
+          docker service update --image "${PREVIOUS_IMAGE}" "$SVC"
+          wait_for_digest "$PREVIOUS_DIGEST"
+          echo "✅ Rollback explícito concluído: ${PREVIOUS_IMAGE}"
+
+      - name: ❌ Falhar workflow após rollback automático
+        if: ${{ always() && steps.deploy_portainer.outputs.deploy_attempted == '1' && (steps.deploy_portainer.outcome == 'failure' || steps.convergence.outcome == 'failure' || steps.public_release.outcome == 'failure') }}
+        run: |
+          echo "::error::DEPLOY_REVERTIDO — rollout pós-tentativa falhou e a release anterior foi restaurada explicitamente"
+          exit 1
 
       - name: 🧹 Prune dangling images pós-deploy (manutenção disco VPS)
         if: always()
