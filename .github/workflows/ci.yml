@@ -768,11 +768,14 @@ jobs:
           docker volume create "$VOL" >/dev/null
           trap 'docker volume rm "$VOL" >/dev/null 2>&1 || true' EXIT
           tar -C "$GITHUB_WORKSPACE/supabase/functions" -cf - . | docker run --rm -i -v "$VOL:/data" alpine:3.19 sh -c 'rm -rf /data/* /data/.* 2>/dev/null || true; tar -xf - -C /data'
+          # Deno 2.2.8 resolve incorretamente todos os optionalDependencies
+          # do Rolldown e exige bindings inexistentes de FreeBSD/OpenHarmony.
+          # 2.9.5 foi validado contra os 180 arquivos deste gate.
           for attempt in 1 2; do
             set +e
             timeout 240 docker run --rm \
               -v "$VOL:/home/deno/functions:ro" \
-              denoland/deno:2.2.8 cache --no-config --no-lock \
+              denoland/deno:2.9.5 cache --no-config --no-lock \
               $(find supabase/functions -name '*.ts' -not -path '*/__tests__/*' -not -name '*.spec.ts' -not -name '*.test.ts' | sed 's|^supabase/functions/|/home/deno/functions/|') \
               >"$RUNNER_TEMP/deno-cache.log" 2>&1
             rc=$?
