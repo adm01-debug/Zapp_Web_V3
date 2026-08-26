@@ -108,6 +108,35 @@ async function readHistoryCallRecorder(page: Page): Promise<HistoryCallRecord[]>
   });
 }
 
+async function stageDocumentMarker(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const win = window as typeof window & { __zappAuthDocumentMarker?: string };
+    const marker = crypto.randomUUID();
+    win.__zappAuthDocumentMarker = marker;
+    return marker;
+  });
+}
+
+async function assertNewDocument(
+  page: Page,
+  previousMarker: string,
+  timeout = 5_000
+): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const win = window as typeof window & { __zappAuthDocumentMarker?: string };
+          return win.__zappAuthDocumentMarker ?? null;
+        }),
+      {
+        timeout,
+        message: 'a navegacao interrompida precisa terminar em um novo documento real',
+      }
+    )
+    .not.toBe(previousMarker);
+}
+
 async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000): Promise<void> {
   await expect.poll(() => new URL(page.url()).pathname, { timeout }).toMatch(expectedPath);
   // 1.5s idle: se um loop existir, ele dispara aqui.
@@ -130,6 +159,7 @@ async function reloadPublicAuthRoute(page: Page): Promise<void> {
   // The SDK reads the staged localStorage payload during bootstrap. Reloading
   // only the public route makes each expired/corrupted case real without
   // reintroducing the protected-document race that affects WebKit.
+  const previousDocumentMarker = await stageDocumentMarker(page);
   let observedAuthDocument = false;
   const observeMainFrame = (frame: { url: () => string }) => {
     if (frame === page.mainFrame() && new URL(frame.url()).pathname === '/auth') {
@@ -152,6 +182,7 @@ async function reloadPublicAuthRoute(page: Page): Promise<void> {
     // WebKit may interrupt the public reload with its own /auth navigation.
     // It is accepted only after observing the new main-frame document.
     await expect.poll(() => observedAuthDocument, { timeout: 5_000 }).toBe(true);
+    await assertNewDocument(page, previousDocumentMarker);
   } finally {
     page.off('framenavigated', observeMainFrame);
   }
@@ -170,6 +201,7 @@ function isExpectedNavigationInterruption(error: unknown): boolean {
 }
 
 async function bootInvalidSessionOnProtectedRoute(page: Page, route: string): Promise<void> {
+  const previousDocumentMarker = await stageDocumentMarker(page);
   let observedAuthDocument = false;
   const observeMainFrame = (frame: { url: () => string }) => {
     if (frame === page.mainFrame() && new URL(frame.url()).pathname === '/auth') {
@@ -185,6 +217,7 @@ async function bootInvalidSessionOnProtectedRoute(page: Page, route: string): Pr
     // Only a verified final /auth document can make this browser interruption
     // expected; otherwise the original navigation error remains a failure.
     await expect.poll(() => observedAuthDocument, { timeout: 5_000 }).toBe(true);
+    await assertNewDocument(page, previousDocumentMarker);
   } finally {
     page.off('framenavigated', observeMainFrame);
   }
