@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { render, renderHook, act, fireEvent, screen, waitFor } from '@testing-library/react';
 
 const mockUpload = vi.hoisted(() => vi.fn());
 const mockCreateSignedUrl = vi.hoisted(() => vi.fn());
@@ -26,6 +26,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { useChatScheduleMessage } from '@/features/inbox/components/chat/hooks/useChatScheduleMessage';
+import { ScheduleMessageDialog } from '@/features/inbox/components/ScheduleMessageDialog';
 
 const mockScheduleMessage = vi.fn<(args: {
   contactId: string;
@@ -35,7 +36,7 @@ const mockScheduleMessage = vi.fn<(args: {
   mediaUrl?: string;
 }) => Promise<unknown>>();
 
-function render() {
+function renderScheduleHook() {
   const onDone = vi.fn();
   const utils = renderHook(() =>
     useChatScheduleMessage({
@@ -49,6 +50,23 @@ function render() {
 
 const future = () => new Date(Date.now() + 86_400_000);
 
+function renderDialogIntegration(scheduleImpl = mockScheduleMessage) {
+  const onOpenChange = vi.fn();
+
+  function Harness() {
+    const onSchedule = useChatScheduleMessage({
+      contactId: 'c1',
+      scheduleMessage: scheduleImpl,
+      onDone: () => onOpenChange(false),
+    });
+
+    return <ScheduleMessageDialog open onOpenChange={onOpenChange} onSchedule={onSchedule} />;
+  }
+
+  render(<Harness />);
+  return { onOpenChange };
+}
+
 describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,7 +74,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
   });
 
   it('schedules text message with exact args and calls onDone once', async () => {
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
 
     await act(async () => {
       await result.current('Olá', future());
@@ -79,7 +97,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
       code: '42501',
       message: 'new row violates row-level security policy',
     });
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
 
     await act(async () => {
       await result.current('Olá', future());
@@ -97,7 +115,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
   it('toasts generic error on non-RLS failure and does NOT call onDone', async () => {
     mockScheduleMessage.mockRejectedValue(new Error('network down'));
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
 
     await act(async () => {
       await result.current('Olá', future());
@@ -115,7 +133,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
   it('does not schedule when attachment upload fails (toast de upload)', async () => {
     mockUpload.mockResolvedValue({ error: { message: 'bucket denied' } });
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
 
     await act(async () => {
@@ -132,7 +150,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
   it('uploads attachment and schedules as media type with signed URL', async () => {
     mockUpload.mockResolvedValue({ error: null });
     mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' } });
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
 
     await act(async () => {
@@ -149,7 +167,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
   });
 
   it('keeps stable identity between renders (useCallback)', () => {
-    const { result, rerender } = render();
+    const { result, rerender } = renderScheduleHook();
     const first = result.current;
     rerender();
     expect(result.current).toBe(first);
@@ -160,7 +178,7 @@ describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed U
   it('E39.8 RED: agendamento com mídia para mais de 7 dias cria URL inválida — deve ser rejeitado', async () => {
     mockUpload.mockResolvedValue({ error: null });
     mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' } });
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
     // 8 dias à frente > TTL da signed URL (604800s = 7 dias) → URL expira
     // antes do envio agendado. O hook deve REJEITAR com erro claro.
@@ -186,7 +204,7 @@ describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed U
   it('E39.9 pin: agendamento com mídia DENTRO de 7 dias continua funcionando', async () => {
     mockUpload.mockResolvedValue({ error: null });
     mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/ok' } });
-    const { result, onDone } = render();
+    const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
     const within7d = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
 
@@ -198,5 +216,36 @@ describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed U
       expect.objectContaining({ messageType: 'image', mediaUrl: 'https://signed/ok' })
     );
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useChatScheduleMessage + ScheduleMessageDialog integration', () => {
+  it('keeps the dialog open and does not emit a success toast when the hook reports failure', async () => {
+    mockScheduleMessage.mockRejectedValue(new Error('network down'));
+    const { onOpenChange } = renderDialogIntegration();
+
+    fireEvent.change(screen.getByLabelText('Mensagem'), {
+      target: { value: 'Olá' },
+    });
+    fireEvent.change(screen.getByLabelText('Data'), {
+      target: { value: '2026-08-27' },
+    });
+    fireEvent.change(screen.getByLabelText('Hora'), {
+      target: { value: '09:15' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Agendar' }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Erro ao agendar mensagem',
+          variant: 'destructive',
+        })
+      );
+    });
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Mensagem agendada!' })
+    );
   });
 });

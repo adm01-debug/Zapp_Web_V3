@@ -16,6 +16,8 @@ interface Params {
   onDone: () => void;
 }
 
+export type ChatScheduleMessageResult = boolean;
+
 /**
  * Encapsulates the "schedule message" flow, including optional attachment
  * upload to the whatsapp-media bucket and signed-URL resolution.
@@ -30,7 +32,11 @@ const MAX_MEDIA_SCHEDULE_MS = 7 * 24 * 60 * 60 * 1000; // TTL da signed URL (604
 
 export function useChatScheduleMessage({ contactId, scheduleMessage, onDone }: Params) {
   return useCallback(
-    async (content: string, scheduledAt: Date, attachment?: File) => {
+    async (
+      content: string,
+      scheduledAt: Date,
+      attachment?: File
+    ): Promise<ChatScheduleMessageResult> => {
       try {
         // E39.9: bloqueio de agendamento inválido — mídia além do prazo da
         // signed URL. Valida ANTES do upload (não sobe arquivo à toa).
@@ -41,7 +47,7 @@ export function useChatScheduleMessage({ contactId, scheduleMessage, onDone }: P
               'Anexos só podem ser agendados até 7 dias à frente (limite da URL assinada).',
             variant: 'destructive',
           });
-          return;
+          return false;
         }
         let mediaUrl: string | undefined;
         let messageType = 'text';
@@ -56,7 +62,7 @@ export function useChatScheduleMessage({ contactId, scheduleMessage, onDone }: P
               description: `Falha ao anexar: ${uploadError.message}`,
               variant: 'destructive',
             });
-            return;
+            return false;
           } else {
             const { data: signedData } = await supabase.storage
               .from('whatsapp-media')
@@ -73,6 +79,7 @@ export function useChatScheduleMessage({ contactId, scheduleMessage, onDone }: P
         }
         await scheduleMessage({ contactId, content, scheduledAt, messageType, mediaUrl });
         onDone();
+        return true;
       } catch (err) {
         log.error('Failed to schedule message:', err);
         // CAMPANHAS-09: toast REAL em 403 — nunca silenciar nem mascarar a causa.
@@ -83,6 +90,7 @@ export function useChatScheduleMessage({ contactId, scheduleMessage, onDone }: P
             : 'Tente novamente.',
           variant: 'destructive',
         });
+        return false;
       }
     },
     [contactId, scheduleMessage, onDone]

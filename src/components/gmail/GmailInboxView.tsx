@@ -98,6 +98,7 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
     event: KeyboardEvent<HTMLDivElement>,
     thread: EmailThread
   ) => {
+    if (event.target !== event.currentTarget) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     handleSelectThread(thread);

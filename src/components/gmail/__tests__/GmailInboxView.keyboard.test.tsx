@@ -31,6 +31,8 @@ describe('GmailInboxView keyboard interactions', () => {
   };
 
   const markAsRead = vi.fn();
+  const starThread = vi.fn();
+  const archiveThread = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,8 +56,8 @@ describe('GmailInboxView keyboard interactions', () => {
       disconnect: vi.fn(),
       syncNow: vi.fn(),
       markAsRead,
-      starThread: vi.fn(),
-      archiveThread: vi.fn(),
+      starThread,
+      archiveThread,
     });
   });
 
@@ -81,5 +83,31 @@ describe('GmailInboxView keyboard interactions', () => {
 
     expect(onSelectThread).toHaveBeenCalledWith(thread);
     expect(markAsRead).toHaveBeenCalledWith('thread-1', true);
+  });
+
+  it('ignores Enter from the favorite button so the row is not selected or marked as read', () => {
+    const onSelectThread = vi.fn();
+    render(<EmailInboxView onSelectThread={onSelectThread} />);
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Adicionar favorito' }), {
+      key: 'Enter',
+    });
+
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(markAsRead).not.toHaveBeenCalled();
+    expect(starThread).not.toHaveBeenCalled();
+  });
+
+  it('ignores Space from the archive button so the row is not selected or marked as read', () => {
+    const onSelectThread = vi.fn();
+    render(<EmailInboxView onSelectThread={onSelectThread} />);
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Arquivar thread' }), {
+      key: ' ',
+    });
+
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(markAsRead).not.toHaveBeenCalled();
+    expect(archiveThread).not.toHaveBeenCalled();
   });
 });
