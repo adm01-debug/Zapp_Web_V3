@@ -52,6 +52,20 @@ async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 8_000)
   await page.waitForTimeout(1500);
 }
 
+async function gotoProtectedRoute(page: Page, route: string): Promise<void> {
+  try {
+    await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  } catch (error) {
+    // WebKit reports the expected immediate auth redirect as an interrupted
+    // source navigation. This is not a product failure: the assertions below
+    // still require /auth, one redirect only and the preserved origin state.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('is interrupted by another navigation') || !message.includes('/auth')) {
+      throw error;
+    }
+  }
+}
+
 async function setSessionState(
   page: Page,
   mode: 'none' | 'expired' | 'corrupted',
@@ -131,7 +145,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       await setSessionState(page, mode);
 
       const navsBefore = navs.length;
-      await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+      await gotoProtectedRoute(page, route);
       await waitForSettled(page, /^\/auth/);
 
       const stepNavs = navs.slice(navsBefore);
