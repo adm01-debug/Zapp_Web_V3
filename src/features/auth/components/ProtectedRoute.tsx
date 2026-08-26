@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { getLogger } from '@/lib/logger';
 import { markTimeToMainScreen, recordAuthzFailure } from '@/lib/appMetrics';
 import { getAppEnv, isDevBypassAllowed } from '@/lib/auth/devBypass';
@@ -71,6 +71,10 @@ export function ProtectedRoute({
   } = useAuth();
   const { roles, loading: rolesLoading, hasRole } = useUserRole();
   const location = useLocation();
+  // Navigate tracks `state` by identity. Keep the redirect payload stable while
+  // this protected location is unchanged so unrelated auth/role re-renders do
+  // not repeat the same history replacement.
+  const redirectState = useMemo(() => ({ from: location }), [location]);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [permissionChecking, setPermissionChecking] = useState(false);
   const [loadingElapsed, setLoadingElapsed] = useState(0);
@@ -232,7 +236,7 @@ export function ProtectedRoute({
     // E51 51.6 (anti-loop): se já estamos em /auth, redirecionar para
     // /auth?reason=timeout recairia na mesma tela → loop. Renderiza saída.
     if (location.pathname !== '/auth') {
-      return <Navigate to="/auth?reason=timeout" state={{ from: location }} replace />;
+      return <Navigate to="/auth?reason=timeout" state={redirectState} replace />;
     }
     return (
       <div
@@ -303,7 +307,7 @@ export function ProtectedRoute({
 
   if (!user || timedOut) {
     recordAuthzFailure({ route: location.pathname, reason: 'unauthenticated' });
-    return <Navigate to="/auth" state={{ from: location }} replace />;
+    return <Navigate to="/auth" state={redirectState} replace />;
   }
 
   // Resolve effective required roles: DB override wins when present
@@ -368,7 +372,7 @@ export function ProtectedRoute({
       }
 
       if (fallback) return <>{fallback}</>;
-      return <Navigate to="/access-denied" state={{ from: location }} replace />;
+      return <Navigate to="/access-denied" state={redirectState} replace />;
     }
   }
 
@@ -405,7 +409,7 @@ export function ProtectedRoute({
     }
 
     if (fallback) return <>{fallback}</>;
-    return <Navigate to="/access-denied" state={{ from: location }} replace />;
+    return <Navigate to="/access-denied" state={redirectState} replace />;
   }
 
   // F3-11: guard useRef — evita chamadas repetidas em re-renders
