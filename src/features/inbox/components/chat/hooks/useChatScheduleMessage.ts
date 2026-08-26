@@ -18,6 +18,12 @@ interface Params {
 
 export type ChatScheduleMessageResult = boolean;
 
+function getSignedUrlFailureMessage(errorMessage?: string) {
+  return errorMessage
+    ? `Falha ao gerar link do anexo: ${errorMessage}`
+    : 'Falha ao gerar link do anexo. Tente novamente.';
+}
+
 /**
  * Encapsulates the "schedule message" flow, including optional attachment
  * upload to the whatsapp-media bucket and signed-URL resolution.
@@ -64,9 +70,17 @@ export function useChatScheduleMessage({ contactId, scheduleMessage, onDone }: P
             });
             return false;
           } else {
-            const { data: signedData } = await supabase.storage
+            const { data: signedData, error: signedUrlError } = await supabase.storage
               .from('whatsapp-media')
               .createSignedUrl(fileName, 604800);
+            if (signedUrlError || !signedData?.signedUrl) {
+              toast({
+                title: 'Erro no upload',
+                description: getSignedUrlFailureMessage(signedUrlError?.message),
+                variant: 'destructive',
+              });
+              return false;
+            }
             mediaUrl = signedData?.signedUrl;
             messageType = attachment.type.startsWith('audio')
               ? 'audio'

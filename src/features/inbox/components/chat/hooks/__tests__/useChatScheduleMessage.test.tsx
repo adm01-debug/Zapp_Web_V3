@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ComponentProps } from 'react';
+import { describe, it, expect, expectTypeOf, vi, beforeEach } from 'vitest';
 import { render, renderHook, act, fireEvent, screen, waitFor } from '@testing-library/react';
 
 const mockUpload = vi.hoisted(() => vi.fn());
@@ -35,6 +36,9 @@ const mockScheduleMessage = vi.fn<(args: {
   messageType: string;
   mediaUrl?: string;
 }) => Promise<unknown>>();
+
+type ChatDialogsScheduleHandler =
+  ComponentProps<typeof import('@/features/inbox/components/chat/ChatDialogs').ChatDialogs>['onScheduleMessage'];
 
 function renderScheduleHook() {
   const onDone = vi.fn();
@@ -75,6 +79,8 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
   it('schedules text message with exact args and calls onDone once', async () => {
     const { result, onDone } = renderScheduleHook();
+
+    expectTypeOf(result.current).toEqualTypeOf<ChatDialogsScheduleHandler>();
 
     await act(async () => {
       await result.current('Olá', future());
@@ -149,7 +155,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 
   it('uploads attachment and schedules as media type with signed URL', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' } });
+    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' }, error: null });
     const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
 
@@ -166,6 +172,51 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
+  it('does not schedule when signed URL generation returns error after successful upload', async () => {
+    mockUpload.mockResolvedValue({ error: null });
+    mockCreateSignedUrl.mockResolvedValue({
+      data: null,
+      error: { message: 'signing denied' },
+    });
+    const { result, onDone } = renderScheduleHook();
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+
+    await act(async () => {
+      await result.current('Legenda', future(), file);
+    });
+
+    expect(mockScheduleMessage).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Erro no upload',
+        description: expect.stringContaining('signing denied'),
+        variant: 'destructive',
+      })
+    );
+  });
+
+  it('does not schedule when signed URL payload is missing the URL', async () => {
+    mockUpload.mockResolvedValue({ error: null });
+    mockCreateSignedUrl.mockResolvedValue({ data: {}, error: null });
+    const { result, onDone } = renderScheduleHook();
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+
+    await act(async () => {
+      await result.current('Legenda', future(), file);
+    });
+
+    expect(mockScheduleMessage).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Erro no upload',
+        description: expect.stringContaining('Falha ao gerar link do anexo'),
+        variant: 'destructive',
+      })
+    );
+  });
+
   it('keeps stable identity between renders (useCallback)', () => {
     const { result, rerender } = renderScheduleHook();
     const first = result.current;
@@ -177,7 +228,7 @@ describe('useChatScheduleMessage (CAMPANHAS-09)', () => {
 describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed URL 7d)', () => {
   it('E39.8 RED: agendamento com mídia para mais de 7 dias cria URL inválida — deve ser rejeitado', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' } });
+    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/url' }, error: null });
     const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
     // 8 dias à frente > TTL da signed URL (604800s = 7 dias) → URL expira
@@ -203,7 +254,7 @@ describe('useChatScheduleMessage — E39: prazo máximo de agendamento (signed U
 
   it('E39.9 pin: agendamento com mídia DENTRO de 7 dias continua funcionando', async () => {
     mockUpload.mockResolvedValue({ error: null });
-    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/ok' } });
+    mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed/ok' }, error: null });
     const { result, onDone } = renderScheduleHook();
     const file = new File(['x'], 'a.png', { type: 'image/png' });
     const within7d = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);

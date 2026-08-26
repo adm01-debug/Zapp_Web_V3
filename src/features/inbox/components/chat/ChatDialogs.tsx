@@ -2,6 +2,7 @@ import { Suspense, lazy, memo } from 'react';
 import { Conversation, Message, InteractiveMessage, LocationMessage } from '@/types/chat';
 import { ExternalProduct } from '@/hooks/useExternalApiManagement';
 import { ExternalProductCatalog } from '@/components/catalog/ExternalProductCatalog';
+import type { ScheduleMessageResult } from '../ScheduleMessageDialog.utils';
 import type { SearchResult } from '../useGlobalSearchData';
 import type { DialogKey, DialogState } from './hooks/useChatDialogs';
 
@@ -42,7 +43,11 @@ interface ChatDialogsProps {
   callDirection: 'inbound' | 'outbound';
   contactId: string;
   onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => void;
-  onScheduleMessage: (message: string, scheduledAt: Date, attachment?: File) => Promise<void>;
+  onScheduleMessage: (
+    message: string,
+    scheduledAt: Date,
+    attachment?: File
+  ) => Promise<ScheduleMessageResult>;
   onSendInteractiveMessage: (interactive: InteractiveMessage) => void;
   onForwardToTargets: (targetIds: string[], targetType: 'contact' | 'group') => void;
   onSendLocation: (location: LocationMessage) => void;
