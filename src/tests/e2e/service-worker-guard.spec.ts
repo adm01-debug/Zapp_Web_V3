@@ -97,9 +97,13 @@ async function waitForSkipCleanupWithOptions(
   label: string,
   options?: {
     requireMarker?: boolean;
+    minimumObservationMs?: number;
   }
 ): Promise<SkipCleanupState> {
   const requireMarker = options?.requireMarker ?? true;
+  if (options?.minimumObservationMs) {
+    await page.waitForTimeout(options.minimumObservationMs);
+  }
   await expect
     .poll(
       async () => {
@@ -193,6 +197,7 @@ test.describe('Service Worker guard', () => {
     await page.goto(`${PREVIEW_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
     const cleanupState = await waitForSkipCleanupWithOptions(page, 'preview-guard', {
       requireMarker: browserName !== 'firefox',
+      minimumObservationMs: browserName === 'firefox' ? 3_500 : undefined,
     });
     expect(cleanupState.cleanupError).toBeNull();
 

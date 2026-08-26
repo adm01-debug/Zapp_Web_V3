@@ -111,13 +111,15 @@ function countPathHits(navs: NavRecord[], path: RegExp): number {
   return navs.filter((n) => path.test(new URL(n.url).pathname)).length;
 }
 
-function countPathTransitions(navs: NavRecord[], path: RegExp): number {
+function countNormalizedPathHits(navs: NavRecord[], path: RegExp, duplicateWindow = 100): number {
   let hits = 0;
-  let previousMatched = false;
+  let previousMatch: NavRecord | null = null;
   for (const nav of navs) {
-    const matched = path.test(new URL(nav.url).pathname);
-    if (matched && !previousMatched) hits += 1;
-    previousMatched = matched;
+    if (!path.test(new URL(nav.url).pathname)) continue;
+    const isBrowserDuplicate =
+      previousMatch?.url === nav.url && nav.at - previousMatch.at <= duplicateWindow;
+    if (!isBrowserDuplicate) hits += 1;
+    previousMatch = nav;
   }
   return hits;
 }
@@ -153,6 +155,22 @@ function buildFakeSession() {
 
 async function readCurrentLocation(page: Page): Promise<string> {
   return page.evaluate(() => `${window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
+async function readRedirectSource(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const state = window.history.state as
+      | {
+          usr?: {
+            from?: { pathname?: string; search?: string; hash?: string };
+          };
+        }
+      | null;
+    const from = state?.usr?.from;
+    return from?.pathname
+      ? `${from.pathname}${from.search ?? ''}${from.hash ?? ''}`
+      : null;
+  });
 }
 
 async function waitForLocation(page: Page, expected: string, timeout = 8_000): Promise<void> {
@@ -335,7 +353,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       await waitForSettled(page, /^\/auth/);
 
       const stepNavs = navs.slice(navsBefore);
-      const authHits = countPathTransitions(stepNavs, /^\/auth/);
+      const authHits = countNormalizedPathHits(stepNavs, /^\/auth/);
 
       expect(
         authHits,
@@ -350,6 +368,12 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       ).toBe(false);
 
       await waitForLocation(page, '/auth');
+      await expect
+        .poll(() => readRedirectSource(page), {
+          timeout: 5_000,
+          message: `[${mode}] origem automática do redirect deve preservar ${route}`,
+        })
+        .toBe(route);
 
       // Storage inválido deve ter sido limpo pelo SDK Supabase.
       if (mode !== 'none') {
