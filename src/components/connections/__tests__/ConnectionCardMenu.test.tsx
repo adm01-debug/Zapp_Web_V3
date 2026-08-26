@@ -3,25 +3,24 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ConnectionCardMenu } from '../ConnectionCardMenu';
 import type { WhatsAppConnection } from '@/features/connections';
 
-function makeConnection(over: Partial<WhatsAppConnection> = {}): WhatsAppConnection {
-  return {
-    id: 'conn-1',
-    name: 'Suporte',
-    phone_number: '+55 11 99999-0000',
-    instance_id: 'instance-1',
-    instance_name: 'suporte_123456',
-    status: 'disconnected',
-    created_at: '2026-08-26T12:00:00.000Z',
-    updated_at: '2026-08-26T12:00:00.000Z',
-    ...over,
-  };
-}
+const connection: WhatsAppConnection = {
+  id: 'conn-1',
+  name: 'Suporte',
+  phone_number: '+55 11 99999-0000',
+  instance_id: 'instance-1',
+  instance_name: 'suporte_123456',
+  status: 'disconnected',
+  qr_code: null,
+  is_default: false,
+  created_at: '2026-08-26T12:00:00.000Z',
+  updated_at: '2026-08-26T12:00:00.000Z',
+};
 
 function setup() {
   const onDelete = vi.fn();
   render(
     <ConnectionCardMenu
-      connection={makeConnection()}
+      connection={connection}
       recheckingHealth={false}
       evoName="suporte_123456"
       isOfficial={false}
