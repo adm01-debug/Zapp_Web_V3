@@ -667,11 +667,7 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       expect(logMock.warn).not.toHaveBeenCalled();
     });
 
-    it('GAP real: error.message "Supabase request timed out" (com espaço) no error-field → log.warn, não log.error', async () => {
-      // O DOMException do boundedFetch do client.ts tem message 'Supabase
-      // request timed out' — "timed out" com espaço NÃO casa /timeout/i do
-      // error-field (só o isTimeoutError do catch pega 'timed ?out'). No
-      // caminho error-field (postgrest-js nunca lança), isso vira warn.
+    it('error.message "Supabase request timed out" (com espaço) no error-field → log.error, não log.warn', async () => {
       sb.setResult('contact_intelligence', { data: null, error: null });
       sb.setResult('evolution_messages', {
         data: null,
@@ -681,11 +677,29 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       const { result } = renderIntel(PHONE_13);
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      expect(logMock.warn).toHaveBeenCalledWith(
-        'messages stats lookup failed:',
-        'Supabase request timed out'
+      expect(logMock.error).toHaveBeenCalledWith(
+        'messages stats lookup timed out (evolution_messages scan):',
+        expect.objectContaining({ message: 'Supabase request timed out' })
       );
+      expect(logMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('abort próprio no error-field → relança cancelamento, sem log.error nem log.warn', async () => {
+      sb.setResult('contact_intelligence', { data: null, error: null });
+      const deferred = sb.setDeferred('evolution_messages');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+      await qc.cancelQueries({ queryKey: ['contact-intelligence-view', PHONE_13] });
+      expect(deferred.getSignal()?.aborted).toBe(true);
+      deferred.resolveResult({
+        data: null,
+        error: { name: 'AbortError', message: 'The operation was aborted.' },
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
       expect(logMock.error).not.toHaveBeenCalled();
+      expect(logMock.warn).not.toHaveBeenCalled();
     });
 
     it("fallback com error.message 'Failed to fetch' → log.error (regex aborted|fetch)", async () => {

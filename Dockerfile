@@ -40,6 +40,8 @@ RUN find dist/assets -type f | sed 's#^dist/assets/##' | LC_ALL=C sort \
   > dist/current-assets.txt
 
 FROM nginx:1.31-alpine AS runtime
+ARG VITE_GIT_SHA
+LABEL org.opencontainers.image.revision="${VITE_GIT_SHA}"
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Retenção de assets do build anterior — assets com nomes content-hashed do
 # build N-1 coexistem com os do build N, sem colisão. Sessões vivas com tab
