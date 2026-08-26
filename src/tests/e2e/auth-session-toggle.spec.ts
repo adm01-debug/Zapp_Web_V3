@@ -328,10 +328,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       ).toBe(1);
 
       const authRedirectTransitions = historyCalls.filter(
-        (call) =>
-          call.kind === 'replaceState' &&
-          new URL(call.fromUrl).pathname !== '/auth' &&
-          new URL(call.url).pathname === '/auth'
+        (call) => call.kind === 'replaceState' && new URL(call.url).pathname === '/auth'
       );
       expect(
         authRedirectTransitions,
