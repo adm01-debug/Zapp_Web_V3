@@ -161,12 +161,17 @@ jobs:
         continue-on-error: true
 
       - name: Install Playwright Browsers
-        # playwright.config.ts define 3 projetos (chromium, firefox, webkit) —
-        # instalar só chromium quebra firefox/webkit no runner (E2E boot suite).
-        run: bunx playwright install --with-deps
+        # Este gate agora roda apenas chromium + firefox no runner self-hosted;
+        # instalar WebKit aqui so aumenta custo e reintroduz o binario incompatível.
+        run: bunx playwright install --with-deps chromium firefox
 
-      - name: E2E Tests (boot suite — src/tests/e2e, 13 specs)
-        run: bun run test:e2e:boot
+      - name: E2E Tests (boot suite — Chromium + Firefox no runner self-hosted)
+        # O WebKit do runner vps-zapp está congelado em uma revisão que não
+        # aceita o Page.overrideSetting(PushAPIEnabled) do Playwright atual;
+        # ele falha ao criar a página, antes do app ou das specs executarem.
+        # A matriz cross-browser continua coberta pelo job `E2E tests` de
+        # ci.yml em ubuntu-latest, onde WebKit roda e passa com o mesmo config.
+        run: bun run test:e2e:boot -- --project=chromium --project=firefox
 
       - name: Build (produces dist/ for the Performance Budget Gate)
         # O gate mede os chunks REAIS de dist/ — sem build ele falha com
