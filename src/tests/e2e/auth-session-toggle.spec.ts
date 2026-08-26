@@ -81,6 +81,7 @@ async function reloadPublicAuthRoute(page: Page): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     if (
       !message.includes('is interrupted by another navigation') &&
+      !message.includes('Frame load interrupted') &&
       !message.includes('NS_BINDING_ABORTED')
     ) {
       throw error;
