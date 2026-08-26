@@ -31,10 +31,24 @@ const SUPABASE_PROJECT_REF = new URL(
   process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321'
 ).hostname.split('.')[0];
 const AUTH_STORAGE_KEY = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
+const HISTORY_PROBE_STORAGE_KEY = '__zappAuthRedirectProbe';
+const HISTORY_PROBE_STAGE_KEY = '__zappAuthRedirectStage';
 
 type FrameNavRecord = {
   url: string;
   at: number;
+};
+
+type MainFrameRequestRecord = {
+  url: string;
+  at: number;
+};
+
+type HistoryProbeRecord = {
+  stage: string;
+  kind: 'pushState' | 'replaceState';
+  url: string;
+  stateFrom: string | null;
 };
 
 async function collectMainFrameNavigations(page: Page): Promise<FrameNavRecord[]> {
@@ -45,6 +59,103 @@ async function collectMainFrameNavigations(page: Page): Promise<FrameNavRecord[]
     }
   });
   return navs;
+}
+
+async function collectMainFrameNavigationRequests(page: Page): Promise<MainFrameRequestRecord[]> {
+  const requests: MainFrameRequestRecord[] = [];
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      requests.push({ url: request.url(), at: Date.now() });
+    }
+  });
+  return requests;
+}
+
+async function installHistoryProbe(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ recordsKey, stageKey }) => {
+      const win = window as typeof window & { __zappAuthRedirectProbeInstalled?: boolean };
+      if (win.__zappAuthRedirectProbeInstalled) return;
+      win.__zappAuthRedirectProbeInstalled = true;
+
+      const readRecords = (): HistoryProbeRecord[] => {
+        try {
+          const raw = sessionStorage.getItem(recordsKey);
+          const parsed: unknown = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? (parsed as HistoryProbeRecord[]) : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const record = (
+        kind: HistoryProbeRecord['kind'],
+        state: unknown,
+        url?: string | URL | null
+      ) => {
+        const stage = sessionStorage.getItem(stageKey);
+        if (!stage) return;
+
+        const stateFrom =
+          state && typeof state === 'object'
+            ? (state as { usr?: { from?: { pathname?: unknown } } }).usr?.from?.pathname
+            : null;
+        const next = readRecords();
+        next.push({
+          stage,
+          kind,
+          url: new URL(url == null ? window.location.href : String(url), window.location.href).href,
+          stateFrom: typeof stateFrom === 'string' ? stateFrom : null,
+        });
+        sessionStorage.setItem(recordsKey, JSON.stringify(next));
+      };
+
+      const originalPushState = history.pushState.bind(history);
+      history.pushState = ((state: unknown, unused: string, url?: string | URL | null) => {
+        originalPushState(state, unused, url);
+        record('pushState', state, url);
+      }) as History['pushState'];
+
+      const originalReplaceState = history.replaceState.bind(history);
+      history.replaceState = ((state: unknown, unused: string, url?: string | URL | null) => {
+        originalReplaceState(state, unused, url);
+        record('replaceState', state, url);
+      }) as History['replaceState'];
+    },
+    { recordsKey: HISTORY_PROBE_STORAGE_KEY, stageKey: HISTORY_PROBE_STAGE_KEY }
+  );
+}
+
+async function beginHistoryProbeStage(page: Page, stage: string): Promise<void> {
+  await page.evaluate(
+    ({ recordsKey, stageKey, nextStage }) => {
+      sessionStorage.setItem(recordsKey, '[]');
+      sessionStorage.setItem(stageKey, nextStage);
+    },
+    { recordsKey: HISTORY_PROBE_STORAGE_KEY, stageKey: HISTORY_PROBE_STAGE_KEY, nextStage: stage }
+  );
+}
+
+async function readHistoryProbeStage(page: Page, stage: string): Promise<HistoryProbeRecord[]> {
+  return page.evaluate(
+    ({ recordsKey, stageKey, expectedStage }) => {
+      try {
+        if (sessionStorage.getItem(stageKey) !== expectedStage) return [];
+        const raw = sessionStorage.getItem(recordsKey);
+        const records: unknown = raw ? JSON.parse(raw) : [];
+        return Array.isArray(records)
+          ? (records as HistoryProbeRecord[]).filter((record) => record.stage === expectedStage)
+          : [];
+      } catch {
+        return [];
+      }
+    },
+    {
+      recordsKey: HISTORY_PROBE_STORAGE_KEY,
+      stageKey: HISTORY_PROBE_STAGE_KEY,
+      expectedStage: stage,
+    }
+  );
 }
 
 async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000): Promise<void> {
@@ -125,7 +236,7 @@ function countFrameTransitionsToPath(navs: FrameNavRecord[], path: RegExp): numb
   return transitions;
 }
 
-function hasExactFramePathHit(navs: FrameNavRecord[], path: string): boolean {
+function hasExactNavigationRequest(navs: MainFrameRequestRecord[], path: string): boolean {
   return navs.some((nav) => new URL(nav.url).pathname === path);
 }
 
@@ -149,11 +260,23 @@ async function readRedirectSource(page: Page): Promise<string | null> {
   });
 }
 
+async function readRedirectSourceForStage(page: Page, stage: string): Promise<string | null> {
+  const records = await readHistoryProbeStage(page, stage);
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (/^\/auth/.test(new URL(record.url).pathname) && record.stateFrom) {
+      return record.stateFrom;
+    }
+  }
+  return readRedirectSource(page);
+}
+
 test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop', () => {
   test('cada modo de sessão inválida redireciona uma única vez para /auth preservando a rota de origem', async ({
     page,
   }) => {
     const frameNavs = await collectMainFrameNavigations(page);
+    const navigationRequests = await collectMainFrameNavigationRequests(page);
 
     // Bootstrap: carrega a app na landing pública para inicializar localStorage/SDK.
     try {
@@ -163,24 +286,31 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       throw err;
     }
     await waitForSettled(page, /^\/auth/, 20_000);
+    // Must be installed after the bootstrap document: it persists to every
+    // navigation in the test without changing how the initial auth page boots.
+    await installHistoryProbe(page);
 
     const modes: Array<'none' | 'expired' | 'corrupted'> = ['none', 'expired', 'corrupted'];
 
     for (const [idx, mode] of modes.entries()) {
       const route = PROTECTED_ROUTES[idx % PROTECTED_ROUTES.length];
       await setSessionState(page, mode);
+      const stage = `${mode}-${idx}-${Date.now()}`;
+      await beginHistoryProbeStage(page, stage);
 
       const frameNavsBefore = frameNavs.length;
+      const navigationRequestsBefore = navigationRequests.length;
       await gotoProtectedRoute(page, route);
       await waitForSettled(page, /^\/auth/);
 
       const stepFrameNavs = frameNavs.slice(frameNavsBefore);
+      const stepNavigationRequests = navigationRequests.slice(navigationRequestsBefore);
       const authTransitions = countFrameTransitionsToPath(stepFrameNavs, /^\/auth/);
 
       expect(
-        hasExactFramePathHit(stepFrameNavs, route),
-        `[${mode}] a etapa deve efetivamente abrir ${route} antes do redirect: ${JSON.stringify(
-          stepFrameNavs.map((n) => n.url)
+        hasExactNavigationRequest(stepNavigationRequests, route),
+        `[${mode}] a etapa deve iniciar a navegação efetiva para ${route}: ${JSON.stringify(
+          stepNavigationRequests.map((n) => n.url)
         )}`
       ).toBe(true);
 
@@ -192,10 +322,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
       ).toBe(1);
 
       await expect
-        // Read only the state attached to the current, settled /auth entry.
-        // Patching History API methods changes React Router's behaviour in
-        // WebKit; reading it directly preserves the app's real navigation.
-        .poll(() => readRedirectSource(page), {
+        .poll(() => readRedirectSourceForStage(page, stage), {
           timeout: 5_000,
           message: `[${mode}] redirect para /auth deve preservar a rota ${route}`,
         })
