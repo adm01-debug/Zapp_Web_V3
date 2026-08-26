@@ -46,6 +46,7 @@ jobs:
     # publish-evolution-api-custom, que roda normalmente).
     outputs:
       image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -125,6 +126,7 @@ jobs:
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -295,6 +297,7 @@ jobs:
           PORTAINER_API_TOKEN: ${{ secrets.PORTAINER_API_TOKEN }}
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           ZAPP_IMAGE: ${{ needs.build-and-push.outputs.image }}
+          DIGEST: ${{ needs.build-and-push.outputs.digest }}
         run: |
           set -euo pipefail
           echo "Deploying: ${ZAPP_IMAGE}"
@@ -308,7 +311,7 @@ jobs:
           cp infra/docker-compose-zapp-web.yml /tmp/compose.yml
 
           # Substitui a variável ${ZAPP_IMAGE} pelo SHA-based tag real
-          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}|g" /tmp/compose.yml
+          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}@${DIGEST}|g" /tmp/compose.yml
           echo "✅ Compose versionado usado: infra/docker-compose-zapp-web.yml"
           echo "Image no compose: $(grep 'image:' /tmp/compose.yml | head -1 | xargs)"
 
