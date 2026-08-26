@@ -65,6 +65,10 @@ describe("deploy production resource isolation", () => {
     expect(workflow).toContain("🌐 Release publicada corresponde ao commit");
     expect(workflow).toContain("PUBLIC_RELEASE_SHA_MISMATCH");
     expect(workflow).toContain("PUBLIC_RELEASE_ENTRY_MISMATCH");
+    expect(workflow).toContain("version.json inválido");
+    expect(workflow).toContain(
+      "PARSED=$(printf '%s' \"$VERSION\" | jq -er",
+    );
     expect(workflow).not.toContain("vars.ENFORCE_CONVERGENCE");
   });
 

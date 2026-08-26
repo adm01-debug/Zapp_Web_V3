@@ -511,8 +511,12 @@ jobs:
           for attempt in 1 2 3 4 5 6; do
             VERSION=$(curl --fail --silent --show-error --max-time 20 \
               -H 'Cache-Control: no-cache' "$VERSION_URL") || { sleep 10; continue; }
-            ACTUAL_SHA=$(printf '%s' "$VERSION" | jq -r '.gitSha // empty')
-            ENTRY=$(printf '%s' "$VERSION" | jq -r '.entry // empty')
+            PARSED=$(printf '%s' "$VERSION" | jq -er '[.gitSha // "", .entry // ""] | @tsv') || {
+              echo "tentativa ${attempt}: version.json inválido"
+              sleep 10
+              continue
+            }
+            IFS=$'\t' read -r ACTUAL_SHA ENTRY <<< "$PARSED"
             [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] || {
               echo "tentativa ${attempt}: publicado ${ACTUAL_SHA:-<vazio>}"
               sleep 10

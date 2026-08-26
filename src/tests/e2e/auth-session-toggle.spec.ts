@@ -13,15 +13,11 @@
  *      total (1 por transição) e nunca 2 redirects consecutivos idênticos
  *      dentro de 500ms (assinatura clássica de loop).
  *
- * Skip gracioso se o dev server estiver indisponível (salvo `E2E_STRICT_AUTH_LOOP=1`).
- *
  * Porta: usa `goto()` relativo — herda `baseURL` do playwright.config.ts
  * (http://localhost:5173). Nunca hardcodar porta nos specs (drift 8080×5173,
  * achado 40:A2 — docs/estado/40-e2e-harness-data.md).
  */
 import { test, expect, type Page } from '@playwright/test';
-
-const STRICT = process.env.E2E_STRICT_AUTH_LOOP === '1';
 
 // Use only routes that are actually wrapped by ProtectedRoute. `/crm` and the
 // bare `/admin` currently fall through to NotFound and cannot validate auth.
@@ -115,7 +111,10 @@ function countNormalizedPathHits(navs: NavRecord[], path: RegExp, duplicateWindo
   let hits = 0;
   let previousMatch: NavRecord | null = null;
   for (const nav of navs) {
-    if (!path.test(new URL(nav.url).pathname)) continue;
+    if (!path.test(new URL(nav.url).pathname)) {
+      previousMatch = null;
+      continue;
+    }
     const isBrowserDuplicate =
       previousMatch?.url === nav.url && nav.at - previousMatch.at <= duplicateWindow;
     if (!isBrowserDuplicate) hits += 1;
@@ -334,13 +333,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
     const navs = await collectAuthNavigations(page);
 
     // Bootstrap: carrega a app na landing pública para inicializar localStorage/SDK.
-    try {
-      await bootstrapPublicAuth(page);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      test.skip(!STRICT, `Localhost inacessível: ${message}`);
-      throw err;
-    }
+    await bootstrapPublicAuth(page);
 
     const modes: Array<'none' | 'expired' | 'corrupted'> = ['none', 'expired', 'corrupted'];
 
@@ -404,13 +397,7 @@ test.describe('Auth guard — alternância sessão válida ↔ expirada sem loop
 
     await installSuccessfulLoginMocks(page);
 
-    try {
-      await bootstrapPublicAuth(page);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      test.skip(!STRICT, `Localhost inacessível: ${message}`);
-      throw err;
-    }
+    await bootstrapPublicAuth(page);
 
     const protectedRoute = '/admin/roles?origin=e2e-auth#restored';
     const authUrlWithNext = await setSafeNextRedirect(page, protectedRoute);
