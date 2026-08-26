@@ -49,6 +49,9 @@ function applicationSources(directory: string): string[] {
   });
 }
 
+const forbiddenRscSurface =
+  /\b(?:HydratedRouter|ServerRouter|unstable_createCallServer|unstable_getRSCStream|unstable_matchRSCServerRequest|unstable_routeRSCServerRequest|unstable_RSCHydratedRouter|unstable_RSCStaticRouter)\b/;
+
 describe('dependências diretas de segurança em runtime', () => {
   it('mantém DOMPurify e React Router em versões corrigidas', () => {
     expect(isAtLeast(installedVersion('dompurify', 'dompurify'), '3.4.13')).toBe(true);
@@ -59,12 +62,25 @@ describe('dependências diretas de segurança em runtime', () => {
   });
 
   it('mantém a aplicação SPA fora das APIs RSC do React Router', () => {
-    const forbiddenRscSurface =
-      /\b(?:HydratedRouter|ServerRouter|createCallServer|matchRSCServerRequest|routeRSCServerRequest)\b/;
     const offenders = applicationSources(join(process.cwd(), 'src')).filter((path) =>
       forbiddenRscSurface.test(readFileSync(path, 'utf8'))
     );
 
     expect(offenders).toEqual([]);
+  });
+
+  it('reconhece os identificadores RSC instáveis exportados pelo React Router', () => {
+    const exportedRuntimeSurface = [
+      'unstable_createCallServer',
+      'unstable_getRSCStream',
+      'unstable_matchRSCServerRequest',
+      'unstable_routeRSCServerRequest',
+      'unstable_RSCHydratedRouter',
+      'unstable_RSCStaticRouter',
+    ];
+
+    for (const identifier of exportedRuntimeSurface) {
+      expect(forbiddenRscSurface.test(`import { ${identifier} } from 'react-router';`)).toBe(true);
+    }
   });
 });
