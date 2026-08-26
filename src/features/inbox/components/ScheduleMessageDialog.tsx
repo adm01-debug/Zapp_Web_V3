@@ -10,6 +10,12 @@ import { format, addDays, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
 
+export function buildScheduledLocalDate(date: string, time: string): Date {
+  const [hours, minutes] = time.split(':').map(Number);
+  const [y, mo, d] = date.split('-').map(Number);
+  return new Date(y, mo - 1, d, hours, minutes);
+}
+
 interface ScheduleMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,11 +49,7 @@ export function ScheduleMessageDialog({
       });
       return;
     }
-    const [hours, minutes] = time.split(':').map(Number);
-    // Parse date as LOCAL midnight to avoid UTC offset shifting the day (e.g. UTC-3 turns
-    // 2026-08-01T00:00:00Z into 2026-07-31T21:00 local — one day early).
-    const [y, mo, d] = date.split('-').map(Number);
-    const scheduledDate = new Date(y, mo - 1, d, hours, minutes);
+    const scheduledDate = buildScheduledLocalDate(date, time);
 
     if (scheduledDate <= new Date()) {
       toast({
@@ -186,10 +188,7 @@ export function ScheduleMessageDialog({
                 A mensagem será enviada em{' '}
                 <span className="font-medium text-foreground">
                   {format(
-                    setMinutes(
-                      setHours(new Date(date), parseInt(time.split(':')[0])),
-                      parseInt(time.split(':')[1])
-                    ),
+                    buildScheduledLocalDate(date, time),
                     "EEEE, dd 'de' MMMM 'às' HH:mm",
                     { locale: ptBR }
                   )}
