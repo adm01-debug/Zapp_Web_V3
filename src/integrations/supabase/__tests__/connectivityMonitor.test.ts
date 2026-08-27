@@ -3,7 +3,7 @@
  *
  * Cobre:
  *   - Falha de rede no ping → status 'backend-down'
- *   - Qualquer resposta HTTP (inclusive 401 sem apikey) → status 'online'
+ *   - Qualquer resposta HTTP do probe público → status 'online'
  *   - reportSupabaseRequestFailure acelera a detecção
  *   - Eventos window online/offline
  *   - Heartbeat inicia com o 1º subscriber e para com o último
@@ -42,7 +42,7 @@ describe('connectivityMonitor — pingSupabaseBackend', () => {
     expect(getSupabaseConnectivityStatus()).toBe('backend-down');
   });
 
-  it('marca online quando o servidor responde (qualquer status HTTP, ex. 401)', async () => {
+  it('marca online quando o servidor responde ao probe público', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
     await pingSupabaseBackend(true);
     expect(getSupabaseConnectivityStatus()).toBe('online');
