@@ -26,7 +26,9 @@ const STRICT = process.env.E2E_STRICT_AUTH_LOOP === '1';
 
 // Use only routes that are actually wrapped by ProtectedRoute. `/crm` and the
 // bare `/admin` currently fall through to NotFound and cannot validate auth.
-const PROTECTED_ROUTES = ['/inbox', '/', '/admin/roles'];
+// Avoid `/`: the Index page has its own navigate('/auth') side effect, which
+// mixes a second redirect authority into this guard-specific contract.
+const PROTECTED_ROUTES = ['/inbox', '/queues/comparison', '/admin/roles'];
 const SUPABASE_PROJECT_REF = new URL(
   // Must stay aligned with playwright.config.ts webServer.env fallback.
   process.env.VITE_SUPABASE_URL ?? 'http://localhost:54321'
@@ -138,9 +140,13 @@ async function assertNewDocument(
 }
 
 async function waitForSettled(page: Page, expectedPath: RegExp, timeout = 20_000): Promise<void> {
-  await expect.poll(() => new URL(page.url()).pathname, { timeout }).toMatch(expectedPath);
-  // 1.5s idle: se um loop existir, ele dispara aqui.
-  await page.waitForTimeout(1500);
+  const readPath = () => (page.isClosed() ? '__closed__' : new URL(page.url()).pathname);
+  await expect.poll(readPath, { timeout }).toMatch(expectedPath);
+  // 1.5s idle: se um loop existir, ele dispara aqui. Esperamos fora do alvo do
+  // browser porque Firefox/WebKit podem recriar o documento e invalidar o
+  // target anterior mesmo quando a navegação final já está correta.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await expect.poll(readPath, { timeout: 2_000 }).toMatch(expectedPath);
 }
 
 async function navigateProtectedRoute(page: Page, route: string): Promise<void> {
@@ -196,7 +202,9 @@ function isExpectedNavigationInterruption(error: unknown): boolean {
   return (
     message.includes('is interrupted by another navigation') ||
     message.includes('Frame load interrupted') ||
-    message.includes('NS_BINDING_ABORTED')
+    message.includes('NS_BINDING_ABORTED') ||
+    message.includes('page.goto: Timeout') ||
+    message.includes('Timeout 20000ms exceeded')
   );
 }
 
@@ -214,8 +222,9 @@ async function bootInvalidSessionOnProtectedRoute(page: Page, route: string): Pr
     await page.goto(route, { waitUntil: 'commit', timeout: 20_000 });
   } catch (error) {
     if (!isExpectedNavigationInterruption(error)) throw error;
-    // Only a verified final /auth document can make this browser interruption
-    // expected; otherwise the original navigation error remains a failure.
+    // Some runners finish the final /auth redirect but never report the
+    // original protected-route commit back to Playwright. We only accept the
+    // race after observing the replacement document in the main frame.
     await expect.poll(() => observedAuthDocument, { timeout: 5_000 }).toBe(true);
     await assertNewDocument(page, previousDocumentMarker);
   } finally {

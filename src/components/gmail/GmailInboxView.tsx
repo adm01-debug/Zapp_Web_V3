@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { RefreshCw, Mail, Star, Archive, Search, AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,6 +92,16 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
     setSelectedId(thread.id);
     if (thread.unread_count > 0) markAsRead(thread.id, true);
     onSelectThread?.(thread);
+  };
+
+  const handleThreadKeyDown = (
+    event: KeyboardEvent<HTMLDivElement>,
+    thread: EmailThread
+  ) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleSelectThread(thread);
   };
 
   // Estado: sem contas
@@ -222,7 +232,7 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
                       onClick={() => handleSelectThread(thread)}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSelectThread(thread)}
+                      onKeyDown={(e) => handleThreadKeyDown(e, thread)}
                     >
                       {/* Avatar letra */}
                       <div

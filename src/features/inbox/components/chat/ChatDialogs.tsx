@@ -42,7 +42,11 @@ interface ChatDialogsProps {
   callDirection: 'inbound' | 'outbound';
   contactId: string;
   onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => void;
-  onScheduleMessage: (message: string, scheduledAt: Date, attachment?: File) => Promise<void>;
+  onScheduleMessage: (
+    message: string,
+    scheduledAt: Date,
+    attachment?: File
+  ) => Promise<boolean>;
   onSendInteractiveMessage: (interactive: InteractiveMessage) => void;
   onForwardToTargets: (targetIds: string[], targetType: 'contact' | 'group') => void;
   onSendLocation: (location: LocationMessage) => void;
