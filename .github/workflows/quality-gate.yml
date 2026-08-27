@@ -13,16 +13,12 @@ concurrency:
 
 jobs:
   quality-gate:
-    runs-on: [Linux, X64, vps-zapp]
-    # 45 nao bastava mais: as 2 tentativas desta sessao (runs 32456567383
-    # attempts 1 e 2, 2026-08-21) foram CANCELADAS pelo proprio timeout aos
-    # ~45m15-26s de wall-clock — nao intervencao externa (confirmado: mesmo
-    # commit, sem push novo, cancelamento sempre durante "E2E Tests boot
-    # suite", sempre ~45min do inicio do job). Causa: Unit & Integration
-    # Tests e Coverage ratchet rodando ~2x mais lentos que o historico
-    # (contencao no pool de runners compartilhado, ver nota 9 do PR #1354)
-    # — sobrou pouco/nenhum tempo pro E2E+Build+Perf Budget depois. 90min
-    # da folga generosa mesmo com os steps mais lentos observados.
+    # Todos os passos deste gate são herméticos: usam credenciais de teste e
+    # não acessam a VPS nem o banco real. Executá-los no runner hospedado
+    # evita a contenção do pool vps-zapp, que causou timeouts falsos no E2E
+    # no mesmo SHA que passou a suíte completa em ubuntu-latest.
+    runs-on: ubuntu-latest
+    # Mantém folga para a suíte completa caso o runner hospedado esteja lento.
     timeout-minutes: 90
     env:
       CI: true
@@ -55,8 +51,8 @@ jobs:
             bun-${{ runner.os }}-
 
       - name: Install dependencies
-        # HUSKY=0: husky v9 e ESM-only, quebra no Node antigo do runner self-hosted (E2E-04)
-        run: bun install --ignore-scripts  # HUSKY=0 nao funciona: node v10 em PATH crasha no ESM antes de ler env (E2E-04)
+        # Não roda hooks de lifecycle em CI; o gate precisa permanecer hermético.
+        run: bun install --ignore-scripts
 
       - name: Lint (blocking — E02/F1-10)
         run: bun run lint
@@ -161,16 +157,13 @@ jobs:
         continue-on-error: true
 
       - name: Install Playwright Browsers
-        # Este gate agora roda apenas chromium + firefox no runner self-hosted;
-        # instalar WebKit aqui so aumenta custo e reintroduz o binario incompatível.
+        # Este gate roda chromium + firefox. O WebKit continua coberto pelo
+        # job E2E hospedado de ci.yml, sem duplicar custo neste workflow.
         run: bunx playwright install --with-deps chromium firefox
 
-      - name: E2E Tests (boot suite — Chromium + Firefox no runner self-hosted)
-        # O WebKit do runner vps-zapp está congelado em uma revisão que não
-        # aceita o Page.overrideSetting(PushAPIEnabled) do Playwright atual;
-        # ele falha ao criar a página, antes do app ou das specs executarem.
-        # A matriz cross-browser continua coberta pelo job `E2E tests` de
-        # ci.yml em ubuntu-latest, onde WebKit roda e passa com o mesmo config.
+      - name: E2E Tests (boot suite — Chromium + Firefox hospedado)
+        # A matriz cross-browser completa, incluindo WebKit, continua coberta
+        # pelo job `E2E tests` de ci.yml em ubuntu-latest.
         run: bun run test:e2e:boot -- --project=chromium --project=firefox
 
       - name: Build (produces dist/ for the Performance Budget Gate)
