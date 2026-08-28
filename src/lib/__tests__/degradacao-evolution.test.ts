@@ -157,11 +157,7 @@ describe('E90 — 4xx NÃO faz retry', () => {
     mockInvoke.mockResolvedValue(httpError(404, 'Not Found'));
 
     const onRetry = vi.fn();
-    const result = await invokeEvolutionWithRetry(
-      'sendText',
-      { body: SEND_BODY },
-      { onRetry }
-    );
+    const result = await invokeEvolutionWithRetry('sendText', { body: SEND_BODY }, { onRetry });
 
     expect(result.error?.status).toBe(404);
     expect(mockInvoke).toHaveBeenCalledTimes(1);
@@ -284,9 +280,17 @@ describe('E90 S2/S3 — DLQ enfileira após retries exaustos', () => {
     enqueueClientFailedMessage({ ...base, payload: { text: 'oi de novo' } }); // outra mensagem
 
     await vi.waitFor(() => expect(mockInsert).toHaveBeenCalledTimes(3));
-    const [row1, row2, row3] = mockInsert.mock.calls.map((c) => c[0]);
-    expect(row1.idempotency_key).toBe(row2.idempotency_key); // → unique parcial dedupe no DB
-    expect(row3.idempotency_key).not.toBe(row1.idempotency_key);
+    // SHA-256 é assíncrono: a ordem em que os digests terminam não precisa ser a
+    // mesma ordem das chamadas. Compare as linhas pelo payload lógico, não pela
+    // posição registrada pelo mock.
+    const rows = mockInsert.mock.calls.map((c) => c[0]);
+    const duplicateRows = rows.filter((row) => row.payload?.text === 'oi');
+    const distinctRow = rows.find((row) => row.payload?.text === 'oi de novo');
+
+    expect(duplicateRows).toHaveLength(2);
+    expect(distinctRow).toBeDefined();
+    expect(duplicateRows[0].idempotency_key).toBe(duplicateRows[1].idempotency_key);
+    expect(distinctRow.idempotency_key).not.toBe(duplicateRows[0].idempotency_key);
   });
 
   it('conflito 23505 (dedupe) é tratado como esperado, sem erro fatal', async () => {
@@ -337,7 +341,11 @@ describe('E90 — resolveTransport degrada quando Evolution cai', () => {
 
     const resolved = await resolveTransport();
 
-    expect(resolved).toMatchObject({ transport: 'cloud', requestedMode: 'official', degraded: false });
+    expect(resolved).toMatchObject({
+      transport: 'cloud',
+      requestedMode: 'official',
+      degraded: false,
+    });
   });
 
   it('modo unofficial → evolution sem tocar na rede (envio continua quando edge cai)', async () => {
