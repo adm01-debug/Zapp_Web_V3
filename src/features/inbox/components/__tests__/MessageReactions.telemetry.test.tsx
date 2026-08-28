@@ -66,6 +66,10 @@ describe('MessageReactions — ownership da telemetria', () => {
     expect(mocks.addReaction).toHaveBeenCalledTimes(1);
     expect(mocks.useReactionMutations).not.toHaveBeenCalled();
     expect(mocks.trackReactionEvent).not.toHaveBeenCalled();
+    expect(mocks.useMessageReactions).toHaveBeenCalledWith(
+      'message-1',
+      expect.objectContaining({ reactionSource: 'bar' })
+    );
   });
 
   it('delega reação rápida sem emitir o evento de adição duas vezes', async () => {
@@ -77,6 +81,10 @@ describe('MessageReactions — ownership da telemetria', () => {
     expect(mocks.addReaction).toHaveBeenCalledTimes(1);
     expect(mocks.useReactionMutations).not.toHaveBeenCalled();
     expect(mocks.trackReactionEvent).not.toHaveBeenCalled();
+    expect(mocks.useMessageReactions).toHaveBeenCalledWith(
+      'message-2',
+      expect.objectContaining({ reactionSource: 'quick' })
+    );
   });
 
   it('preserva a remoção quando o perfil já reagiu', async () => {

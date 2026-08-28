@@ -47,6 +47,7 @@ export const MessageReactions = memo(function MessageReactions({
     senderType,
     refreshKey,
     disableRealtime,
+    reactionSource: 'bar',
   });
   const { reactions, addReaction, removeReaction, currentProfileId } = reactionState;
   // addReaction/removeReaction já registram sucesso/erro no mutation owner.
@@ -114,6 +115,7 @@ export const QuickReactionBar = memo(function QuickReactionBar({
     senderType,
     refreshKey,
     disableRealtime,
+    reactionSource: 'quick',
   });
   const { addReaction, removeReaction, hasReacted } = reactionState;
 
