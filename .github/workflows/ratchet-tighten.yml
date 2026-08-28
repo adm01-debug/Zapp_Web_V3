@@ -223,7 +223,7 @@ jobs:
           Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório.
           EOF
 
-      - name: Close stale bot-owned ratchet PRs after successor validation
+      - name: Mark stale bot-owned ratchet PRs after successor validation
         if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
@@ -312,7 +312,7 @@ jobs:
           fi
 
           while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
-            # Revalida imediatamente antes de cada mutação: OPEN→MERGED é seguro;
+            # Revalida imediatamente antes do aviso: OPEN→MERGED é seguro;
             # CLOSED, ausência, ambiguidade ou troca de URL preservam o PR anterior.
             LATEST_RECORD="$(resolve_successor)"
             IFS=$'\t' read -r LATEST_STATE LATEST_URL <<< "$LATEST_RECORD"
@@ -332,15 +332,11 @@ jobs:
               <<< "$COMMENTS_JSON" >/dev/null; then
               echo "Aviso do sucessor já existe; preservando comentário único: $EXISTING_URL"
             else
-              echo "Marcando ratchet anterior antes do fechamento: $EXISTING_URL"
+              echo "Marcando ratchet anterior para revisão segura: $EXISTING_URL"
               NOTICE_BODY="$(printf '%s\n%s' \
                 "$NOTICE_MARKER" \
-                "Este ratchet foi substituído por ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. O PR obsoleto será fechado sem excluir sua branch, impedindo que um teto antigo afrouxe o baseline atual.")"
+                "Há um ratchet mais novo em ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. Este PR permanece como fallback enquanto o sucessor está em validação. Depois que um baseline mais justo entrar na main, a proteção strict + o gate obrigatório de monotonicidade impedem que este teto antigo seja mergeado e afrouxe o baseline.")"
               gh pr comment "$EXISTING_URL" \
                 --body "$NOTICE_BODY"
             fi
-
-            echo "Fechando ratchet obsoleto sem apagar branch: $EXISTING_URL"
-            gh pr close "$EXISTING_URL" \
-              --repo "${{ github.repository }}"
           done <<< "$EXISTING"

@@ -101,6 +101,15 @@ jobs:
           fi
           echo "Lockfile consistency check passed."
 
+      - name: Data-layer baseline monotonicity regression tests
+        run: node --test scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
+
+      - name: Data-layer baseline monotonicity (blocking)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "$BASE_REF"
+
   quality:
     name: Quality diagnostics
     # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun node
