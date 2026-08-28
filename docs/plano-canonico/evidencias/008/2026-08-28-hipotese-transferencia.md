@@ -4,15 +4,18 @@
 > - Etapas relacionadas: `041`, `042`
 > - Data/hora: `2026-08-28T15:55:00-03:00`
 > - Owner: engenharia Zapp Web V3
-> - Ambiente: repositório local isolado; baseline `origin/main@c5e83d30e`
-> - Veredito: `parcial` — causa confirmada; PR `#1444` em revisão, sem merge/deploy
+> - Ambiente: baseline histórica `origin/main@c5e83d30e`; validação pós-merge em
+>   `main@f76cc68f3`
+> - Veredito: `parcial` — contenção frontend entregue; contrato transacional/RLS e
+>   entradas visíveis da lista permanecem abertos
 
 ## Identificação
 
 - Repositório: `adm01-debug/Zapp_Web_V3`
 - SHA auditado: `c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`
 - Branch/worktree documental: `docs/plano-canonico-status-20260828` / worktree isolada
-- PR correlacionado: `#1443`; a correção técnica em `#1444` exige evidência própria
+- PRs correlacionados: `#1443` (auditoria, merge `15580041b`) e `#1444` (contenção,
+  merge/deploy `f76cc68f3`)
 - Gates aplicáveis: `G000`, `G001`, `G004`
 
 ## Causa e reprodução
@@ -55,10 +58,14 @@ Teste de regressão planejado:
 
 - Esperado: falha de trilha nunca vira sucesso pleno; tipo não suportado nunca alcança
   escrita; o diálogo aguarda o settlement e bloqueia chamada duplicada.
-- Observado na baseline: erros de timeline/auditoria são ignorados, o diálogo fecha sem
-  aguardar e casts permitem encaminhar `connection` a handlers de agente/fila.
-- Artefatos: caminhos/trechos reproduzíveis descritos acima; PR técnico `#1444` ainda em
-  revisão e, portanto, não fecha a etapa.
+- Observado na baseline: erros de timeline/auditoria eram ignorados, o diálogo fechava sem
+  aguardar e casts permitiam encaminhar `connection` a handlers de agente/fila.
+- Observado após `#1444`: o resultado é `success|partial|error`, o update principal usa
+  compare-and-set, o diálogo aguarda e bloqueia duplicidade, `connection` foi removido e a
+  transferência em massa ficou explicitamente desabilitada. A suíte focal passou com
+  `3` arquivos e `28` testes; a CI e o deploy do SHA `f76cc68f3` concluíram com sucesso.
+- Limite ainda aberto: as tabelas de auditoria não expõem `INSERT` para o cliente
+  autenticado; a contenção reporta `partial`, mas a atomicidade exige RPC/RLS autorizado.
 
 ## Mudança mínima da primeira onda
 
@@ -85,7 +92,8 @@ dados, o rollback é de código; registros já criados não serão apagados.
 
 ## Limitações e decisão
 
-- Este arquivo é uma hipótese de planejamento auditada, não evidência de conclusão.
+- Este arquivo registra a hipótese original e a conclusão parcial da primeira contenção;
+  não declara concluído o contrato transacional.
 - O schema atual aceita `transfer_type` `internal|direct` e não expõe policy de INSERT
   para `authenticated`; o PR frontend deve reportar resultado parcial até o contrato
   RPC/RLS autorizado das Etapas 027/042.
