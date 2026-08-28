@@ -13,13 +13,15 @@ concurrency:
 
 jobs:
   tighten:
-    # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): cálculo local + push com GITHUB_TOKEN genérico, sem DB/VPS.
+    # Cálculo local + branch/PR. Nunca grava diretamente na main protegida.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # PAT/App token permite que o push/PR dispare os checks; o token padrão é
+          # apenas fallback para repositórios sem GH_TOKEN_ACTIONS configurado.
+          token: ${{ secrets.GH_TOKEN_ACTIONS || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -71,20 +73,31 @@ jobs:
           git config user.email "bot@users.noreply.github.com"
           git checkout -b "${{ steps.tighten.outputs.branch }}"
           git add scripts/data-layer-baseline.json
-          git commit -m "chore(ratchet): auto-tighten data-layer baseline [skip ci]"
+          # Não usar [skip ci]: o PR gerado também precisa satisfazer branch protection.
+          git commit -m "chore(ratchet): auto-tighten data-layer baseline"
 
       - name: Push ratchet branch
         if: steps.tighten.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS || secrets.GITHUB_TOKEN }}
         run: |
+          BRANCH="${{ steps.tighten.outputs.branch }}"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin "${{ steps.tighten.outputs.branch }}"
+          if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null 2>&1; then
+            echo "Branch remota já existe; validando conteúdo para tornar rerun idempotente."
+            git fetch --no-tags origin "${BRANCH}:refs/remotes/origin/${BRANCH}"
+            if ! git diff --quiet "origin/${BRANCH}" -- scripts/data-layer-baseline.json; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} existe com baseline diferente"
+              exit 1
+            fi
+          else
+            git push origin "$BRANCH"
+          fi
 
       - name: Create PR for tightened baseline
         if: steps.tighten.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS || secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="${{ steps.tighten.outputs.branch }}"
           EXISTING_URL="$(gh pr list --repo "${{ github.repository }}" --state open --head "$BRANCH" --json url --jq '.[0].url')"
