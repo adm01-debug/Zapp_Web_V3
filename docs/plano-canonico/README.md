@@ -1354,12 +1354,16 @@ a concluído.
 
 ## 7. Ordem executiva recomendada
 
-1. **Onda A — contenção sem DB:** 001–010, 031, 035–037, 041, 056, 061, 081–083.
-2. **Onda B — inventário e contratos:** 011–025, 051–052, 072–075, 084–085.
-3. **Onda C — correções DB autorizadas:** 026–030, 032–034, 042–044, 077, 093.
-4. **Onda D — integrações:** 045–050, 053–060, 068–069, 079–080.
-5. **Onda E — produto parcial:** 062–067 e decisões/limpezas da 070.
-6. **Onda F — certificação:** 038–040, 071, 076, 078, 086–100.
+Dentro de cada onda, a ordem é da esquerda para a direita. Uma onda só começa
+quando as dependências das etapas selecionadas na onda anterior estiverem
+comprovadas no registro de evidências.
+
+1. **Onda A — governança, contenção e toolchain:** 001–010; 031; 035–037; 081.
+2. **Onda B — inventário, contratos e gates básicos:** 011–025; 051–052; 061; 071–072; 082–083.
+3. **Onda C — correções DB autorizadas e seus testes:** 026–030; 032–034; 041–044; 077; 084.
+4. **Onda D — integrações e correções operacionais:** 038; 045–050; 053–060; 068–069; 073–075; 079; 085.
+5. **Onda E — produto parcial, UX e decisões de limpeza:** 062–067; 039–040; 070; 076; 078; 080.
+6. **Onda F — certificação, staging, rollout e aceite:** 086–100.
 
 Essa ordem reduz primeiro falsos sucessos e falhas de confiança. Implementar features
 novas antes de estabilizar contratos, typecheck, retries e CI ampliaria o risco de
