@@ -107,8 +107,11 @@ jobs:
       - name: Data-layer baseline monotonicity (blocking)
         if: github.event_name == 'pull_request'
         env:
-          BASE_REF: origin/${{ github.base_ref }}
-        run: node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "$BASE_REF"
+          BASE_BRANCH: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_BRANCH"
+          node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "origin/$BASE_BRANCH"
 
   quality:
     name: Quality diagnostics

@@ -60,6 +60,17 @@ test("rejects a stale candidate after main has a tighter total", () => {
   );
 });
 
+test("rejects totals outside the safe integer range", () => {
+  const unsafe = calls({
+    "src/features": Number.MAX_SAFE_INTEGER,
+    "src/hooks": Number.MAX_SAFE_INTEGER,
+  });
+  assert.throws(
+    () => assertDataLayerBaselineMonotonic(unsafe, unsafe),
+    /soma dos contadores excede o intervalo inteiro seguro/,
+  );
+});
+
 test("rejects malformed, missing, extra, negative, and fractional counters", () => {
   assert.throws(() => parseDataLayerBaseline("{", "bad"), /JSON inválido/);
   assert.throws(

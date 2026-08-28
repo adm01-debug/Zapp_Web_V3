@@ -58,6 +58,13 @@ export function assertDataLayerBaselineMonotonic(baseCalls, candidateCalls) {
     0,
   );
 
+  if (
+    !Number.isSafeInteger(baseTotal) ||
+    !Number.isSafeInteger(candidateTotal)
+  ) {
+    throw new Error("soma dos contadores excede o intervalo inteiro seguro");
+  }
+
   if (hardIncreases.length > 0) {
     throw new Error(
       `baseline afrouxou escopo hard: ${hardIncreases.join(", ")}`,
