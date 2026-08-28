@@ -47,8 +47,9 @@ Teste de regressão planejado:
    isolado até existir evidência de zero produtores antigos;
 11. provar que a ação em massa fica indisponível enquanto não houver a mesma trilha e
     resultado estruturado do fluxo individual;
-12. resolver o usuário autenticado por `profiles.user_id` e persistir `profiles.id` em
-    `transfer_comments.agent_id`, cobrindo um perfil cujo `id != user_id`.
+12. resolver o usuário autenticado por `profiles.user_id` e persistir `profiles.id` tanto
+    em `messages.agent_id` quanto em `transfer_comments.agent_id`, cobrindo um perfil cujo
+    `id != user_id`.
 
 ## Resultado
 
@@ -91,9 +92,10 @@ dados, o rollback é de código; registros já criados não serão apagados.
 - Consulta somente leitura ao banco canônico confirmou também que `source_conversation_id`
   é nullable, `priority`, `remote_jid` e `created_at` são NOT NULL, e o vocabulário de
   status é `pending|accepted|in_progress|completed|returned|rejected|expired|cancelled`.
-- A mesma consulta confirmou que `transfer_comments.agent_id` referencia `profiles.id`;
-  existem perfis canônicos em que `profiles.id != profiles.user_id`, portanto usar
-  diretamente `auth.uid()` viola o contrato para parte dos agentes.
+- A mesma consulta confirmou que `messages.agent_id` e `transfer_comments.agent_id`
+  precisam usar `profiles.id`; existem perfis canônicos em que `profiles.id !=
+  profiles.user_id`, portanto usar diretamente `auth.uid()` viola o contrato para parte
+  dos agentes.
 - O caminho em massa atualiza somente `contacts`, sem timeline nem
   `conversation_transfers`; a contenção segura é mantê-lo desabilitado até o contrato
   transacional posterior.
