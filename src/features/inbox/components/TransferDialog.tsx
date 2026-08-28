@@ -30,7 +30,7 @@ interface TransferDialogProps {
     type: 'agent' | 'queue',
     targetId: string,
     message?: string
-  ) => Promise<TransferConversationResult | void> | TransferConversationResult | void;
+  ) => Promise<TransferConversationResult> | TransferConversationResult;
 }
 
 /** Transfer Dialog component. */
@@ -54,12 +54,6 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
     try {
       const result = await onTransfer(transferType, selectedTarget, message || undefined);
       if (attemptId !== transferAttemptRef.current) return;
-      if (!result) {
-        onOpenChange(false);
-        setSelectedTarget('');
-        setMessage('');
-        return;
-      }
       if (result.status === 'error') {
         toast.error(result.title, { description: result.description });
         return;

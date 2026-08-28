@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { X, Archive, Forward, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,12 +5,10 @@ import { useDensity } from '@/hooks/useDensity';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { motion, AnimatePresence } from '@/components/ui/motion';
-import { TransferDialog } from './TransferDialog';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
   onMarkAsRead: () => void;
-  onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => Promise<void> | void;
   onArchive: () => void;
   onClearSelection: () => void;
   isLoading?: boolean;
@@ -21,19 +18,14 @@ interface BulkActionsToolbarProps {
 export function BulkActionsToolbar({
   selectedCount,
   onMarkAsRead,
-  onTransfer,
   onArchive,
   onClearSelection,
   isLoading = false,
 }: BulkActionsToolbarProps) {
-  const [showTransferDialog, setShowTransferDialog] = useState(false);
   const { density } = useDensity();
   const isCompact = density === 'compact' || density === 'dense';
 
   if (selectedCount === 0) return null;
-
-  const handleTransfer = (type: 'agent' | 'queue', targetId: string, message?: string) =>
-    onTransfer(type, targetId, message);
 
   return (
     <>
@@ -100,22 +92,26 @@ export function BulkActionsToolbar({
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowTransferDialog(true)}
-                    disabled={isLoading}
-                    className={cn(
-                      'gap-2 font-bold text-primary-foreground hover:bg-primary-foreground/20',
-                      isCompact ? 'h-7 text-[10px]' : 'h-8 text-[11px]'
-                    )}
-                    aria-label="Transferir"
-                  >
-                    <Forward className={cn(isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
-                    <span className="hidden sm:inline">Transferir</span>
-                  </Button>
+                  <span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled
+                      className={cn(
+                        'gap-2 font-bold text-primary-foreground',
+                        isCompact ? 'h-7 text-[10px]' : 'h-8 text-[11px]'
+                      )}
+                      aria-label="Transferência em massa indisponível"
+                    >
+                      <Forward className={cn(isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+                      <span className="hidden sm:inline">Transferir</span>
+                    </Button>
+                  </span>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Transferir para agente ou fila</TooltipContent>
+                <TooltipContent side="bottom">
+                  Transferência em massa temporariamente indisponível até concluir a trilha de
+                  auditoria.
+                </TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -147,12 +143,6 @@ export function BulkActionsToolbar({
           </div>
         </motion.div>
       </AnimatePresence>
-
-      <TransferDialog
-        open={showTransferDialog}
-        onOpenChange={setShowTransferDialog}
-        onTransfer={handleTransfer}
-      />
     </>
   );
 }

@@ -6,12 +6,21 @@ const mockGetUser = vi.hoisted(() => vi.fn());
 const mockContactsMaybeSingle = vi.hoisted(() => vi.fn());
 const mockContactsEq = vi.hoisted(() => vi.fn(() => ({ maybeSingle: mockContactsMaybeSingle })));
 const mockContactsSelect = vi.hoisted(() => vi.fn(() => ({ eq: mockContactsEq })));
-const mockContactsUpdateMaybeSingle = vi.hoisted(() => vi.fn());
-const mockContactsUpdateSelect = vi.hoisted(() =>
-  vi.fn(() => ({ maybeSingle: mockContactsUpdateMaybeSingle }))
-);
-const mockContactsUpdateEq = vi.hoisted(() => vi.fn(() => ({ select: mockContactsUpdateSelect })));
-const mockContactsUpdate = vi.hoisted(() => vi.fn(() => ({ eq: mockContactsUpdateEq })));
+const contactUpdateMocks = vi.hoisted(() => {
+  const maybeSingle = vi.fn();
+  const select = vi.fn(() => ({ maybeSingle }));
+  type UpdateBuilder = {
+    eq: ReturnType<typeof vi.fn>;
+    is: ReturnType<typeof vi.fn>;
+    select: typeof select;
+  };
+  const builder = {} as UpdateBuilder;
+  builder.eq = vi.fn(() => builder);
+  builder.is = vi.fn(() => builder);
+  builder.select = select;
+  const update = vi.fn(() => builder);
+  return { builder, maybeSingle, select, update };
+});
 const mockMessagesInsert = vi.hoisted(() => vi.fn());
 const mockTransfersMaybeSingle = vi.hoisted(() => vi.fn());
 const mockTransfersSelect = vi.hoisted(() =>
@@ -29,7 +38,7 @@ vi.mock('@/integrations/datasource/db', () => ({
     if (table === 'contacts') {
       return {
         select: mockContactsSelect,
-        update: mockContactsUpdate,
+        update: contactUpdateMocks.update,
       };
     }
     if (table === 'messages') {
@@ -83,7 +92,7 @@ describe('useTransferConversation', () => {
       },
       error: null,
     });
-    mockContactsUpdateMaybeSingle.mockResolvedValue({ data: { id: CONTACT_ID }, error: null });
+    contactUpdateMocks.maybeSingle.mockResolvedValue({ data: { id: CONTACT_ID }, error: null });
     mockMessagesInsert.mockResolvedValue({ error: null });
     mockTransfersMaybeSingle.mockResolvedValue({ data: { id: 'tr-1' }, error: null });
     mockTransferCommentsInsert.mockResolvedValue({ error: null });
@@ -106,13 +115,16 @@ describe('useTransferConversation', () => {
       );
     });
 
-    expect(mockContactsUpdate).toHaveBeenCalledWith({ assigned_to: 'agent-destino' });
+    expect(contactUpdateMocks.update).toHaveBeenCalledWith({ assigned_to: 'agent-destino' });
+    expect(contactUpdateMocks.builder.eq).toHaveBeenCalledWith('assigned_to', 'agent-anterior');
+    expect(contactUpdateMocks.builder.eq).toHaveBeenCalledWith('queue_id', 'queue-antiga');
     expect(mockMessagesInsert).toHaveBeenCalled();
     expect(mockTransfersInsert).toHaveBeenCalled();
     expect(mockTransfersInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         from_queue_id: 'queue-antiga',
         transfer_type: 'internal',
+        priority: 2,
         to_agent_id: 'agent-destino',
       })
     );
@@ -122,6 +134,30 @@ describe('useTransferConversation', () => {
       title: 'Chat transferido!',
       description: 'O chat foi transferido para outro atendente.',
     });
+  });
+
+  it('usa filtros null-safe no compare-and-set da atribuição atual', async () => {
+    mockContactsMaybeSingle.mockResolvedValue({
+      data: {
+        assigned_to: null,
+        queue_id: null,
+        name: 'Cliente sem fila',
+        remote_jid: '5511999999999@s.whatsapp.net',
+        instance_name: 'wpp1',
+      },
+      error: null,
+    });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    await act(async () => {
+      await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(contactUpdateMocks.builder.is).toHaveBeenCalledWith('assigned_to', null);
+    expect(contactUpdateMocks.builder.is).toHaveBeenCalledWith('queue_id', null);
   });
 
   it('retorna partial quando a auditoria estruturada falha depois da transferência principal', async () => {
@@ -146,7 +182,7 @@ describe('useTransferConversation', () => {
       );
     });
 
-    expect(mockContactsUpdate).toHaveBeenCalledWith({
+    expect(contactUpdateMocks.update).toHaveBeenCalledWith({
       queue_id: 'queue-destino',
       assigned_to: null,
     });
@@ -246,7 +282,7 @@ describe('useTransferConversation', () => {
   });
 
   it('retorna error quando a atualização principal falha e não grava falso sucesso', async () => {
-    mockContactsUpdateMaybeSingle.mockResolvedValue({
+    contactUpdateMocks.maybeSingle.mockResolvedValue({
       data: null,
       error: { message: 'permission denied' },
     });
@@ -273,7 +309,7 @@ describe('useTransferConversation', () => {
   });
 
   it('retorna error quando o update afeta zero linhas e não continua a trilha', async () => {
-    mockContactsUpdateMaybeSingle.mockResolvedValue({ data: null, error: null });
+    contactUpdateMocks.maybeSingle.mockResolvedValue({ data: null, error: null });
 
     const { result } = renderHook(() =>
       useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })

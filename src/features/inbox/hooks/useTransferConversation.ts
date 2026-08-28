@@ -85,9 +85,18 @@ export function useTransferConversation({
       }
 
       try {
-        const { data: updatedContact, error: updateError } = await dbFrom('contacts')
-          .update(updateData)
-          .eq('id', contactId)
+        let updateQuery = dbFrom('contacts').update(updateData).eq('id', contactId);
+
+        // Compare-and-set mínimo: se outro agente reatribuiu o contato entre a leitura
+        // e este UPDATE, a linha deixa de casar e não sobrescrevemos a ação concorrente.
+        updateQuery = current.assigned_to
+          ? updateQuery.eq('assigned_to', current.assigned_to)
+          : updateQuery.is('assigned_to', null);
+        updateQuery = current.queue_id
+          ? updateQuery.eq('queue_id', current.queue_id)
+          : updateQuery.is('queue_id', null);
+
+        const { data: updatedContact, error: updateError } = await updateQuery
           .select('id')
           .maybeSingle();
         if (updateError || !updatedContact?.id) {
@@ -144,6 +153,7 @@ export function useTransferConversation({
             to_queue_id: type === 'queue' ? targetId : null,
             transfer_type: 'internal',
             status: 'pending',
+            priority: 2,
             reason:
               message ??
               (type === 'agent'

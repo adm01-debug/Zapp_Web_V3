@@ -50,7 +50,7 @@ describe('TransferDialog', () => {
   });
 
   const renderDialog = (
-    onTransfer: () => Promise<TransferConversationResult | void> | TransferConversationResult | void
+    onTransfer: () => Promise<TransferConversationResult> | TransferConversationResult
   ) => {
     const onOpenChange = vi.fn();
     const view = render(
@@ -153,20 +153,6 @@ describe('TransferDialog', () => {
       description: 'O chat foi transferido, mas a trilha de auditoria ficou incompleta.',
     });
     expect(toastSuccess).not.toHaveBeenCalled();
-  });
-
-  it('fecha sem ler status quando o callback resolve sem payload detalhado', async () => {
-    const onTransfer = vi.fn().mockResolvedValue(undefined);
-
-    const { onOpenChange } = renderDialog(onTransfer);
-    fireEvent.click(screen.getByRole('button', { name: /Transferir/i }));
-
-    await waitFor(() => {
-      expect(onOpenChange).toHaveBeenCalledWith(false);
-    });
-    expect(toastSuccess).not.toHaveBeenCalled();
-    expect(toastWarning).not.toHaveBeenCalled();
-    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('mantém o diálogo aberto quando a transferência falha antes da atualização principal', async () => {
