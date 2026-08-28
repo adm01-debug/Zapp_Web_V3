@@ -53,11 +53,19 @@ describe('TransferDialog', () => {
     onTransfer: () => Promise<TransferConversationResult | void> | TransferConversationResult | void
   ) => {
     const onOpenChange = vi.fn();
-    render(<TransferDialog open onOpenChange={onOpenChange} onTransfer={onTransfer} />);
+    const view = render(
+      <TransferDialog open onOpenChange={onOpenChange} onTransfer={onTransfer} />
+    );
 
     fireEvent.click(screen.getByText('Ana'));
 
-    return { onOpenChange };
+    return {
+      onOpenChange,
+      setOpen: (open: boolean) =>
+        view.rerender(
+          <TransferDialog open={open} onOpenChange={onOpenChange} onTransfer={onTransfer} />
+        ),
+    };
   };
 
   it('não expõe transferência entre conexões sem contrato de backend', () => {
@@ -83,6 +91,7 @@ describe('TransferDialog', () => {
     expect(onTransfer).toHaveBeenCalledTimes(1);
     expect(onTransfer).toHaveBeenCalledWith('agent', 'agent-1', undefined);
     expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
 
     await act(async () => {
       resolveTransfer({
@@ -98,6 +107,33 @@ describe('TransferDialog', () => {
     expect(toastSuccess).toHaveBeenCalledWith('Chat transferido!', {
       description: 'O chat foi transferido para outro atendente.',
     });
+  });
+
+  it('ignora a conclusão de uma tentativa obsoleta após fechamento externo', async () => {
+    let resolveTransfer!: (value: TransferConversationResult) => void;
+    const onTransfer = vi.fn(
+      () =>
+        new Promise<TransferConversationResult>((resolve) => {
+          resolveTransfer = resolve;
+        })
+    );
+
+    const { onOpenChange, setOpen } = renderDialog(onTransfer);
+    fireEvent.click(screen.getByRole('button', { name: /Transferir/i }));
+
+    setOpen(false);
+    setOpen(true);
+
+    await act(async () => {
+      resolveTransfer({
+        status: 'success',
+        title: 'Chat transferido!',
+        description: 'O chat foi transferido para outro atendente.',
+      });
+    });
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it('fecha com warning quando a transferência foi parcial, sem toast de sucesso pleno', async () => {

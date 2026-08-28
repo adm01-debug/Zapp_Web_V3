@@ -6,7 +6,11 @@ const mockGetUser = vi.hoisted(() => vi.fn());
 const mockContactsMaybeSingle = vi.hoisted(() => vi.fn());
 const mockContactsEq = vi.hoisted(() => vi.fn(() => ({ maybeSingle: mockContactsMaybeSingle })));
 const mockContactsSelect = vi.hoisted(() => vi.fn(() => ({ eq: mockContactsEq })));
-const mockContactsUpdateEq = vi.hoisted(() => vi.fn());
+const mockContactsUpdateMaybeSingle = vi.hoisted(() => vi.fn());
+const mockContactsUpdateSelect = vi.hoisted(() =>
+  vi.fn(() => ({ maybeSingle: mockContactsUpdateMaybeSingle }))
+);
+const mockContactsUpdateEq = vi.hoisted(() => vi.fn(() => ({ select: mockContactsUpdateSelect })));
 const mockContactsUpdate = vi.hoisted(() => vi.fn(() => ({ eq: mockContactsUpdateEq })));
 const mockMessagesInsert = vi.hoisted(() => vi.fn());
 const mockTransfersMaybeSingle = vi.hoisted(() => vi.fn());
@@ -68,7 +72,7 @@ const AGENT_ID = '660e8400-e29b-41d4-a716-446655440000';
 describe('useTransferConversation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUser.mockResolvedValue({ data: { user: { id: AGENT_ID } } });
+    mockGetUser.mockResolvedValue({ data: { user: { id: AGENT_ID } }, error: null });
     mockContactsMaybeSingle.mockResolvedValue({
       data: {
         assigned_to: 'agent-anterior',
@@ -79,7 +83,7 @@ describe('useTransferConversation', () => {
       },
       error: null,
     });
-    mockContactsUpdateEq.mockResolvedValue({ error: null });
+    mockContactsUpdateMaybeSingle.mockResolvedValue({ data: { id: CONTACT_ID }, error: null });
     mockMessagesInsert.mockResolvedValue({ error: null });
     mockTransfersMaybeSingle.mockResolvedValue({ data: { id: 'tr-1' }, error: null });
     mockTransferCommentsInsert.mockResolvedValue({ error: null });
@@ -105,6 +109,13 @@ describe('useTransferConversation', () => {
     expect(mockContactsUpdate).toHaveBeenCalledWith({ assigned_to: 'agent-destino' });
     expect(mockMessagesInsert).toHaveBeenCalled();
     expect(mockTransfersInsert).toHaveBeenCalled();
+    expect(mockTransfersInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from_queue_id: 'queue-antiga',
+        transfer_type: 'internal',
+        to_agent_id: 'agent-destino',
+      })
+    );
     expect(mockTransferCommentsInsert).toHaveBeenCalled();
     expect(outcome).toEqual({
       status: 'success',
@@ -174,6 +185,45 @@ describe('useTransferConversation', () => {
     );
   });
 
+  it('retorna partial quando a promise da timeline rejeita após a atribuição', async () => {
+    mockMessagesInsert.mockRejectedValue(new Error('network retry exhausted'));
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(outcome?.status).toBe('partial');
+    expect(mockTransfersInsert).toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'messages insert failed during transfer audit trail:',
+      expect.any(Error)
+    );
+  });
+
+  it('retorna partial quando a promise da auditoria rejeita após a atribuição', async () => {
+    mockTransfersMaybeSingle.mockRejectedValue(new Error('audit endpoint unavailable'));
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('queue', 'queue-destino');
+    });
+
+    expect(outcome?.status).toBe('partial');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'conversation_transfers insert failed:',
+      expect.any(Error)
+    );
+  });
+
   it('retorna partial quando o insert de auditoria não devolve id', async () => {
     mockTransfersMaybeSingle.mockResolvedValue({ data: null, error: null });
 
@@ -196,7 +246,10 @@ describe('useTransferConversation', () => {
   });
 
   it('retorna error quando a atualização principal falha e não grava falso sucesso', async () => {
-    mockContactsUpdateEq.mockResolvedValue({ error: { message: 'permission denied' } });
+    mockContactsUpdateMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'permission denied' },
+    });
 
     const { result } = renderHook(() =>
       useTransferConversation({
@@ -217,5 +270,26 @@ describe('useTransferConversation', () => {
       title: 'Erro na transferência',
       description: 'Não foi possível transferir o chat. Tente novamente.',
     });
+  });
+
+  it('retorna error quando o update afeta zero linhas e não continua a trilha', async () => {
+    mockContactsUpdateMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(outcome?.status).toBe('error');
+    expect(mockMessagesInsert).not.toHaveBeenCalled();
+    expect(mockTransfersInsert).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Transfer contact update failed:',
+      expect.objectContaining({ message: 'Contact update affected zero rows' })
+    );
   });
 });

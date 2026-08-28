@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from '@/components/ui/motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -43,12 +43,17 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
   const { queues, loading: loadingQueues } = useQueues();
 
   const [isTransferring, setIsTransferring] = useState(false);
+  const transferInFlightRef = useRef(false);
+  const transferAttemptRef = useRef(0);
 
   const handleTransfer = async () => {
-    if (!selectedTarget || isTransferring) return;
+    if (!selectedTarget || transferInFlightRef.current) return;
+    transferInFlightRef.current = true;
+    const attemptId = ++transferAttemptRef.current;
     setIsTransferring(true);
     try {
       const result = await onTransfer(transferType, selectedTarget, message || undefined);
+      if (attemptId !== transferAttemptRef.current) return;
       if (!result) {
         onOpenChange(false);
         setSelectedTarget('');
@@ -70,23 +75,34 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
 
       toast.success(result.title, { description: result.description });
     } catch (err) {
+      if (attemptId !== transferAttemptRef.current) return;
       log.error('[TransferDialog] Falha inesperada ao transferir:', err);
       toast.error('Erro na transferência', {
         description: 'Não foi possível transferir o chat. Tente novamente.',
       });
     } finally {
-      setIsTransferring(false);
+      if (attemptId === transferAttemptRef.current) {
+        transferInFlightRef.current = false;
+        setIsTransferring(false);
+      }
     }
   };
 
   // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
+      transferAttemptRef.current += 1;
+      transferInFlightRef.current = false;
       setSelectedTarget('');
       setMessage('');
       setIsTransferring(false);
     }
   }, [open]);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isTransferring) return;
+    onOpenChange(nextOpen);
+  };
 
   const availableAgents = useMemo(
     () => agents.filter((a) => a.status === 'online' || a.status === 'away'),
@@ -94,7 +110,7 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -255,7 +271,7 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isTransferring}>
               Cancelar
             </Button>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
