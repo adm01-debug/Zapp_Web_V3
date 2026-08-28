@@ -44,9 +44,21 @@ jobs:
           const { execSync } = require('child_process');
           const fs = require('fs');
           const output = process.env.GITHUB_OUTPUT;
-          const before = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
+          const readCalls = (label) => {
+            const calls = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
+            if (!calls || typeof calls !== 'object' || Array.isArray(calls)) {
+              throw new Error(`${label}: campo calls inválido`);
+            }
+            for (const [scope, value] of Object.entries(calls)) {
+              if (!Number.isSafeInteger(value) || value < 0) {
+                throw new Error(`${label}: contador inválido em ${scope}`);
+              }
+            }
+            return calls;
+          };
+          const before = readCalls('baseline anterior');
           execSync('node scripts/check-data-layer.mjs --update-baseline', {stdio:'inherit'});
-          const after = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
+          const after = readCalls('baseline gerado');
           const hard = ['src/components','src/pages'];
           const up = hard.filter(k => (after[k]??0) > (before[k]??0));
           const beforeTotal = Object.values(before).reduce((a,b)=>a+b,0);
@@ -74,8 +86,36 @@ jobs:
           console.log(`✅ baseline apertado localmente (${beforeTotal} -> ${afterTotal}) e pronto para PR.`);
           EOF
 
-      - name: Create branch and commit
+      - name: Prevent concurrent ratchet PRs
+        id: pr_guard
         if: steps.tighten.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          TARGET_BRANCH: ${{ steps.tighten.outputs.branch }}
+        run: |
+          EXISTING="$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --json headRefName,url \
+            --jq '[.[] | select(.headRefName | startswith("chore/ratchet-tighten-"))][0] | if . then [.headRefName, .url] | @tsv else "" end')"
+          if [ -z "$EXISTING" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          EXISTING_BRANCH="${EXISTING%%$'\t'*}"
+          EXISTING_URL="${EXISTING#*$'\t'}"
+          if [ "$EXISTING_BRANCH" = "$TARGET_BRANCH" ]; then
+            echo "PR idempotente já existente: $EXISTING_URL"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::notice::Ratchet já pendente em $EXISTING_URL; nenhuma segunda PR será criada"
+          echo "proceed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Create branch and commit
+        if: steps.tighten.outputs.changed == 'true' && steps.pr_guard.outputs.proceed == 'true'
         run: |
           git config user.name "ratchet-bot"
           git config user.email "bot@users.noreply.github.com"
@@ -85,7 +125,7 @@ jobs:
           git commit -m "chore(ratchet): auto-tighten data-layer baseline"
 
       - name: Push ratchet branch
-        if: steps.tighten.outputs.changed == 'true'
+        if: steps.tighten.outputs.changed == 'true' && steps.pr_guard.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
@@ -113,9 +153,12 @@ jobs:
           fi
 
       - name: Create PR for tightened baseline
-        if: steps.tighten.outputs.changed == 'true'
+        if: steps.tighten.outputs.changed == 'true' && steps.pr_guard.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          BEFORE_TOTAL: ${{ steps.tighten.outputs.before_total }}
+          AFTER_TOTAL: ${{ steps.tighten.outputs.after_total }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           BRANCH="${{ steps.tighten.outputs.branch }}"
           EXISTING_URL="$(gh pr list --repo "${{ github.repository }}" --state open --head "$BRANCH" --json url --jq '.[0].url')"
@@ -128,10 +171,12 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "chore(ratchet): tighten data-layer baseline [$(date +%Y-%m-%d)]" \
-            --body "Ajuste automático do baseline de data-layer detectado após merge na \`main\`.
+            --body-file - <<EOF
+          Ajuste automático do baseline de data-layer detectado após merge na \`main\`.
 
-          - Antes: \`${{ steps.tighten.outputs.before_total }}\`
-          - Depois: \`${{ steps.tighten.outputs.after_total }}\`
-          - Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          - Antes: \`${BEFORE_TOTAL}\`
+          - Depois: \`${AFTER_TOTAL}\`
+          - Run: ${RUN_URL}
 
-          Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório."
+          Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório.
+          EOF
