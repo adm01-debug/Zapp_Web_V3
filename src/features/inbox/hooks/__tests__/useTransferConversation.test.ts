@@ -151,6 +151,50 @@ describe('useTransferConversation', () => {
     });
   });
 
+  it('retorna partial quando a timeline falha depois da atualização principal', async () => {
+    mockMessagesInsert.mockResolvedValue({ error: { message: 'timeline unavailable' } });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({
+        contactId: CONTACT_ID,
+        whatsappConnectionId: 'wa-1',
+      })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(mockTransfersInsert).toHaveBeenCalled();
+    expect(outcome?.status).toBe('partial');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'messages insert failed during transfer audit trail:',
+      expect.objectContaining({ message: 'timeline unavailable' })
+    );
+  });
+
+  it('retorna partial quando o insert de auditoria não devolve id', async () => {
+    mockTransfersMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({
+        contactId: CONTACT_ID,
+        whatsappConnectionId: 'wa-1',
+      })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(outcome?.status).toBe('partial');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'conversation_transfers insert returned no audit id'
+    );
+  });
+
   it('retorna error quando a atualização principal falha e não grava falso sucesso', async () => {
     mockContactsUpdateEq.mockResolvedValue({ error: { message: 'permission denied' } });
 

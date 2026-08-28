@@ -13,12 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { User, Users, Send, ArrowRight, Loader2, Smartphone } from 'lucide-react';
+import { User, Users, Send, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getLogger } from '@/lib/logger';
 import { useAgents } from '@/features/admin';
 import { useQueues } from '@/hooks/useQueues';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { TransferConversationResult } from '../hooks/useTransferConversation';
 
@@ -36,55 +35,17 @@ interface TransferDialogProps {
 
 /** Transfer Dialog component. */
 export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialogProps) {
-  const [transferType, setTransferType] = useState<'agent' | 'queue' | 'connection'>('agent');
+  const [transferType, setTransferType] = useState<'agent' | 'queue'>('agent');
   const [selectedTarget, setSelectedTarget] = useState<string>('');
   const [message, setMessage] = useState('');
-  const [connections, setConnections] = useState<
-    { id: string; name: string; phone_number: string; status: string }[]
-  >([]);
-  const [loadingConnections, setLoadingConnections] = useState(false);
 
   const { agents, isLoading: loadingAgents } = useAgents();
   const { queues, loading: loadingQueues } = useQueues();
-
-  // Fetch WhatsApp connections
-  useEffect(() => {
-    if (transferType !== 'connection' || !open) return;
-    let cancelled = false;
-    setLoadingConnections(true);
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('whatsapp_connections')
-          .select('id, name, phone_number, status')
-          .eq('status', 'connected');
-        if (cancelled) return;
-        setConnections(
-          (data as { id: string; name: string; phone_number: string; status: string }[]) || []
-        );
-      } catch (err) {
-        // Antes: promise sem catch → unhandled rejection E setLoadingConnections
-        // nunca rodava → spinner infinito no diálogo de transferência.
-        if (!cancelled) log.error('[TransferDialog] Falha ao carregar conexões:', err);
-      } finally {
-        if (!cancelled) setLoadingConnections(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [transferType, open]);
 
   const [isTransferring, setIsTransferring] = useState(false);
 
   const handleTransfer = async () => {
     if (!selectedTarget || isTransferring) return;
-    if (transferType === 'connection') {
-      toast.warning('Transferência para conexão ainda não está disponível', {
-        description: 'Essa ação permanece bloqueada até existir um fluxo real de backend.',
-      });
-      return;
-    }
     setIsTransferring(true);
     try {
       const result = await onTransfer(transferType, selectedTarget, message || undefined);
@@ -147,10 +108,10 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
           <RadioGroup
             value={transferType}
             onValueChange={(v) => {
-              setTransferType(v as 'agent' | 'queue' | 'connection');
+              setTransferType(v as 'agent' | 'queue');
               setSelectedTarget('');
             }}
-            className="grid grid-cols-3 gap-3"
+            className="grid grid-cols-2 gap-3"
           >
             <Label
               htmlFor="agent"
@@ -193,28 +154,6 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
               <div>
                 <p className="font-medium">Departamento</p>
                 <p className="text-xs text-muted-foreground">Transferir para uma fila</p>
-              </div>
-            </Label>
-
-            <Label
-              htmlFor="connection"
-              className={cn(
-                'flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-all',
-                transferType === 'connection'
-                  ? 'border-whatsapp bg-whatsapp/5'
-                  : 'border-border hover:border-muted-foreground'
-              )}
-            >
-              <RadioGroupItem value="connection" id="connection" className="sr-only" />
-              <Smartphone
-                className={cn(
-                  'h-5 w-5',
-                  transferType === 'connection' ? 'text-whatsapp' : 'text-muted-foreground'
-                )}
-              />
-              <div>
-                <p className="font-medium">Conexão</p>
-                <p className="text-xs text-muted-foreground">Outro WhatsApp</p>
               </div>
             </Label>
           </RadioGroup>
@@ -269,46 +208,6 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
                   </p>
                 )}
               </div>
-            </div>
-          )}
-
-          {transferType === 'connection' && (
-            <div className="space-y-2">
-              <Label>Selecione uma conexão WhatsApp</Label>
-              {loadingConnections ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : connections.length > 0 ? (
-                <div className="max-h-48 space-y-2 overflow-y-auto">
-                  {connections.map((conn) => (
-                    <motion.button
-                      key={conn.id}
-                      whileHover={{ x: 4 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSelectedTarget(conn.id)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all',
-                        selectedTarget === conn.id
-                          ? 'border-whatsapp bg-whatsapp/5'
-                          : 'border-border hover:border-muted-foreground'
-                      )}
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                        <Smartphone className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{conn.name}</p>
-                        <p className="text-xs text-muted-foreground">{conn.phone_number}</p>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-              ) : (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  Nenhuma conexão disponível
-                </p>
-              )}
             </div>
           )}
 

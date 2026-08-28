@@ -11,7 +11,7 @@ import { TransferDialog } from './TransferDialog';
 interface BulkActionsToolbarProps {
   selectedCount: number;
   onMarkAsRead: () => void;
-  onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => void;
+  onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => Promise<void> | void;
   onArchive: () => void;
   onClearSelection: () => void;
   isLoading?: boolean;
@@ -32,10 +32,8 @@ export function BulkActionsToolbar({
 
   if (selectedCount === 0) return null;
 
-  const handleTransfer = (type: 'agent' | 'queue', targetId: string, message?: string) => {
+  const handleTransfer = (type: 'agent' | 'queue', targetId: string, message?: string) =>
     onTransfer(type, targetId, message);
-    setShowTransferDialog(false);
-  };
 
   return (
     <>
@@ -153,13 +151,7 @@ export function BulkActionsToolbar({
       <TransferDialog
         open={showTransferDialog}
         onOpenChange={setShowTransferDialog}
-        onTransfer={
-          handleTransfer as (
-            type: 'agent' | 'connection' | 'queue',
-            targetId: string,
-            message?: string
-          ) => void
-        }
+        onTransfer={handleTransfer}
       />
     </>
   );

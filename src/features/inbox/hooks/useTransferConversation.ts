@@ -118,9 +118,12 @@ export function useTransferConversation({
           .maybeSingle();
 
         let commentErr: unknown = null;
+        const transferLogged = !transferErr && Boolean(transferRow?.id);
 
         if (transferErr) {
           log.error('conversation_transfers insert failed:', transferErr);
+        } else if (!transferRow?.id) {
+          log.error('conversation_transfers insert returned no audit id');
         } else if (message && transferRow?.id && agentId) {
           const { error } = await supabase.from('transfer_comments').insert({
             transfer_id: transferRow.id,
@@ -144,7 +147,7 @@ export function useTransferConversation({
             ? 'O chat foi transferido para outro atendente.'
             : 'O chat foi transferido para outra fila.';
 
-        if (timelineErr || transferErr || commentErr) {
+        if (timelineErr || !transferLogged || commentErr) {
           return {
             status: 'partial',
             title: 'Transferência parcial',

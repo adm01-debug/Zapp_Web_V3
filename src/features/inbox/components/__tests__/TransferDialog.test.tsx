@@ -38,16 +38,6 @@ vi.mock('@/hooks/useQueues', () => ({
   }),
 }));
 
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    from: () => ({
-      select: () => ({
-        eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-      }),
-    }),
-  },
-}));
-
 vi.mock('@/lib/logger', () => ({
   getLogger: () => ({
     error: vi.fn(),
@@ -59,7 +49,9 @@ describe('TransferDialog', () => {
     vi.clearAllMocks();
   });
 
-  const renderDialog = (onTransfer: () => Promise<TransferConversationResult>) => {
+  const renderDialog = (
+    onTransfer: () => Promise<TransferConversationResult | void> | TransferConversationResult | void
+  ) => {
     const onOpenChange = vi.fn();
     render(<TransferDialog open onOpenChange={onOpenChange} onTransfer={onTransfer} />);
 
@@ -67,6 +59,13 @@ describe('TransferDialog', () => {
 
     return { onOpenChange };
   };
+
+  it('não expõe transferência entre conexões sem contrato de backend', () => {
+    renderDialog(vi.fn());
+
+    expect(screen.queryByText('Conexão')).not.toBeInTheDocument();
+    expect(screen.queryByText('Outro WhatsApp')).not.toBeInTheDocument();
+  });
 
   it('aguarda a promise de transferência antes de fechar o diálogo', async () => {
     let resolveTransfer!: (value: TransferConversationResult) => void;
@@ -79,7 +78,9 @@ describe('TransferDialog', () => {
 
     const { onOpenChange } = renderDialog(onTransfer);
     fireEvent.click(screen.getByRole('button', { name: /Transferir/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Transferindo/i }));
 
+    expect(onTransfer).toHaveBeenCalledTimes(1);
     expect(onTransfer).toHaveBeenCalledWith('agent', 'agent-1', undefined);
     expect(onOpenChange).not.toHaveBeenCalled();
 
@@ -116,6 +117,20 @@ describe('TransferDialog', () => {
       description: 'O chat foi transferido, mas a trilha de auditoria ficou incompleta.',
     });
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('fecha sem ler status quando o callback resolve sem payload detalhado', async () => {
+    const onTransfer = vi.fn().mockResolvedValue(undefined);
+
+    const { onOpenChange } = renderDialog(onTransfer);
+    fireEvent.click(screen.getByRole('button', { name: /Transferir/i }));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('mantém o diálogo aberto quando a transferência falha antes da atualização principal', async () => {
