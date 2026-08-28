@@ -36,16 +36,18 @@ Teste de regressão planejado:
 5. selecionar `connection` na baseline e provar que o callback recebe um tipo não
    suportado; após a contenção, provar que a opção/cast não alcança qualquer write.
 6. fazer o update resolver com zero linhas e exigir falha antes de qualquer trilha;
-7. rejeitar a promise da timeline/auditoria após o update e exigir `parcial`, sem sugerir
+7. falhar a leitura inicial de `contacts` e exigir aborto do fluxo antes de update,
+   timeline ou auditoria;
+8. rejeitar a promise da timeline/auditoria após o update e exigir `parcial`, sem sugerir
    retry de uma atribuição já commitada;
-8. validar queue→agent e queue→queue preservando `from_queue_id` e usando o valor
+9. validar queue→agent e queue→queue preservando `from_queue_id` e usando o valor
    canônico `transfer_type='internal'`;
-9. provar que o parser Realtime aceita `internal|direct`, todos os estados canônicos e
+10. provar que o parser Realtime aceita `internal|direct`, todos os estados canônicos e
    `source_conversation_id` nulo; manter o vocabulário legado apenas em ramo de leitura
    isolado até existir evidência de zero produtores antigos;
-10. provar que a ação em massa fica indisponível enquanto não houver a mesma trilha e
+11. provar que a ação em massa fica indisponível enquanto não houver a mesma trilha e
     resultado estruturado do fluxo individual;
-11. resolver o usuário autenticado por `profiles.user_id` e persistir `profiles.id` em
+12. resolver o usuário autenticado por `profiles.user_id` e persistir `profiles.id` em
     `transfer_comments.agent_id`, cobrindo um perfil cujo `id != user_id`.
 
 ## Resultado
