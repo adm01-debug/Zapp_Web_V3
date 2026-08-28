@@ -39,6 +39,7 @@ import {
 import type { AggregatedReaction } from '@/features/inbox/hooks/team-chat/useTeamMessageReactions';
 import type { TeamConversation } from '@/hooks/useTeamChat';
 import { MessageStatus } from '@/features/inbox';
+import { normalizeTeamMessageStatus } from './teamMessageStatus';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ interface TeamMessage {
   reply_to_id?: string | null;
   is_edited?: boolean;
   is_deleted?: boolean;
-  status?: string;
+  status?: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -160,6 +161,7 @@ export function TeamMessageItem({
     ?.replace(/\[.*?\]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .trim();
+  const displayStatus = normalizeTeamMessageStatus(msg.status);
 
   return (
     <ContextMenu key={msg.id}>
@@ -319,10 +321,10 @@ export function TeamMessageItem({
                         </span>
                         {isMine && (
                           <MessageStatus
-                            status={msg.status || 'sent'}
+                            status={displayStatus}
                             className={cn(
                               'origin-right scale-75',
-                              msg.status === 'read' ? 'text-info' : 'text-primary-foreground/60'
+                              displayStatus === 'read' ? 'text-info' : 'text-primary-foreground/60'
                             )}
                           />
                         )}
