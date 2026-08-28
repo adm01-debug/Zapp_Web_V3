@@ -6,6 +6,7 @@ on:
     branches: [main]
 permissions:
   contents: write
+  pull-requests: write
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -14,13 +15,12 @@ jobs:
   tighten:
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): cálculo local + push com GITHUB_TOKEN genérico, sem DB/VPS.
     runs-on: ubuntu-latest
-    env:
-      GH_PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
-          persist-credentials: true
+          persist-credentials: false
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -28,24 +28,79 @@ jobs:
           node-version: '22'
 
       - name: Tighten baseline (down-only nos escopos hard)
+        id: tighten
         run: |
           node - << 'EOF'
           const { execSync } = require('child_process');
           const fs = require('fs');
+          const output = process.env.GITHUB_OUTPUT;
           const before = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
           execSync('node scripts/check-data-layer.mjs --update-baseline', {stdio:'inherit'});
           const after = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
           const hard = ['src/components','src/pages'];
           const up = hard.filter(k => (after[k]??0) > (before[k]??0));
-          const totalUp = Object.values(after).reduce((a,b)=>a+b,0) > Object.values(before).reduce((a,b)=>a+b,0);
-          if (up.length || totalUp) { console.log('⛔ subida detectada em', up.join(',')||'TOTAL', '— não afrouxo. Revertendo.'); execSync('git checkout -- scripts/data-layer-baseline.json'); process.exit(0); }
+          const beforeTotal = Object.values(before).reduce((a,b)=>a+b,0);
+          const afterTotal = Object.values(after).reduce((a,b)=>a+b,0);
+          const totalUp = afterTotal > beforeTotal;
+          if (up.length || totalUp) {
+            console.log('⛔ subida detectada em', up.join(',')||'TOTAL', '— não afrouxo. Revertendo.');
+            execSync('git restore --source=HEAD --staged --worktree scripts/data-layer-baseline.json');
+            fs.appendFileSync(output, 'changed=false\n');
+            fs.appendFileSync(output, 'reason=upward-or-total-growth\n');
+            process.exit(0);
+          }
           const changed = execSync('git status --porcelain scripts/data-layer-baseline.json').toString().trim();
-          if (!changed) { console.log('baseline já justo — nada a fazer.'); process.exit(0); }
-          execSync('git config user.name "ratchet-bot" && git config user.email "bot@users.noreply.github.com"');
-          // Usar GH_PUSH_TOKEN para bypass de branch protection
-          const repo = process.env.GITHUB_REPOSITORY;
-          const token = process.env.GH_PUSH_TOKEN || process.env.GITHUB_TOKEN;
-          if (token) execSync(`git remote set-url origin https://x-access-token:${token}@github.com/${repo}.git`);
-          execSync('git add scripts/data-layer-baseline.json && git commit -m "chore(ratchet): auto-tighten data-layer baseline [skip ci]" && git push');
-          console.log('✅ baseline apertado e commitado.');
+          if (!changed) {
+            console.log('baseline já justo — nada a fazer.');
+            fs.appendFileSync(output, 'changed=false\n');
+            fs.appendFileSync(output, 'reason=no-change\n');
+            process.exit(0);
+          }
+          const branch = `chore/ratchet-tighten-${process.env.GITHUB_SHA.slice(0, 12)}`;
+          fs.appendFileSync(output, 'changed=true\n');
+          fs.appendFileSync(output, `branch=${branch}\n`);
+          fs.appendFileSync(output, `before_total=${beforeTotal}\n`);
+          fs.appendFileSync(output, `after_total=${afterTotal}\n`);
+          console.log(`✅ baseline apertado localmente (${beforeTotal} -> ${afterTotal}) e pronto para PR.`);
           EOF
+
+      - name: Create branch and commit
+        if: steps.tighten.outputs.changed == 'true'
+        run: |
+          git config user.name "ratchet-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git checkout -b "${{ steps.tighten.outputs.branch }}"
+          git add scripts/data-layer-baseline.json
+          git commit -m "chore(ratchet): auto-tighten data-layer baseline [skip ci]"
+
+      - name: Push ratchet branch
+        if: steps.tighten.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin "${{ steps.tighten.outputs.branch }}"
+
+      - name: Create PR for tightened baseline
+        if: steps.tighten.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ steps.tighten.outputs.branch }}"
+          EXISTING_URL="$(gh pr list --repo "${{ github.repository }}" --state open --head "$BRANCH" --json url --jq '.[0].url')"
+          if [ -n "$EXISTING_URL" ]; then
+            echo "PR já existente: $EXISTING_URL"
+            exit 0
+          fi
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(ratchet): tighten data-layer baseline [$(date +%Y-%m-%d)]" \
+            --body "Ajuste automático do baseline de data-layer detectado após merge na \`main\`.
+
+          - Antes: \`${{ steps.tighten.outputs.before_total }}\`
+          - Depois: \`${{ steps.tighten.outputs.after_total }}\`
+          - Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório."
