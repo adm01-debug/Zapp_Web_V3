@@ -351,7 +351,9 @@ jobs:
       # sem commit, caso um falso positivo bloqueie deploys.
       # ============================================================
       - name: ✅ Convergência verificada (Swarm × imagem do deploy)
-        if: ${{ vars.ENFORCE_CONVERGENCE != '0' }}
+        # format() normaliza variável ausente para string vazia antes da
+        # comparação: default ligado; somente o valor explícito "0" desliga.
+        if: ${{ format('{0}', vars.ENFORCE_CONVERGENCE) != '0' }}
         env:
           EXPECTED_IMAGE: ${{ needs.build-and-push.outputs.image }}
         run: |
