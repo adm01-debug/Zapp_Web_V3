@@ -62,6 +62,10 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 008 | [`2026-08-28-validacao-pos-merge-transferencia.md`](./008/2026-08-28-validacao-pos-merge-transferencia.md) | `f76cc68f3` | parcial |
 | 041 | [`2026-08-28-validacao-pos-merge-transferencia.md`](./008/2026-08-28-validacao-pos-merge-transferencia.md) | `f76cc68f3` | parcial |
 | 042 | [`2026-08-28-validacao-pos-merge-transferencia.md`](./008/2026-08-28-validacao-pos-merge-transferencia.md) | `f76cc68f3` | parcial |
+| 008 | [`2026-08-28-validacao-integrada-pos-p0.md`](./008/2026-08-28-validacao-integrada-pos-p0.md) | `b69322102` | parcial |
+| 041 | [`2026-08-28-validacao-integrada-pos-p0.md`](./008/2026-08-28-validacao-integrada-pos-p0.md) | `b69322102` | parcial |
+| 042 | [`2026-08-28-validacao-integrada-pos-p0.md`](./008/2026-08-28-validacao-integrada-pos-p0.md) | `b69322102` | parcial |
+| 044 | [`2026-08-28-validacao-integrada-pos-p0.md`](./008/2026-08-28-validacao-integrada-pos-p0.md) | `b69322102` | parcial |
 | 008 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |
 | 056 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |
 | 068 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |
