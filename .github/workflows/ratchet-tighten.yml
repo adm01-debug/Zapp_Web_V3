@@ -154,7 +154,7 @@ jobs:
           Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório.
           EOF
 
-      - name: Supersede stale bot-owned ratchet PRs
+      - name: Mark stale bot-owned ratchet PRs without destructive cleanup
         if: steps.tighten.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
@@ -199,8 +199,7 @@ jobs:
           fi
 
           while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
-            echo "Substituindo ratchet obsoleto do bot: $EXISTING_URL"
+            echo "Marcando ratchet anterior para revisão manual: $EXISTING_URL"
             gh pr comment "$EXISTING_URL" \
-              --body "Substituído automaticamente por ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}."
-            gh pr close "$EXISTING_URL" --delete-branch
+              --body "Há um ratchet mais novo em ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. Este PR foi preservado sem fechamento automático nem remoção de branch para permitir validação manual antes de qualquer limpeza."
           done <<< "$EXISTING"
