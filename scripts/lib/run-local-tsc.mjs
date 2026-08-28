@@ -1,11 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { isAbsolute, relative } from 'node:path';
+import { isAbsolute, relative, win32 } from 'node:path';
 
 const requireFromThisRepository = createRequire(import.meta.url);
 const ANSI_ESCAPE_RE = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 const SOURCE_DIAGNOSTIC_RE = /^(.*\.(?:[cm]?tsx?))\((\d+),(\d+)\): error TS(\d+):\s*(.*)$/;
 const ANY_ERROR_DIAGNOSTIC_RE = /error TS\d+:/;
+const FATAL_PROCESS_OUTPUT_RE =
+  /^(?:FATAL(?: ERROR)?|INTERNAL COMPILER ERROR|JavaScript heap out of memory|heap out of memory|segmentation fault|uncaught(?: exception)?|node:internal(?:[\\/]|:)|npm (?:ERR!|error)|pnpm (?:ERR_|error)|bun (?:error|panic)|panic:|ERR_[A-Z0-9_]+)/im;
+
+export const DEFAULT_TSC_TIMEOUT_MS = 5 * 60 * 1_000;
+export const DEFAULT_TSC_MAX_BUFFER = 64 * 1024 * 1024;
+
+const TYPECHECK_EXIT_STATUSES = new Set([1, 2]);
 
 export class TypeScriptInvocationError extends Error {
   constructor(message, { cause, output = '', kind = 'invocation' } = {}) {
@@ -19,8 +26,45 @@ export class TypeScriptInvocationError extends Error {
 
 function normalizeFile(file, cwd) {
   const normalized = file.replace(/\\/g, '/');
-  const repositoryRelative = isAbsolute(normalized) ? relative(cwd, normalized) : normalized;
+  let repositoryRelative = normalized;
+
+  if (win32.isAbsolute(file) && win32.isAbsolute(cwd)) {
+    repositoryRelative = win32.relative(cwd, file);
+  } else if (isAbsolute(normalized)) {
+    repositoryRelative = relative(cwd, normalized);
+  }
+
   return repositoryRelative.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function combineProcessOutput(stdout, stderr) {
+  if (!stdout) return stderr;
+  if (!stderr) return stdout;
+  return stdout.endsWith('\n') ? `${stdout}${stderr}` : `${stdout}\n${stderr}`;
+}
+
+function forcePlainDiagnostics(args) {
+  const normalizedArgs = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = String(args[index]);
+    if (argument === '--pretty') {
+      if (/^(?:true|false)$/i.test(String(args[index + 1] ?? ''))) index += 1;
+      continue;
+    }
+    if (/^--pretty=/i.test(argument)) continue;
+    normalizedArgs.push(argument);
+  }
+
+  return [...normalizedArgs, '--pretty', 'false'];
+}
+
+function validateExecutionLimit(value, label) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new TypeScriptInvocationError(`${label} deve ser um inteiro positivo.`, {
+      kind: 'configuration',
+    });
+  }
 }
 
 function outputExcerpt(output) {
@@ -71,10 +115,16 @@ export function runLocalTsc({
   args = ['--noEmit', '-p', 'tsconfig.app.json'],
   cwd = process.cwd(),
   env = process.env,
+  maxBuffer = DEFAULT_TSC_MAX_BUFFER,
   nodePath = process.execPath,
   resolveTscImpl = resolveLocalTsc,
   spawnSyncImpl = spawnSync,
+  timeoutMs = DEFAULT_TSC_TIMEOUT_MS,
 } = {}) {
+  validateExecutionLimit(timeoutMs, 'timeoutMs');
+  validateExecutionLimit(maxBuffer, 'maxBuffer');
+
+  const compilerArgs = forcePlainDiagnostics(args);
   let tscPath;
   try {
     tscPath = resolveTscImpl();
@@ -88,12 +138,14 @@ export function runLocalTsc({
 
   let result;
   try {
-    result = spawnSyncImpl(nodePath, [tscPath, ...args], {
+    result = spawnSyncImpl(nodePath, [tscPath, ...compilerArgs], {
       cwd,
       env,
       encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
+      killSignal: 'SIGTERM',
+      maxBuffer,
       shell: false,
+      timeout: timeoutMs,
     });
   } catch (cause) {
     throw new TypeScriptInvocationError('Não foi possível iniciar o compilador TypeScript local.', {
@@ -101,19 +153,27 @@ export function runLocalTsc({
     });
   }
 
-  const output = `${result?.stdout ?? ''}${result?.stderr ?? ''}`;
-  const cleanOutputLines = output.replace(ANSI_ESCAPE_RE, '').split(/\r?\n/);
+  const output = combineProcessOutput(result?.stdout ?? '', result?.stderr ?? '');
+  const cleanOutput = output.replace(ANSI_ESCAPE_RE, '');
+  const cleanOutputLines = cleanOutput.split(/\r?\n/);
   const diagnostics = parseTypeScriptDiagnostics(output, { cwd });
   const unscopedDiagnostics = cleanOutputLines.filter(
     (line) => ANY_ERROR_DIAGNOSTIC_RE.test(line) && !SOURCE_DIAGNOSTIC_RE.test(line)
   );
 
   if (result?.error) {
+    const timedOut = result.error.code === 'ETIMEDOUT';
+    const outputExceeded = result.error.code === 'ENOBUFS';
     throw new TypeScriptInvocationError(
-      'Falha ao iniciar o processo do compilador TypeScript local.',
+      timedOut
+        ? `Compilador TypeScript excedeu o timeout de ${timeoutMs} ms; saída parcial recusada.`
+        : outputExceeded
+          ? `Saída do compilador TypeScript excedeu ${maxBuffer} bytes; saída parcial recusada.`
+          : 'Falha ao iniciar o processo do compilador TypeScript local.',
       {
         cause: result.error,
         output,
+        kind: timedOut ? 'timeout' : outputExceeded ? 'output-limit' : 'invocation',
       }
     );
   }
@@ -121,6 +181,20 @@ export function runLocalTsc({
   if (result?.signal || !Number.isInteger(result?.status)) {
     throw new TypeScriptInvocationError(
       `Compilador TypeScript terminou de forma anormal${result?.signal ? ` (sinal ${result.signal})` : ''}.`,
+      { output }
+    );
+  }
+
+  if (result.status !== 0 && !TYPECHECK_EXIT_STATUSES.has(result.status)) {
+    throw new TypeScriptInvocationError(
+      `Compilador TypeScript retornou exit code não suportado (${result.status}); resultado recusado.\n${outputExcerpt(output)}`,
+      { output }
+    );
+  }
+
+  if (FATAL_PROCESS_OUTPUT_RE.test(cleanOutput)) {
+    throw new TypeScriptInvocationError(
+      `Compilador TypeScript emitiu uma falha fatal; saída parcial recusada.\n${outputExcerpt(output)}`,
       { output }
     );
   }
@@ -142,7 +216,7 @@ export function runLocalTsc({
   return {
     command: nodePath,
     tscPath,
-    args: [...args],
+    args: compilerArgs,
     status: result.status,
     output,
     diagnostics,

@@ -9,7 +9,7 @@
  * Para congelar uma redução real de dívida:
  *   node scripts/check-tsc-ratchet.mjs --update
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -74,6 +74,12 @@ export function executeRatchet({
   baselinePath = BASELINE_PATH,
   runTscImpl = runLocalTsc,
 } = {}) {
+  if (update && !existsSync(baselinePath)) {
+    throw new Error(
+      `--update recusado: baseline ausente em ${baselinePath}. Restaure o baseline versionado antes de atualizá-lo.`
+    );
+  }
+
   // runLocalTsc lança antes de qualquer leitura/escrita se o compilador não puder
   // ser executado. Isso impede que --update grave um falso baseline zero.
   const compilerResult = runTscImpl();
@@ -83,20 +89,18 @@ export function executeRatchet({
   );
 
   if (update) {
-    if (existsSync(baselinePath)) {
-      let existingBaseline;
-      try {
-        existingBaseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
-      } catch (cause) {
-        throw new Error(`baseline inválido em ${baselinePath}: ${cause.message}`, { cause });
-      }
-      validateErrorSummary(existingBaseline, 'baseline');
-      const updateEvaluation = evaluateRatchet(current, existingBaseline);
-      if (!updateEvaluation.passed) {
-        throw new Error(
-          '--update recusado: o resultado atual aumenta ou desloca a dívida TypeScript do baseline.'
-        );
-      }
+    let existingBaseline;
+    try {
+      existingBaseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    } catch (cause) {
+      throw new Error(`baseline inválido em ${baselinePath}: ${cause.message}`, { cause });
+    }
+    validateErrorSummary(existingBaseline, 'baseline');
+    const updateEvaluation = evaluateRatchet(current, existingBaseline);
+    if (!updateEvaluation.passed) {
+      throw new Error(
+        '--update recusado: o resultado atual aumenta ou desloca a dívida TypeScript do baseline.'
+      );
     }
     writeFileSync(baselinePath, `${JSON.stringify(current, null, 2)}\n`);
     return { mode: 'updated', current };
@@ -110,7 +114,9 @@ export function executeRatchet({
   try {
     baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
   } catch (cause) {
-    throw new Error(`baseline inválido em ${baselinePath}: ${cause.message}`, { cause });
+    throw new Error(`baseline inválido em ${baselinePath}: ${cause.message}`, {
+      cause,
+    });
   }
   validateErrorSummary(baseline, 'baseline');
 
@@ -152,8 +158,16 @@ function printResult(result) {
   return 0;
 }
 
-function isMainModule() {
-  return process.argv[1] && resolve(process.argv[1]) === SCRIPT_PATH;
+function canonicalEntrypoint(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+export function isMainModule(candidate = process.argv[1], scriptPath = SCRIPT_PATH) {
+  return Boolean(candidate) && canonicalEntrypoint(candidate) === canonicalEntrypoint(scriptPath);
 }
 
 if (isMainModule()) {
