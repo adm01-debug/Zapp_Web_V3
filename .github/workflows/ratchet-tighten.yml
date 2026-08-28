@@ -5,8 +5,8 @@ on:
   push:
     branches: [main]
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -16,12 +16,20 @@ jobs:
     # Cálculo local + branch/PR. Nunca grava diretamente na main protegida.
     runs-on: ubuntu-latest
     steps:
+      - name: Require event-capable GitHub token
+        env:
+          GH_ACTIONS_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+        run: |
+          if [ -z "$GH_ACTIONS_TOKEN" ]; then
+            echo "::error::GH_TOKEN_ACTIONS ausente — o token padrão não dispara os checks do PR gerado"
+            exit 1
+          fi
+
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # PAT/App token permite que o push/PR dispare os checks; o token padrão é
-          # apenas fallback para repositórios sem GH_TOKEN_ACTIONS configurado.
-          token: ${{ secrets.GH_TOKEN_ACTIONS || secrets.GITHUB_TOKEN }}
+          # PAT/App token permite que o push/PR dispare os checks obrigatórios.
+          token: ${{ secrets.GH_TOKEN_ACTIONS }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -79,14 +87,24 @@ jobs:
       - name: Push ratchet branch
         if: steps.tighten.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
           BRANCH="${{ steps.tighten.outputs.branch }}"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null 2>&1; then
             echo "Branch remota já existe; validando conteúdo para tornar rerun idempotente."
             git fetch --no-tags origin "${BRANCH}:refs/remotes/origin/${BRANCH}"
-            if ! git diff --quiet "origin/${BRANCH}" -- scripts/data-layer-baseline.json; then
+            REMOTE_PARENT="$(git rev-parse "origin/${BRANCH}^")"
+            if [ "$REMOTE_PARENT" != "$GITHUB_SHA" ]; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} não deriva do SHA esperado"
+              exit 1
+            fi
+            CHANGED_PATHS="$(git diff --name-only "$GITHUB_SHA" "origin/${BRANCH}")"
+            if [ "$CHANGED_PATHS" != "scripts/data-layer-baseline.json" ]; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} contém caminhos inesperados"
+              exit 1
+            fi
+            if ! git diff --quiet "origin/${BRANCH}" HEAD -- scripts/data-layer-baseline.json; then
               echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} existe com baseline diferente"
               exit 1
             fi
@@ -97,7 +115,7 @@ jobs:
       - name: Create PR for tightened baseline
         if: steps.tighten.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
           BRANCH="${{ steps.tighten.outputs.branch }}"
           EXISTING_URL="$(gh pr list --repo "${{ github.repository }}" --state open --head "$BRANCH" --json url --jq '.[0].url')"
