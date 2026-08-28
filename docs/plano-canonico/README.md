@@ -165,6 +165,8 @@ a concluído.
 - [ ] Listar owners, worktrees, PRs e arquivos quentes por domínio.
 - [ ] Detectar sobreposição antes de cada onda e definir ordem de rebase/integração.
 - [ ] Impedir que um agente reverta, sobrescreva ou “limpe” mudança alheia silenciosamente.
+- [ ] Antes de qualquer implementação, reservar worktree, PR, owner e conjunto exclusivo de
+  arquivos; uma etapa sem essa reserva permanece somente em diagnóstico.
 
 **Concluída quando:** toda frente ativa possui owner e regra explícita de coordenação.
 
@@ -189,6 +191,8 @@ a concluído.
 - [ ] Adotar `docs/plano-canonico/evidencias/<etapa>/` como destino futuro de relatórios não sensíveis.
 - [ ] Definir nomes, timestamp, SHA, ambiente, comando/query e resultado esperado/obtido.
 - [ ] Referenciar artefatos grandes ou sensíveis por ID seguro, sem copiá-los para o Git.
+- [ ] Invalidar ou revalidar evidências dependentes quando um contrato, migration, Edge ou
+  baseline anterior mudar de SHA; prova de outro SHA não fecha etapa automaticamente.
 
 **Concluída quando:** cada `[x]` aponta para prova inequívoca e reproduzível.
 
@@ -249,6 +253,10 @@ a concluído.
 - [ ] Dividir execução por domínio, dependência, risco e arquivos sem sobreposição.
 - [ ] Ordenar primeiro contenções de falso sucesso, depois correções contratuais e features novas.
 - [ ] Registrar autorizações pendentes e o GO do responsável antes da primeira implementação.
+- [ ] Exigir que toda frente tenha worktree/PR/owner/arquivos exclusivos antes de escrever
+  código, e manter diagnóstico separado de implementação.
+- [ ] Revalidar a proteção de `main` antes das ondas técnicas; ausência ou escopo insuficiente
+  do token do sentinel é bloqueio explícito, não aviso verde.
 
 **Concluída quando:** existe sequência executável, revisável e autorizada.
 
@@ -299,6 +307,8 @@ a concluído.
 - [ ] Coletar RLS/FORCE RLS, operações, roles e expressões `USING`/`WITH CHECK`.
 - [ ] Revalidar todas as tabelas com RLS e zero policy em todos os schemas; usar amostras anteriores apenas como ponto de partida e separar fail-closed intencional de fio quebrado.
 - [ ] Testar matriz `anon`, usuário, supervisor, admin e service role nas tabelas críticas.
+- [ ] Para tabelas acionadas pelo produto, exercitar também a identidade real do chamador
+  frontend/Edge; catálogo ou `SET ROLE` isolado não prova o fluxo do usuário.
 
 **Concluída quando:** acesso efetivo, e não apenas existência de policy, está provado por papel.
 
@@ -409,6 +419,8 @@ a concluído.
 - [ ] Classificar versões aplicadas sem arquivo e arquivos sem registro como normal, backfill ou suspeita.
 - [ ] Preservar squash/allowlist imutáveis e separar fila viva de histórico arquivado.
 - [ ] Documentar objetos live-only sem reintroduzir corpo antigo ou bug corrigido.
+- [ ] Comparar explicitamente repo, ledger vivo e snapshot/hash de origem; uma árvore de
+  migrations aparentemente limpa, sozinha, não prova convergência DB-as-source.
 
 **Concluída quando:** ledger, fila viva e espelho histórico contam a mesma história operacional.
 
@@ -493,6 +505,8 @@ a concluído.
 - [ ] Corrigir/justificar os três casos históricos de `EXCEPTION WHEN OTHERS` sem mover a allowlist imutável.
 - [ ] Disponibilizar `pglast`/parser pinado e separar parse, apply delta, replay e restore por dump.
 - [ ] Ensaiar constraints, RLS, RPCs, triggers, jobs, rollback e restore em banco descartável.
+- [ ] Declarar o escopo de cada restore como `zapp-only` ou banco completo com `evo` e fachada
+  `public`; sucesso do primeiro não certifica o segundo.
 
 **Concluída quando:** mudança DB relevante é sintaticamente válida, aplicável, reversível e restaurável.
 
@@ -541,6 +555,8 @@ a concluído.
 **Prioridade:** P1 · **Estado inicial:** parcial · **Classe:** FE/EDGE · **Gates:** G003/G004/G005 · **Dependências:** 032–033
 
 - [ ] Traçar evento → dispatcher → canal → delivery log, incluindo dedupe.
+- [ ] Provar o encadeamento administrativo `salvar → evento real → dispatcher → delivery log`;
+  a existência isolada de uma Edge não prova que a configuração é operacional.
 - [ ] Testar permissão negada, service worker indisponível, autoplay bloqueado e múltiplas abas.
 - [ ] Decidir e rotular o canal de alerta por e-mail ainda exibido como “em breve”.
 
@@ -763,6 +779,8 @@ a concluído.
 - [ ] Inventariar fetches/clients, destino, segredo, timeout, retry e telemetria.
 - [ ] Classificar gateway oficial, bypass autorizado e violação.
 - [ ] Criar guard que detecte destino/client real, sem exceção cega para `connection-health-check` nem dependência do literal `EVOLUTION_API_URL`.
+- [ ] Antes de migrar cada rota, registrar owner e versão/contrato compatível do gateway no
+  `evolution-stack`; o guard deve detectar rotas Evolution diretas, não só um nome de variável.
 
 **Concluída quando:** nenhum egresso produtivo fica sem política, owner e teste negativo.
 
@@ -844,7 +862,8 @@ a concluído.
 
 **Prioridade:** P1 · **Estado inicial:** parcial · **Classe:** EDGE/INT · **Gates:** G003/G004/G008 · **Dependências:** 048/051
 
-- [ ] Alinhar actions `listAccounts/list-accounts`, handlers e consumidores.
+- [ ] Inventariar actions, handlers e consumidores e corrigir somente divergências de nome ou
+  forma reproduzidas; não tratar `listAccounts/list-accounts` como fato sem evidência atual.
 - [ ] Definir download/preview via backend sem expor token OAuth ao browser.
 - [ ] Testar conexão, callback, refresh, reconexão, revogação e limites de MIME/tamanho.
 
@@ -981,6 +1000,9 @@ a concluído.
 - [ ] Classificar tabelas backend-only, rotas sem adoção, Edge sem caller e arquivos órfãos.
 - [ ] Preservar archives, snapshots, fixtures, partições e infraestrutura intencional.
 - [ ] Submeter cada remoção em lista revisável com impacto, recuperação e aceite do Joaquim.
+- [ ] Encerrar esta etapa em decisão e plano individual: arquivar/remover só pode ocorrer em PR
+  próprio, após evidência renovada de 088–090 e autorização específica; classificação não
+  autoriza execução.
 
 **Concluída quando:** não existe “limpeza em lote”; cada candidato possui veredito humano rastreável.
 
@@ -993,6 +1015,8 @@ a concluído.
 **Prioridade:** P0 · **Estado inicial:** parcial; mudanças concorrentes ativas · **Classe:** FE/SEC · **Gates:** G001/G004/G005 · **Dependências:** 001/003/009/031
 
 - [ ] Cobrir login, logout, refresh, expiração, deep link, redirect e sessão em múltiplas abas.
+- [ ] Exercitar duas abas reais com logout/expiração e definir prazo máximo de convergência;
+  incluir deep link com 2FA pendente e refresh lento.
 - [ ] Definir matriz rota/ação→AAL2 e provar que sessão logada sem segundo fator não acessa o que exige AAL2.
 - [ ] Testar ProtectedRoute, bypass dev, lockout, usuário sem workspace e replay/skew de TOTP sem restaurar races já corrigidas.
 
@@ -1043,6 +1067,8 @@ a concluído.
 - [ ] Trilha browser: migrar CORS função a função sem ampliar allowlist.
 - [ ] Trilha servidor-servidor: padronizar HMAC com comparação constante, timestamp e rotação multi-secret.
 - [ ] Cobrir preflight, origem negada, assinatura ausente/alterada, replay e erro com headers corretos.
+- [ ] Tratar segredo compartilhado sem HMAC como compatibilidade transitória com data/owner de
+  remoção, e criar gate para CORS ad hoc fora de `_shared/cors.ts` com allowlist mínima.
 
 **Concluída quando:** webhooks e browsers recebem comportamento uniforme e fail-closed.
 
@@ -1088,7 +1114,7 @@ a concluído.
 
 **Prioridade:** P0 · **Estado inicial:** parcial · **Classe:** DB/EDGE/CROSS · **Gates:** G002/G003/G006/G009 · **Dependências:** 002/012–018/052–055
 
-- [ ] Reconciliar a medição viva de referências (`48/13`) com o guard estático (`28/0`) e classificar cada caso como contrato, exceção formal ou violação.
+- [ ] Reconciliar a medição viva de referências (`48/13`) com o guard estático (`28/0`) e classificar cada caso como contrato, exceção formal ou violação; publicar `I1` e `I2` como semáforos separados para que `TOTAL: 0` não mascare acoplamento.
 - [ ] Confirmar roles, views curadas, FKs excepcionais e owner de migrations sem confiar apenas no resumo `TOTAL` do guard.
 - [ ] Vincular qualquer mudança de infra a PR/release do `evolution-stack`.
 
@@ -1101,6 +1127,8 @@ a concluído.
 **Prioridade:** P0 · **Estado inicial:** parcial; alto risco destrutivo · **Classe:** SEC/DB/EDGE · **Gates:** G002/G003/G004/G008 · **Dependências:** 007/020/062–064/077
 
 - [ ] Confirmar visibilidade, expiração/escopo de signed URLs, MIME, tamanho e retenção, priorizando `whatsapp-media`, `recibos-entrega`, `audio-messages` e buckets com PII.
+- [ ] Produzir matriz bucket → visibilidade → consumidor → mecanismo (`public URL`, signed URL
+  ou backend); documentação e runtime divergentes não contam como conformidade.
 - [ ] Proibir limpeza sem cruzar fontes, hashes, dry-run, amostra reversível e restauração comprovada.
 - [ ] Cobrir export/import, anonimização, auditoria e acesso a PII sem tocar objetos protegidos.
 
@@ -1189,6 +1217,8 @@ a concluído.
 - [ ] Fazer o Nightly falhar explicitamente se descobrir/executar zero testes.
 - [ ] Corrigir cleanup que tenta alterar trigger sobre `evolution_contacts` como se fosse tabela no schema da API.
 - [ ] Tornar limpeza idempotente e limitada por tenant/prefixo/IDs/timebox exclusivos de teste.
+- [ ] Provar efeito por contadores/escopo esperado, não apenas HTTP 200, e isolar ou pausar o
+  cleanup quando compartilhar ambiente com regressão/staging ainda em execução.
 
 **Concluída quando:** Nightly executa a quantidade esperada e cleanup termina sem tocar dados reais.
 
@@ -1225,6 +1255,8 @@ a concluído.
 - [ ] Corrigir permissão do sentinel sem ampliar token além de Administration:read necessário.
 - [ ] Reconciliar workflows, runners, secrets, schedules e inventário documental.
 - [ ] Atualizar Graphify/docs somente no commit aceito e validar candidatos a lixo com o dono.
+- [ ] Manter a proteção de branch como gate bloqueante: warning por token ausente ou escopo
+  insuficiente não é aprovação para merge/release.
 
 **Concluída quando:** três provas independentes existem: sentinel de branch verde, jobs do domínio confiáveis e docs reconciliadas com runtime.
 
@@ -1251,6 +1283,8 @@ a concluído.
 - [ ] Confirmar versões, topologia, secrets de homologação e integrações controladas.
 - [ ] Preparar dados anonimizados ou fixtures representativas sem copiar PII indevida.
 - [ ] Ensaiar backup, restore ou ambiente descartável equivalente antes das mudanças.
+- [ ] Registrar runbook, owner e mecanismo versionado de entrada/saída do staging; sem caminho
+  canônico reproduzível, a etapa permanece bloqueada, não “concluída por ambiente ad hoc”.
 
 **Concluída quando:** staging reproduz os fluxos e permite recuperação segura.
 
@@ -1275,6 +1309,8 @@ a concluído.
 - [ ] Rodar a baseline da Etapa 009 e suítes específicas das áreas tocadas.
 - [ ] Validar sucesso, erro, permissão, retry, timeout, offline e reload.
 - [ ] Comparar métricas/estado de dados com a baseline pré-mudança.
+- [ ] Exercitar compatibilidade `N/N-1` entre frontend, Edge, banco e service worker/cache antes
+  de promover contrato ou migration que possa coexistir com cliente anterior.
 
 **Concluída quando:** não há regressão bloqueante e toda mudança possui prova focal.
 
@@ -1287,6 +1323,8 @@ a concluído.
 - [ ] Injetar provedor fora, segredo ausente, timeout, 4xx/5xx e conexão interrompida.
 - [ ] Simular duplicidade, concorrência, retry storm e resposta fora de ordem.
 - [ ] Reexecutar isolamento por papel/workspace, IDOR, uploads, webhooks e rate limit.
+- [ ] Usar apenas sandbox, tenants, contas e destinatários de teste autorizados, com prefixo de
+  correlação e limite de custo; nenhuma injeção pode gerar envio real não autorizado.
 
 **Concluída quando:** falhas são observáveis, recuperáveis e não geram sucesso falso.
 
@@ -1294,9 +1332,11 @@ a concluído.
 
 ### 096 — Aprovar e executar rollout progressivo
 
-**Prioridade:** P0 · **Estado inicial:** deploy por digest já avançado; revalidar · **Classe:** REL · **Gates:** G005/G008/G009 · **Dependências:** 094–095
+**Prioridade:** P0 · **Estado inicial:** tag de SHA estável; digest e canário real ainda não comprovados no workflow ativo · **Classe:** REL · **Gates:** G005/G008/G009 · **Dependências:** 094–095
 
-- [ ] Fixar artefato imutável por digest e estratégia de canário/tenant/percentual.
+- [ ] Fixar artefato imutável por digest no deploy ativo e comprovar a estratégia de canário/tenant/percentual; uma tag SHA não deve ser chamada de digest.
+- [ ] Se ainda não existir canário real, declarar rollout controlado como modo provisório, com
+  aprovação e compensações; ele não conta como evidência de canário para aceite final.
 - [ ] Definir limites numéricos de erro, latência, fila e custo para pausar/reverter.
 - [ ] Promover por domínio, sem deploy manual fora do pipeline aprovado.
 
@@ -1311,6 +1351,8 @@ a concluído.
 - [ ] Validar boot, auth, inbox, conexão, Edge, DB, Realtime, storage e integrações críticas; para cron, verificar apenas o probe/última run recente.
 - [ ] Comparar `version.json` nos três domínios e asset de entrada.
 - [ ] Correlacionar release ID, logs frontend/Edge, eventos DB e resposta do provedor.
+- [ ] Executar script ou workflow focal, versionado e vinculado ao domínio alterado; health 200
+  isolado não substitui smoke do fluxo crítico.
 
 **Concluída quando:** o artefato esperado está servido e os fluxos mínimos respondem.
 
@@ -1323,6 +1365,8 @@ a concluído.
 - [ ] Acompanhar erros, latência, filas, retries, jobs, SLOs, custos e feedback operacional.
 - [ ] Exigir duas execuções agendadas reais dos jobs do domínio alterado; cleanup só é bloqueador se a onda o modificar.
 - [ ] Registrar waiver somente com owner, justificativa, prazo e risco aceito.
+- [ ] Congelar baseline, hashes e modo de regen dos drift gates durante as duas janelas; registrar
+  efeito/contadores dos jobs, não apenas seu retorno HTTP.
 
 **Concluída quando:** duas janelas agendadas independentes, com workflows previamente enumerados, confirmam estabilidade além do push.
 
@@ -1335,6 +1379,8 @@ a concluído.
 - [ ] Ramo A: se gatilho disparar, executar rollback, restaurar serviço e registrar incidente; a release não é aceita.
 - [ ] Ramo B: sem gatilho, confirmar estabilidade sustentada e aceitar a release candidata.
 - [ ] Em qualquer ramo, atualizar docs e apresentar limpezas separadamente, sem executá-las por associação ao release.
+- [ ] Se image tag custom ou proteção de rollback não for verificável, exigir waiver explícito e
+  ensaio compensatório; sem isso a candidata não habilita a Etapa 100.
 
 **Concluída quando:** o ramo executado está explícito; rollback restaura a baseline, enquanto somente o ramo estável habilita a Etapa 100.
 
@@ -1356,14 +1402,17 @@ a concluído.
 
 Dentro de cada onda, a ordem é da esquerda para a direita. Uma onda só começa
 quando as dependências das etapas selecionadas na onda anterior estiverem
-comprovadas no registro de evidências.
+comprovadas no registro de evidências. Antes de toda onda, revalidar cwd e
+repositório-alvo contra a matriz da Etapa 002; Promo Finance permanece fora do
+escopo. Na Onda C, 026–030/077 só podem produzir diagnóstico, desenho e testes
+descartáveis até existir autorização G008 registrada para qualquer apply compartilhado.
 
-1. **Onda A — governança, contenção e toolchain:** 001–010; 031; 035–037; 081.
+1. **Onda A — governança, contenção e toolchain:** 001–010; 091; 031; 035–037; 081.
 2. **Onda B — inventário, contratos e gates básicos:** 011–025; 051–052; 061; 071–072; 082–083.
 3. **Onda C — correções DB autorizadas e seus testes:** 026–030; 032–034; 041–044; 077; 084.
 4. **Onda D — integrações e correções operacionais:** 038; 045–050; 053–060; 068–069; 073–075; 079; 085.
 5. **Onda E — produto parcial, UX e decisões de limpeza:** 062–067; 039–040; 070; 076; 078; 080.
-6. **Onda F — certificação, staging, rollout e aceite:** 086–100.
+6. **Onda F — certificação, staging, rollout e aceite:** 086–090; 092–100.
 
 Essa ordem reduz primeiro falsos sucessos e falhas de confiança. Implementar features
 novas antes de estabilizar contratos, typecheck, retries e CI ampliaria o risco de
@@ -1396,6 +1445,8 @@ regressão.
   `docs/exhaustive-system-audit-100-steps-20260826`, commit `be37867cc72421748ef1477d4f0e570d6c85cd59`.
 - Catálogo vivo read-only dos schemas `zapp`, `evo` e `public`, revalidado em 28/08.
 - Grafo local `graphify-out/graph.json` consultado com 19.475 nós.
+- Simulação pré-execução de 28/08 em
+  [`SIMULACAO-CENARIOS-2026-08-28.md`](./SIMULACAO-CENARIOS-2026-08-28.md).
 - Suíte limpa da `origin/main`: build e testes principais verdes, com as falhas
   específicas registradas nas etapas 031, 083 e 086–090.
 - Produção observada em 28/08: três domínios no mesmo build e health público saudável;
