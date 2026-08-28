@@ -324,6 +324,28 @@ describe('useTransferConversation', () => {
     );
   });
 
+  it('trata contato nulo sem erro do PostgREST como preflight incompleto', async () => {
+    mockContactsMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(outcome?.status).toBe('error');
+    expect(contactUpdateMocks.update).not.toHaveBeenCalled();
+    expect(mockMessagesInsert).not.toHaveBeenCalled();
+    expect(mockTransfersInsert).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Transfer preflight failed:',
+      expect.objectContaining({ message: 'Contact not visible' })
+    );
+  });
+
   it('interrompe antes do contato quando o perfil surrogate do agente não é resolvido', async () => {
     mockProfilesMaybeSingle.mockResolvedValue({
       data: null,
