@@ -7,12 +7,13 @@ const log = getLogger('useConversationTasksData');
 
 export async function fetchConversationTasks(contactId: string, signal?: AbortSignal) {
   if (!isValidUUID(contactId)) return [];
-  const { data } = await supabase
+  const query = supabase
     .from('conversation_tasks')
     .select('*')
     .eq('contact_id', contactId)
-    .order('created_at', { ascending: false })
-    .abortSignal(signal);
+    .order('created_at', { ascending: false });
+  if (signal) query.abortSignal(signal);
+  const { data } = await query;
   return data ?? [];
 }
 
@@ -116,9 +117,8 @@ export function useConversationPendingTasks(contactIds: string[]) {
       return;
     }
 
-    const { contactIds: pendingContactIds, rateLimited } = await fetchPendingTaskContactIds(
-      validIds
-    );
+    const { contactIds: pendingContactIds, rateLimited } =
+      await fetchPendingTaskContactIds(validIds);
 
     if (rateLimited) {
       // 429: skip this refresh cycle entirely (no retry, keep last known data).
