@@ -4,18 +4,15 @@
 > - Etapas relacionadas: `041`, `042`
 > - Data/hora: `2026-08-28T15:55:00-03:00`
 > - Owner: engenharia Zapp Web V3
-> - Ambiente: baseline histórica `origin/main@c5e83d30e`; validação pós-merge em
->   `main@f76cc68f3`
-> - Veredito: `parcial` — contenção frontend entregue; contrato transacional/RLS e
->   entradas visíveis da lista permanecem abertos
+> - Ambiente: repositório local isolado; baseline `origin/main@c5e83d30e`
+> - Veredito: `parcial` — causa confirmada; PR `#1444` em revisão, sem merge/deploy
 
 ## Identificação
 
 - Repositório: `adm01-debug/Zapp_Web_V3`
 - SHA auditado: `c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`
 - Branch/worktree documental: `docs/plano-canonico-status-20260828` / worktree isolada
-- PRs correlacionados: `#1443` (auditoria, merge `15580041b`) e `#1444` (contenção,
-  merge/deploy `f76cc68f3`)
+- PR correlacionado: `#1443`; a correção técnica em `#1444` exige evidência própria
 - Gates aplicáveis: `G000`, `G001`, `G004`
 
 ## Causa e reprodução
@@ -50,22 +47,17 @@ Teste de regressão planejado:
    isolado até existir evidência de zero produtores antigos;
 11. provar que a ação em massa fica indisponível enquanto não houver a mesma trilha e
     resultado estruturado do fluxo individual;
-12. resolver o usuário autenticado por `profiles.user_id` e persistir `profiles.id` tanto
-    em `messages.agent_id` quanto em `transfer_comments.agent_id`, cobrindo um perfil cujo
-    `id != user_id`.
+12. resolver o usuário autenticado por `profiles.user_id` e persistir `profiles.id` em
+    `transfer_comments.agent_id`, cobrindo um perfil cujo `id != user_id`.
 
 ## Resultado
 
 - Esperado: falha de trilha nunca vira sucesso pleno; tipo não suportado nunca alcança
   escrita; o diálogo aguarda o settlement e bloqueia chamada duplicada.
-- Observado na baseline: erros de timeline/auditoria eram ignorados, o diálogo fechava sem
-  aguardar e casts permitiam encaminhar `connection` a handlers de agente/fila.
-- Observado após `#1444`: o resultado é `success|partial|error`, o update principal usa
-  compare-and-set, o diálogo aguarda e bloqueia duplicidade, `connection` foi removido e a
-  transferência em massa ficou explicitamente desabilitada. A suíte focal passou com
-  `3` arquivos e `28` testes; a CI e o deploy do SHA `f76cc68f3` concluíram com sucesso.
-- Limite ainda aberto: as tabelas de auditoria não expõem `INSERT` para o cliente
-  autenticado; a contenção reporta `partial`, mas a atomicidade exige RPC/RLS autorizado.
+- Observado na baseline: erros de timeline/auditoria são ignorados, o diálogo fecha sem
+  aguardar e casts permitem encaminhar `connection` a handlers de agente/fila.
+- Artefatos: caminhos/trechos reproduzíveis descritos acima; PR técnico `#1444` ainda em
+  revisão e, portanto, não fecha a etapa.
 
 ## Mudança mínima da primeira onda
 
@@ -92,18 +84,16 @@ dados, o rollback é de código; registros já criados não serão apagados.
 
 ## Limitações e decisão
 
-- Este arquivo registra a hipótese original e a conclusão parcial da primeira contenção;
-  não declara concluído o contrato transacional.
+- Este arquivo é uma hipótese de planejamento auditada, não evidência de conclusão.
 - O schema atual aceita `transfer_type` `internal|direct` e não expõe policy de INSERT
   para `authenticated`; o PR frontend deve reportar resultado parcial até o contrato
   RPC/RLS autorizado das Etapas 027/042.
 - Consulta somente leitura ao banco canônico confirmou também que `source_conversation_id`
   é nullable, `priority`, `remote_jid` e `created_at` são NOT NULL, e o vocabulário de
   status é `pending|accepted|in_progress|completed|returned|rejected|expired|cancelled`.
-- A mesma consulta confirmou que `messages.agent_id` e `transfer_comments.agent_id`
-  precisam usar `profiles.id`; existem perfis canônicos em que `profiles.id !=
-  profiles.user_id`, portanto usar diretamente `auth.uid()` viola o contrato para parte
-  dos agentes.
+- A mesma consulta confirmou que `transfer_comments.agent_id` referencia `profiles.id`;
+  existem perfis canônicos em que `profiles.id != profiles.user_id`, portanto usar
+  diretamente `auth.uid()` viola o contrato para parte dos agentes.
 - O caminho em massa atualiza somente `contacts`, sem timeline nem
   `conversation_transfers`; a contenção segura é mantê-lo desabilitado até o contrato
   transacional posterior.
