@@ -29,9 +29,9 @@ git fetch origin main
 git rev-parse origin/main
 git diff --name-status 383f07f59 c5e83d30e
 gh pr checks 1442 --repo adm01-debug/Zapp_Web_V3
-rg -c '^### [0-9]{3} —' docs/plano-canonico/README.md
-rg -o -- '- \[x\]' docs/plano-canonico/README.md | wc -l
-rg -o -- '- \[ \]' docs/plano-canonico/README.md | wc -l
+git show c5e83d30e:docs/plano-canonico/README.md | rg -c '^### [0-9]{3} —'
+git show c5e83d30e:docs/plano-canonico/README.md | rg -o -- '- \[x\]' | wc -l
+git show c5e83d30e:docs/plano-canonico/README.md | rg -o -- '- \[ \]' | wc -l
 ```
 
 Contagem estrutural reproduzível no documento canônico imutável de
@@ -43,9 +43,9 @@ checkboxes de conclusão marcados: 0
 subitens de checklist abertos: 345
 ```
 
-O README desta branch de revisão possui `352` subitens abertos porque incorporou os
-critérios adicionais de voz, filas e transferência; esse delta não altera a medição da
-baseline acima.
+O README desta branch de revisão possui `354` subitens abertos porque incorporou os
+critérios adicionais de voz, filas, transferência, identidade de perfil e `dryRun` de
+relatórios; esse delta não altera a medição da baseline acima.
 
 ## Resultado
 
