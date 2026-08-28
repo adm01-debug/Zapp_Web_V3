@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('useTransferConversation');
@@ -10,6 +9,12 @@ import { isValidUUID } from '@/utils/uuid';
 interface UseTransferConversationOptions {
   contactId: string;
   whatsappConnectionId: string | undefined;
+}
+
+export interface TransferConversationResult {
+  status: 'success' | 'partial' | 'error';
+  title: string;
+  description: string;
 }
 
 /**
@@ -33,7 +38,11 @@ export function useTransferConversation({
     async (type: 'agent' | 'queue', targetId: string, message?: string) => {
       if (!isValidUUID(contactId)) {
         log.warn('transferConversation: contactId is not a valid UUID, skipping', { contactId });
-        return;
+        return {
+          status: 'error',
+          title: 'Erro na transferência',
+          description: 'Não foi possível transferir o chat porque o contato é inválido.',
+        } satisfies TransferConversationResult;
       }
       try {
         const { data: userData } = await supabase.auth.getUser();
@@ -68,7 +77,7 @@ export function useTransferConversation({
             ? '🔄 Chat transferido para outro atendente.'
             : '🔄 Chat transferido para outra fila.';
 
-        await dbFrom('messages').insert({
+        const { error: timelineErr } = await dbFrom('messages').insert({
           contact_id: contactId,
           whatsapp_connection_id: whatsappConnectionId ?? null,
           content: transferNote,
@@ -93,9 +102,11 @@ export function useTransferConversation({
             to_queue_id: type === 'queue' ? targetId : null,
             transfer_type: type,
             status: 'pending',
-            reason: message ?? (type === 'agent'
-              ? 'Transferência para outro atendente'
-              : 'Transferência para outra fila'),
+            reason:
+              message ??
+              (type === 'agent'
+                ? 'Transferência para outro atendente'
+                : 'Transferência para outra fila'),
             remote_jid: current?.remote_jid ?? '',
             source_instance: current?.instance_name ?? '',
             target_instance: current?.instance_name ?? '',
@@ -106,37 +117,54 @@ export function useTransferConversation({
           .select('id')
           .maybeSingle();
 
+        let commentErr: unknown = null;
+
         if (transferErr) {
           log.error('conversation_transfers insert failed:', transferErr);
         } else if (message && transferRow?.id && agentId) {
-          const { error: commentErr } = await supabase
-            .from('transfer_comments')
-            .insert({
-              transfer_id: transferRow.id,
-              agent_id: agentId,
-              author_instance: current?.instance_name ?? '',
-              author_name: 'Agente',
-              content: message,
-            });
-          if (commentErr) {
-            log.error('transfer_comments insert failed:', commentErr);
+          const { error } = await supabase.from('transfer_comments').insert({
+            transfer_id: transferRow.id,
+            agent_id: agentId,
+            author_instance: current?.instance_name ?? '',
+            author_name: 'Agente',
+            content: message,
+          });
+          commentErr = error;
+          if (error) {
+            log.error('transfer_comments insert failed:', error);
           }
         }
 
-        toast({
+        if (timelineErr) {
+          log.error('messages insert failed during transfer audit trail:', timelineErr);
+        }
+
+        const successDescription =
+          type === 'agent'
+            ? 'O chat foi transferido para outro atendente.'
+            : 'O chat foi transferido para outra fila.';
+
+        if (timelineErr || transferErr || commentErr) {
+          return {
+            status: 'partial',
+            title: 'Transferência parcial',
+            description:
+              'O chat foi transferido, mas a trilha de auditoria ficou incompleta. Revise o histórico antes de seguir.',
+          } satisfies TransferConversationResult;
+        }
+
+        return {
+          status: 'success',
           title: 'Chat transferido!',
-          description:
-            type === 'agent'
-              ? 'O chat foi transferido para outro atendente.'
-              : 'O chat foi transferido para outra fila.',
-        });
+          description: successDescription,
+        } satisfies TransferConversationResult;
       } catch (err) {
         log.error('Transfer failed:', err);
-        toast({
+        return {
+          status: 'error',
           title: 'Erro na transferência',
           description: 'Não foi possível transferir o chat. Tente novamente.',
-          variant: 'destructive',
-        });
+        } satisfies TransferConversationResult;
       }
     },
     [contactId, whatsappConnectionId]

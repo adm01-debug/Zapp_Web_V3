@@ -19,13 +19,19 @@ import { getLogger } from '@/lib/logger';
 import { useAgents } from '@/features/admin';
 import { useQueues } from '@/hooks/useQueues';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import type { TransferConversationResult } from '../hooks/useTransferConversation';
 
 const log = getLogger('TransferDialog');
 
 interface TransferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onTransfer: (type: 'agent' | 'queue' | 'connection', targetId: string, message?: string) => void;
+  onTransfer: (
+    type: 'agent' | 'queue',
+    targetId: string,
+    message?: string
+  ) => Promise<TransferConversationResult | void> | TransferConversationResult | void;
 }
 
 /** Transfer Dialog component. */
@@ -73,12 +79,40 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
 
   const handleTransfer = async () => {
     if (!selectedTarget || isTransferring) return;
+    if (transferType === 'connection') {
+      toast.warning('Transferência para conexão ainda não está disponível', {
+        description: 'Essa ação permanece bloqueada até existir um fluxo real de backend.',
+      });
+      return;
+    }
     setIsTransferring(true);
     try {
-      onTransfer(transferType, selectedTarget, message || undefined);
+      const result = await onTransfer(transferType, selectedTarget, message || undefined);
+      if (!result) {
+        onOpenChange(false);
+        setSelectedTarget('');
+        setMessage('');
+        return;
+      }
+      if (result.status === 'error') {
+        toast.error(result.title, { description: result.description });
+        return;
+      }
+
       onOpenChange(false);
       setSelectedTarget('');
       setMessage('');
+      if (result.status === 'partial') {
+        toast.warning(result.title, { description: result.description });
+        return;
+      }
+
+      toast.success(result.title, { description: result.description });
+    } catch (err) {
+      log.error('[TransferDialog] Falha inesperada ao transferir:', err);
+      toast.error('Erro na transferência', {
+        description: 'Não foi possível transferir o chat. Tente novamente.',
+      });
     } finally {
       setIsTransferring(false);
     }
