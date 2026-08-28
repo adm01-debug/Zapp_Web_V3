@@ -136,6 +136,37 @@ describe('TransferDialog', () => {
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 
+  it('ignora a conclusão pendente quando a troca de conversa desmonta o diálogo', async () => {
+    let resolveTransfer!: (value: TransferConversationResult) => void;
+    const onTransfer = vi.fn(
+      () =>
+        new Promise<TransferConversationResult>((resolve) => {
+          resolveTransfer = resolve;
+        })
+    );
+
+    const onOpenChange = vi.fn();
+    const oldDialog = render(
+      <TransferDialog open onOpenChange={onOpenChange} onTransfer={onTransfer} />
+    );
+    fireEvent.click(screen.getByText('Ana'));
+    fireEvent.click(screen.getByRole('button', { name: /Transferir/i }));
+
+    oldDialog.unmount();
+    render(<TransferDialog open onOpenChange={onOpenChange} onTransfer={onTransfer} />);
+
+    await act(async () => {
+      resolveTransfer({
+        status: 'success',
+        title: 'Chat transferido!',
+        description: 'O chat foi transferido para outro atendente.',
+      });
+    });
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
   it('fecha com warning quando a transferência foi parcial, sem toast de sucesso pleno', async () => {
     const onTransfer = vi.fn().mockResolvedValue({
       status: 'partial',

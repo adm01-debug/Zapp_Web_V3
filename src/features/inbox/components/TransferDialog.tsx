@@ -93,6 +93,16 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
     }
   }, [open]);
 
+  // Trocar de conversa desmonta este diálogo sem necessariamente renderizar open=false.
+  // Invalide a continuação antiga para que ela não feche a instância da nova conversa.
+  useEffect(
+    () => () => {
+      transferAttemptRef.current += 1;
+      transferInFlightRef.current = false;
+    },
+    []
+  );
+
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isTransferring) return;
     onOpenChange(nextOpen);
