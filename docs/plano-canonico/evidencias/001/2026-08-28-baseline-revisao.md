@@ -43,7 +43,7 @@ checkboxes de conclusão marcados: 0
 subitens de checklist abertos: 345
 ```
 
-O README desta branch de revisão possui `350` subitens abertos porque incorporou os
+O README desta branch de revisão possui `352` subitens abertos porque incorporou os
 critérios adicionais de voz, filas e transferência; esse delta não altera a medição da
 baseline acima.
 

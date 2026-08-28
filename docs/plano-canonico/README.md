@@ -663,6 +663,8 @@ a concluído.
 
 - [ ] Fazer o frontend tratar falha de `conversation_transfers`/`transfer_comments` como resultado incompleto.
 - [ ] Remover o cast de `connection` e não oferecer transferência entre conexões até existir handler/contrato real.
+- [ ] Alinhar o parser Realtime de `conversation_transfers` aos enums e à nulabilidade do banco canônico.
+- [ ] Desativar a transferência em massa enquanto ela não usar a mesma trilha auditável, ou fazê-la retornar resultado estruturado sem falso sucesso.
 - [ ] Aguardar o resultado da operação antes de fechar o diálogo e bloquear duplo envio durante a promise.
 - [ ] Não emitir toast final de sucesso quando a auditoria obrigatória não persistir.
 - [ ] Apresentar retry/compensação segura sem duplicar timeline ou transferência.

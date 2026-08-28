@@ -39,7 +39,12 @@ Teste de regressão planejado:
 7. rejeitar a promise da timeline/auditoria após o update e exigir `parcial`, sem sugerir
    retry de uma atribuição já commitada;
 8. validar queue→agent e queue→queue preservando `from_queue_id` e usando o valor
-   canônico `transfer_type='internal'`.
+   canônico `transfer_type='internal'`;
+9. provar que o parser Realtime aceita `internal|direct`, todos os estados canônicos e
+   `source_conversation_id` nulo; manter o vocabulário legado apenas em ramo de leitura
+   isolado até existir evidência de zero produtores antigos;
+10. provar que a ação em massa fica indisponível enquanto não houver a mesma trilha e
+    resultado estruturado do fluxo individual.
 
 ## Resultado
 
@@ -79,4 +84,10 @@ dados, o rollback é de código; registros já criados não serão apagados.
 - O schema atual aceita `transfer_type` `internal|direct` e não expõe policy de INSERT
   para `authenticated`; o PR frontend deve reportar resultado parcial até o contrato
   RPC/RLS autorizado das Etapas 027/042.
+- Consulta somente leitura ao banco canônico confirmou também que `source_conversation_id`
+  é nullable, `priority`, `remote_jid` e `created_at` são NOT NULL, e o vocabulário de
+  status é `pending|accepted|in_progress|completed|returned|rejected|expired|cancelled`.
+- O caminho em massa atualiza somente `contacts`, sem timeline nem
+  `conversation_transfers`; a contenção segura é mantê-lo desabilitado até o contrato
+  transacional posterior.
 - Decisão: liberar somente a contenção frontend após CI; não aplicar DDL/RLS nesta onda.
