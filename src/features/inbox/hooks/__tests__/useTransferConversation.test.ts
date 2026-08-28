@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTransferConversation } from '../useTransferConversation';
 
@@ -29,7 +29,9 @@ const mockTransfersMaybeSingle = vi.hoisted(() => vi.fn());
 const mockTransfersSelect = vi.hoisted(() =>
   vi.fn(() => ({ maybeSingle: mockTransfersMaybeSingle }))
 );
-const mockTransfersInsert = vi.hoisted(() => vi.fn(() => ({ select: mockTransfersSelect })));
+const mockTransfersInsert = vi.hoisted(() =>
+  vi.fn((_payload: Record<string, unknown>) => ({ select: mockTransfersSelect }))
+);
 const mockTransferCommentsInsert = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
@@ -111,6 +113,11 @@ describe('useTransferConversation', () => {
     mockTransferCommentsInsert.mockResolvedValue({ error: null });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it('retorna success quando atualização principal e trilha de auditoria persistem', async () => {
     const { result } = renderHook(() =>
       useTransferConversation({
@@ -176,6 +183,99 @@ describe('useTransferConversation', () => {
 
     expect(contactUpdateMocks.builder.is).toHaveBeenCalledWith('assigned_to', null);
     expect(contactUpdateMocks.builder.is).toHaveBeenCalledWith('queue_id', null);
+  });
+
+  it('gera tickets distintos para transferências concorrentes no mesmo milissegundo', async () => {
+    const fixedNow = 1_787_950_800_000;
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
+    const randomUUID = vi
+      .fn()
+      .mockReturnValueOnce('11111111-1111-4111-8111-111111111111')
+      .mockReturnValueOnce('22222222-2222-4222-8222-222222222222');
+    vi.stubGlobal('crypto', { randomUUID });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    await act(async () => {
+      await Promise.all([
+        result.current.transferConversation('agent', 'agent-destino'),
+        result.current.transferConversation('queue', 'queue-destino'),
+      ]);
+    });
+
+    const ticketNumbers = mockTransfersInsert.mock.calls.map(
+      ([payload]) => payload.ticket_number as string
+    );
+
+    expect(ticketNumbers).toHaveLength(2);
+    expect(new Set(ticketNumbers).size).toBe(2);
+    expect(ticketNumbers).toEqual(
+      expect.arrayContaining([
+        `T-${fixedNow.toString(36).toUpperCase()}-1111111111114111`,
+        `T-${fixedNow.toString(36).toUpperCase()}-2222222222224222`,
+      ])
+    );
+    expect(ticketNumbers.every((ticket) => /^T-[0-9A-Z]+-[0-9A-F]{16}$/.test(ticket))).toBe(true);
+  });
+
+  it('usa getRandomValues quando crypto.randomUUID não está disponível', async () => {
+    const fixedNow = 1_787_950_800_000;
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
+    const entropyChunks = [
+      [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07],
+      [0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f],
+    ];
+    const getRandomValues = vi.fn((target: Uint8Array) => {
+      target.set(entropyChunks[getRandomValues.mock.calls.length - 1]);
+      return target;
+    });
+    vi.stubGlobal('crypto', { getRandomValues });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    await act(async () => {
+      await result.current.transferConversation('agent', 'agent-destino');
+      await result.current.transferConversation('queue', 'queue-destino');
+    });
+
+    const ticketNumbers = mockTransfersInsert.mock.calls.map(
+      ([payload]) => payload.ticket_number as string
+    );
+
+    expect(getRandomValues).toHaveBeenCalledTimes(2);
+    expect(ticketNumbers).toEqual([
+      `T-${fixedNow.toString(36).toUpperCase()}-0001020304050607`,
+      `T-${fixedNow.toString(36).toUpperCase()}-08090A0B0C0D0E0F`,
+    ]);
+    expect(new Set(ticketNumbers).size).toBe(2);
+  });
+
+  it('mantém unicidade local no fallback legado sem Web Crypto', async () => {
+    const fixedNow = 1_787_950_800_000;
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
+    vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    vi.stubGlobal('crypto', undefined);
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    await act(async () => {
+      await result.current.transferConversation('agent', 'agent-destino');
+      await result.current.transferConversation('queue', 'queue-destino');
+    });
+
+    const ticketNumbers = mockTransfersInsert.mock.calls.map(
+      ([payload]) => payload.ticket_number as string
+    );
+
+    expect(ticketNumbers).toHaveLength(2);
+    expect(new Set(ticketNumbers).size).toBe(2);
+    expect(ticketNumbers.every((ticket) => /^T-[0-9A-Z]+-[0-9A-F]{16}$/.test(ticket))).toBe(true);
   });
 
   it('retorna partial quando a auditoria estruturada falha depois da transferência principal', async () => {
