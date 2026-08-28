@@ -585,6 +585,8 @@ a concluído.
 - [ ] Implementar a action `answer` e demais comandos do `useVoiceActionHandler` com efeito
   verificável, ou removê-los/desabilitá-los no contrato e na UI; toast local não conta como
   execução da ação.
+- [ ] Vincular `logVoiceCommand.success` ao resultado real da action/Edge; comando rejeitado,
+  desabilitado ou no-op não pode ser auditado como sucesso.
 
 **Concluída quando:** todo controle interativo executa efeito real ou fica desabilitado/oculto.
 

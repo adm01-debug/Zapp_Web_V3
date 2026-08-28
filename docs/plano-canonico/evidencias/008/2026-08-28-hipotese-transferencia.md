@@ -35,6 +35,11 @@ Teste de regressão planejado:
 4. após a contenção, exigir resultado `parcial` e impedir toast de sucesso pleno.
 5. selecionar `connection` na baseline e provar que o callback recebe um tipo não
    suportado; após a contenção, provar que a opção/cast não alcança qualquer write.
+6. fazer o update resolver com zero linhas e exigir falha antes de qualquer trilha;
+7. rejeitar a promise da timeline/auditoria após o update e exigir `parcial`, sem sugerir
+   retry de uma atribuição já commitada;
+8. validar queue→agent e queue→queue preservando `from_queue_id` e usando o valor
+   canônico `transfer_type='internal'`.
 
 ## Resultado
 
@@ -67,3 +72,11 @@ Teste de regressão planejado:
 
 Reverter o PR frontend para o SHA anterior. Como a primeira onda não muda schema nem
 dados, o rollback é de código; registros já criados não serão apagados.
+
+## Limitações e decisão
+
+- Este arquivo é uma hipótese de planejamento auditada, não evidência de conclusão.
+- O schema atual aceita `transfer_type` `internal|direct` e não expõe policy de INSERT
+  para `authenticated`; o PR frontend deve reportar resultado parcial até o contrato
+  RPC/RLS autorizado das Etapas 027/042.
+- Decisão: liberar somente a contenção frontend após CI; não aplicar DDL/RLS nesta onda.

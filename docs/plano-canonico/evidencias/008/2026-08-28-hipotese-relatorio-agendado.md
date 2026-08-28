@@ -29,7 +29,11 @@ Teste de regressão planejado:
 2. falha controlada em Storage, signed URL ou Resend;
 3. confirmar que o run continua elegível para nova tentativa, sem aparecer como entrega
    bem-sucedida;
-4. na tentativa final, confirmar DLQ `error`, sem novo claim.
+4. na tentativa final, confirmar DLQ `error`, sem novo claim;
+5. simular crash após o quinto claim e recuperar o orphan diretamente para DLQ, sem
+   restaurar `success` inelegível;
+6. simular aceite do provedor seguido de crash antes de persistir `delivered_at` e provar
+   idempotência/reconciliação por chave estável de run+destinatário, sem e-mail duplicado.
 
 ## Resultado
 
@@ -59,3 +63,11 @@ autorização DB; nenhum DDL será aplicado por esta evidência.
 Migration futura deverá documentar reversão do CHECK/índice/RPC e compatibilidade dos
 estados existentes. A Edge só será promovida junto ao contrato compatível; rollback
 parcial de apenas um lado é proibido.
+
+## Limitações e decisão
+
+- Este arquivo é uma hipótese de planejamento auditada, não evidência de conclusão.
+- Ainda faltam escolha do modelo de estado, mecanismo de idempotência aceito pelo
+  provedor, staging e teste de crash; nenhuma mudança foi aplicada ao DB/Edge.
+- Decisão: não aceitar a troca isolada `success → error`; desenhar migration, RPC, Edge e
+  recuperação de orphan como um contrato único sujeito a autorização G008.
