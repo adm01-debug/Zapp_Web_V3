@@ -233,28 +233,58 @@ jobs:
 
           REPO_OWNER="${{ github.repository_owner }}"
           BOT_LOGIN="$(gh api user --jq .login)"
-          CURRENT_URL="$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --state open \
-            --head "$TARGET_BRANCH" \
-            --limit 1000 \
-            --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,url | \
-            jq -r \
-              --arg bot "$BOT_LOGIN" \
-              --arg owner "$REPO_OWNER" \
-              --arg target "$TARGET_BRANCH" \
-              'first(.[] | select(
-                .headRefName == $target and
-                .baseRefName == "main" and
-                .isCrossRepository == false and
-                .headRepositoryOwner.login == $owner and
-                .author.login == $bot and
-                ((.body // "") | contains("<!-- ratchet-tighten-automation -->"))
-              ) | .url) // empty')"
-          if [ -z "$CURRENT_URL" ]; then
-            echo "::error::RATCHET_SUCCESSOR_MISSING — PR substituto não existe; PRs anteriores serão preservados"
-            exit 1
-          fi
+
+          resolve_successor() {
+            local matches count state url
+            matches="$(gh pr list \
+              --repo "${{ github.repository }}" \
+              --state all \
+              --head "$TARGET_BRANCH" \
+              --limit 1000 \
+              --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,state,url | \
+              jq -c \
+                --arg bot "$BOT_LOGIN" \
+                --arg owner "$REPO_OWNER" \
+                --arg target "$TARGET_BRANCH" \
+                '[.[] | select(
+                  .headRefName == $target and
+                  .baseRefName == "main" and
+                  .isCrossRepository == false and
+                  .headRepositoryOwner.login == $owner and
+                  .author.login == $bot and
+                  ((.body // "") | contains("<!-- ratchet-tighten-automation -->"))
+                )]')"
+            count="$(jq 'length' <<< "$matches")"
+
+            if [ "$count" -eq 0 ]; then
+              echo "::error::RATCHET_SUCCESSOR_MISSING — PR substituto não existe; PRs anteriores serão preservados" >&2
+              return 1
+            fi
+            if [ "$count" -gt 1 ]; then
+              echo "::error::RATCHET_SUCCESSOR_AMBIGUOUS — múltiplos PRs substitutos canônicos encontrados" >&2
+              return 1
+            fi
+
+            state="$(jq -r '.[0].state' <<< "$matches")"
+            url="$(jq -r '.[0].url' <<< "$matches")"
+            case "$state" in
+              OPEN|MERGED)
+                printf '%s\t%s\n' "$state" "$url"
+                ;;
+              CLOSED)
+                echo "::error::RATCHET_SUCCESSOR_CLOSED — sucessor fechado sem merge; PRs anteriores serão preservados: ${url}" >&2
+                return 1
+                ;;
+              *)
+                echo "::error::RATCHET_SUCCESSOR_STATE_INVALID — estado inesperado: ${state}" >&2
+                return 1
+                ;;
+            esac
+          }
+
+          SUCCESSOR_RECORD="$(resolve_successor)"
+          IFS=$'\t' read -r CURRENT_STATE CURRENT_URL <<< "$SUCCESSOR_RECORD"
+          echo "Sucessor canônico validado em estado ${CURRENT_STATE}: ${CURRENT_URL}"
 
           EXISTING="$(gh pr list \
             --repo "${{ github.repository }}" \
@@ -282,6 +312,16 @@ jobs:
           fi
 
           while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
+            # Revalida imediatamente antes de cada mutação: OPEN→MERGED é seguro;
+            # CLOSED, ausência, ambiguidade ou troca de URL preservam o PR anterior.
+            LATEST_RECORD="$(resolve_successor)"
+            IFS=$'\t' read -r LATEST_STATE LATEST_URL <<< "$LATEST_RECORD"
+            if [ "$LATEST_URL" != "$CURRENT_URL" ]; then
+              echo "::error::RATCHET_SUCCESSOR_CHANGED — sucessor canônico mudou durante a execução" >&2
+              exit 1
+            fi
+            CURRENT_STATE="$LATEST_STATE"
+
             NOTICE_MARKER="<!-- ratchet-tighten-stale-notice:${TARGET_BRANCH} -->"
             COMMENTS_JSON="$(gh pr view "$EXISTING_URL" \
               --repo "${{ github.repository }}" \
