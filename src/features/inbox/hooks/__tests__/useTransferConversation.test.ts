@@ -281,6 +281,31 @@ describe('useTransferConversation', () => {
     );
   });
 
+  it('interrompe como error quando a leitura inicial do contato falha', async () => {
+    mockContactsMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'contact visibility denied' },
+    });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(outcome?.status).toBe('error');
+    expect(contactUpdateMocks.update).not.toHaveBeenCalled();
+    expect(mockMessagesInsert).not.toHaveBeenCalled();
+    expect(mockTransfersInsert).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Transfer preflight failed:',
+      expect.objectContaining({ message: 'contact visibility denied' })
+    );
+  });
+
   it('retorna error quando a atualização principal falha e não grava falso sucesso', async () => {
     contactUpdateMocks.maybeSingle.mockResolvedValue({
       data: null,
