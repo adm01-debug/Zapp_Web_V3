@@ -97,8 +97,74 @@ jobs:
           # Não usar [skip ci]: o PR gerado também precisa satisfazer branch protection.
           git commit -m "chore(ratchet): auto-tighten data-layer baseline"
 
-      - name: Push ratchet branch
+      - name: Check prior canonical ratchet PR state
+        id: prior_pr
         if: steps.tighten.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="${{ steps.tighten.outputs.branch }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          BOT_LOGIN="$(gh api user --jq .login)"
+          MATCHES="$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state all \
+            --head "$BRANCH" \
+            --limit 1000 \
+            --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,state,url | \
+            jq -c \
+              --arg bot "$BOT_LOGIN" \
+              --arg owner "$REPO_OWNER" \
+              --arg branch "$BRANCH" \
+              '[.[] | select(
+                .headRefName == $branch and
+                .baseRefName == "main" and
+                .isCrossRepository == false and
+                .headRepositoryOwner.login == $owner and
+                .author.login == $bot and
+                ((.body // "") | contains("<!-- ratchet-tighten-automation -->"))
+              )]')"
+          MATCH_COUNT="$(jq 'length' <<< "$MATCHES")"
+
+          if [ "$MATCH_COUNT" -gt 1 ]; then
+            echo "::error::RATCHET_PR_AMBIGUOUS — mais de um PR canônico encontrado para ${BRANCH}"
+            exit 1
+          fi
+
+          if [ "$MATCH_COUNT" -eq 0 ]; then
+            echo "state=NONE" >> "$GITHUB_OUTPUT"
+            echo "completed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_STATE="$(jq -r '.[0].state' <<< "$MATCHES")"
+          PR_URL="$(jq -r '.[0].url' <<< "$MATCHES")"
+          echo "state=${PR_STATE}" >> "$GITHUB_OUTPUT"
+          echo "url=${PR_URL}" >> "$GITHUB_OUTPUT"
+
+          case "$PR_STATE" in
+            MERGED)
+              echo "completed=true" >> "$GITHUB_OUTPUT"
+              echo "Ratchet deste SHA já foi mergeado: $PR_URL"
+              ;;
+            OPEN)
+              echo "completed=false" >> "$GITHUB_OUTPUT"
+              echo "Ratchet deste SHA já está aberto: $PR_URL"
+              ;;
+            CLOSED)
+              echo "::error::RATCHET_PR_CLOSED — PR canônico foi fechado sem merge; revisão manual necessária: ${PR_URL}"
+              exit 1
+              ;;
+            *)
+              echo "::error::RATCHET_PR_STATE_INVALID — estado inesperado: ${PR_STATE}"
+              exit 1
+              ;;
+          esac
+
+      - name: Push ratchet branch
+        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
@@ -126,7 +192,7 @@ jobs:
           fi
 
       - name: Create PR for tightened baseline
-        if: steps.tighten.outputs.changed == 'true'
+        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
           BEFORE_TOTAL: ${{ steps.tighten.outputs.before_total }}
@@ -136,22 +202,7 @@ jobs:
           set -euo pipefail
 
           BRANCH="${{ steps.tighten.outputs.branch }}"
-          REPO_OWNER="${{ github.repository_owner }}"
-          EXISTING_URL="$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --state open \
-            --head "$BRANCH" \
-            --limit 1000 \
-            --json baseRefName,headRefName,headRepositoryOwner,isCrossRepository,url | \
-            jq -r \
-              --arg owner "$REPO_OWNER" \
-              --arg branch "$BRANCH" \
-              'first(.[] | select(
-                .headRefName == $branch and
-                .baseRefName == "main" and
-                .isCrossRepository == false and
-                .headRepositoryOwner.login == $owner
-              ) | .url) // empty')"
+          EXISTING_URL="${{ steps.prior_pr.outputs.url }}"
           if [ -n "$EXISTING_URL" ]; then
             echo "PR já existente: $EXISTING_URL"
             exit 0
@@ -172,8 +223,8 @@ jobs:
           Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório.
           EOF
 
-      - name: Mark stale bot-owned ratchet PRs without destructive cleanup
-        if: steps.tighten.outputs.changed == 'true'
+      - name: Close stale bot-owned ratchet PRs after successor validation
+        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
           TARGET_BRANCH: ${{ steps.tighten.outputs.branch }}
@@ -181,27 +232,30 @@ jobs:
           set -euo pipefail
 
           REPO_OWNER="${{ github.repository_owner }}"
+          BOT_LOGIN="$(gh api user --jq .login)"
           CURRENT_URL="$(gh pr list \
             --repo "${{ github.repository }}" \
             --state open \
             --head "$TARGET_BRANCH" \
             --limit 1000 \
-            --json baseRefName,headRefName,headRepositoryOwner,isCrossRepository,url | \
+            --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,url | \
             jq -r \
+              --arg bot "$BOT_LOGIN" \
               --arg owner "$REPO_OWNER" \
               --arg target "$TARGET_BRANCH" \
               'first(.[] | select(
                 .headRefName == $target and
                 .baseRefName == "main" and
                 .isCrossRepository == false and
-                .headRepositoryOwner.login == $owner
+                .headRepositoryOwner.login == $owner and
+                .author.login == $bot and
+                ((.body // "") | contains("<!-- ratchet-tighten-automation -->"))
               ) | .url) // empty')"
           if [ -z "$CURRENT_URL" ]; then
             echo "::error::RATCHET_SUCCESSOR_MISSING — PR substituto não existe; PRs anteriores serão preservados"
             exit 1
           fi
 
-          BOT_LOGIN="$(gh api user --jq .login)"
           EXISTING="$(gh pr list \
             --repo "${{ github.repository }}" \
             --state open \
@@ -237,13 +291,16 @@ jobs:
               'any(.comments[]?; ((.body // "") | contains($marker)))' \
               <<< "$COMMENTS_JSON" >/dev/null; then
               echo "Aviso do sucessor já existe; preservando comentário único: $EXISTING_URL"
-              continue
+            else
+              echo "Marcando ratchet anterior antes do fechamento: $EXISTING_URL"
+              NOTICE_BODY="$(printf '%s\n%s' \
+                "$NOTICE_MARKER" \
+                "Este ratchet foi substituído por ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. O PR obsoleto será fechado sem excluir sua branch, impedindo que um teto antigo afrouxe o baseline atual.")"
+              gh pr comment "$EXISTING_URL" \
+                --body "$NOTICE_BODY"
             fi
 
-            echo "Marcando ratchet anterior para revisão manual: $EXISTING_URL"
-            NOTICE_BODY="$(printf '%s\n%s' \
-              "$NOTICE_MARKER" \
-              "Há um ratchet mais novo em ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. Este PR foi preservado sem fechamento automático nem remoção de branch para permitir validação manual antes de qualquer limpeza.")"
-            gh pr comment "$EXISTING_URL" \
-              --body "$NOTICE_BODY"
+            echo "Fechando ratchet obsoleto sem apagar branch: $EXISTING_URL"
+            gh pr close "$EXISTING_URL" \
+              --repo "${{ github.repository }}"
           done <<< "$EXISTING"
