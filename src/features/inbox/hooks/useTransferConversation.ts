@@ -52,7 +52,7 @@ export function useTransferConversation({
         name: string | null;
         remote_jid: string | null;
         instance_name: string | null;
-      } | null = null;
+      };
 
       try {
         const { data: userData, error: authError } = await supabase.auth.getUser();
