@@ -16,12 +16,15 @@ import { insertWhisperMessage } from '../../../hooks/useWhisperMessagesMutation'
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 const mockToast = vi.fn();
+const mockAuthState = vi.hoisted(() => ({
+  profile: { id: 'user-1' } as { id: string } | null,
+}));
 vi.mock('@/hooks/use-toast', () => ({ toast: (p: unknown) => mockToast(p) }));
 
 vi.mock('@/integrations/datasource/db', () => ({
   dbFrom: vi.fn(() => ({ select: vi.fn(() => Promise.resolve({ data: [], error: null })) })),
 }));
-vi.mock('@/features/auth', () => ({ useAuth: () => ({ profile: { id: 'user-1' } }) }));
+vi.mock('@/features/auth', () => ({ useAuth: () => mockAuthState }));
 vi.mock('@/lib/logger', () => ({
   getLogger: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
@@ -86,6 +89,7 @@ function makeHandlers(onSendMessage: OnSendMessage) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(insertWhisperMessage).mockReset();
+  mockAuthState.profile = { id: 'user-1' };
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -149,6 +153,33 @@ describe('BUG-02 — attachments in whisper mode early-return', () => {
         variant: 'destructive',
       })
     );
+  });
+});
+
+describe('Fail-closed — whisper requires an authenticated profile', () => {
+  it('preserves the draft and performs no write when profile is null', async () => {
+    mockAuthState.profile = null;
+    const onSendMessage = vi.fn<OnSendMessage>().mockResolvedValue(undefined);
+    const { result } = makeHandlers(onSendMessage);
+
+    act(() => {
+      result.current.setIsWhisper(true);
+      result.current.setInputValue('nota interna sem autor');
+    });
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(vi.mocked(insertWhisperMessage)).not.toHaveBeenCalled();
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(result.current.inputValue).toBe('nota interna sem autor');
+    expect(result.current.isSending).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith({
+      title: 'Erro ao enviar sussurro',
+      description: 'Usuário não autenticado. Faça login e tente novamente.',
+      variant: 'destructive',
+    });
   });
 });
 
