@@ -86,7 +86,7 @@ jobs:
           console.log(`✅ baseline apertado localmente (${beforeTotal} -> ${afterTotal}) e pronto para PR.`);
           EOF
 
-      - name: Prevent concurrent ratchet PRs
+      - name: Supersede stale ratchet PRs
         id: pr_guard
         if: steps.tighten.outputs.changed == 'true'
         env:
@@ -97,22 +97,25 @@ jobs:
             --repo "${{ github.repository }}" \
             --state open \
             --json headRefName,url \
-            --jq '[.[] | select(.headRefName | startswith("chore/ratchet-tighten-"))][0] | if . then [.headRefName, .url] | @tsv else "" end')"
+            --jq '.[] | select(.headRefName | startswith("chore/ratchet-tighten-")) | [.headRefName, .url] | @tsv')"
           if [ -z "$EXISTING" ]; then
             echo "proceed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          EXISTING_BRANCH="${EXISTING%%$'\t'*}"
-          EXISTING_URL="${EXISTING#*$'\t'}"
-          if [ "$EXISTING_BRANCH" = "$TARGET_BRANCH" ]; then
-            echo "PR idempotente já existente: $EXISTING_URL"
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
+            if [ "$EXISTING_BRANCH" = "$TARGET_BRANCH" ]; then
+              echo "PR idempotente já existente: $EXISTING_URL"
+              continue
+            fi
 
-          echo "::notice::Ratchet já pendente em $EXISTING_URL; nenhuma segunda PR será criada"
-          echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Substituindo ratchet obsoleto: $EXISTING_URL"
+            gh pr comment "$EXISTING_URL" \
+              --body "Substituído automaticamente pelo ratchet da main em ${GITHUB_SHA}."
+            gh pr close "$EXISTING_URL" --delete-branch
+          done <<< "$EXISTING"
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
 
       - name: Create branch and commit
         if: steps.tighten.outputs.changed == 'true' && steps.pr_guard.outputs.proceed == 'true'
