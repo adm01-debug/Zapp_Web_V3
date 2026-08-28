@@ -1,8 +1,10 @@
 # PLANO-CANÔNICO-001-100 — Melhorias e correções do Zapp Web V3
 
 > Data de consolidação: 2026-08-28<br>
-> Baseline Git: `origin/main` em `383f07f5919e570d0d33edb09164d0c5f5bfd65b`<br>
-> Branch documental: `docs/plano-canonico-100-etapas-20260828`<br>
+> Baseline original do plano: `origin/main` em `383f07f5919e570d0d33edb09164d0c5f5bfd65b`<br>
+> Baseline da revisão de implementação: `origin/main` em `c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`<br>
+> Branch documental original: `docs/plano-canonico-100-etapas-20260828`<br>
+> Revisão auditada: 2026-08-28, em `docs/plano-canonico-status-20260828`<br>
 > Natureza desta entrega: planejamento e critérios de aceite. Nenhum código de produto,
 > dado, objeto de banco ou serviço da VPS foi alterado pela criação deste documento.
 
@@ -18,6 +20,13 @@ mais ser usados isoladamente para declarar o estado atual, porque tratam baselin
 escopos e datas diferentes. Este arquivo é a única fonte editável do checklist
 `001–100`; não haverá uma segunda cópia manual dividida em fases.
 
+A revisão de implementação está registrada em
+[`STATUS-IMPLEMENTACAO-2026-08-28.md`](./STATUS-IMPLEMENTACAO-2026-08-28.md). Esse
+arquivo é uma fotografia auditada, sem checkboxes e sem autoridade para substituir este
+checklist. As provas reproduzíveis passam a usar o índice único em
+[`evidencias/README.md`](./evidencias/README.md). A divisão inicial dos P0 em PRs
+independentes está em [`ONDAS-P0-2026-08-28.md`](./ONDAS-P0-2026-08-28.md).
+
 ## 2. Veredito de partida
 
 O sistema não precisa retornar integralmente à V2. O núcleo do Zapp Web V3 está
@@ -27,6 +36,8 @@ de execução. Os riscos mais importantes confirmados na baseline são:
 
 - transferência de conversa mostra sucesso mesmo quando a trilha estruturada de
   auditoria falha por RLS;
+- o diálogo oferece transferência para outra conexão, mas o handler aceita somente
+  agente/fila; um cast mascara o contrato e pode tratar `connection_id` como `queue_id`;
 - falha retryável de relatório agendado pode ser gravada como `success`;
 - o overload ativo `increment_snapshot_version(text)` engole exceções e não atualiza o
   estado esperado;
@@ -571,6 +582,11 @@ a concluído.
 - [ ] Ligar o refresh real de `AdminSearchInsightsPage` e seu estado de carregamento/erro.
 - [ ] Corrigir o seletor de nível em Skill Based Routing, hoje ignorado ao salvar.
 - [ ] Auditar `swipeActions.ts`, callbacks vazios e controles habilitados com handler no-op.
+- [ ] Implementar a action `answer` e demais comandos do `useVoiceActionHandler` com efeito
+  verificável, ou removê-los/desabilitá-los no contrato e na UI; toast local não conta como
+  execução da ação.
+- [ ] Vincular `logVoiceCommand.success` ao resultado real da action/Edge; comando rejeitado,
+  desabilitado ou no-op não pode ser auditado como sucesso.
 
 **Concluída quando:** todo controle interativo executa efeito real ou fica desabilitado/oculto.
 
@@ -630,6 +646,9 @@ a concluído.
 
 - [ ] Classificar services, hooks de management, adapters e tabs experimentais de Connections por consumidor real.
 - [ ] Decidir integrar ou remover `useVirtualRows`, único órfão confirmado pelo checker, mediante aprovação.
+- [ ] Classificar `queue_routing_rules`/`QueueRoutingRules`: conectar as regras ao motor real
+  de roteamento com prova E2E, ou manter a superfície desativada/roadmap explícito; CRUD sem
+  consumidor operacional não conta como implementação.
 - [ ] Criar gate contra novas superfícies sem chamador/backend e contra duplicação de fonte de verdade.
 
 **Concluída quando:** cada abstração possui owner, consumidor e função inequívoca.
@@ -643,10 +662,14 @@ a concluído.
 **Prioridade:** P0 · **Estado inicial:** confirmado aberto · **Classe:** INBOX/FE/DB · **Gates:** G001/G002/G004 · **Dependências:** 027/031
 
 - [ ] Fazer o frontend tratar falha de `conversation_transfers`/`transfer_comments` como resultado incompleto.
+- [ ] Remover o cast de `connection` e não oferecer transferência entre conexões até existir handler/contrato real.
+- [ ] Alinhar o parser Realtime de `conversation_transfers` aos enums e à nulabilidade do banco canônico.
+- [ ] Desativar a transferência em massa enquanto ela não usar a mesma trilha auditável, ou fazê-la retornar resultado estruturado sem falso sucesso.
+- [ ] Aguardar o resultado da operação antes de fechar o diálogo e bloquear duplo envio durante a promise.
 - [ ] Não emitir toast final de sucesso quando a auditoria obrigatória não persistir.
 - [ ] Apresentar retry/compensação segura sem duplicar timeline ou transferência.
 
-**Concluída quando:** usuário nunca recebe confirmação plena de uma transferência sem trilha exigida.
+**Concluída quando:** usuário nunca recebe confirmação plena de uma transferência sem trilha exigida, e nenhum tipo não suportado alcança uma escrita de agente/fila.
 
 **Evidência mínima:** teste com RLS negando insert e estado visual/auditoria esperados.
 
@@ -657,6 +680,8 @@ a concluído.
 - [ ] Definir unidade transacional para contato, mensagem de timeline, transferência e comentário.
 - [ ] Garantir idempotency key e comportamento de retry após falha em cada ponto.
 - [ ] Correlacionar realtime, audit log e histórico administrativo.
+- [ ] Resolver `auth.uid()` para `profiles.id` antes de persistir FKs de agente e provar o
+  caso em que as duas identidades são diferentes.
 
 **Concluída quando:** falha parcial não deixa estado contraditório ou sucesso ambíguo.
 
@@ -829,6 +854,8 @@ a concluído.
 - [ ] Fazer falha antes de `MAX_ATTEMPTS` permanecer retryável, nunca `success`.
 - [ ] Garantir transição final para erro/DLQ e não duplicar relatório entregue.
 - [ ] Testar falha temporária, falha permanente, concorrência de claim e retomada.
+- [ ] Garantir que `dryRun` não faça claim, não incremente tentativas e não altere a
+  outbox de produção.
 
 **Concluída quando:** nenhuma entrega falha é persistida como sucesso.
 
@@ -1447,6 +1474,12 @@ regressão.
 - Grafo local `graphify-out/graph.json` consultado com 19.475 nós.
 - Simulação pré-execução de 28/08 em
   [`SIMULACAO-CENARIOS-2026-08-28.md`](./SIMULACAO-CENARIOS-2026-08-28.md).
+- Revisão integral de implementação de 28/08 em
+  [`STATUS-IMPLEMENTACAO-2026-08-28.md`](./STATUS-IMPLEMENTACAO-2026-08-28.md),
+  auditada contra `origin/main@c5e83d30e` e catálogo canônico em leitura.
+- Índice e padrão de provas em [`evidencias/README.md`](./evidencias/README.md).
+- Quadro de owners, worktrees, dependências e autorizações P0 em
+  [`ONDAS-P0-2026-08-28.md`](./ONDAS-P0-2026-08-28.md).
 - Suíte limpa da `origin/main`: build e testes principais verdes, com as falhas
   específicas registradas nas etapas 031, 083 e 086–090.
 - Produção observada em 28/08: três domínios no mesmo build e health público saudável;
