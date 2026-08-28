@@ -14,8 +14,9 @@ excluídas. O catálogo canônico foi consultado somente em leitura.
 ## Veredito
 
 As 100 etapas ainda permanecem abertas sob a definição rigorosa do plano. Há trabalho
-real já construído, mas nenhuma etapa possui simultaneamente implementação, testes,
-merge, deploy, observação, rollback e evidência suficientes para receber `[x]`.
+real já construído, mas nenhuma etapa possui todo o conjunto de gates que lhe é
+aplicável — implementação/decisão, testes, merge, deploy, observação, rollback e
+evidência conforme o caso — para receber `[x]`.
 
 | Estado auditado | Quantidade | Significado |
 |---|---:|---|
@@ -93,8 +94,8 @@ porque o PR `#1442` possui Axe verde, embora o aceite completo ainda falte.
 
 | Etapa | Status | Evidência/resultado atual | Falta para fechar |
 |---|---|---|---|
-| 041 | Aberta | Transferência mostra sucesso mesmo se auditoria/comentário falharem | Sucesso somente após trilha mínima persistida |
-| 042 | Aberta | Fluxo faz writes independentes em contato, mensagem, transferência e comentário | Operação atômica ou compensável com idempotência |
+| 041 | Aberta | Transferência mostra sucesso parcial como pleno; `connection` é mascarada por cast e pode cair no ramo de fila | Bloquear tipo sem contrato, aguardar a operação e só confirmar após trilha mínima |
+| 042 | Aberta | Fluxo faz writes independentes em contato, mensagem, transferência e comentário | Operação tipada, atômica ou compensável, com idempotência |
 | 043 | Aberta | Status do ticket é overlay/stub em `localStorage` | Backend como fonte de verdade, com reload e multiusuário |
 | 044 | Aberta | Não há lock, versão ou compare-and-swap no fluxo | Regra de conflito e teste multiaba/multiagente |
 | 045 | Aberta | Hook expõe `delete-instance`; router retorna `unknown_action` | Implementar handler ou remover a ação do contrato/UI |

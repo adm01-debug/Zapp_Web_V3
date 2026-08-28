@@ -36,6 +36,8 @@ de execução. Os riscos mais importantes confirmados na baseline são:
 
 - transferência de conversa mostra sucesso mesmo quando a trilha estruturada de
   auditoria falha por RLS;
+- o diálogo oferece transferência para outra conexão, mas o handler aceita somente
+  agente/fila; um cast mascara o contrato e pode tratar `connection_id` como `queue_id`;
 - falha retryável de relatório agendado pode ser gravada como `success`;
 - o overload ativo `increment_snapshot_version(text)` engole exceções e não atualiza o
   estado esperado;
@@ -658,10 +660,12 @@ a concluído.
 **Prioridade:** P0 · **Estado inicial:** confirmado aberto · **Classe:** INBOX/FE/DB · **Gates:** G001/G002/G004 · **Dependências:** 027/031
 
 - [ ] Fazer o frontend tratar falha de `conversation_transfers`/`transfer_comments` como resultado incompleto.
+- [ ] Remover o cast de `connection` e não oferecer transferência entre conexões até existir handler/contrato real.
+- [ ] Aguardar o resultado da operação antes de fechar o diálogo e bloquear duplo envio durante a promise.
 - [ ] Não emitir toast final de sucesso quando a auditoria obrigatória não persistir.
 - [ ] Apresentar retry/compensação segura sem duplicar timeline ou transferência.
 
-**Concluída quando:** usuário nunca recebe confirmação plena de uma transferência sem trilha exigida.
+**Concluída quando:** usuário nunca recebe confirmação plena de uma transferência sem trilha exigida, e nenhum tipo não suportado alcança uma escrita de agente/fila.
 
 **Evidência mínima:** teste com RLS negando insert e estado visual/auditoria esperados.
 
