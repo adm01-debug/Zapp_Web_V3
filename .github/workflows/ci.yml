@@ -211,18 +211,14 @@ jobs:
           META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
         run: node scripts/check-types-schemas.mjs
 
+      - name: TypeScript gate regression tests (blocking)
+        run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
+
       - name: TypeScript check (ratchet, blocking)
         run: node scripts/check-tsc-ratchet.mjs
 
       - name: TypeScript check — chat components (blocking, strict)
-        run: |
-          set +e
-          OUT=$(bunx tsgo --noEmit -p tsconfig.app.json 2>&1)
-          echo "$OUT" | grep -E "src/(features/inbox/components/chat|lib/react-refs)" | grep -E "error TS" && {
-            echo "::error title=Chat components typecheck::TypeScript errors detected in chat components (baseline is zero).";
-            exit 1;
-          }
-          exit 0
+        run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
 
       - name: ts-nocheck drift gate (blocking)
         run: node scripts/check-ts-nocheck.mjs
