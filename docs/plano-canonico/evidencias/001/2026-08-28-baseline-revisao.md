@@ -1,10 +1,10 @@
 # Evidência 001 — baseline da revisão de implementação
 
-> Etapa: `001`  
-> Data/hora: `2026-08-28` (America/Sao_Paulo)  
-> Owner: engenharia Zapp Web V3  
-> Ambiente: repositório local isolado + GitHub Actions + DB canônico read-only  
-> Veredito: `parcial`
+> - Etapa: `001`
+> - Data/hora: `2026-08-28` (America/Sao_Paulo)
+> - Owner: engenharia Zapp Web V3
+> - Ambiente: repositório local isolado + GitHub Actions + DB canônico read-only
+> - Veredito: `parcial`
 
 ## Identificação
 
@@ -31,13 +31,18 @@ git diff --name-status 383f07f59 c5e83d30e
 gh pr checks 1442 --repo adm01-debug/Zapp_Web_V3
 ```
 
-Contagem estrutural reproduzível no documento canônico:
+Contagem estrutural reproduzível no documento canônico imutável de
+`origin/main@c5e83d30e`:
 
 ```text
 etapas numeradas: 100
 checkboxes de conclusão marcados: 0
 subitens de checklist abertos: 345
 ```
+
+O README desta branch de revisão possui `349` subitens abertos porque incorporou os
+critérios adicionais de voz, filas e transferência; esse delta não altera a medição da
+baseline acima.
 
 ## Resultado
 
@@ -65,4 +70,3 @@ Não aplicável: procedimento somente leitura e documentação em branch isolada
 
 A baseline Git está fixada e reproduzível para esta revisão, mas a Etapa 001 permanece
 `parcial` até o carimbo completo de toolchain, produção e frentes concorrentes.
-

@@ -1,10 +1,10 @@
 # Evidência NNN — título curto
 
-> Etapa: `NNN`  
-> Data/hora: `AAAA-MM-DDTHH:MM:SS-03:00`  
-> Owner: `<nome ou equipe>`  
-> Ambiente: `<local|CI|staging|produção-read-only>`  
-> Veredito: `<válida|parcial|falhou|invalidada|waiver>`
+> - Etapa: `NNN`
+> - Data/hora: `AAAA-MM-DDTHH:MM:SS-03:00`
+> - Owner: `<nome ou equipe>`
+> - Ambiente: `<local|CI|staging|produção-read-only>`
+> - Veredito: `<válida|parcial|falhou|invalidada|waiver>`
 
 ## Identificação
 
@@ -44,4 +44,3 @@ do teste. Não amplie o escopo por associação.
 
 Explique por que a evidência fecha, não fecha ou invalida parte da etapa. Se houver
 waiver, informe owner, prazo e compensações.
-

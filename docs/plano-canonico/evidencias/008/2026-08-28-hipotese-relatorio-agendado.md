@@ -1,9 +1,19 @@
 # Evidência 008 — hipótese do retry de relatório agendado
 
-> Etapas: `008`, `056`, `068`  
-> Data: 2026-08-28  
-> Ambiente: `origin/main@c5e83d30e`  
-> Veredito: `parcial` — causa confirmada; mudança DB não autorizada
+> - Etapa primária: `008`
+> - Etapas relacionadas: `056`, `068`
+> - Data/hora: `2026-08-28T15:45:00-03:00`
+> - Owner: engenharia Zapp Web V3
+> - Ambiente: repositório local isolado + DB canônico somente leitura
+> - Veredito: `parcial` — causa confirmada; mudança DB não autorizada
+
+## Identificação
+
+- Repositório: `adm01-debug/Zapp_Web_V3`
+- SHA auditado: `c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`
+- Branch/worktree: `docs/plano-canonico-status-20260828` / worktree isolada
+- PR/run: `#1443`; nenhuma migration ou Edge foi aplicada
+- Gates aplicáveis à solução futura: `G000`, `G002`, `G003`, `G007`, `G008`
 
 ## Causa e reprodução
 
@@ -20,6 +30,15 @@ Teste de regressão planejado:
 3. confirmar que o run continua elegível para nova tentativa, sem aparecer como entrega
    bem-sucedida;
 4. na tentativa final, confirmar DLQ `error`, sem novo claim.
+
+## Resultado
+
+- Esperado: geração e entrega possuem estados inequívocos; falha retryável continua
+  elegível sem aparecer como envio bem-sucedido; tentativa final vai para DLQ.
+- Observado: `success` representa geração concluída e, simultaneamente, item pendente de
+  retry; a Edge restaura esse estado para manter o contrato atual do RPC de claim.
+- Artefatos: migration/RPC/Edge inspecionados na baseline e catálogo DB consultado apenas
+  em leitura; não houve teste de mutação nem staging autorizado.
 
 ## Mudança mínima segura
 
@@ -40,4 +59,3 @@ autorização DB; nenhum DDL será aplicado por esta evidência.
 Migration futura deverá documentar reversão do CHECK/índice/RPC e compatibilidade dos
 estados existentes. A Edge só será promovida junto ao contrato compatível; rollback
 parcial de apenas um lado é proibido.
-

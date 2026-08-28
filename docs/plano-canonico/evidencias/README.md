@@ -15,7 +15,10 @@ evidencias/
     └── AAAA-MM-DD-descricao-curta.md
 ```
 
-- `NNN` é a etapa com três dígitos, de `001` a `100`.
+- `NNN` é a etapa primária/dona da evidência, com três dígitos, de `001` a `100`.
+- Uma prova pode apoiar etapas relacionadas sem ser duplicada: ela permanece no
+  diretório da etapa primária, declara todas as etapas no cabeçalho e recebe uma linha
+  de índice para cada lookup relacionado.
 - Cada arquivo registra uma execução ou decisão imutável; correções geram novo arquivo.
 - Artefatos grandes ficam no provedor de CI/observabilidade e são referenciados por ID
   e URL estável. Não copiar logs extensos para o Git.
@@ -53,5 +56,9 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | Etapa | Evidência | Baseline | Veredito |
 |---|---|---|---|
 | 001 | [`2026-08-28-baseline-revisao.md`](./001/2026-08-28-baseline-revisao.md) | `c5e83d30e` | parcial |
-| 008/041 | [`2026-08-28-hipotese-transferencia.md`](./008/2026-08-28-hipotese-transferencia.md) | `c5e83d30e` | parcial |
-| 008/056/068 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |
+| 008 | [`2026-08-28-hipotese-transferencia.md`](./008/2026-08-28-hipotese-transferencia.md) | `c5e83d30e` | parcial |
+| 041 | [`2026-08-28-hipotese-transferencia.md`](./008/2026-08-28-hipotese-transferencia.md) | `c5e83d30e` | parcial |
+| 042 | [`2026-08-28-hipotese-transferencia.md`](./008/2026-08-28-hipotese-transferencia.md) | `c5e83d30e` | parcial |
+| 008 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |
+| 056 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |
+| 068 | [`2026-08-28-hipotese-relatorio-agendado.md`](./008/2026-08-28-hipotese-relatorio-agendado.md) | `c5e83d30e` | parcial |

@@ -1,10 +1,10 @@
 # Revisão integral de implementação — plano canônico 001–100
 
-> Data: 2026-08-28  
-> Baseline: `origin/main@c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`  
-> Escopo: `adm01-debug/Zapp_Web_V3`, schemas `zapp`/`evo` e fachada `public` em leitura  
-> Natureza: auditoria de estado; nenhum código de produto, objeto de banco ou serviço da
-> VPS foi alterado para produzir este relatório.
+> - Data: 2026-08-28
+> - Baseline: `origin/main@c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`
+> - Escopo: `adm01-debug/Zapp_Web_V3`, schemas `zapp`/`evo` e fachada `public` em leitura
+> - Natureza: auditoria de estado; nenhum código de produto, objeto de banco ou serviço da
+>   VPS foi alterado para produzir este relatório.
 
 Este documento registra a revisão pedida após a aprovação do plano. Ele é uma
 fotografia derivada, sem checkboxes, e não substitui o checklist editável em
