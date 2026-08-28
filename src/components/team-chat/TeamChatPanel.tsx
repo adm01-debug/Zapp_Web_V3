@@ -7,14 +7,7 @@ import { useAuth } from '@/features/auth';
 import { TeamConversation } from '@/hooks/useTeamChat';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  ArrowDown,
-  X,
-  Search,
-  Lock,
-  Shield,
-  Link2,
-} from 'lucide-react';
+import { ArrowDown, X, Search, Lock, Shield, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -384,7 +377,7 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
                         isEditing={s.editingId === msg.id}
                         editText={s.editText}
                         repliedMsg={repliedMsg ?? null}
-                        signedUrl={signedUrls.get(msg.id)}
+                        signedUrl={signedUrls.get(msg.id) ?? undefined}
                         reactions={aggregate(msg.id)}
                         isToggling={isToggling}
                         conversation={conversation}
