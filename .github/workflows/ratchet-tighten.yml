@@ -28,7 +28,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # PAT/App token permite que o push/PR dispare os checks obrigatórios.
+          # PAT de usuário permite que o push/PR dispare os checks obrigatórios e
+          # fornece identidade verificável via `gh api user` na limpeza conservadora.
           token: ${{ secrets.GH_TOKEN_ACTIONS }}
           fetch-depth: 0
 
@@ -160,6 +161,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
           TARGET_BRANCH: ${{ steps.tighten.outputs.branch }}
         run: |
+          set -euo pipefail
+
           CURRENT_URL="$(gh pr list \
             --repo "${{ github.repository }}" \
             --state open \
@@ -199,7 +202,22 @@ jobs:
           fi
 
           while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
+            NOTICE_MARKER="<!-- ratchet-tighten-stale-notice:${TARGET_BRANCH} -->"
+            COMMENTS_JSON="$(gh pr view "$EXISTING_URL" \
+              --repo "${{ github.repository }}" \
+              --json comments)"
+            if jq -e \
+              --arg marker "$NOTICE_MARKER" \
+              '.comments | any(.body; contains($marker))' \
+              <<< "$COMMENTS_JSON" >/dev/null; then
+              echo "Aviso do sucessor já existe; preservando comentário único: $EXISTING_URL"
+              continue
+            fi
+
             echo "Marcando ratchet anterior para revisão manual: $EXISTING_URL"
+            NOTICE_BODY="$(printf '%s\n%s' \
+              "$NOTICE_MARKER" \
+              "Há um ratchet mais novo em ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. Este PR foi preservado sem fechamento automático nem remoção de branch para permitir validação manual antes de qualquer limpeza.")"
             gh pr comment "$EXISTING_URL" \
-              --body "Há um ratchet mais novo em ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. Este PR foi preservado sem fechamento automático nem remoção de branch para permitir validação manual antes de qualquer limpeza."
+              --body "$NOTICE_BODY"
           done <<< "$EXISTING"
