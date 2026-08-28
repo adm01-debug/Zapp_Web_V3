@@ -133,8 +133,25 @@ jobs:
           AFTER_TOTAL: ${{ steps.tighten.outputs.after_total }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -euo pipefail
+
           BRANCH="${{ steps.tighten.outputs.branch }}"
-          EXISTING_URL="$(gh pr list --repo "${{ github.repository }}" --state open --head "$BRANCH" --json url --jq '.[0].url')"
+          REPO_OWNER="${{ github.repository_owner }}"
+          EXISTING_URL="$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --head "$BRANCH" \
+            --limit 1000 \
+            --json baseRefName,headRefName,headRepositoryOwner,isCrossRepository,url | \
+            jq -r \
+              --arg owner "$REPO_OWNER" \
+              --arg branch "$BRANCH" \
+              'first(.[] | select(
+                .headRefName == $branch and
+                .baseRefName == "main" and
+                .isCrossRepository == false and
+                .headRepositoryOwner.login == $owner
+              ) | .url) // empty')"
           if [ -n "$EXISTING_URL" ]; then
             echo "PR já existente: $EXISTING_URL"
             exit 0
@@ -163,25 +180,33 @@ jobs:
         run: |
           set -euo pipefail
 
+          REPO_OWNER="${{ github.repository_owner }}"
           CURRENT_URL="$(gh pr list \
             --repo "${{ github.repository }}" \
             --state open \
             --head "$TARGET_BRANCH" \
-            --limit 1 \
-            --json url \
-            --jq '.[0].url')"
+            --limit 1000 \
+            --json baseRefName,headRefName,headRepositoryOwner,isCrossRepository,url | \
+            jq -r \
+              --arg owner "$REPO_OWNER" \
+              --arg target "$TARGET_BRANCH" \
+              'first(.[] | select(
+                .headRefName == $target and
+                .baseRefName == "main" and
+                .isCrossRepository == false and
+                .headRepositoryOwner.login == $owner
+              ) | .url) // empty')"
           if [ -z "$CURRENT_URL" ]; then
             echo "::error::RATCHET_SUCCESSOR_MISSING — PR substituto não existe; PRs anteriores serão preservados"
             exit 1
           fi
 
           BOT_LOGIN="$(gh api user --jq .login)"
-          REPO_OWNER="${{ github.repository_owner }}"
           EXISTING="$(gh pr list \
             --repo "${{ github.repository }}" \
             --state open \
             --limit 1000 \
-            --json author,baseRefName,body,headRefName,headRepositoryOwner,url | \
+            --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,url | \
             jq -r \
               --arg bot "$BOT_LOGIN" \
               --arg owner "$REPO_OWNER" \
@@ -190,6 +215,7 @@ jobs:
                 .headRefName != $target and
                 (.headRefName | startswith("chore/ratchet-tighten-")) and
                 .baseRefName == "main" and
+                .isCrossRepository == false and
                 .author.login == $bot and
                 .headRepositoryOwner.login == $owner and
                 (((.body // "") | contains("<!-- ratchet-tighten-automation -->")) or
@@ -208,7 +234,7 @@ jobs:
               --json comments)"
             if jq -e \
               --arg marker "$NOTICE_MARKER" \
-              '.comments | any(.body; contains($marker))' \
+              'any(.comments[]?; ((.body // "") | contains($marker)))' \
               <<< "$COMMENTS_JSON" >/dev/null; then
               echo "Aviso do sucessor já existe; preservando comentário único: $EXISTING_URL"
               continue
