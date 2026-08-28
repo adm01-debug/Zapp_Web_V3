@@ -44,7 +44,8 @@ export function useTransferConversation({
           description: 'Não foi possível transferir o chat porque o contato é inválido.',
         } satisfies TransferConversationResult;
       }
-      let agentId: string;
+      let profileId: string;
+      let profileName = 'Agente';
       let current: {
         assigned_to: string | null;
         queue_id: string | null;
@@ -56,7 +57,18 @@ export function useTransferConversation({
       try {
         const { data: userData, error: authError } = await supabase.auth.getUser();
         if (authError || !userData.user?.id) throw authError ?? new Error('Agent unavailable');
-        agentId = userData.user.id;
+
+        // auth.uid() identifica auth.users; as FKs de agente usam o UUID surrogate de
+        // zapp.profiles. Eles não são iguais para todos os usuários do banco canônico.
+        const { data: profile, error: profileError } = await dbFrom('profiles')
+          .select('id, name')
+          .eq('user_id', userData.user.id)
+          .maybeSingle();
+        if (profileError || !profile?.id) {
+          throw profileError ?? new Error('Agent profile not visible');
+        }
+        profileId = profile.id;
+        profileName = profile.name ?? 'Agente';
 
         // INBOX-12: ler a atribuição atual antes da transferência para compor o
         // audit trail em conversation_transfers (from_agent_id/from_queue_id).
@@ -128,7 +140,7 @@ export function useTransferConversation({
           message_type: 'text',
           sender: 'agent',
           status: 'sent',
-          agent_id: agentId,
+          agent_id: profileId,
         });
         timelineErr = error;
       } catch (err) {
@@ -186,9 +198,9 @@ export function useTransferConversation({
         try {
           const { error } = await supabase.from('transfer_comments').insert({
             transfer_id: transferRow.id,
-            agent_id: agentId,
+            agent_id: profileId,
             author_instance: current.instance_name ?? '',
-            author_name: 'Agente',
+            author_name: profileName,
             content: message,
           });
           commentErr = error;

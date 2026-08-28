@@ -3,6 +3,9 @@ import { renderHook, act } from '@testing-library/react';
 import { useTransferConversation } from '../useTransferConversation';
 
 const mockGetUser = vi.hoisted(() => vi.fn());
+const mockProfilesMaybeSingle = vi.hoisted(() => vi.fn());
+const mockProfilesEq = vi.hoisted(() => vi.fn(() => ({ maybeSingle: mockProfilesMaybeSingle })));
+const mockProfilesSelect = vi.hoisted(() => vi.fn(() => ({ eq: mockProfilesEq })));
 const mockContactsMaybeSingle = vi.hoisted(() => vi.fn());
 const mockContactsEq = vi.hoisted(() => vi.fn(() => ({ maybeSingle: mockContactsMaybeSingle })));
 const mockContactsSelect = vi.hoisted(() => vi.fn(() => ({ eq: mockContactsEq })));
@@ -41,6 +44,11 @@ vi.mock('@/integrations/datasource/db', () => ({
         update: contactUpdateMocks.update,
       };
     }
+    if (table === 'profiles') {
+      return {
+        select: mockProfilesSelect,
+      };
+    }
     if (table === 'messages') {
       return {
         insert: mockMessagesInsert,
@@ -76,12 +84,17 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const CONTACT_ID = '550e8400-e29b-41d4-a716-446655440000';
-const AGENT_ID = '660e8400-e29b-41d4-a716-446655440000';
+const AUTH_USER_ID = '660e8400-e29b-41d4-a716-446655440000';
+const PROFILE_ID = '770e8400-e29b-41d4-a716-446655440000';
 
 describe('useTransferConversation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUser.mockResolvedValue({ data: { user: { id: AGENT_ID } }, error: null });
+    mockGetUser.mockResolvedValue({ data: { user: { id: AUTH_USER_ID } }, error: null });
+    mockProfilesMaybeSingle.mockResolvedValue({
+      data: { id: PROFILE_ID, name: 'Agente Teste' },
+      error: null,
+    });
     mockContactsMaybeSingle.mockResolvedValue({
       data: {
         assigned_to: 'agent-anterior',
@@ -119,6 +132,9 @@ describe('useTransferConversation', () => {
     expect(contactUpdateMocks.builder.eq).toHaveBeenCalledWith('assigned_to', 'agent-anterior');
     expect(contactUpdateMocks.builder.eq).toHaveBeenCalledWith('queue_id', 'queue-antiga');
     expect(mockMessagesInsert).toHaveBeenCalled();
+    expect(mockMessagesInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ agent_id: PROFILE_ID })
+    );
     expect(mockTransfersInsert).toHaveBeenCalled();
     expect(mockTransfersInsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -128,7 +144,9 @@ describe('useTransferConversation', () => {
         to_agent_id: 'agent-destino',
       })
     );
-    expect(mockTransferCommentsInsert).toHaveBeenCalled();
+    expect(mockTransferCommentsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ agent_id: PROFILE_ID, author_name: 'Agente Teste' })
+    );
     expect(outcome).toEqual({
       status: 'success',
       title: 'Chat transferido!',
@@ -304,6 +322,29 @@ describe('useTransferConversation', () => {
       'Transfer preflight failed:',
       expect.objectContaining({ message: 'contact visibility denied' })
     );
+  });
+
+  it('interrompe antes do contato quando o perfil surrogate do agente não é resolvido', async () => {
+    mockProfilesMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'profile visibility denied' },
+    });
+
+    const { result } = renderHook(() =>
+      useTransferConversation({ contactId: CONTACT_ID, whatsappConnectionId: 'wa-1' })
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.transferConversation>> | undefined;
+    await act(async () => {
+      outcome = await result.current.transferConversation('agent', 'agent-destino');
+    });
+
+    expect(outcome?.status).toBe('error');
+    expect(mockProfilesEq).toHaveBeenCalledWith('user_id', AUTH_USER_ID);
+    expect(mockContactsSelect).not.toHaveBeenCalled();
+    expect(contactUpdateMocks.update).not.toHaveBeenCalled();
+    expect(mockMessagesInsert).not.toHaveBeenCalled();
+    expect(mockTransfersInsert).not.toHaveBeenCalled();
   });
 
   it('retorna error quando a atualização principal falha e não grava falso sucesso', async () => {
