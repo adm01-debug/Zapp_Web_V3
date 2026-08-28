@@ -6,6 +6,48 @@ const log = getLogger('useTransferConversation');
 import { dbFrom } from '@/integrations/datasource/db';
 import { isValidUUID } from '@/utils/uuid';
 
+const TICKET_ENTROPY_BYTES = 8;
+let legacyTicketCounter = 0;
+
+function bytesToUpperHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
+
+function createTicketEntropy(): string {
+  const cryptoApi = typeof globalThis.crypto === 'undefined' ? undefined : globalThis.crypto;
+
+  if (typeof cryptoApi?.randomUUID === 'function') {
+    try {
+      const entropy = cryptoApi.randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase();
+      if (/^[0-9A-F]{16}$/.test(entropy)) return entropy;
+    } catch {
+      // Navegadores sem randomUUID funcional ainda podem oferecer getRandomValues.
+    }
+  }
+
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    try {
+      return bytesToUpperHex(cryptoApi.getRandomValues(new Uint8Array(TICKET_ENTROPY_BYTES)));
+    } catch {
+      // Último fallback para runtimes legados ou com Web Crypto bloqueada.
+    }
+  }
+
+  legacyTicketCounter = (legacyTicketCounter + 1) & 0xffff;
+  const randomPart = Math.floor(Math.random() * 0x1000000000000)
+    .toString(16)
+    .padStart(12, '0');
+  const counterPart = legacyTicketCounter.toString(16).padStart(4, '0');
+  return `${randomPart}${counterPart}`.toUpperCase();
+}
+
+function createTransferTicketNumber(): string {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  return `T-${timestamp}-${createTicketEntropy()}`;
+}
+
 interface UseTransferConversationOptions {
   contactId: string;
   whatsappConnectionId: string | undefined;
@@ -174,7 +216,7 @@ export function useTransferConversation({
             remote_jid: current.remote_jid ?? '',
             source_instance: current.instance_name ?? '',
             target_instance: current.instance_name ?? '',
-            ticket_number: `T-${Date.now().toString(36).toUpperCase()}`,
+            ticket_number: createTransferTicketNumber(),
             created_at: now,
             updated_at: now,
           })
