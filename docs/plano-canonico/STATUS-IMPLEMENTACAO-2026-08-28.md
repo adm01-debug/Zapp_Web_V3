@@ -2,7 +2,7 @@
 
 > Data: 2026-08-28  
 > Baseline: `origin/main@c5e83d30e29a74100af7bbcf60b5dee4acd5efd7`  
-> Escopo: `adm01-debug/Zapp_Web_V3`, schemas `zapp` e `evo` em leitura  
+> Escopo: `adm01-debug/Zapp_Web_V3`, schemas `zapp`/`evo` e fachada `public` em leitura  
 > Natureza: auditoria de estado; nenhum código de produto, objeto de banco ou serviço da
 > VPS foi alterado para produzir este relatório.
 
@@ -199,4 +199,3 @@ As duas lacunas descobertas na revisão foram incorporadas sem criar etapas `101
 
 Cada item deve sair em branch/worktree e PR próprios. Nenhuma limpeza ou mudança de
 banco é autorizada por este relatório.
-
