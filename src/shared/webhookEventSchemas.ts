@@ -305,24 +305,55 @@ export type ConversationEventRow = z.infer<typeof conversationEventRowSchema>;
 // Conversation transfer row
 // ─────────────────────────────────────────────
 
-/** Zod schema for a zapp.conversation_transfers row tracking agent/queue handoff lifecycle (pending→active→closed). */
-export const conversationTransferRowSchema = z.object({
+const conversationTransferCommonShape = {
   id: z.string().uuid(),
-  source_conversation_id: z.string().uuid(), // non-nullable per DB constraint
   from_agent_id: z.string().nullable(),
   to_agent_id: z.string().nullable(),
   from_queue_id: z.string().nullable(),
   to_queue_id: z.string().nullable(),
+  ticket_number: z.string(),
+  contact_id: z.string().nullable(),
+  contact_name: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+};
+
+const canonicalConversationTransferRowSchema = z.object({
+  ...conversationTransferCommonShape,
+  source_conversation_id: z.string().uuid().nullable(),
+  status: z.enum([
+    'pending',
+    'accepted',
+    'in_progress',
+    'completed',
+    'returned',
+    'rejected',
+    'expired',
+    'cancelled',
+  ]),
+  transfer_type: z.enum(['internal', 'direct']),
+  priority: z.number().int().min(1).max(4),
+  remote_jid: z.string(),
+  created_at: z.string(),
+});
+
+// Compatibilidade de leitura durante o rollout: snapshots/API legados ainda podem
+// trazer o vocabulário anterior e colunas nullable. Escritas novas seguem apenas o
+// contrato canônico acima; remover este ramo exige evidência de zero produtores legados.
+const legacyConversationTransferRowSchema = z.object({
+  ...conversationTransferCommonShape,
+  source_conversation_id: z.string().uuid(),
   status: z.enum(['pending', 'active', 'closed', 'cancelled', 'rejected']),
   transfer_type: z.enum(['queue', 'agent', 'bot', 'external']),
   priority: z.number().int().nullable(),
-  ticket_number: z.string(),
-  contact_id: z.string().nullable(),
   remote_jid: z.string().nullable(),
-  contact_name: z.string().nullable(),
-  metadata: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string().nullable(),
 });
+
+/** Zod schema for canonical zapp.conversation_transfers rows with a read-only legacy compatibility branch. */
+export const conversationTransferRowSchema = z.union([
+  canonicalConversationTransferRowSchema,
+  legacyConversationTransferRowSchema,
+]);
 
 // ─────────────────────────────────────────────
 // Team message row (zapp.team_messages)
