@@ -36,6 +36,11 @@ const checks = [
     "falta o gate explícito de convergência Swarm×imagem",
   ],
   [
+    /if: \$\{\{ format\('\{0\}', vars\.ENFORCE_CONVERGENCE\) != '0' \}\}/,
+    workflow,
+    "gate de convergência deve normalizar variável ausente antes de comparar com 0",
+  ],
+  [
     /docker service ps "\$SVC" --filter desired-state=running --no-trunc --format '\{\{\.ID\}\}\|\{\{\.CurrentState\}\}\|\{\{\.Error\}\}\|\{\{\.Image\}\}'/,
     workflow,
     "convergência não valida as tasks desired-state=running",
