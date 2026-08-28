@@ -680,6 +680,8 @@ a concluído.
 - [ ] Definir unidade transacional para contato, mensagem de timeline, transferência e comentário.
 - [ ] Garantir idempotency key e comportamento de retry após falha em cada ponto.
 - [ ] Correlacionar realtime, audit log e histórico administrativo.
+- [ ] Resolver `auth.uid()` para `profiles.id` antes de persistir FKs de agente e provar o
+  caso em que as duas identidades são diferentes.
 
 **Concluída quando:** falha parcial não deixa estado contraditório ou sucesso ambíguo.
 
@@ -852,6 +854,8 @@ a concluído.
 - [ ] Fazer falha antes de `MAX_ATTEMPTS` permanecer retryável, nunca `success`.
 - [ ] Garantir transição final para erro/DLQ e não duplicar relatório entregue.
 - [ ] Testar falha temporária, falha permanente, concorrência de claim e retomada.
+- [ ] Garantir que `dryRun` não faça claim, não incremente tentativas e não altere a
+  outbox de produção.
 
 **Concluída quando:** nenhuma entrega falha é persistida como sucesso.
 

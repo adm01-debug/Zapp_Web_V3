@@ -95,7 +95,7 @@ porque o PR `#1442` possui Axe verde, embora o aceite completo ainda falte.
 | Etapa | Status | Evidência/resultado atual | Falta para fechar |
 |---|---|---|---|
 | 041 | Aberta | Transferência mostra sucesso parcial como pleno; `connection` é mascarada por cast e pode cair no ramo de fila | Bloquear tipo sem contrato, aguardar a operação e só confirmar após trilha mínima |
-| 042 | Aberta | Fluxo faz writes independentes em contato, mensagem, transferência e comentário | Operação tipada, atômica ou compensável, com idempotência |
+| 042 | Aberta | Fluxo faz writes independentes e usa `auth.uid()` onde a FK exige `profiles.id` | Operação tipada, atômica/compensável, identidade correta e idempotência |
 | 043 | Aberta | Status do ticket é overlay/stub em `localStorage` | Backend como fonte de verdade, com reload e multiusuário |
 | 044 | Aberta | Não há lock, versão ou compare-and-swap no fluxo | Regra de conflito e teste multiaba/multiagente |
 | 045 | Aberta | Hook expõe `delete-instance`; router retorna `unknown_action` | Implementar handler ou remover a ação do contrato/UI |
@@ -114,7 +114,7 @@ porque o PR `#1442` possui Axe verde, embora o aceite completo ainda falte.
 | 053 | Aberta | `connection-health-check` usa `fetch` direto à Evolution | Gateway padrão e testes 200/401/404/5xx |
 | 054 | Aberta | Dois dispatchers WhatsApp contornam gateway | Unificar autenticação, timeout, retry e envio |
 | 055 | Parcial | Telemetria detecta fallback; não existe fallback funcional | Implementar ou rejeitar formalmente no contrato |
-| 056 | Aberta | Falha retryável de relatório pode ser registrada como `success` | Estado retryável honesto, teste e prova do cron |
+| 056 | Aberta | Falha retryável pode virar `success`; `dryRun` pode consumir claims/tentativas | Estado retryável honesto, dry-run não mutante, teste e prova do cron |
 | 057 | Aberta | Scheduler TalkX compensa; início manual fire-and-forget não | Caminhos simétricos com confirmação/rollback |
 | 058 | Aberta | Sicoob fabrica identidade instável com `Date.now()`/`message_id` | Chave determinística e idempotência por remetente |
 | 059 | Parcial | Backend Gmail persiste anexos; frontend não os consome | Integrar leitura/download e validar OAuth fim a fim |
