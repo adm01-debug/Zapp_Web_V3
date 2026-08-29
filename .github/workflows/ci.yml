@@ -31,7 +31,7 @@ env:
 
 jobs:
   lockfile:
-    name: Verify Lockfile
+    name: Lockfile e proteções da camada de dados
     # Piloto de migração pra ubuntu-latest (auditoria 2026-08-21): o repo está
     # PÚBLICO hoje (confirmado via `gh repo view --json visibility` — a
     # premissa "repo privado + cota billing esgotada" de 2026-08-18 não se
@@ -65,31 +65,32 @@ jobs:
             git fetch origin ${{ github.base_ref }}
             BASE="origin/${{ github.base_ref }}"
             LOCK_DIFF=$(git diff "$BASE"...HEAD --name-only -- bun.lock)
-            OLD_RAW=$(git show "$BASE:package.json" 2>/dev/null || echo '{}')
-            if echo "$OLD_RAW" | jq '.' >/dev/null 2>&1; then
-              OLD_PKG="$OLD_RAW"
-            else
-              OLD_PKG=$(echo "$OLD_RAW" | base64 -d 2>/dev/null || echo '{}')
+            if ! OLD_RAW=$(git show "$BASE:package.json" 2>/dev/null); then
+              echo "::error::Base package.json could not be read from $BASE."
+              exit 1
             fi
             NEW_PKG=$(cat package.json)
           else
             LOCK_DIFF=$(git diff HEAD^ HEAD --name-only -- bun.lock 2>/dev/null || true)
-            OLD_RAW=$(git show "HEAD^:package.json" 2>/dev/null || echo '{}')
-            if echo "$OLD_RAW" | jq '.' >/dev/null 2>&1; then
-              OLD_PKG="$OLD_RAW"
-            else
-              OLD_PKG=$(echo "$OLD_RAW" | base64 -d 2>/dev/null || echo '{}')
+            if ! OLD_RAW=$(git show "HEAD^:package.json" 2>/dev/null); then
+              echo "::error::Base package.json could not be read from HEAD^."
+              exit 1
             fi
             NEW_PKG=$(cat package.json)
           fi
+          if ! OLD_PKG=$(printf '%s' "$OLD_RAW" | node scripts/normalize-package-json-input.mjs); then
+            echo "::error::Base package.json is neither valid JSON nor a valid legacy base64-encoded JSON object."
+            exit 1
+          fi
           # Compare only the dependency fields — scripts/version changes are irrelevant.
-          # If OLD_PKG is not valid JSON (e.g. base branch has corrupted content), skip the
-          # comparison entirely rather than comparing against a synthetic empty object, which
-          # would always appear as a "dep change" and produce a false-positive failure.
+          # Defense in depth: both the trusted base and the candidate must be JSON objects.
           if ! echo "$OLD_PKG" | jq empty 2>/dev/null; then
-            echo "::warning::Base package.json could not be parsed as JSON — lockfile diff skipped."
-            echo "Lockfile consistency check skipped (base package.json unreadable)."
-            exit 0
+            echo "::error::Base package.json could not be parsed as JSON — lockfile consistency cannot be proven."
+            exit 1
+          fi
+          if ! echo "$NEW_PKG" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "::error::Candidate package.json is not a valid JSON object."
+            exit 1
           fi
           OLD_DEPS=$(echo "$OLD_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
           NEW_DEPS=$(echo "$NEW_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
@@ -100,6 +101,96 @@ jobs:
             exit 1
           fi
           echo "Lockfile consistency check passed."
+
+      - name: Testes de regressão dos gates de lockfile e camada de dados
+        run: >-
+          node --test
+          scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
+          scripts/lib/__tests__/normalize-package-json-input.test.mjs
+          scripts/lib/__tests__/ratchet-tighten-workflow.test.mjs
+
+      - name: Monotonicidade do baseline da camada de dados (bloqueante)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_BRANCH"
+          node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "origin/$BASE_BRANCH"
+
+      - name: Contagens do código dentro do baseline candidato (bloqueante)
+        run: node scripts/check-data-layer.mjs
+
+  typescript-gates:
+    name: Gates TypeScript (hospedado, bloqueante)
+    # Os gates são herméticos e não recebem secrets. Dois runners diferentes
+    # do pool vps-zapp abortaram o tsc com SIGABRT após ~60 s. Para um dos SHAs
+    # afetados, o mesmo gate passou no ubuntu-latest; no outro incidente, o
+    # rerun passou em um terceiro runner self-hosted. Isolar estes passos no
+    # runner hospedado remove a fonte observada de falso vermelho sem retry e
+    # sem relaxar o comportamento fail-closed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lockfile
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Preparar Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Restaurar cache de dependências Bun
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Instalar dependências sem scripts de ciclo de vida
+        run: bun install --ignore-scripts
+
+      - name: Testes de regressão do gate TypeScript (bloqueante)
+        run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
+
+      - name: Verificação TypeScript por ratchet (bloqueante)
+        run: node scripts/check-tsc-ratchet.mjs
+
+      - name: Verificação TypeScript dos componentes de chat (estrita e bloqueante)
+        run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
+
+      - name: Gate contra deriva de ts-nocheck (bloqueante)
+        run: node scripts/check-ts-nocheck.mjs
+
+  required-merge-gate:
+    # A proteção de main exige este contexto nominal. O fan-in preserva o
+    # contrato existente e torna tanto o lockfile/ratchet monotônico quanto os
+    # gates TypeScript hospedados obrigatórios para merge.
+    name: Verify Lockfile
+    runs-on: ubuntu-latest
+    needs: [lockfile, typescript-gates]
+    if: always()
+    steps:
+      - name: Confirmar proteções obrigatórias
+        env:
+          LOCKFILE_RESULT: ${{ needs.lockfile.result }}
+          TYPESCRIPT_RESULT: ${{ needs.typescript-gates.result }}
+        run: |
+          set -euo pipefail
+          if [ "$LOCKFILE_RESULT" != "success" ] || [ "$TYPESCRIPT_RESULT" != "success" ]; then
+            echo "::error title=Required merge guards::lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
+            exit 1
+          fi
+          echo "Required merge guards passed: lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
 
   quality:
     name: Quality diagnostics
@@ -210,18 +301,6 @@ jobs:
           META_URL: ${{ secrets.ZAPP_META_URL }}
           META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
         run: node scripts/check-types-schemas.mjs
-
-      - name: TypeScript gate regression tests (blocking)
-        run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
-
-      - name: TypeScript check (ratchet, blocking)
-        run: node scripts/check-tsc-ratchet.mjs
-
-      - name: TypeScript check — chat components (blocking, strict)
-        run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
-
-      - name: ts-nocheck drift gate (blocking)
-        run: node scripts/check-ts-nocheck.mjs
 
   # audit-contract-scan: SEMPRE corre (inclusive em PRs de fork sem secrets).
   # Valida: edge function invoke() tem diretório correspondente + script roda sem

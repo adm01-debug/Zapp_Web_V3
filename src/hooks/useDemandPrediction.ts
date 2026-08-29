@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dbFrom } from '@/integrations/datasource/db';
 import { queryKeys } from '@/services/api/queryKeys';
 
@@ -18,7 +18,7 @@ export interface DemandInsights {
   maxPredicted: number;
   avgPredicted: number;
   currentActual: number;
-  trend: 'up' | 'down';
+  trend: 'up' | 'down' | 'stable';
   peakTime: string;
   capacityRisk: boolean;
 }
@@ -54,12 +54,20 @@ function generatePredictionFromHistory(messageHistory: { hour: number; count: nu
 
 /** Hook: use Demand Prediction. */
 export function useDemandPrediction(externalData?: PredictionPoint[], currentCapacity = 35) {
+  const queryClient = useQueryClient();
+  const previousExternalData = useRef(externalData);
+
   const { data: messageHistory = [] } = useQuery({
     queryKey: queryKeys.demandPrediction.history(),
-    queryFn: async () => {
+    // Dados externos já são a fonte completa desta renderização. Manter a
+    // query ativa faria uma leitura redundante e deixaria requests/logs em voo
+    // mesmo depois do consumidor desmontar.
+    enabled: externalData === undefined,
+    queryFn: async ({ signal }) => {
       const { data, error } = await dbFrom('evolution_messages')
         .select('created_at')
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .abortSignal(signal);
       if (error) throw error;
 
       const hourCounts = new Map<number, number[]>();
@@ -77,13 +85,45 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
     staleTime: 5 * 60 * 1000,
   });
 
-  const data = externalData || generatePredictionFromHistory(messageHistory);
+  useEffect(() => {
+    const queryWasEnabled = previousExternalData.current === undefined;
+    previousExternalData.current = externalData;
+
+    // enabled=false impede novas consultas, mas não cancela uma já em voo. O
+    // efeito vem após useQuery para que as opções do observer estejam atuais
+    // antes de isActive(). Como o cancelamento afeta toda a query, só interrompe
+    // quando nenhum observer habilitado permanece.
+    if (queryWasEnabled && externalData !== undefined) {
+      const queryKey = queryKeys.demandPrediction.history();
+      const sharedQuery = queryClient.getQueryCache().find({ queryKey, exact: true });
+
+      if (sharedQuery && !sharedQuery.isActive()) {
+        void queryClient.cancelQueries({ queryKey, exact: true });
+      }
+    }
+  }, [externalData, queryClient]);
+
+  const data = externalData ?? generatePredictionFromHistory(messageHistory);
 
   const insights = useMemo<DemandInsights>(() => {
     const predictions = data.filter(d => d.isPrediction);
+    const currentActual = data.find(d => !d.isPrediction && d.actual !== undefined)?.actual ?? 0;
+
+    // Dados externos podem estar vazios ou conter apenas pontos históricos.
+    // Mantém o painel renderizável e as métricas finitas até haver previsões.
+    if (predictions.length === 0) {
+      return {
+        maxPredicted: 0,
+        avgPredicted: 0,
+        currentActual,
+        trend: 'stable',
+        peakTime: '',
+        capacityRisk: false,
+      };
+    }
+
     const maxPredicted = Math.max(...predictions.map(p => p.predicted));
     const avgPredicted = predictions.reduce((a, b) => a + b.predicted, 0) / predictions.length;
-    const currentActual = data.find(d => !d.isPrediction && d.actual !== undefined)?.actual || 0;
     const trend = predictions[predictions.length - 1].predicted > currentActual ? 'up' : 'down';
     const peakTime = predictions.find(p => p.predicted === maxPredicted)?.time || '';
     const capacityRisk = maxPredicted > currentCapacity;
