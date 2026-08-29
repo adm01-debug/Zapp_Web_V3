@@ -10,6 +10,7 @@
  *
  * Covered:
  *   - data returned equals externalData when provided
+ *   - the datasource query remains enabled when externalData is omitted
  *   - insights.maxPredicted is the maximum predicted value among isPrediction=true points
  *   - insights.avgPredicted is the average of predicted values among isPrediction=true points
  *   - insights.currentActual is the actual value of the first non-prediction point
@@ -21,7 +22,7 @@
  *   - default currentCapacity is 35
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { useDemandPrediction, type PredictionPoint } from '../useDemandPrediction';
@@ -92,6 +93,16 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(dbFromMock).not.toHaveBeenCalled();
     expect(selectMock).not.toHaveBeenCalled();
     expect(gteMock).not.toHaveBeenCalled();
+  });
+
+  it('queries the datasource when externalData is omitted', async () => {
+    renderHook(() => useDemandPrediction(), { wrapper: makeWrapper() });
+
+    await waitFor(() => {
+      expect(dbFromMock).toHaveBeenCalledWith('evolution_messages');
+    });
+    expect(selectMock).toHaveBeenCalledWith('created_at');
+    expect(gteMock).toHaveBeenCalledOnce();
   });
 });
 
