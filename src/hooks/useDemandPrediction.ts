@@ -56,6 +56,10 @@ function generatePredictionFromHistory(messageHistory: { hour: number; count: nu
 export function useDemandPrediction(externalData?: PredictionPoint[], currentCapacity = 35) {
   const { data: messageHistory = [] } = useQuery({
     queryKey: queryKeys.demandPrediction.history(),
+    // Dados externos já são a fonte completa desta renderização. Manter a
+    // query ativa faria uma leitura redundante e deixaria requests/logs em voo
+    // mesmo depois do consumidor desmontar.
+    enabled: externalData === undefined,
     queryFn: async () => {
       const { data, error } = await dbFrom('evolution_messages')
         .select('created_at')

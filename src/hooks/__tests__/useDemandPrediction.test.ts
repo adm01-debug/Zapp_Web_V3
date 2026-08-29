@@ -20,11 +20,27 @@
  *   - insights.capacityRisk is false when maxPredicted <= currentCapacity
  *   - default currentCapacity is 35
  */
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { useDemandPrediction, type PredictionPoint } from '../useDemandPrediction';
+
+const { dbFromMock, selectMock, gteMock } = vi.hoisted(() => {
+  const gte = vi.fn(async () => ({ data: [], error: null }));
+  const select = vi.fn(() => ({ gte }));
+  const dbFrom = vi.fn(() => ({ select }));
+
+  return { dbFromMock: dbFrom, selectMock: select, gteMock: gte };
+});
+
+vi.mock('@/integrations/datasource/db', () => ({ dbFrom: dbFromMock }));
+
+beforeEach(() => {
+  dbFromMock.mockClear();
+  selectMock.mockClear();
+  gteMock.mockClear();
+});
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -68,6 +84,14 @@ describe('useDemandPrediction — data passthrough', () => {
       { wrapper: makeWrapper() }
     );
     expect(result.current.data).toBe(EXTERNAL_DATA);
+  });
+
+  it('does not query the datasource when externalData is provided', () => {
+    renderHook(() => useDemandPrediction(EXTERNAL_DATA), { wrapper: makeWrapper() });
+
+    expect(dbFromMock).not.toHaveBeenCalled();
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(gteMock).not.toHaveBeenCalled();
   });
 });
 
