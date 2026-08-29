@@ -258,16 +258,18 @@ O repositório possui um **grafo de conhecimento** em `graphify-out/` (Apache 2.
 - **Top god nodes (rebuild 2026-08-20):** `cn()` (982°), `Button` (504°), `supabase` (412°), `Badge` (366°), `Card` (329°), `CardContent` (316°), `CardHeader` (257°), `getLogger()` (257°), `CardTitle` (255°), `err()` (213°)
 - **Limitação conhecida do parser (NÃO é bug):** 31 arquivos `.tsx` saem como "partially extracted" — todos por **`&` literal em texto JSX** (ex.: `VoIP & Chamadas`, `Conexões & Integrações`, `Privacidade & LGPD`). O tree-sitter do graphify aborta no `&` cru; esbuild/tsc/React aceitam (build de prod passa). Consultas a esses componentes podem faltar nós/arestas a partir da 1ª linha com `&`. **Não** trocar por `&amp;` — é churn por falso positivo de ferramenta.
 - **MCP server:** 8 tools (`graphify_query`, `graphify_path`, `graphify_db_crossref`, etc.)
+- **Wiki do grafo:** `graphify export wiki` (≤1 s a partir do `graph.json` existente) gera `graphify-out/wiki/` — ~1,5 mil artigos (1 por comunidade) + `index.md` como ponto de entrada para navegação ampla de agentes. Regenerar junto com o rebuild. Não versionado (coberto pelo ignore `graphify-out/*`).
+- **Watch (`graphify watch .`) — NÃO usar como daemon neste repo (testado 2026-08-25):** requer `watchdog` no venv do tool; debounce 3 s; cada mudança dispara **re-extração AST completa** (~2,8 mil arquivos — o cache não é aproveitado entre builds). Pior: o rebuild escreve cache/saídas no próprio diretório vigiado e **re-dispara o watcher em loop** (observado: `4010 file(s) changed` logo após o 1º rebuild → 2º rebuild imediato). Fluxo canônico permanece `graphify update .` pós-commit (~40 s nesta máquina; ~2,5 min no container) + `graphify export wiki`.
 
 **Sempre consultar o grafo antes de `search_files`/grep.**
 
-Regenerar (via container claude-code, ~2,5 min, sem custo de API):
+Regenerar (via container claude-code, ~2,5 min, sem custo de API) + wiki:
 ```sh
-. /workspace/.local/env.sh && cd /workspace/repos/zapp-web-v3 && graphify update . --force
+. /workspace/.local/env.sh && cd /workspace/repos/zapp-web-v3 && graphify update . --force && graphify export wiki
 ```
 Consultar: `graphify explain "<no>"` · `graphify path "A" "B"`
 
-`graph.json` (35 MB) e `graph.html` **não** são versionados — só `GRAPH_REPORT.md` e `manifest.json`.
+`graph.json` (35 MB), `graph.html` e `wiki/` **não** são versionados — `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json` e `.graphify_labels.json.sig` são preservados.
 
 ---
 
