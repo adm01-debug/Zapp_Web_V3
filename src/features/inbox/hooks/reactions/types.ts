@@ -17,4 +17,6 @@ export interface UseMessageReactionsOptions {
   senderType?: 'contact' | 'agent';
   refreshKey?: string;
   disableRealtime?: boolean;
+  /** Origem da interação para emitir um único evento de analytics com semântica correta. */
+  reactionSource?: 'bar' | 'quick';
 }

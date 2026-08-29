@@ -1,12 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createZappAdminClient } from "../_shared/db-client.ts";
-import { handleCors, jsonResponse } from "../_shared/validation.ts";
-import { requireAdminOrSupervisor } from "../_shared/auth.ts";
+import { createZappAdminClient } from "../../_shared/db-client.ts";
+import { handleCors, jsonResponse } from "../../_shared/validation.ts";
+import { requireAdminOrSupervisor } from "../../_shared/auth.ts";
 
 /**
  * zapp-google-calendar-sync — status da integração Google Calendar (G1).
  *
- * ADR 2026-08-18 (ver ADR.md neste diretório): o chamador de front foi
+ * ADR 2026-08-18 (ver ADR-2026-08-18.md neste diretório): o chamador de front foi
  * REMOVIDO — não existem credenciais de Google Calendar no ambiente
  * (.env.required só tem GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET para OAuth do
  * Gmail; zapp.google_calendar_config vazia no DB vivo; sem service account,
@@ -71,11 +71,11 @@ Deno.serve(async (req) => {
         req,
       );
     }
-    // Credenciais presentes mas pipeline de sync não implantado — ver ADR.md.
+    // Credenciais presentes mas pipeline de sync não implantado — ver ADR-2026-08-18.md.
     // Estado inalcançável hoje: a config exige escrita service_role e não há
     // credenciais reais no ambiente.
     return jsonResponse(
-      statusBody("error", { message: "pipeline de sync indisponível — ver ADR.md no diretório da edge" }),
+      statusBody("error", { message: "pipeline de sync indisponível — ver ADR-2026-08-18.md no diretório da edge" }),
       200,
       req,
     );

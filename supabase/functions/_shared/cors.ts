@@ -1,20 +1,33 @@
+// Allowlist de origens — auditoria PLANO-100 etapa 29-backlog (2026-08-25):
+//   REMOVIDO 'https://supabase.com' e pattern /^https:\/\/.*\.supabase\.co$/ —
+//     produção é self-hosted em *.atomicabr.com.br (ARQUITETURA_CANONICA.md);
+//     as únicas referências a supabase.co no src/ são DETECÇÃO de ambiente
+//     (whatsappAdapter/BackendDiagnostics), nunca origem servindo o app.
+//   REMOVIDO pattern zapp-web-v3-git-*-.vercel.app — Vercel aposentada para o
+//     ZAPP em 2026-08-20 (team juca1 sem nenhum projeto zapp; verificado ao vivo).
+//   ADICIONADO zappweb.app.br + www.zappweb.app.br — aliases de produção que
+//     servem o MESMO bundle (ARQUITETURA_CANONICA.md, verificado byte-a-byte);
+//     sem ACAO pra eles o app aberto nesses hosts não chama edge functions.
+//   MANTIDO lovable.dev (exact + pattern) — src/lib/buildVersion.ts ainda
+//     detecta beta.lovable.dev como ambiente de preview vivo.
+//   MANTIDO promobrindes.com.br (empresa) — domínio próprio de 1ª parte,
+//     sem documentação de aposentadoria.
 const ALLOWED_ORIGINS = [
   'https://nexus.promobrindes.com.br',
   'https://app.promobrindes.com.br',
   'https://promobrindes.com.br',
   'https://zapp.atomicabr.com.br',
+  'https://zappweb.app.br',
+  'https://www.zappweb.app.br',
   'https://atomicabr.com.br',
   'https://lovable.dev',
-  'https://supabase.com',
 ];
 const ALLOWED_PATTERNS = [
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
   /^https:\/\/.*\.lovable\.dev$/,
-  /^https:\/\/.*\.supabase\.co$/,
   /^https:\/\/.*\.promobrindes\.com\.br$/,
   /^https:\/\/.*\.atomicabr\.com\.br$/,
-  /^https:\/\/zapp-web-v3-git-[a-z0-9-]+-juca1\.vercel\.app$/,
 ];
 const ALLOWED_HEADERS = [
   'authorization', 'x-client-info', 'apikey', 'content-type',

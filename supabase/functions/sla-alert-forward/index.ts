@@ -13,6 +13,7 @@ import { createZappAdminClient } from '../_shared/db-client.ts';
 import { z } from 'https://esm.sh/zod@3.23.8';
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 import { requireUser } from '../_shared/auth.ts';
+import { WebhookSecurityService } from '../_shared/hmac-validation.ts';
 import { checkRateLimit } from '../_shared/validation.ts';
 import { parseOrReject } from '../_shared/contract-kit.ts';
 import { CONTRACT_SCHEMAS } from '../_shared/contract-schemas.ts';
@@ -29,21 +30,6 @@ const PayloadSchema = z.object({
 });
 
 type AlertPayload = z.infer<typeof PayloadSchema>;
-
-async function hmacSha256Hex(secret: string, body: string): Promise<string> {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 function jsonResponse(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -118,7 +104,8 @@ Deno.serve(async (req) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const secret = Deno.env.get('SLA_ALERT_WEBHOOK_SECRET');
     if (secret) {
-      headers['X-Lovable-Signature'] = `sha256=${await hmacSha256Hex(secret, body)}`;
+      // Assinatura via módulo canônico — signPayload já devolve "sha256=<hex>" (HMAC-SHA256).
+      headers['X-Lovable-Signature'] = await new WebhookSecurityService(secret).signPayload(body);
     }
 
     const ctrl = new AbortController();

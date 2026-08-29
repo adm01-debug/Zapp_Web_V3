@@ -3,7 +3,7 @@
  * Encapsula useVirtualizer com estimateSize, overscan e scrollMargin.
  */
 import { useRef, useLayoutEffect, useState } from 'react';
-import { useVirtualizer, type VirtualizerOptions } from '@tanstack/react-virtual';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface UseVirtualRowsOptions<T> {
   items: T[];
@@ -29,7 +29,7 @@ export function useVirtualRows<T>({
     const ro = new ResizeObserver(measure);
     ro.observe(container);
     return () => ro.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length > 0]);
 
   const virtualizer = useVirtualizer({
@@ -39,7 +39,7 @@ export function useVirtualRows<T>({
     overscan,
     measureElement: (el) => el.getBoundingClientRect().height,
     scrollMargin,
-  } as VirtualizerOptions<HTMLDivElement, HTMLDivElement>);
+  });
 
   return {
     scrollContainerRef,

@@ -77,10 +77,7 @@ function makeBuilder(mode: 'resolve' | 'hold') {
         }
         signalRef?.addEventListener('abort', abortError, { once: true });
         if (mode === 'resolve') {
-          setTimeout(
-            () => resolve({ data: crmData('5511912345678'), error: null }),
-            5
-          );
+          setTimeout(() => resolve({ data: crmData('5511912345678'), error: null }), 5);
         }
         // mode 'hold': nunca resolve — só rejeita via abort (simula fetch em voo)
       });
@@ -176,9 +173,7 @@ describe('useExternalContact360 — abort plumbing (signal → dbGet → builder
     expect(mockLogger.error).not.toHaveBeenCalled();
     expect(mockLogger.warn).not.toHaveBeenCalled();
     // Cancelamento não pode ser convertido em sucesso com `null` no cache.
-    expect(
-      queryClient.getQueryData(['external-contact-360', '5511912345678'])
-    ).toBeUndefined();
+    expect(queryClient.getQueryData(['external-contact-360', '5511912345678'])).toBeUndefined();
   });
 
   it('backward compat: builder sem abortSignal (mock/Promise pura) resolve normalmente', async () => {

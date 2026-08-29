@@ -2,7 +2,7 @@
  * STEP 4B Migration: ai-classify-tickets now forwards to unified ai-router
  */
 
-import { handleCors, errorResponse, errorEnvelope, getCorsHeaders } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, getCorsHeaders, checkRateLimit, getClientIP } from "../_shared/validation.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 
@@ -13,6 +13,14 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("authorization");
     if (!authHeader) return errorEnvelope("unauthorized", "Unauthorized", 401, req);
+
+    // Rate limit por-isolate, chaveado por IP: este proxy NÃO verifica o JWT
+    // (auth real é no ai-router), então o sub não é confiável aqui. 120/min é
+    // o limite mais folgado do repo (zapp-email-inbound-webhook) — protege o
+    // parse + forward e a conta de IA contra flood sem apertar escritório
+    // atrás de NAT. PLANO-100 etapa 28 (rate-limit unificado).
+    const rl = checkRateLimit(`ai-classify-tickets:${getClientIP(req)}`, 120, 60_000);
+    if (!rl.allowed) return errorEnvelope("rate_limit_exceeded", "Rate limit exceeded", 429, req);
 
     const raw = await req.json().catch(() => null);
     const parsed = parseOrReject("ai-classify-tickets", CONTRACT_SCHEMAS["ai-classify-tickets"], req, raw, {
