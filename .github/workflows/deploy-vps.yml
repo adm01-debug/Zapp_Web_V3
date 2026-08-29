@@ -439,6 +439,14 @@ jobs:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 10
     steps:
+      - name: "🔧 Preparação — garante bc no runner (fail-closed)"
+        run: |
+          if ! command -v bc >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq bc
+          fi
+          command -v bc >/dev/null 2>&1 || { echo "::error::BC_UNAVAILABLE — não foi possível obter bc; abortando (fail-closed)"; exit 1; }
+          bc --version | head -1
+
       - name: "1/4 — TTM www.zappweb.app.br (< 3.0s)"
         run: |
           RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
@@ -505,3 +513,61 @@ jobs:
             case "$ALLOW" in "*"|"$ORIGIN") ;; *) echo "::error::CORS_HEADER_AUSENTE em $URL"; exit 1 ;; esac
           done
           echo "✅ CORS crítico disponível para o frontend"
+
+      # ============================================================
+      # ETAPA 73 (plano-100, 2026-08-25): gate de proteção de rollback.
+      # A retenção GHCR (keep 30 = 10 deploys) roda no BUILD do próximo
+      # deploy; a SHA daqui fica naturalmente segura nessa janela, mas
+      # blindar um rollback além disso exige entrada em
+      # infra/ghcr-protected-tags.txt — que só vale commitada (é lida no
+      # build seguinte). Auto-commit pela CI foi avaliado e REJEITADO:
+      # quebraria a política do repo (PR + merge humano) e o permissions
+      # contents: read. Este step VERIFICA e ALERTA (nunca muta):
+      # sentinela greppável ROLLBACK_UNPROTECTED + alerta por execução
+      # (mesmo canal/best-effort do alerta de retenção do job build —
+      # nunca bloqueia deploy verde).
+      # Roda SÓ em deploy verde (steps 1-3 ok; sem if:always de propósito).
+      # ============================================================
+      - name: "📦 Checkout do ghcr-protected-tags.txt (gate etapa 73)"
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            infra/ghcr-protected-tags.txt
+
+      - name: "🛡️ Proteção de rollback da SHA deployada (etapa 73 — verifica + alerta)"
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          GH_TOKEN_ACTIONS: ${{ secrets.GH_TOKEN_ACTIONS }}
+          DEPLOY_IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          # workflow_dispatch com image_tag custom: a SHA do evento não
+          # corresponde à tag deployada — gate não consegue verificar, pular.
+          if [ -n "$DEPLOY_IMAGE_TAG" ]; then
+            echo "::notice::GATE_ROLLBACK_PULSO — image_tag custom (${DEPLOY_IMAGE_TAG}): SHA do evento não corresponde à tag deployada."
+            exit 0
+          fi
+          SHA12="${GITHUB_SHA::12}"
+          if [ ! -f infra/ghcr-protected-tags.txt ]; then
+            echo "::warning::ROLLBACK_PROTECT_FILE_MISSING — infra/ghcr-protected-tags.txt ausente (retenção usa fallback hardcoded do step de leitura)"
+            exit 0
+          fi
+          if grep -qxF "$SHA12" infra/ghcr-protected-tags.txt; then
+            echo "✅ SHA production-$SHA12 já protegida em infra/ghcr-protected-tags.txt"
+            exit 0
+          fi
+          MSG="SHA production-$SHA12 NÃO está protegida em infra/ghcr-protected-tags.txt. Janela natural: 10 deploys (keep 30). Para blindar além: bash scripts/update-rollback-protection.sh $SHA12 + PR (política: CI não commita na main). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "::warning::ROLLBACK_UNPROTECTED ${MSG}"
+          if [ -n "$ALERT_WEBHOOK_URL" ]; then
+            PAYLOAD=$(jq -cn --arg text "🛡️ ${MSG}" '{text: $text}')
+            curl -fsS -X POST "$ALERT_WEBHOOK_URL" \
+              -H 'Content-Type: application/json' \
+              -d "$PAYLOAD" || true
+          elif [ -n "$GH_TOKEN_ACTIONS" ]; then
+            PAYLOAD=$(jq -cn --arg body "🛡️ ${MSG}" '{body: $body}')
+            curl -fsS -X POST "https://api.github.com/repos/${{ github.repository }}/commits/${GITHUB_SHA}/comments" \
+              -H "Authorization: Bearer $GH_TOKEN_ACTIONS" \
+              -H "Accept: application/vnd.github+json" \
+              -d "$PAYLOAD" || true
+          fi

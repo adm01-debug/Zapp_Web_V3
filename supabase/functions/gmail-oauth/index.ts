@@ -10,6 +10,12 @@ import { GmailOauthV1Schema } from '../_shared/contract-schemas.ts';
  * Signs an OAuth state token binding it to userId.
  * State = base64(userId|nonce|hmac) — prevents Account Binding CSRF.
  * Attacker cannot forge a state for another user without their JWT (needed for getAuthUrl).
+ *
+ * NÃO migrou pra _shared/hmac-validation.ts (PLANO-100 etapa 22, 2026-08-25):
+ * é protocolo próprio de state token (chave DERIVADA via slice/padEnd + envelope
+ * base64 userId|nonce|sigHex), não validação de assinatura de webhook — a API do
+ * módulo (hex sobre body cru) mudaria a cripto e invalidaria states em trânsito.
+ * A comparação já usa o comparador canônico timingSafeStringEqual (_shared/auth.ts).
  */
 async function signOAuthState(userId: string, signingKey: string): Promise<string> {
   const nonce = crypto.randomUUID();

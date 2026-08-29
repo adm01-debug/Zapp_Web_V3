@@ -122,10 +122,89 @@ export function normalizeVersion(raw: unknown): string | null {
   return m ? `v${m[1]}` : s; // strings não numéricas passam cruas (rejeitadas depois)
 }
 
+// ─── Etapa 59 (A4, PLANO-100-CONTRATOS-EDGE): `version` de negócio × hint ───
+
+// Introspecção de shape — mesmo padrão do guard estático da Invariante 10
+// (contract-registry-integrity.test.ts): ZodObject expõe `.shape`;
+// discriminatedUnion (sicoob-bridge) expõe os branches em `_def.options`;
+// ZodEffects (refine/superRefine) embrulha o schema interno.
+// deno-lint-ignore no-explicit-any
+function collectObjectShapes(schema: any): Record<string, any>[] {
+  if (!schema) return [];
+  if (schema._def?.typeName === "ZodObject") return [schema.shape];
+  if (schema._def?.typeName === "ZodDiscriminatedUnion") {
+    const options = (schema._def.options ?? []) as unknown[];
+    return options.flatMap((opt) => collectObjectShapes(opt));
+  }
+  if (schema._def?.typeName === "ZodEffects") return collectObjectShapes(schema._def.schema);
+  return []; // ZodArray, ZodUnion comum etc. — sem shape introspectável
+}
+
+const VERSION_HINT_KEYS = ["version", "contract_version"] as const;
+const businessVersionKeysCache = new WeakMap<SchemaMap, Set<string>>();
+
+/**
+ * Etapa 59 (A4, 2026-08-25): chaves (`version`/`contract_version`) que algum
+ * schema do contrato declara como campo de NEGÓCIO (não-z.literal). Payload
+ * com campo homônimo de negócio — ex.: `version: "3.1.4"` da versão do app
+ * integrador, que `normalizeVersion` reduz a um valor fora de `supported` —
+ * não pode sequestrar a negociação e virar 422 `unsupported_contract_version`
+ * espúrio: nesses contratos o hint do body é ignorado e a versão cai na
+ * auto-detecção por formato.
+ *
+ * `z.literal(...)` (evolution-webhook/sicoob-bridge/-reply v2 declaram
+ * `version: z.literal("2.0")`) é o marcador de versão do PRÓPRIO envelope,
+ * metadata de contrato — hint permanece legítimo (mesma classificação do
+ * guard estático da Invariante 10). Memoizado por referência do SchemaMap:
+ * nos webhooks de alto tráfego a introspecção roda 1x por contrato.
+ */
+function businessVersionKeys(schemas: SchemaMap): Set<string> {
+  const cached = businessVersionKeysCache.get(schemas);
+  if (cached) return cached;
+  const keys = new Set<string>();
+  for (const schema of Object.values(schemas ?? {})) {
+    for (const shape of collectObjectShapes(schema)) {
+      for (const key of VERSION_HINT_KEYS) {
+        const field = shape[key];
+        if (field != null && field._def?.typeName !== "ZodLiteral") keys.add(key);
+      }
+    }
+  }
+  businessVersionKeysCache.set(schemas, keys);
+  return keys;
+}
+
+/**
+ * Etapa 59 (A4): true quando o hint de versão veio do BODY (não do header —
+ * header é sempre um pedido explícito) e a chave usada é campo de NEGÓCIO
+ * declarado no schema. O desarme REAL (transformar o hint em auto-detecção)
+ * só acontece no parseOrReject, e apenas quando o hint aponta FORA de
+ * `supported` — hints que apontam pra uma versão suportada (incluindo pedidos
+ * explícitos de versão em sunset, que a etapa 55 responde com 410) seguem
+ * honrados inalterados.
+ */
+function isBodyBusinessVersionHint(
+  req: Request | null,
+  body: unknown,
+  schemas: SchemaMap,
+): boolean {
+  if (req?.headers?.get?.("x-contract-version")) return false;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const b = body as Record<string, unknown>;
+  const business = businessVersionKeys(schemas);
+  if (b.contract_version != null) return business.has("contract_version");
+  if (b.version != null) return business.has("version");
+  return false;
+}
+
 /**
  * Resolve a versão explicitamente pedida pelo cliente.
  * Precedência: header `x-contract-version` > body.contract_version > body.version.
  * Retorna null quando nada foi pedido (→ auto-detecção).
+ *
+ * Etapa 59 (A4): um hint de body que colida com campo de NEGÓCIO homônimo é
+ * desarmado pelo parseOrReject (ver `isBodyBusinessVersionHint`) quando
+ * aponta fora de `supported` — esta função permanece pura na resolução.
  */
 export function resolveRequestedVersion(req: Request | null, body: unknown): string | null {
   const fromHeader = req?.headers?.get?.("x-contract-version");
@@ -202,6 +281,35 @@ export function contractHeaders(contractName: string, version: string): Record<s
   return out;
 }
 
+/**
+ * Etapa 54 (PLANO-100-CONTRATOS-EDGE, 2026-08-25): resposta de SUCESSO com os
+ * headers de contrato anexados — substitui a propagação manual de
+ * `parsed.headers` que cada handler duplicava (spread em jsonResponse/new
+ * Response). Recebe o resultado ok de parseOrReject + body + ResponseInit.
+ *
+ * Composição dos headers (ordem crescente de precedência):
+ *   1. `init.headers`     → CORS extras do endpoint (extraHeaders/getCorsHeaders)
+ *   2. `parsed.headers`   → x-contract-version (+ sunset/x-contract-deprecated)
+ *   3. `Content-Type`     → application/json (sempre, por último)
+ *
+ * Headers de contrato vencem os de `init`: nenhum merge de CORS pode derrubar
+ * x-contract-version/sunset (o risco simulado da etapa — perder
+ * x-contract-version em produção — fica estruturalmente impossível).
+ * Status/statusText vêm de `init` como em qualquer ResponseInit.
+ */
+export function respondWithContract(
+  parsed: ParseOk,
+  body: unknown,
+  init: ResponseInit = {},
+): Response {
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(parsed.headers ?? {})) {
+    headers.set(name, value);
+  }
+  headers.set("Content-Type", "application/json");
+  return new Response(JSON.stringify(body), { ...init, headers });
+}
+
 // ─── Núcleo: parseOrReject ───────────────────────────────────────────────────
 
 /**
@@ -252,7 +360,17 @@ export function parseOrReject<T = unknown>(
   }
 
   // 2) Versão explícita fora do suporte → unsupported_contract_version.
-  const requested = resolveRequestedVersion(req, body);
+  // Etapa 59 (A4, PLANO-100-CONTRATOS-EDGE): hint que veio do BODY apontando
+  // FORA de `supported`, com a chave declarada como campo de NEGÓCIO no
+  // schema (ex.: `version: "3.1.4"` do app integrador), não é pedido de
+  // versão — desarma e cai na auto-detecção por formato. Antes do fix virava
+  // 422 `unsupported_contract_version` espúrio. Hints apontando pra versão
+  // SUPORTADA (incluindo pedido explícito de versão em sunset → 410, etapa
+  // 55) e hints via HEADER seguem honrados inalterados.
+  let requested = resolveRequestedVersion(req, body);
+  if (requested && !supported.includes(requested) && isBodyBusinessVersionHint(req, body, schemas)) {
+    requested = null;
+  }
   if (requested && !supported.includes(requested)) {
     const eb = buildContractErrorBody(
       contractName, requested, "unsupported_contract_version",

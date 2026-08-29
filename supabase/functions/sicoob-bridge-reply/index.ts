@@ -1,8 +1,8 @@
-import { handleCors, errorResponse, errorEnvelope, jsonResponse, Logger } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, Logger } from "../_shared/validation.ts";
 import { requireUser, requireServiceRoleOnly, getBearer, timingSafeStringEqual } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { fetchWithRetry } from "../_shared/retry-with-backoff.ts";
 
@@ -133,7 +133,9 @@ Deno.serve(async (req) => {
     log.done(200);
     // Bloco 5 (2026-08-21): propaga x-contract-version/deprecated/sunset
     // (parsed.headers) — antes desses headers nunca chegavam ao cliente.
-    return jsonResponse({ success: true, sicoob_response: result }, 200, req, parsed.headers);
+    // Etapa 54 (PLANO-100-CONTRATOS-EDGE): propagação agora via
+    // respondWithContract (contract-kit), sem spread manual.
+    return respondWithContract(parsed, { success: true, sicoob_response: result }, { status: 200, headers: getCorsHeaders(req) });
 
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
