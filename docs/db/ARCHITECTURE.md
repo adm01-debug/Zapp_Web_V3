@@ -131,13 +131,17 @@ O **PostgREST expõe o schema `public` por padrão**, e o app chama `/rest/v1/*`
 
 ## Estratégia de Migration
 
+```text
+1. Author escreve migration versionada em supabase/migrations/
+2. Valida lint/smoke em staging ou banco efêmero comparando contra o baseline
+3. Code review + merge para main
+4. Produção self-hosted aplica via fluxo DB-as-source
+   (MCP SQL versionado e/ou infra/db-migrate/apply-migrations.sh)
+5. Registro em supabase_migrations.schema_migrations
+6. Validação pós-apply + reload de schema cache
 ```
-1. Author escreve migration em supabase/migrations/
-2. Aplica em staging via supabase db push
-3. Smoke tests validam
-4. Code review + merge para main
-5. Aplica em produção via supabase db push
-6. Validação pós-deploy
-```
+
+> O fluxo acima substitui o `supabase db push` para este banco. O guia normativo
+> é [`supabase/migrations/README.md`](../../supabase/migrations/README.md).
 
 Formato: `YYYYMMDDHHMMSS_description.sql` (14-digit prefix). Sem repetição de versão — gate de CI bloqueia duplicatas.

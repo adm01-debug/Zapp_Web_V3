@@ -199,20 +199,25 @@ ou de ligar algo intencionalmente desligado.
 
 ## Stubs Ativos (RPCs sem implementação real)
 
-Estas funções existem como stubs em `supabase/migrations/20260717000002_create_missing_rpcs_stubs.sql`.
-Todas fazem `RAISE EXCEPTION P0001` exceto onde indicado. **Não implementar como tabelas** — requerem Edge Functions.
+Estas funções seguem catalogadas como stubs/parciais, mas a migration original
+`20260717000002_create_missing_rpcs_stubs.sql` não está mais no repo após o
+cleanup. Use `docs/RPC_STUBS_STATUS.md`, `src/integrations/supabase/types.ts`
+e o snapshot canônico para o contrato vivo. **Não implementar como tabelas** —
+requerem Edge Functions.
 
 | RPC | Comportamento do Stub | Implementação Real |
 |-----|-----------------------|--------------------|
 | `initiate_gmail_oauth` | RAISE P0001 | Edge Function OAuth Google |
 | `complete_gmail_oauth` | RAISE P0001 | Edge Function OAuth callback |
-| `sync_to_crm` | RAISE P0001 | Edge Function + API CRM |
+| `sync_to_crm` | Retorna `{synced:false,error:'CRM sync not yet implemented'}` | Edge Function + API CRM |
 | `export_user_data` | Retorna perfil básico (JSON) | Edge Function export completo |
 | `import_user_data` | RAISE P0001 | Edge Function com validação |
 | `enrich_contact` | Retorna `{enriched: false}` | Integração API enriquecimento |
-| `get_latest_analysis` | Retorna avg engagement_score | Analytics completo |
+| `get_latest_analysis` | Legado/parcial; UI nova usa `rpc_latest_contact_analysis` | Analytics completo |
 
-> `check_download_permission` — **NÃO é stub**: função intencionalmente ausente, frontend fail-open via SQLSTATE 42883.
+> `check_download_permission` — **NÃO é stub**: função intencionalmente ausente; o
+> design original era fail-open via SQLSTATE 42883, mas o hook atual do frontend
+> está fail-closed quando a RPC não existe.
 > Detalhes completos em `docs/RPC_STUBS_STATUS.md`.
 
 ---
