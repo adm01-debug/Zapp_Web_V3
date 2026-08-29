@@ -70,7 +70,11 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
   // Guarda content + attachments juntos: um envio só-mídia falho tem
   // messageContent === '' (falsy), então checar `!payload` sozinho fazia
   // retryLastSend virar no-op silencioso para esse caso.
-  const lastFailedSendRef = useRef<{ content: string; attachments?: File[]; conversationId: string } | null>(null);
+  const lastFailedSendRef = useRef<{
+    content: string;
+    attachments?: File[];
+    conversationId: string;
+  } | null>(null);
   const lastFailedAudioRef = useRef<{
     blob: Blob;
     onSendAudio: (blob: Blob) => Promise<void>;
@@ -207,7 +211,12 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
 
           if (dbError) throw dbError;
           if (!updated || updated.length === 0) {
-            log.warn('[editMessage] UPDATE casou 0 linhas', { id: currentEditing.id, instanceName, contactId, contactPhone });
+            log.warn('[editMessage] UPDATE casou 0 linhas', {
+              id: currentEditing.id,
+              instanceName,
+              contactId,
+              contactPhone,
+            });
             toast({
               title: 'Editada no WhatsApp',
               description: 'A alteração foi enviada, mas o histórico local não foi atualizado.',
@@ -257,7 +266,8 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
       }
 
       // Guard: autenticação antes de alterar qualquer estado (preserva texto do usuário).
-      if (isWhisperRef.current && !profile?.id) {
+      const profileId = profile?.id;
+      if (isWhisperRef.current && !profileId) {
         toast({
           title: 'Erro ao enviar sussurro',
           description: 'Usuário não autenticado. Faça login e tente novamente.',
@@ -291,11 +301,15 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         }
 
         if (isWhisperRef.current) {
+          // O modo pode mudar enquanto o gate DEV aguarda a simulação acima.
+          // Falha fechada e deixa o catch restaurar o texto em vez de acessar
+          // um profile nulo ou enviar um sussurro sem autoria.
+          if (!profileId) throw new Error('Usuário não autenticado. Faça login e tente novamente.');
           const { error } = await insertWhisperMessage({
             contact_id: contactId,
-            sender_id: profile.id,
+            sender_id: profileId,
             content: messageContent,
-            target_agent_id: profile.id,
+            target_agent_id: profileId,
           });
           if (error) throw error;
           toast({ title: 'Sussurro enviado', description: 'Nota interna registrada com sucesso.' });
@@ -630,7 +644,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
       throw new Error('Nao foi possivel arquivar: acao nao configurada.');
     }
     await opts.onArchive();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- opts.onArchive é a única propriedade usada; opts inteiro não é necessário
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- opts.onArchive é a única propriedade usada; opts inteiro não é necessário
   }, [contactId, opts.onArchive]);
 
   const { handleInputChange, handleKeyDown, handleSlashCommand } = useInputHandlers({

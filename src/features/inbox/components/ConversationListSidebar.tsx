@@ -195,7 +195,6 @@ export function ConversationListSidebar({
       <BulkActionsToolbar
         selectedCount={bulkActions.selectedIds.size}
         onMarkAsRead={bulkActions.bulkMarkAsRead}
-        onTransfer={bulkActions.bulkTransfer}
         onArchive={bulkActions.bulkArchive}
         onClearSelection={bulkActions.clearSelection}
         isLoading={bulkActions.bulkLoading}

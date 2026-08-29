@@ -20,10 +20,7 @@ import {
 type RealtimePayload = { new: unknown };
 
 /** Handler mínimo — mesmo formato usado por useWarRoomAlerts / useZappMessages. */
-function makeHandler<T>(
-  schema: Parameters<typeof safeParseEvent>[0],
-  onValid: (row: T) => void,
-) {
+function makeHandler<T>(schema: Parameters<typeof safeParseEvent>[0], onValid: (row: T) => void) {
   return (payload: RealtimePayload) => {
     const parsed = safeParseEvent(schema, payload.new);
     if (!parsed.ok) return; // silent drop
@@ -43,17 +40,17 @@ describe('conversation_transfers — pipeline safeParseEvent → notificação',
     from_queue_id: null,
     to_queue_id: null,
     status: 'pending',
-    transfer_type: 'queue',
+    transfer_type: 'internal',
     priority: 2,
     ticket_number: 'T-100',
     contact_id: null,
-    remote_jid: null,
+    remote_jid: '5511999999999@s.whatsapp.net',
     contact_name: null,
     metadata: null,
     created_at: '2026-07-08T10:00:00Z',
   };
 
-  it('entrega notificação para transferência válida (status=pending, type=queue)', () => {
+  it('entrega notificação para transferência válida (status=pending, type=internal)', () => {
     const notify = vi.fn();
     const handler = makeHandler(conversationTransferRowSchema, notify);
     handler({ new: validTransfer });
@@ -61,12 +58,17 @@ describe('conversation_transfers — pipeline safeParseEvent → notificação',
     expect(notify.mock.calls[0][0]).toMatchObject({ status: 'pending', priority: 2 });
   });
 
-  it('descarta status fora do enum ("expired") sem notificar nem lançar', () => {
+  it('aceita os estados e o tipo alternativo definidos no banco canônico', () => {
     const notify = vi.fn();
     const handler = makeHandler(conversationTransferRowSchema, notify);
-    expect(() =>
-      handler({ new: { ...validTransfer, status: 'expired' } }),
-    ).not.toThrow();
+    handler({ new: { ...validTransfer, status: 'completed', transfer_type: 'direct' } });
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('descarta status fora do enum ("unknown") sem notificar nem lançar', () => {
+    const notify = vi.fn();
+    const handler = makeHandler(conversationTransferRowSchema, notify);
+    expect(() => handler({ new: { ...validTransfer, status: 'unknown' } })).not.toThrow();
     expect(notify).not.toHaveBeenCalled();
   });
 
@@ -84,12 +86,13 @@ describe('conversation_transfers — pipeline safeParseEvent → notificação',
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('descarta payload sem source_conversation_id (missing)', () => {
+  it('descarta payload sem source_conversation_id, mas aceita null', () => {
     const notify = vi.fn();
     const handler = makeHandler(conversationTransferRowSchema, notify);
     const { source_conversation_id: _source_conversation_id, ...bad } = validTransfer;
     handler({ new: bad });
-    expect(notify).not.toHaveBeenCalled();
+    handler({ new: { ...validTransfer, source_conversation_id: null } });
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 
   it('descarta payload com ticket_number null', () => {
@@ -110,9 +113,9 @@ describe('conversation_transfers — pipeline safeParseEvent → notificação',
     const notify = vi.fn();
     const handler = makeHandler(conversationTransferRowSchema, notify);
     handler({ new: { ...validTransfer, status: 'nope' } }); // inválido
-    handler({ new: validTransfer });                        // válido
-    handler({ new: null });                                 // inválido
-    handler({ new: { ...validTransfer, id: UUID_B } });     // válido
+    handler({ new: validTransfer }); // válido
+    handler({ new: null }); // inválido
+    handler({ new: { ...validTransfer, id: UUID_B } }); // válido
     expect(notify).toHaveBeenCalledTimes(2);
   });
 });
@@ -185,9 +188,9 @@ describe('conversation_events — pipeline safeParseEvent → notificação', ()
   it('processa lote misto — invalidos não bloqueiam válidos', () => {
     const notify = vi.fn();
     const handler = makeHandler(conversationEventRowSchema, notify);
-    handler({ new: { ...validEvent, contact_id: null } });          // inválido
-    handler({ new: validEvent });                                    // válido
-    handler({ new: { ...validEvent, event_type: '' } });             // inválido
+    handler({ new: { ...validEvent, contact_id: null } }); // inválido
+    handler({ new: validEvent }); // válido
+    handler({ new: { ...validEvent, event_type: '' } }); // inválido
     handler({ new: { ...validEvent, id: UUID_B, event_type: 'close' } }); // válido
     expect(notify).toHaveBeenCalledTimes(2);
   });

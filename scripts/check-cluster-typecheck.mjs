@@ -1,74 +1,22 @@
 #!/usr/bin/env node
 /**
- * check-cluster-typecheck.mjs
+ * Ratchet TypeScript por cluster.
  *
- * Rachet de tipos por cluster: percorre os clusters registrados abaixo,
- * roda `tsgo --noEmit` restrito aos arquivos do cluster (respeitando
- * tsconfig.app.json) e falha se qualquer arquivo com `@ts-nocheck` for
- * introduzido em cluster já limpo, ou se erros TS aumentarem.
- *
- * Uso local:
- *   node scripts/check-cluster-typecheck.mjs
- *   node scripts/check-cluster-typecheck.mjs --cluster crm
- *
- * O baseline é gerado dinamicamente a partir do estado atual do repo, então
- * a regra prática é: nenhum cluster listado pode regredir.
+ * Executa uma única vez o compilador TypeScript instalado localmente e atribui
+ * seus diagnósticos aos arquivos de cada cluster. Falha de invocação encerra o
+ * gate sem transformar indisponibilidade do compilador em falso sucesso.
  */
-import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { globSync } from 'glob';
 
-// ---------------------------------------------------------------------------
-// Node >= 20 compatible globSync (fs.globSync requires Node >= 22).
-// Supports ** (recursive) and * (single-segment) wildcards.
-// ---------------------------------------------------------------------------
-function globSync(pattern, _opts) {
-  const sep = '/';
-  const parts = pattern.split(sep);
-  function safeReaddir(d) {
-    try { return readdirSync(d, { withFileTypes: true }); } catch { return []; }
-  }
-  function walk(dir, segs) {
-    if (!segs.length) return [];
-    const head = segs[0]; const rest = segs.slice(1);
-    const results = [];
-    if (head === '**') {
-      if (rest.length) results.push(...walk(dir, rest));
-      for (const e of safeReaddir(dir)) {
-        if (e.isDirectory()) results.push(...walk(dir + sep + e.name, segs));
-      }
-    } else if (head.includes('*')) {
-      const esc = head.replace(/[.+^${}()|[\]\\]/g, "\\import { resolve } from 'node:path';").replace(/[*]/g, "[^/]*");
-      const re = new RegExp("^" + esc + "$");
-      for (const e of safeReaddir(dir)) {
-        if (!re.test(e.name)) continue;
-        const full = dir + sep + e.name;
-        if (!rest.length) { if (!e.isDirectory()) results.push(full); }
-        else if (e.isDirectory()) results.push(...walk(full, rest));
-      }
-    } else {
-      const full = dir + sep + head;
-      try {
-        const s = fs.lstatSync(full);
-        if (!rest.length) { if (!s.isDirectory()) results.push(full); }
-        else if (s.isDirectory()) results.push(...walk(full, rest));
-      } catch {}
-    }
-    return results;
-  }
-  const gi = parts.findIndex(p => p.includes('*') || p === '**');
-  const root = gi <= 0 ? '.' : parts.slice(0, gi).join(sep);
-  const rem  = gi <= 0 ? parts : parts.slice(gi);
-  return walk(root, rem);
-}
-
+import { runLocalTsc, TypeScriptInvocationError } from './lib/run-local-tsc.mjs';
 
 const NOCHECK_BASELINE_PATH = 'scripts/ts-nocheck-baseline.txt';
 const nocheckBaseline = new Set(
   existsSync(NOCHECK_BASELINE_PATH)
     ? readFileSync(NOCHECK_BASELINE_PATH, 'utf8')
         .split('\n')
-        .map((l) => l.trim())
+        .map((line) => line.trim())
         .filter(Boolean)
     : []
 );
@@ -86,87 +34,98 @@ const CLUSTERS = {
     'src/features/inbox/components/ChatHeader.tsx',
     'src/features/inbox/components/ChatInputArea.tsx',
   ],
+  'chat-components': ['src/features/inbox/components/chat/**/*.{ts,tsx}', 'src/lib/reactRefs.ts'],
   queues: [
     'src/hooks/useQueueManagement.ts',
     'src/hooks/useQueueAnalytics.ts',
     'src/hooks/useQueueSlaPanel.ts',
   ],
-  observability: [
-    'src/hooks/useAlertManagement.ts',
-    'src/hooks/usePerformanceMonitoring.ts',
-  ],
+  observability: ['src/hooks/useAlertManagement.ts', 'src/hooks/usePerformanceMonitoring.ts'],
 };
 
-const cli = process.argv.slice(2);
-const filterIdx = cli.indexOf('--cluster');
-const targetCluster = filterIdx >= 0 ? cli[filterIdx + 1] : null;
-
-const args = new Set(cli.filter((a) => a.startsWith('--') || cli[cli.indexOf(a) - 1] !== '--cluster'));
+function normalizePath(path) {
+  return path.replace(/\\/g, '/').replace(/^\.\//, '');
+}
 
 function expand(patterns) {
   const files = new Set();
-  for (const p of patterns) {
-    if (p.includes('*')) {
-      try {
-        for (const f of globSync(p, { nodir: true })) files.add(f);
-      } catch { /* node < 22 fallback */ }
-    } else if (existsSync(p)) {
-      files.add(p);
+  for (const pattern of patterns) {
+    if (pattern.includes('*') || pattern.includes('?') || pattern.includes('{')) {
+      for (const file of globSync(pattern, { nodir: true })) files.add(normalizePath(file));
+    } else if (existsSync(pattern)) {
+      files.add(normalizePath(pattern));
     }
   }
-  return [...files];
+  return [...files].sort();
+}
+
+const cli = process.argv.slice(2);
+const filterIndex = cli.indexOf('--cluster');
+const targetCluster = filterIndex >= 0 ? cli[filterIndex + 1] : null;
+const selected = Object.entries(CLUSTERS).filter(
+  ([name]) => !targetCluster || targetCluster === name
+);
+
+if (selected.length === 0 || (filterIndex >= 0 && !targetCluster)) {
+  console.error(`✗ Nenhum cluster casou com filtro '${targetCluster ?? ''}'`);
+  process.exit(2);
+}
+
+const clusterFiles = selected.map(([name, patterns]) => ({ name, files: expand(patterns) }));
+const nonEmptyClusters = clusterFiles.filter(({ files }) => files.length > 0);
+if (nonEmptyClusters.length === 0) {
+  console.error(`✗ Nenhum arquivo casou com filtro '${targetCluster ?? 'todos'}'`);
+  process.exit(2);
+}
+
+let compilerResult;
+try {
+  compilerResult = runLocalTsc();
+} catch (error) {
+  console.error('✗ TypeScript por cluster: falha de infraestrutura (fail-closed).');
+  console.error(
+    `    ${error instanceof TypeScriptInvocationError ? error.message : String(error)}`
+  );
+  process.exit(2);
 }
 
 let failed = 0;
-let checkedClusters = 0;
-
-for (const [name, patterns] of Object.entries(CLUSTERS)) {
-  if (targetCluster && targetCluster !== name) continue;
-  const files = expand(patterns);
+for (const { name, files } of clusterFiles) {
   if (files.length === 0) {
     console.log(`◦ ${name}: nenhum arquivo casou (skip)`);
     continue;
   }
-  checkedClusters++;
 
-  // 1. Regra: sem @ts-nocheck em clusters já limpos (ignora arquivos no baseline aprovado)
-  const dirty = files.filter((f) => {
-    if (nocheckBaseline.has(f)) return false;
-    try { return readFileSync(f, 'utf8').startsWith('// @ts-nocheck'); }
-    catch { return false; }
+  const dirty = files.filter((file) => {
+    if (nocheckBaseline.has(file)) return false;
+    try {
+      return readFileSync(file, 'utf8').startsWith('// @ts-nocheck');
+    } catch {
+      return false;
+    }
   });
-  if (dirty.length) {
-    console.error(`✗ Cluster ${name}: @ts-nocheck detectado em ${dirty.length} arquivo(s) FORA do baseline:`);
-    for (const f of dirty) console.error(`    ${f}`);
-    failed++;
+  if (dirty.length > 0) {
+    console.error(
+      `✗ Cluster ${name}: @ts-nocheck detectado em ${dirty.length} arquivo(s) FORA do baseline:`
+    );
+    for (const file of dirty) console.error(`    ${file}`);
+    failed += 1;
     continue;
   }
 
-  // 2. Rodar tsgo restrito a estes arquivos (usa tsconfig.app.json)
-  try {
-    execSync(`bunx tsgo --noEmit -p tsconfig.app.json`, { stdio: 'pipe' });
-    console.log(`✓ Cluster ${name}: ${files.length} arquivo(s) — tsc limpo`);
-  } catch (err) {
-    const out = String(err.stdout || '') + String(err.stderr || '');
-    // filtra apenas erros nos arquivos do cluster
-    const relevant = out.split('\n').filter((line) => files.some((f) => line.includes(f)));
-    if (relevant.length) {
-      console.error(`✗ Cluster ${name}: ${relevant.length} erro(s) TS`);
-      for (const line of relevant.slice(0, 20)) console.error(`    ${line}`);
-      failed++;
-    } else {
-      console.log(`✓ Cluster ${name}: sem erros no escopo (tsc reportou erros fora do cluster)`);
-    }
+  const fileSet = new Set(files);
+  const relevant = compilerResult.diagnostics.filter((diagnostic) => fileSet.has(diagnostic.file));
+  if (relevant.length > 0) {
+    console.error(`✗ Cluster ${name}: ${relevant.length} erro(s) TS`);
+    for (const diagnostic of relevant.slice(0, 20)) console.error(`    ${diagnostic.rawLine}`);
+    failed += 1;
+  } else {
+    console.log(`✓ Cluster ${name}: ${files.length} arquivo(s) — tsc limpo no escopo`);
   }
-}
-
-if (checkedClusters === 0) {
-  console.error(`✗ Nenhum cluster casou com filtro '${targetCluster}'`);
-  process.exit(2);
 }
 
 if (failed > 0) {
   console.error(`\n✗ ${failed} cluster(s) com dívida de tipos`);
   process.exit(1);
 }
-console.log(`\n✓ Todos os ${checkedClusters} cluster(s) limpos`);
+console.log(`\n✓ Todos os ${nonEmptyClusters.length} cluster(s) limpos`);

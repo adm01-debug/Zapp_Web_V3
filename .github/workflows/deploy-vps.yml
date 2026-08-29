@@ -34,10 +34,10 @@ env:
 jobs:
   build-and-push:
     name: Build & push image
-    # 2026-08-06: runners GitHub-hosted (ubuntu-latest) sem alocação na conta —
-    # fila inteira travada em pending. Build no runner self-hosted da VPS
-    # (online, Docker disponível) — mesmo padrão dos workflows E2E-VPS.
-    runs-on: [Linux, X64, vps-zapp]
+    # Build isolado da VPS de produção. Nunca adicionar fallback automático
+    # para vps-zapp: uma indisponibilidade do runner deve parar o deploy, não
+    # disputar CPU/RAM/I/O com Supabase, Traefik, Evolution e o app.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     # 2026-08-06 20:30: environment removido — runs com `environment:`
     # ficavam em pending SEM jobs (resolução travada na conta); todos os
@@ -46,6 +46,7 @@ jobs:
     # publish-evolution-api-custom, que roda normalmente).
     outputs:
       image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -85,25 +86,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: ⚡ Pull previous assets para retencao entre deploys
+      - name: ⚡ Preparar assets N-1 (manifesto estrito)
         run: |
-          # Extrair /usr/share/nginx/html/assets/ do deploy N-1 antes de buildar N.
-          # production-latest = tag do deploy atual, que sera sobrescrita pelo push novo.
-          # Sessoes vivas com tab aberta do deploy anterior nao recebem 404 nos chunks JS/CSS.
+          set -euo pipefail
+          rm -rf ./previous-assets /tmp/prev-assets /tmp/prev-manifest
           mkdir -p ./previous-assets
           docker rm -f prev-zapp 2>/dev/null || true
           if docker pull ghcr.io/${{ env.IMAGE_NAME }}:production-latest 2>/dev/null; then
-            docker create --name prev-zapp ghcr.io/${{ env.IMAGE_NAME }}:production-latest
-            mkdir -p /tmp/prev-assets
-            # Usar src/. garante copia de CONTEUDO (nunca cria assets/ aninhado)
-            docker cp prev-zapp:/usr/share/nginx/html/assets/. /tmp/prev-assets/ 2>/dev/null || true
-            docker rm prev-zapp 2>/dev/null || true
-            if [ -d /tmp/prev-assets ]; then
-              cp -r /tmp/prev-assets/. ./previous-assets/
-              rm -rf /tmp/prev-assets
+            docker create --name prev-zapp ghcr.io/${{ env.IMAGE_NAME }}:production-latest >/dev/null
+            if ! docker cp prev-zapp:/usr/share/nginx/html/current-assets.txt /tmp/prev-manifest 2>/dev/null; then
+              echo "Imagem legada sem manifesto: retenção ignorada para eliminar o acúmulo histórico"
+              docker rm -f prev-zapp >/dev/null
+              exit 0
             fi
-            COUNT=$(ls ./previous-assets | wc -l | tr -d ' ')
-            echo "Assets retidos: ${COUNT} arquivos do build anterior"
+            mkdir -p /tmp/prev-assets
+            docker cp prev-zapp:/usr/share/nginx/html/assets/. /tmp/prev-assets/
+            docker rm -f prev-zapp >/dev/null
+
+            COUNT=$(wc -l < /tmp/prev-manifest | tr -d ' ')
+            [ "$COUNT" -le 5000 ] || { echo "::error::ASSET_RETENTION_FILES=${COUNT} (limite 5000)"; exit 1; }
+            while IFS= read -r asset; do
+              case "$asset" in ""|/*|*".."*) echo "::error::Manifesto contém caminho inválido: $asset"; exit 1 ;; esac
+              [ -f "/tmp/prev-assets/$asset" ] || { echo "::error::Asset ausente no build anterior: $asset"; exit 1; }
+              mkdir -p "./previous-assets/$(dirname "$asset")"
+              cp "/tmp/prev-assets/$asset" "./previous-assets/$asset"
+            done < /tmp/prev-manifest
+            SIZE_KB=$(du -sk ./previous-assets | awk '{print $1}')
+            [ "$SIZE_KB" -le 153600 ] || { echo "::error::ASSET_RETENTION_SIZE=${SIZE_KB}KB (limite 150MB)"; exit 1; }
+            echo "Assets retidos: ${COUNT} arquivos, ${SIZE_KB}KB, exclusivamente do build N-1"
           else
             echo "Sem imagem anterior (1o deploy ou production-latest indisponivel) — ok"
           fi
@@ -116,9 +126,12 @@ jobs:
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
+          build-contexts: |
+            previous_assets=./previous-assets
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}
@@ -132,6 +145,8 @@ jobs:
             VITE_SENTRY_ENVIRONMENT=production
             VITE_APP_ENV=production
             VITE_ENABLE_CLIENT_OBSERVABILITY=true
+          cache-from: type=gha,scope=zapp-web-production
+          cache-to: type=gha,mode=max,scope=zapp-web-production
 
       - name: 📋 Ler tags de rollback protegidas (infra/ghcr-protected-tags.txt)
         id: protect
@@ -282,6 +297,7 @@ jobs:
           PORTAINER_API_TOKEN: ${{ secrets.PORTAINER_API_TOKEN }}
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           ZAPP_IMAGE: ${{ needs.build-and-push.outputs.image }}
+          DIGEST: ${{ needs.build-and-push.outputs.digest }}
         run: |
           set -euo pipefail
           echo "Deploying: ${ZAPP_IMAGE}"
@@ -295,7 +311,7 @@ jobs:
           cp infra/docker-compose-zapp-web.yml /tmp/compose.yml
 
           # Substitui a variável ${ZAPP_IMAGE} pelo SHA-based tag real
-          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}|g" /tmp/compose.yml
+          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}@${DIGEST}|g" /tmp/compose.yml
           echo "✅ Compose versionado usado: infra/docker-compose-zapp-web.yml"
           echo "Image no compose: $(grep 'image:' /tmp/compose.yml | head -1 | xargs)"
 
@@ -335,7 +351,9 @@ jobs:
       # sem commit, caso um falso positivo bloqueie deploys.
       # ============================================================
       - name: ✅ Convergência verificada (Swarm × imagem do deploy)
-        if: ${{ vars.ENFORCE_CONVERGENCE != '0' }}
+        # format() normaliza variável ausente para string vazia antes da
+        # comparação: default ligado; somente o valor explícito "0" desliga.
+        if: ${{ format('{0}', vars.ENFORCE_CONVERGENCE) != '0' }}
         env:
           EXPECTED_IMAGE: ${{ needs.build-and-push.outputs.image }}
         run: |
@@ -343,27 +361,58 @@ jobs:
           SVC="zapp-web-prod_web"
           EXPECTED_SHA="${EXPECTED_IMAGE##*:}"
           DEADLINE=$((SECONDS + 300))
-          IMG="?"; REPL="0/1"
+          IMG="?"; REPL="0/1"; TASKS=""
           while :; do
             STATUS=$(docker service inspect "$SVC" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}' 2>/dev/null || echo "inspect_fail")
             REPL=$(docker service ls --filter "name=${SVC}" --format '{{.Replicas}}' | head -1)
             IMG=$(docker service inspect "$SVC" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "?")
+            TASKS=$(docker service ps "$SVC" --filter desired-state=running --no-trunc --format '{{.ID}}|{{.CurrentState}}|{{.Error}}|{{.Image}}' 2>/dev/null || true)
             echo "estado=${STATUS} replicas=${REPL:-?} image=${IMG}"
+            printf '%s\n' "${TASKS:-<sem tasks desejadas>}"
             case "$STATUS" in
               rollback_completed|rollback_paused|paused)
                 echo "::error::CONVERGENCE_FAIL — UpdateStatus=${STATUS} (Swarm reverteu/pausou o rollout; a imagem nova NÃO está servindo)"; exit 1 ;;
             esac
             REPL_OK=$(echo "${REPL:-0/1}" | awk -F/ '{print ($1==$2 && $2!="0") ? "1" : "0"}')
+            TASKS_PRESENT=$(printf '%s\n' "$TASKS" | awk 'NF { found=1 } END { print found ? "1" : "0" }')
+            TASKS_RUNNING_OK=$(printf '%s\n' "$TASKS" | awk -F'|' '
+              NF < 4 { next }
+              $2 !~ /^Running / { bad=1 }
+              END { print bad ? "0" : "1" }
+            ')
+            TASKS_ERROR_FREE=$(printf '%s\n' "$TASKS" | awk -F'|' '
+              NF < 4 { next }
+              length($3) > 0 { bad=1 }
+              END { print bad ? "0" : "1" }
+            ')
+            TASKS_IMAGE_OK=$(printf '%s\n' "$TASKS" | grep -Fq -- "$EXPECTED_SHA" && \
+              printf '%s\n' "$TASKS" | awk -F'|' -v sha="$EXPECTED_SHA" '
+                NF < 4 { next }
+                index($4, sha) == 0 { bad=1 }
+                END { print bad ? "0" : "1" }
+              ' || echo "0")
             if { [ "$STATUS" = "completed" ] || [ "$STATUS" = "none" ]; } \
               && echo "$IMG" | grep -Fq -- "$EXPECTED_SHA" \
-              && [ "$REPL_OK" = "1" ]; then
+              && [ "$REPL_OK" = "1" ] \
+              && [ "$TASKS_PRESENT" = "1" ] \
+              && [ "$TASKS_RUNNING_OK" = "1" ] \
+              && [ "$TASKS_ERROR_FREE" = "1" ] \
+              && [ "$TASKS_IMAGE_OK" = "1" ]; then
               break
             fi
             if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              [ "$TASKS_PRESENT" = "1" ] || echo "::error::CONVERGENCE_TASKS_MISSING — ${SVC} sem tasks desired-state=running"
+              [ "$TASKS_RUNNING_OK" = "1" ] || echo "::error::CONVERGENCE_TASK_NOT_RUNNING — há task desired-state=running fora de estado Running"
+              [ "$TASKS_ERROR_FREE" = "1" ] || echo "::error::CONVERGENCE_TASK_ERROR — há task desired-state=running com erro reportado"
+              [ "$TASKS_IMAGE_OK" = "1" ] || echo "::error::CONVERGENCE_TASK_IMAGE_MISMATCH — task desired-state=running ainda não usa a imagem esperada"
               echo "::error::CONVERGENCE_TIMEOUT — rollout não convergiu em 300s (estado=${STATUS} image=${IMG} replicas=${REPL})"; exit 1
             fi
             sleep 15
           done
+          [ "$TASKS_PRESENT" = "1" ] || { echo "::error::CONVERGENCE_TASKS_MISSING — ${SVC} sem tasks desired-state=running"; exit 1; }
+          [ "$TASKS_RUNNING_OK" = "1" ] || { echo "::error::CONVERGENCE_TASK_NOT_RUNNING — há task desired-state=running fora de estado Running"; exit 1; }
+          [ "$TASKS_ERROR_FREE" = "1" ] || { echo "::error::CONVERGENCE_TASK_ERROR — há task desired-state=running com erro reportado"; exit 1; }
+          [ "$TASKS_IMAGE_OK" = "1" ] || { echo "::error::CONVERGENCE_TASK_IMAGE_MISMATCH — task desired-state=running ainda não usa a imagem esperada"; exit 1; }
           echo "✅ Convergência verificada: ${SVC} @ ${IMG} (replicas ${REPL})"
 
       - name: 🧹 Prune dangling images pós-deploy (manutenção disco VPS)
@@ -379,10 +428,9 @@ jobs:
   # ============================================================
   # Health check pós-deploy DETERMINÍSTICO (DP-09, 2026-08-06):
   # post-deploy-check.yml (workflow_run) não disparava de forma confiável;
-  # este job roda SEMPRE que o deploy concluir (if: always()), sem depender
-  # de webhooks. Checagens: TTM www.zappweb.app.br < 3.0s (000/timeout =
-  # falha), PostgREST vivo (4xx ok; 5xx/000 = falha), edge function
-  # get-media-base64 viva (4xx ok; 5xx/000 = falha).
+  # este job roda somente após rollout confirmado, sem depender de webhooks.
+  # Checagens: TTM, PostgREST, edge function e preflight CORS dos endpoints
+  # que falharam juntos no incidente de 25/08/2026.
   # ============================================================
   post-deploy-health:
     name: 🩺 Health check pós-deploy (determinístico)
@@ -411,7 +459,7 @@ jobs:
             echo "::error::SITE_DEAD — conexão falhou/timeout (HTTP 000)"
             exit 1
           fi
-          if [ "$(echo "$TTM > 3.0" | bc -l)" = "1" ]; then
+          if ! awk -v t="$TTM" 'BEGIN { exit !(t <= 3.0) }'; then
             echo "::error::TTM_TOO_SLOW — ${TTM}s > 3.0s (limite)"
             exit 1
           fi
@@ -447,6 +495,25 @@ jobs:
           esac
           echo "✅ Edge Function viva — HTTP ${CODE} (4xx sem body é esperado)"
 
+      - name: "4/4 — Preflight CORS dos endpoints críticos"
+        if: always()
+        run: |
+          set -euo pipefail
+          ORIGIN="https://zapp.atomicabr.com.br"
+          for URL in \
+            "https://supabase.atomicabr.com.br/rest/v1/whatsapp_connections" \
+            "https://supabase.atomicabr.com.br/functions/v1/evolution-api/status"; do
+            HEADERS=$(curl -sS -D - -o /dev/null --max-time 15 -X OPTIONS "$URL" \
+              -H "Origin: ${ORIGIN}" \
+              -H "Access-Control-Request-Method: GET")
+            CODE=$(printf '%s\n' "$HEADERS" | awk 'toupper($1) ~ /^HTTP\// { code=$2 } END { print code }')
+            ALLOW=$(printf '%s\n' "$HEADERS" | awk -F': *' 'tolower($1)=="access-control-allow-origin" { gsub("\\r", "", $2); print $2 }' | tail -1)
+            echo "$URL → HTTP ${CODE:-000}, ACAO=${ALLOW:-ausente}"
+            case "${CODE:-000}" in 2*|4*) ;; *) echo "::error::CORS_PREFLIGHT_HTTP=${CODE:-000} em $URL"; exit 1 ;; esac
+            case "$ALLOW" in "*"|"$ORIGIN") ;; *) echo "::error::CORS_HEADER_AUSENTE em $URL"; exit 1 ;; esac
+          done
+          echo "✅ CORS crítico disponível para o frontend"
+
       # ============================================================
       # ETAPA 73 (plano-100, 2026-08-25): gate de proteção de rollback.
       # A retenção GHCR (keep 30 = 10 deploys) roda no BUILD do próximo
@@ -468,7 +535,7 @@ jobs:
           sparse-checkout: |
             infra/ghcr-protected-tags.txt
 
-      - name: "4/4 — 🛡️ Proteção de rollback da SHA deployada (etapa 73 — verifica + alerta)"
+      - name: "🛡️ Proteção de rollback da SHA deployada (etapa 73 — verifica + alerta)"
         env:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           GH_TOKEN_ACTIONS: ${{ secrets.GH_TOKEN_ACTIONS }}
