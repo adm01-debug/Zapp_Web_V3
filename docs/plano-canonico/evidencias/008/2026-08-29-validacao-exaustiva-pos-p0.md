@@ -62,6 +62,11 @@ git diff 470f3625b6f5..c0e98478ee72 -- scripts/data-layer-baseline.json
 curl -fsS https://zapp.atomicabr.com.br/version.json
 curl -fsS https://zappweb.app.br/version.json
 curl -fsS https://www.zappweb.app.br/version.json
+bash -lc 'for host in zapp.atomicabr.com.br zappweb.app.br www.zappweb.app.br; do
+  for path in / /auth /favicon.ico /version.json; do
+    curl -sS -L -o /dev/null -w "%{http_code}\n" "https://${host}${path}"
+  done
+done'
 
 SELECT pg_postmaster_start_time();
 SELECT relname, n_tup_ins, n_tup_upd, n_tup_del
@@ -141,6 +146,10 @@ mutators, `nextval`, triggers, DDL, DML ou RPCs operacionais.
 | parser Realtime rejeitar todo contrato canônico | corrigido | ramo canônico aceita `internal\|direct` e os oito estados live |
 | `DemandPrediction` quebrar com array vazio | corrigido | vazio estável, `trend=stable`, cancelamento e testes dedicados |
 | ausência de testes do hook single | corrigido | suíte cobre preflight, CAS, ticket, sucesso, parcial e erro |
+
+No fluxo single, o identificador canônico resolvido é usado tanto em
+`messages.agent_id` quanto em `transfer_comments.agent_id`; ambos representam
+`zapp.profiles.id`, não `auth.users.id`.
 
 ## Gaps reais remanescentes
 
@@ -247,12 +256,33 @@ verde. Para uma futura redução real de baseline, porém, o secret
 credencial event-capable equivalente. Não houve rotação ou alteração de segredo nesta
 rodada.
 
+## Correções aditivas das provas de 28/08
+
+As evidências anteriores permanecem preservadas como fotografia da execução original;
+esta prova posterior limita explicitamente o que elas podiam concluir:
+
+- o run inicial de `#1444` com convergência `Swarm × digest` pulada não certificava, por
+  si só, a task ativa; a correlação forte usada agora vem dos runs posteriores com
+  convergência `completed`, imagem exata e réplica `1/1`;
+- a referência histórica a `132` testes em corpo editável de PR não é usada como artefato
+  imutável de fechamento; os totais atuais vêm de logs de jobs identificados por run;
+- Quality Gate genérico e Vitest não fecham `G004` de transferência. Não houve nesta
+  rodada Playwright autenticado do lifecycle completo; por isso `041/042/044` continuam
+  parciais;
+- as consultas live sanitizadas estão registradas nesta prova, em vez de inferir o banco
+  apenas das migrations históricas;
+- os probes atuais usam `GET`, não `HEAD`, para raiz, auth, favicon e versão.
+
 ## Limites e autorizações preservadas
 
 - Nenhum objeto, policy, função, trigger, grant, índice, tabela ou dado foi alterado.
 - Nenhuma função mutante, sequência ou trigger foi chamada para fabricar erro.
 - Nenhum arquivo candidato a lixo foi removido.
 - Nenhuma mudança de VPS host, Swarm, SO ou pacote foi realizada.
+- O GO documental original não autorizava mudança manual de produção. A autorização
+  operacional posterior do dono permitiu merge e pediu explicitamente commit, push, PR,
+  CI, merge e validação do deploy real; o deploy citado foi o workflow normal do merge,
+  sem comando manual na VPS.
 - Probes públicos não substituem E2E autenticado de negócio.
 - Correção DB continua condicionada a migration nova, staging, testes e autorização
   explícita do Joaquim antes do apply.
