@@ -54,6 +54,9 @@ gh run view 33229794279
 gh run view 33229794225
 gh run view 33230650615 --log-failed
 gh pr view 1455 --json files,body,headRefOid,baseRefOid,state,statusCheckRollup
+bash scripts/check-audit-docs-integrity.sh
+git diff --check
+git grep -n -E '209\.142\.67\.51|186\.207\.138\.55' -- docs/plano-canonico
 git show origin/main:src/features/inbox/hooks/useTransferConversation.ts
 git show origin/main:src/features/inbox/components/TransferDialog.tsx
 git show origin/main:src/shared/webhookEventSchemas.ts
