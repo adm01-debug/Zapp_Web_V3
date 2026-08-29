@@ -1,0 +1,95 @@
+name: DB Guard
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - ".github/workflows/db-guard.yml"
+      - "scripts/generate-schema-catalog.mjs"
+      - "scripts/check-mcp-exec-acl.mjs"
+      - "src/integrations/supabase/types.ts"
+      - "supabase/schema-catalog.json"
+      - "supabase/migrations/**"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - ".github/workflows/db-guard.yml"
+      - "scripts/generate-schema-catalog.mjs"
+      - "scripts/check-mcp-exec-acl.mjs"
+      - "src/integrations/supabase/types.ts"
+      - "supabase/schema-catalog.json"
+      - "supabase/migrations/**"
+  workflow_dispatch:
+
+concurrency:
+  group: db-guard-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event.pull_request.number == '' }}
+
+jobs:
+  catalog-fresh:
+    name: Catalog fresh + ACL RPC MCP
+    runs-on: [Linux, X64, vps-zapp]
+    env:
+      SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
+      META_URL: ${{ secrets.ZAPP_META_URL }}
+      META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Catálogo local está determinístico
+        run: node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --check
+
+      - name: Gerar catálogo vivo via postgres-meta
+        if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
+        run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json
+
+      - name: Comparar catálogo commitado com o catálogo vivo
+        if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
+        run: |
+          if ! diff -u supabase/schema-catalog.json reports/schema-catalog.live.json; then
+            echo "::error title=Schema catalog stale::supabase/schema-catalog.json divergiu do postgres-meta. Regenere o catálogo e commite o artefato atualizado."
+            exit 1
+          fi
+          echo "Catálogo vivo confere com o artefato commitado."
+
+      - name: Avisar quando a checagem viva não executar
+        if: ${{ env.META_URL == '' || env.META_TOKEN == '' }}
+        run: |
+          echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. Só a consistência local do schema-catalog foi validada nesta run."
+
+      - name: Garantir psql disponível
+        if: ${{ env.SUPABASE_DB_URL != '' }}
+        run: |
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Assertion ACL RPC MCP
+        if: ${{ env.SUPABASE_DB_URL != '' }}
+        run: node scripts/check-mcp-exec-acl.mjs
+
+      - name: Avisar quando a assertion ACL não executar
+        if: ${{ env.SUPABASE_DB_URL == '' }}
+        run: |
+          echo "::notice title=ACL RPC MCP não verificada::SUPABASE_DB_URL ausente. O gate de ACL foi pulado nesta run."
+
+      - name: Publicar catálogo vivo
+        if: always() && env.META_URL != '' && env.META_TOKEN != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: schema-catalog-live
+          path: reports/schema-catalog.live.json
+          if-no-files-found: ignore
+          retention-days: 14
