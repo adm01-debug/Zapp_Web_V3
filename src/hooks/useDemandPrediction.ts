@@ -60,10 +60,11 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
     // query ativa faria uma leitura redundante e deixaria requests/logs em voo
     // mesmo depois do consumidor desmontar.
     enabled: externalData === undefined,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await dbFrom('evolution_messages')
         .select('created_at')
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .abortSignal(signal);
       if (error) throw error;
 
       const hourCounts = new Map<number, number[]>();

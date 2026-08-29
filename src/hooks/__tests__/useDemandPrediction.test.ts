@@ -12,6 +12,7 @@
  *   - data returned equals externalData when provided
  *   - empty externalData is handled without querying or invalid insights
  *   - the datasource query remains enabled when externalData is omitted
+ *   - the React Query cancellation signal reaches the datasource builder
  *   - insights.maxPredicted is the maximum predicted value among isPrediction=true points
  *   - insights.avgPredicted is the average of predicted values among isPrediction=true points
  *   - insights.currentActual is the actual value of the first non-prediction point
@@ -28,12 +29,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { useDemandPrediction, type PredictionPoint } from '../useDemandPrediction';
 
-const { dbFromMock, selectMock, gteMock } = vi.hoisted(() => {
-  const gte = vi.fn(async () => ({ data: [], error: null }));
+const { dbFromMock, selectMock, gteMock, abortSignalMock } = vi.hoisted(() => {
+  const abortSignal = vi.fn(async (_signal: AbortSignal) => ({ data: [], error: null }));
+  const gte = vi.fn(() => ({ abortSignal }));
   const select = vi.fn(() => ({ gte }));
   const dbFrom = vi.fn(() => ({ select }));
 
-  return { dbFromMock: dbFrom, selectMock: select, gteMock: gte };
+  return { dbFromMock: dbFrom, selectMock: select, gteMock: gte, abortSignalMock: abortSignal };
 });
 
 vi.mock('@/integrations/datasource/db', () => ({ dbFrom: dbFromMock }));
@@ -42,6 +44,7 @@ beforeEach(() => {
   dbFromMock.mockClear();
   selectMock.mockClear();
   gteMock.mockClear();
+  abortSignalMock.mockClear();
 });
 
 function makeWrapper() {
@@ -104,6 +107,27 @@ describe('useDemandPrediction — data passthrough', () => {
     });
     expect(selectMock).toHaveBeenCalledWith('created_at');
     expect(gteMock).toHaveBeenCalledOnce();
+    expect(abortSignalMock).toHaveBeenCalledWith(expect.any(AbortSignal));
+  });
+
+  it('aborts an in-flight datasource query when the consumer unmounts', async () => {
+    abortSignalMock.mockImplementationOnce((signal: AbortSignal) => new Promise((_, reject) => {
+      signal.addEventListener(
+        'abort',
+        () => reject(new DOMException('Query cancelled', 'AbortError')),
+        { once: true }
+      );
+    }));
+
+    const { unmount } = renderHook(() => useDemandPrediction(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(abortSignalMock).toHaveBeenCalledOnce());
+    const forwardedSignal = abortSignalMock.mock.calls[0][0];
+    expect(forwardedSignal.aborted).toBe(false);
+
+    unmount();
+
+    await waitFor(() => expect(forwardedSignal.aborted).toBe(true));
   });
 
   it('handles empty externalData without querying or invalid insights', () => {
