@@ -31,7 +31,7 @@ env:
 
 jobs:
   lockfile:
-    name: Lockfile and data-layer guards
+    name: Lockfile e proteções da camada de dados
     # Piloto de migração pra ubuntu-latest (auditoria 2026-08-21): o repo está
     # PÚBLICO hoje (confirmado via `gh repo view --json visibility` — a
     # premissa "repo privado + cota billing esgotada" de 2026-08-18 não se
@@ -102,13 +102,13 @@ jobs:
           fi
           echo "Lockfile consistency check passed."
 
-      - name: Data-layer baseline monotonicity regression tests
+      - name: Testes de regressão dos gates de lockfile e camada de dados
         run: >-
           node --test
           scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
           scripts/lib/__tests__/normalize-package-json-input.test.mjs
 
-      - name: Data-layer baseline monotonicity (blocking)
+      - name: Monotonicidade do baseline da camada de dados (bloqueante)
         if: github.event_name == 'pull_request'
         env:
           BASE_BRANCH: ${{ github.base_ref }}
@@ -117,8 +117,11 @@ jobs:
           git fetch --no-tags origin "$BASE_BRANCH"
           node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "origin/$BASE_BRANCH"
 
+      - name: Contagens do código dentro do baseline candidato (bloqueante)
+        run: node scripts/check-data-layer.mjs
+
   typescript-gates:
-    name: TypeScript gates (hosted, blocking)
+    name: Gates TypeScript (hospedado, bloqueante)
     # Os gates são herméticos e não recebem secrets. Dois runners diferentes
     # do pool vps-zapp abortaram o tsc com SIGABRT após ~60 s. Para um dos SHAs
     # afetados, o mesmo gate passou no ubuntu-latest; no outro incidente, o
@@ -129,22 +132,22 @@ jobs:
     timeout-minutes: 30
     needs: lockfile
     steps:
-      - name: Checkout code
+      - name: Baixar código
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Setup Node
+      - name: Preparar Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      - name: Setup Bun
+      - name: Preparar Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
 
-      - name: Cache Bun dependencies
+      - name: Restaurar cache de dependências Bun
         uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
@@ -152,19 +155,19 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-
 
-      - name: Install dependencies (hermetic)
+      - name: Instalar dependências sem scripts de ciclo de vida
         run: bun install --ignore-scripts
 
-      - name: TypeScript gate regression tests (blocking)
+      - name: Testes de regressão do gate TypeScript (bloqueante)
         run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
 
-      - name: TypeScript check (ratchet, blocking)
+      - name: Verificação TypeScript por ratchet (bloqueante)
         run: node scripts/check-tsc-ratchet.mjs
 
-      - name: TypeScript check — chat components (blocking, strict)
+      - name: Verificação TypeScript dos componentes de chat (estrita e bloqueante)
         run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
 
-      - name: ts-nocheck drift gate (blocking)
+      - name: Gate contra deriva de ts-nocheck (bloqueante)
         run: node scripts/check-ts-nocheck.mjs
 
   required-merge-gate:
@@ -176,7 +179,7 @@ jobs:
     needs: [lockfile, typescript-gates]
     if: always()
     steps:
-      - name: Confirm required guards
+      - name: Confirmar proteções obrigatórias
         env:
           LOCKFILE_RESULT: ${{ needs.lockfile.result }}
           TYPESCRIPT_RESULT: ${{ needs.typescript-gates.result }}

@@ -183,8 +183,16 @@ jobs:
               echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} contém caminhos inesperados"
               exit 1
             fi
-            if ! git diff --quiet "origin/${BRANCH}" HEAD -- scripts/data-layer-baseline.json; then
-              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} existe com baseline diferente"
+            if ! REMOTE_CALLS="$(git show "origin/${BRANCH}:scripts/data-layer-baseline.json" | jq -e -cS '.calls | select(type == "object")')"; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} contém baseline remoto inválido"
+              exit 1
+            fi
+            if ! LOCAL_CALLS="$(jq -e -cS '.calls | select(type == "object")' scripts/data-layer-baseline.json)"; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — baseline local gerado é inválido"
+              exit 1
+            fi
+            if [ "$REMOTE_CALLS" != "$LOCAL_CALLS" ]; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} existe com contagens de baseline diferentes"
               exit 1
             fi
           else
