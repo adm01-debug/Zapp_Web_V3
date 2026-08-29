@@ -52,6 +52,18 @@ de execução. Os riscos mais importantes confirmados na baseline são:
 - jobs agendados de drift, E2E, limpeza e proteção de branch ainda falham, embora o
   pipeline principal de push/deploy esteja verde.
 
+### Atualização auditada em 29/08/2026
+
+O bloco acima permanece como fotografia da baseline de partida. Na `main@470f3625b`,
+as correções de resultado honesto da transferência single, remoção de `connection`,
+identidade `profiles.id`, parser canônico, TypeScript fail-closed e demanda externa já
+foram integradas e revalidadas. A evidência reproduzível está em
+[`2026-08-29-validacao-exaustiva-pos-p0.md`](./evidencias/008/2026-08-29-validacao-exaustiva-pos-p0.md).
+
+Continuam abertos: contrato/RLS/funções DB da transferência, trilha de bulk e handoff,
+pipeline de relatórios agendados e permissão do secret do ratchet para criar PR sem
+intervenção. Nenhum objeto do banco foi alterado durante essa revalidação.
+
 ### Fotografia viva usada como referência
 
 | Schema | Tabelas regulares | Particionadas | Views | Matviews | Funções | Triggers não internos | Policies |
@@ -529,9 +541,9 @@ a concluído.
 
 **Prioridade:** P0 · **Estado inicial:** confirmado aberto (15 diagnósticos) · **Classe:** FE/QA · **Gates:** G001 · **Dependências:** 001/009
 
-- [ ] Reproduzir `tsc --noEmit -p tsconfig.app.json` em checkout limpo da baseline.
-- [ ] Corrigir os contratos de auth, chat, reactions, timestamps, virtualizer e `AbortSignal` sem casts cegos.
-- [ ] Reaproveitar apenas mudanças válidas da branch de typecheck, revisando conflito por conflito.
+- [x] Reproduzir `tsc --noEmit -p tsconfig.app.json` em checkout limpo da baseline.
+- [x] Corrigir os contratos de auth, chat, reactions, timestamps, virtualizer e `AbortSignal` sem casts cegos.
+- [x] Reaproveitar apenas mudanças válidas da branch de typecheck, revisando conflito por conflito.
 
 **Concluída quando:** typecheck direto e o gate oficial retornam zero erro em checkout limpo.
 
@@ -661,12 +673,12 @@ a concluído.
 
 **Prioridade:** P0 · **Estado inicial:** confirmado aberto · **Classe:** INBOX/FE/DB · **Gates:** G001/G002/G004 · **Dependências:** 027/031
 
-- [ ] Fazer o frontend tratar falha de `conversation_transfers`/`transfer_comments` como resultado incompleto.
-- [ ] Remover o cast de `connection` e não oferecer transferência entre conexões até existir handler/contrato real.
-- [ ] Alinhar o parser Realtime de `conversation_transfers` aos enums e à nulabilidade do banco canônico.
+- [x] Fazer o frontend tratar falha de `conversation_transfers`/`transfer_comments` como resultado incompleto.
+- [x] Remover o cast de `connection` e não oferecer transferência entre conexões até existir handler/contrato real.
+- [x] Alinhar o parser Realtime de `conversation_transfers` aos enums e à nulabilidade do banco canônico.
 - [ ] Desativar a transferência em massa enquanto ela não usar a mesma trilha auditável, ou fazê-la retornar resultado estruturado sem falso sucesso.
-- [ ] Aguardar o resultado da operação antes de fechar o diálogo e bloquear duplo envio durante a promise.
-- [ ] Não emitir toast final de sucesso quando a auditoria obrigatória não persistir.
+- [x] Aguardar o resultado da operação antes de fechar o diálogo e bloquear duplo envio durante a promise.
+- [x] Não emitir toast final de sucesso quando a auditoria obrigatória não persistir.
 - [ ] Apresentar retry/compensação segura sem duplicar timeline ou transferência.
 
 **Concluída quando:** usuário nunca recebe confirmação plena de uma transferência sem trilha exigida, e nenhum tipo não suportado alcança uma escrita de agente/fila.
@@ -680,7 +692,7 @@ a concluído.
 - [ ] Definir unidade transacional para contato, mensagem de timeline, transferência e comentário.
 - [ ] Garantir idempotency key e comportamento de retry após falha em cada ponto.
 - [ ] Correlacionar realtime, audit log e histórico administrativo.
-- [ ] Resolver `auth.uid()` para `profiles.id` antes de persistir FKs de agente e provar o
+- [x] Resolver `auth.uid()` para `profiles.id` antes de persistir FKs de agente e provar o
   caso em que as duas identidades são diferentes.
 
 **Concluída quando:** falha parcial não deixa estado contraditório ou sucesso ambíguo.
