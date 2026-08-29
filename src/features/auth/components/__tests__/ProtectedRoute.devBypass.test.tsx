@@ -92,7 +92,8 @@ function renderProtected(ui: ReactElement, initialPath = '/admin') {
 
 function AuthStateProbe() {
   const location = useLocation();
-  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? 'none';
+  const from =
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? 'none';
   return <div>{`AUTH_FROM:${from}`}</div>;
 }
 

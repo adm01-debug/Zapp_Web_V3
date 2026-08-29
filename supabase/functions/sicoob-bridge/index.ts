@@ -1,7 +1,7 @@
 import { createZappAdminClient } from '../_shared/db-client.ts';
-import { handleCors, errorResponse, errorEnvelope, jsonResponse, requireEnv, Logger, getCorsHeaders } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, requireEnv, Logger, getCorsHeaders } from "../_shared/validation.ts";
 import { timingSafeStringEqual } from "../_shared/auth.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 
 Deno.serve(async (req) => {
@@ -81,7 +81,10 @@ Deno.serve(async (req) => {
       if (msgError) {
         if ((msgError as { code?: string }).code === '23505') {
           log.info("Duplicate message_id — returning idempotent success", { message_id });
-          return jsonResponse({ success: true, message: 'Message already exists', idempotent: true }, 200, req, parsed.headers);
+          // Etapa 54 (PLANO-100-CONTRATOS-EDGE): respostas de sucesso migram pra
+          // respondWithContract — parsed.headers (x-contract-version/deprecated/
+          // sunset) anexados pelo kit, sem propagação manual.
+          return respondWithContract(parsed, { success: true, message: 'Message already exists', idempotent: true }, { status: 200, headers: getCorsHeaders(req) });
         }
         throw new Error(`Failed to create message: ${msgError.message}`);
       }
@@ -89,7 +92,7 @@ Deno.serve(async (req) => {
       await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', contactId);
 
       log.done(200, { contactId, messageId: newMessage.id });
-      return jsonResponse({ success: true, contact_id: contactId, message_id: newMessage.id }, 200, req, parsed.headers);
+      return respondWithContract(parsed, { success: true, contact_id: contactId, message_id: newMessage.id }, { status: 200, headers: getCorsHeaders(req) });
 
     } else if (action === 'mark_read') {
       const { external_ids } = body;
@@ -97,7 +100,7 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Failed to mark messages as read: ${error.message}`);
 
       log.done(200, { count: external_ids.length });
-      return jsonResponse({ success: true, updated: external_ids.length }, 200, req, parsed.headers);
+      return respondWithContract(parsed, { success: true, updated: external_ids.length }, { status: 200, headers: getCorsHeaders(req) });
 
     } else {
       return errorResponse(`Unknown action: ${action}. Supported: new_message, mark_read`, 400, req, undefined, contractResponseHeaders);

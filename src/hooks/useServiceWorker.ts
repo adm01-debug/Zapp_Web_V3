@@ -18,24 +18,21 @@ type SwSkipCleanupState = {
 };
 
 function setSwSkipCleanupState(
-  update:
-    | SwSkipCleanupState
-    | ((prev: SwSkipCleanupState) => SwSkipCleanupState)
+  update: SwSkipCleanupState | ((prev: SwSkipCleanupState) => SwSkipCleanupState)
 ): void {
   if (typeof window === 'undefined') return;
   const globalWindow = window as typeof window & {
     [SW_SKIP_CLEANUP_STATE_KEY]?: SwSkipCleanupState;
   };
-  const previous =
-    globalWindow[SW_SKIP_CLEANUP_STATE_KEY] ?? {
-      phase: 'idle',
-      startedAt: null,
-      finishedAt: null,
-      registrations: [],
-      staleCaches: [],
-      controllerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null,
-      error: null,
-    };
+  const previous = globalWindow[SW_SKIP_CLEANUP_STATE_KEY] ?? {
+    phase: 'idle',
+    startedAt: null,
+    finishedAt: null,
+    registrations: [],
+    staleCaches: [],
+    controllerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null,
+    error: null,
+  };
   globalWindow[SW_SKIP_CLEANUP_STATE_KEY] =
     typeof update === 'function' ? update(previous) : update;
 }
@@ -70,19 +67,25 @@ async function cleanupLegacyServiceWorker(): Promise<boolean> {
   // com prefixo workbox-/zapp-.
   if (navigator.serviceWorker.controller) {
     // Garante que nao ha flag residual que cause reload surpresa.
-    try { localStorage.removeItem(CACHE_RESET_FLAG); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(CACHE_RESET_FLAG);
+    } catch {
+      /* noop */
+    }
     return false;
   }
 
   const cacheKeys = await caches.keys();
   // Filtra apenas caches legados (workbox-/zapp-), mesmo criterio do
   // activate handler em sw.js. NUNCA purgar o HTTP cache do browser.
-  const staleKeys = cacheKeys.filter((k) =>
-    /^(workbox-|zapp-)/i.test(k)
-  );
+  const staleKeys = cacheKeys.filter((k) => /^(workbox-|zapp-)/i.test(k));
 
   if (staleKeys.length === 0) {
-    try { localStorage.removeItem(CACHE_RESET_FLAG); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(CACHE_RESET_FLAG);
+    } catch {
+      /* noop */
+    }
     return false;
   }
 
@@ -138,10 +141,14 @@ function shouldSkipServiceWorker(): boolean {
     if (
       host.startsWith('id-preview--') ||
       host.startsWith('preview--') ||
-      host === 'lovableproject.com' || host.endsWith('.lovableproject.com') ||
-      host === 'lovableproject-dev.com' || host.endsWith('.lovableproject-dev.com') ||
-      host === 'beta.lovable.dev' || host.endsWith('.beta.lovable.dev')
-    ) return true;
+      host === 'lovableproject.com' ||
+      host.endsWith('.lovableproject.com') ||
+      host === 'lovableproject-dev.com' ||
+      host.endsWith('.lovableproject-dev.com') ||
+      host === 'beta.lovable.dev' ||
+      host.endsWith('.beta.lovable.dev')
+    )
+      return true;
     if (new URL(window.location.href).searchParams.get('sw') === 'off') return true;
   } catch {
     /* noop */
@@ -164,17 +171,14 @@ async function unregisterAllServiceWorkers(): Promise<void> {
   try {
     const regs = await navigator.serviceWorker.getRegistrations?.();
     const registrations = (regs ?? [])
-      .map(
-        (r) =>
-          r.active?.scriptURL ||
-          r.waiting?.scriptURL ||
-          r.installing?.scriptURL ||
-          r.scope
-      )
+      .map((r) => r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || r.scope)
       .filter(Boolean);
     let staleCaches: string[] = [];
     if (regs && regs.length) {
-      log.info('[ServiceWorker] Unregistering existing workers', regs.map((r) => r.scope));
+      log.info(
+        '[ServiceWorker] Unregistering existing workers',
+        regs.map((r) => r.scope)
+      );
       await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
     }
     // Purga apenas caches com prefixo workbox-/zapp- (mesmo criterio do
@@ -193,7 +197,9 @@ async function unregisterAllServiceWorkers(): Promise<void> {
       sessionStorage.removeItem('zapp-workbox-purged-once');
       sessionStorage.removeItem('sw-cache-reset-done');
       localStorage.removeItem('sw-cache-reset-done');
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
     setSwSkipCleanupState({
       phase: 'done',
       startedAt,
@@ -231,8 +237,6 @@ export function useServiceWorker() {
       return;
     }
 
-
-
     let cleanup: (() => void) | undefined;
     let disposed = false;
     const timeoutIds: NodeJS.Timeout[] = [];
@@ -259,7 +263,7 @@ export function useServiceWorker() {
           if (error.message.includes('404') && retryCount < 3) {
             log.warn(`[ServiceWorker] 404 on registration attempt ${retryCount + 1}, retrying...`);
             const jitter = Math.random() * 1000;
-            const delay = (2000 * Math.pow(2, retryCount)) + jitter;
+            const delay = 2000 * Math.pow(2, retryCount) + jitter;
             const timeoutId = setTimeout(() => {
               if (!disposed) {
                 registerServiceWorker(retryCount + 1);
@@ -315,9 +319,11 @@ export function useServiceWorker() {
         const onMessage = (event: MessageEvent) => {
           log.debug('[ServiceWorker] Message received:', event.data);
           if (event.data?.type === 'NOTIFICATION_CLICK') {
-            document.dispatchEvent(new CustomEvent('notification-click', {
-              detail: event.data.data,
-            }));
+            document.dispatchEvent(
+              new CustomEvent('notification-click', {
+                detail: event.data.data,
+              })
+            );
           }
           if (event.data?.type === 'SW_UPDATED') {
             // A sw.js just activated. The stamped SW posts SW_UPDATED on EVERY
@@ -334,8 +340,8 @@ export function useServiceWorker() {
             // chunks. O reload imediato servia a HTML antiga do cache com chunks
             // novos que ainda não existiam → "Failed to fetch dynamically imported
             // module". Com a janela de 60s o CDN tem tempo de propagar.
-            void import('@/lib/buildVersion').then(
-              ({ requestGracefulRefresh, getCurrentBuildId }) => {
+            void import('@/lib/buildVersion')
+              .then(({ requestGracefulRefresh, getCurrentBuildId }) => {
                 // Verifica disposed após import dinâmico assíncrono para evitar
                 // chamar requestGracefulRefresh após o hook ter sido desmontado.
                 if (disposed) return;
@@ -343,10 +349,10 @@ export function useServiceWorker() {
                   typeof event.data.buildId === 'string' ? event.data.buildId : undefined;
                 const currentBuildId = getCurrentBuildId();
                 if (!swBuildId || swBuildId === 'unknown' || swBuildId === currentBuildId) {
-                  log.debug(
-                    '[ServiceWorker] SW_UPDATED for the running build — no reload needed',
-                    { swBuildId, currentBuildId }
-                  );
+                  log.debug('[ServiceWorker] SW_UPDATED for the running build — no reload needed', {
+                    swBuildId,
+                    currentBuildId,
+                  });
                   return;
                 }
                 log.info(
@@ -354,21 +360,20 @@ export function useServiceWorker() {
                   { swBuildId, currentBuildId }
                 );
                 requestGracefulRefresh(`sw-updated:${swBuildId}`, swBuildId);
-              }
-            ).catch((err: unknown) => {
-              // import() dinâmico pode rejeitar (chunk removido em redeploy) —
-              // sem handler vira unhandled rejection no handler do SW.
-              log.warn('[ServiceWorker] Falha ao carregar buildVersion no SW_UPDATED:', err);
-            });
+              })
+              .catch((err: unknown) => {
+                // import() dinâmico pode rejeitar (chunk removido em redeploy) —
+                // sem handler vira unhandled rejection no handler do SW.
+                log.warn('[ServiceWorker] Falha ao carregar buildVersion no SW_UPDATED:', err);
+              });
           }
         };
         navigator.serviceWorker.addEventListener('message', onMessage);
 
-
         // Cleanup on unmount (interval was leaking before)
         cleanup = () => {
           clearInterval(intervalId);
-          timeoutIds.forEach(id => clearTimeout(id));
+          timeoutIds.forEach((id) => clearTimeout(id));
           navigator.serviceWorker.removeEventListener('message', onMessage);
         };
       } catch (error) {

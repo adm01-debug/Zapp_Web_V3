@@ -89,7 +89,18 @@ export async function invokeEdge<T = unknown>(
   functionName: string,
   options?: InvokeOptions
 ): Promise<InvokeEdgeResult<T>> {
-  const { data, error } = await supabase.functions.invoke<T>(functionName, options);
+  let invocation: Awaited<ReturnType<typeof supabase.functions.invoke<T>>>;
+  try {
+    invocation = await supabase.functions.invoke<T>(functionName, options);
+  } catch {
+    // O SDK normalmente devolve FunctionsFetchError em `error`, mas adapters,
+    // mocks e falhas inesperadas também podem rejeitar a Promise. Preserve o
+    // contrato público deste wrapper: chamadores nunca precisam de try/finally
+    // apenas para não deixar estado de loading preso.
+    return { ok: false, code: 'network_error', message: '', fieldErrors: {} };
+  }
+
+  const { data, error } = invocation;
 
   if (!error) {
     return { ok: true, data: data as T };

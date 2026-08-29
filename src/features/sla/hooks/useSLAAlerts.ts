@@ -270,6 +270,8 @@ export function useSLAAlerts(params: SLAAlertParams) {
         }
 
         // External webhook forwarding (best-effort, fire-and-forget).
+        // Etapa 82 (PLANO-100, D-front): antes `.then(undefined, undefined)`
+        // silenciava 100% da falha do forward — segue não-fatal, agora com warn.
         void supabase.functions
           .invoke('sla-alert-forward', {
             body: {
@@ -283,10 +285,12 @@ export function useSLAAlerts(params: SLAAlertParams) {
               occurred_at: new Date().toISOString(),
             },
           })
-          .then(
-            () => undefined,
-            () => undefined
-          );
+          .catch((err) => {
+            console.warn(
+              '[useSLAAlerts] sla-alert-forward falhou (não fatal):',
+              err instanceof Error ? err.message : err
+            );
+          });
       } finally {
         inflightRef.current.delete(key);
       }

@@ -3,7 +3,7 @@ import { getSecret } from '../_shared/mod.ts';
 import { requireUser } from '../_shared/auth.ts';
 import { timingSafeEqual } from '../_shared/hmac-validation.ts';
 import { initSentry, captureException, captureMessage } from '../_shared/sentry.ts';
-import { parseOrReject } from '../_shared/contract-kit.ts';
+import { parseOrReject, respondWithContract } from '../_shared/contract-kit.ts';
 import { CONTRACT_SCHEMAS } from '../_shared/contract-schemas.ts';
 
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
@@ -113,6 +113,7 @@ Deno.serve(async (req) => {
           signal: AbortSignal.timeout(15_000),
         });
         if (!watchRes.ok) {
+          // Resposta OUTBOUND do Google — {} é fallback inofensivo (só degrada o detail do erro); não é o antipadrão de body de request (D1/etapa 27).
           const watchErr = await watchRes.json().catch(() => ({}));
           return json({ error: 'Watch failed', detail: watchErr }, 500);
         }
@@ -129,12 +130,16 @@ Deno.serve(async (req) => {
           status: 'active',
         }, { onConflict: 'account_id' });
 
-        return json({ ok: true, historyId: watchData.historyId, expiresAt: expires });
+        // Etapa 54 (PLANO-100-CONTRATOS-EDGE): respostas de SUCESSO migram pra
+        // respondWithContract — parsed.headers (x-contract-version/deprecated/
+        // sunset) anexados pelo kit. json() permanece para erros/GET (sem
+        // contrato negociado nesses caminhos).
+        return respondWithContract(parsed, { ok: true, historyId: watchData.historyId, expiresAt: expires }, { status: 200, headers: getCorsHeaders(req) });
       }
 
       // ── Pub/Sub push: process email notification ────────────────────
       const message = body.message as { data?: string; messageId?: string; publishTime?: string } | undefined;
-      if (!message?.data) return json({ ok: true, skipped: 'no_message' });
+      if (!message?.data) return respondWithContract(parsed, { ok: true, skipped: 'no_message' }, { status: 200, headers: getCorsHeaders(req) });
 
       let decoded: { emailAddress?: string; historyId?: string };
       try {
@@ -144,13 +149,13 @@ Deno.serve(async (req) => {
       }
 
       const { emailAddress, historyId } = decoded;
-      if (!emailAddress || !historyId) return json({ ok: true, skipped: 'missing_fields' });
+      if (!emailAddress || !historyId) return respondWithContract(parsed, { ok: true, skipped: 'missing_fields' }, { status: 200, headers: getCorsHeaders(req) });
 
       const { data: account } = await supabase.from('email_accounts').select('id, access_token, refresh_token, token_expires_at').eq('email', emailAddress).maybeSingle();
-      if (!account) return json({ ok: true, skipped: 'account_not_found' });
+      if (!account) return respondWithContract(parsed, { ok: true, skipped: 'account_not_found' }, { status: 200, headers: getCorsHeaders(req) });
 
       const token = await getValidToken(supabase, account.id);
-      if (!token) return json({ ok: true, skipped: 'invalid_token' });
+      if (!token) return respondWithContract(parsed, { ok: true, skipped: 'invalid_token' }, { status: 200, headers: getCorsHeaders(req) });
 
       const { data: watch } = await supabase.from('email_watch_history').select('history_id').eq('account_id', account.id).maybeSingle();
       const startHistoryId = watch?.history_id ?? historyId;
@@ -162,7 +167,7 @@ Deno.serve(async (req) => {
         status: 'active',
       }, { onConflict: 'account_id' });
 
-      return json({ ok: true });
+      return respondWithContract(parsed, { ok: true }, { status: 200, headers: getCorsHeaders(req) });
     }
 
     // ── GET: status endpoint ────────────────────────────────────────
