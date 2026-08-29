@@ -52,14 +52,9 @@ jobs:
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
         run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json
 
-      - name: Comparar catálogo commitado com o catálogo vivo
+      - name: Comparar contrato do catálogo commitado com o catálogo vivo
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
-        run: |
-          if ! diff -u supabase/schema-catalog.json reports/schema-catalog.live.json; then
-            echo "::error title=Schema catalog stale::supabase/schema-catalog.json divergiu do postgres-meta. Regenere o catálogo e commite o artefato atualizado."
-            exit 1
-          fi
-          echo "Catálogo vivo confere com o artefato commitado."
+        run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json --compare-file supabase/schema-catalog.json --ignore-source
 
       - name: Avisar quando a checagem viva não executar
         if: ${{ env.META_URL == '' || env.META_TOKEN == '' }}

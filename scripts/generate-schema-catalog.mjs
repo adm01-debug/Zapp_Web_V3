@@ -19,6 +19,8 @@
  *   --out <path>          Arquivo de saída (default: supabase/schema-catalog.json)
  *   --schemas <csv>       Filtra schemas de topo (default: todos os presentes em Database)
  *   --from-meta           Busca o types.ts do postgres-meta em vez de ler arquivo local
+ *   --compare-file <path> Compara o catálogo gerado com outro catálogo JSON
+ *   --ignore-source       Ignora o bloco `source` na comparação entre catálogos
  *   --check               Compara a saída gerada com o arquivo em --out e falha se divergir
  *
  * Exit codes:
@@ -47,12 +49,14 @@ function readFlag(name, fallback = undefined) {
 
 const TYPES_FILE = readFlag('types-file', DEFAULT_TYPES_FILE);
 const OUT_FILE = readFlag('out', DEFAULT_OUT_FILE);
+const COMPARE_FILE = readFlag('compare-file', '');
 const SCHEMAS_FILTER = (readFlag('schemas', '') || '')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
 const FROM_META = process.argv.includes('--from-meta');
 const CHECK_ONLY = process.argv.includes('--check');
+const IGNORE_SOURCE = process.argv.includes('--ignore-source');
 
 function sha1(input) {
   return createHash('sha1').update(input).digest('hex');
@@ -482,6 +486,26 @@ function stableStringify(value) {
   return JSON.stringify(value, null, 2) + '\n';
 }
 
+function normalizeCatalogForComparison(catalog) {
+  if (!IGNORE_SOURCE) return sortObject(catalog);
+
+  const clone = JSON.parse(JSON.stringify(catalog));
+  delete clone.source;
+  return sortObject(clone);
+}
+
+function compareCatalogs(leftCatalog, rightCatalog, leftLabel, rightLabel) {
+  const normalizedLeft = stableStringify(normalizeCatalogForComparison(leftCatalog));
+  const normalizedRight = stableStringify(normalizeCatalogForComparison(rightCatalog));
+
+  if (normalizedLeft !== normalizedRight) {
+    console.error(
+      `::error title=Schema catalog stale::${leftLabel} divergiu de ${rightLabel}.`,
+    );
+    process.exit(1);
+  }
+}
+
 async function main() {
   const { source, text } = await loadTypesSource();
   const parsed = parseDatabaseTypes(text);
@@ -504,6 +528,19 @@ async function main() {
 
   mkdirSync(dirname(resolve(OUT_FILE)), { recursive: true });
   writeFileSync(OUT_FILE, output);
+
+  if (COMPARE_FILE) {
+    if (!existsSync(COMPARE_FILE)) {
+      console.error(`::error title=Schema catalog ausente::${COMPARE_FILE} não existe.`);
+      process.exit(1);
+    }
+    const compareTarget = JSON.parse(readFileSync(COMPARE_FILE, 'utf8'));
+    compareCatalogs(catalog, compareTarget, OUT_FILE, COMPARE_FILE);
+    console.log(
+      `✓ ${OUT_FILE} confere com ${COMPARE_FILE}${IGNORE_SOURCE ? ' (ignorando source)' : ''}.`,
+    );
+  }
+
   console.log(`✓ Catálogo gerado em ${OUT_FILE}`);
   console.log(`  Fonte: ${source.kind}`);
   console.log(`  Schemas: ${catalog.summary.schemas} | Tables: ${catalog.summary.tables} | Views: ${catalog.summary.views} | Functions: ${catalog.summary.functions}`);

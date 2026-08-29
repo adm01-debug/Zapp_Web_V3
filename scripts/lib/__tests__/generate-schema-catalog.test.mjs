@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -31,4 +31,41 @@ test('generate-schema-catalog preserva colunas críticas e normaliza Returns inl
   assert.ok(zapp.Views.gmail_accounts.row_columns.some((column) => column.name === 'watch_expiration'));
   assert.ok(zapp.Views.contacts.row_columns.some((column) => column.name === 'last_seen_at'));
   assert.ok(zapp.Views.contacts.row_columns.some((column) => column.name === 'workspace_id'));
+});
+
+test('generate-schema-catalog compara catálogos ignorando source quando solicitado', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-compare-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+  const compareFile = join(outDir, 'schema-catalog.compare.json');
+
+  execFileSync('node', [scriptPath, '--types-file', fixturePath, '--out', outFile], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  const catalog = JSON.parse(readFileSync(outFile, 'utf8'));
+  catalog.source = {
+    kind: 'postgres-meta',
+    url: 'https://example.invalid/pg/generators/typescript',
+    types_sha1: catalog.source.types_sha1,
+  };
+  writeFileSync(compareFile, JSON.stringify(catalog, null, 2) + '\n');
+
+  execFileSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      fixturePath,
+      '--out',
+      outFile,
+      '--compare-file',
+      compareFile,
+      '--ignore-source',
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    },
+  );
 });

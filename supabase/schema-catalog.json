@@ -138,6 +138,16 @@
           "overload_count": 0,
           "overloads": []
         },
+        "fn_collect_backlog_history": {
+          "definition_sha1": "98656fcabc5a11941f3bb123fcd24fdce549e125",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "number"
+            }
+          ]
+        },
         "fn_create_monthly_partition": {
           "definition_sha1": "307105b35596afee028622ab35e578762ce52133",
           "overload_count": 1,
@@ -185,41 +195,6 @@
           "overload_count": 0,
           "overloads": []
         },
-        "fn_ensure_monthly_partitions": {
-          "definition_sha1": "ada9dc172cfeb5fa05f252bfca6f71f73a72f540",
-          "overload_count": 1,
-          "overloads": [
-            {
-              "args": [
-                {
-                  "name": "p_base_table",
-                  "type": "string"
-                },
-                {
-                  "name": "p_months_ahead",
-                  "type": "number"
-                },
-                {
-                  "name": "p_schema",
-                  "type": "string"
-                }
-              ],
-              "returns": {
-                "fields": [
-                  {
-                    "name": "acao",
-                    "type": "string"
-                  },
-                  {
-                    "name": "partitao",
-                    "type": "string"
-                  }
-                ],
-                "kind": "object[]"
-              }
-            }
-          ]
-        },
         "fn_evict_media_cache": {
           "definition_sha1": "b20daa0a6803342a63d5b940cc2a0ce0804acc82",
           "overload_count": 0,
@@ -252,6 +227,16 @@
             {
               "args": [],
               "returns": "boolean"
+            }
+          ]
+        },
+        "fn_kpi_rollup_refresh": {
+          "definition_sha1": "77c23fec79411936301c757f918a83ee4fcff563",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "undefined"
             }
           ]
         },
@@ -420,6 +405,16 @@
           "overload_count": 0,
           "overloads": []
         },
+        "fn_purge_recon_temp_tables": {
+          "definition_sha1": "f068aaa95020bc9b97c38d03bdeabf7a401272ad",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "number"
+            }
+          ]
+        },
         "fn_purge_storage_cache": {
           "definition_sha1": "3a3f915ebb0eafeccebef383e019c94f42db00fb",
           "overload_count": 1,
@@ -432,6 +427,26 @@
                 }
               ],
               "returns": "Json"
+            }
+          ]
+        },
+        "fn_purge_traefik_401_stats": {
+          "definition_sha1": "86734d2e624983edcfa62a8d0ac96a7ca5e70e0d",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "number"
+            }
+          ]
+        },
+        "fn_recon_coverage_snapshot": {
+          "definition_sha1": "d2ee62857d98defa5d67fa6ab514e38cd0a7bbe9",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "undefined"
             }
           ]
         },
@@ -476,27 +491,14 @@
           "overloads": []
         },
         "fn_sync_lid_from_api": {
-          "definition_sha1": "573404c4aba0d1c4822f3b9ea179210f8a2b7b72",
-          "overload_count": 2,
+          "definition_sha1": "03964b984053f35a6d55013b9eee5fa1517598e5",
+          "overload_count": 1,
           "overloads": [
             {
               "args": [
                 {
                   "name": "p_instance",
                   "type": "string"
-                }
-              ],
-              "returns": "Json"
-            },
-            {
-              "args": [
-                {
-                  "name": "p_instance",
-                  "type": "string"
-                },
-                {
-                  "name": "p_limit",
-                  "type": "number"
                 }
               ],
               "returns": "Json"
@@ -1173,6 +1175,433 @@
         }
       },
       "Tables": {
+        "_dead_idx_usage_audit_20260820": {
+          "definition_sha1": "43b633388b59c1fe5592726200879628969d60f5",
+          "insert_columns": [
+            {
+              "name": "captured_at",
+              "type": "string | null"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "idx_scan",
+              "type": "number | null"
+            },
+            {
+              "name": "idx_tup_fetch",
+              "type": "number | null"
+            },
+            {
+              "name": "idx_tup_read",
+              "type": "number | null"
+            },
+            {
+              "name": "index_size_bytes",
+              "type": "number | null"
+            },
+            {
+              "name": "index_type",
+              "type": "string | null"
+            },
+            {
+              "name": "indexname",
+              "type": "string | null"
+            },
+            {
+              "name": "is_primary",
+              "type": "boolean | null"
+            },
+            {
+              "name": "is_unique",
+              "type": "boolean | null"
+            },
+            {
+              "name": "recommendation",
+              "type": "string | null"
+            },
+            {
+              "name": "schemaname",
+              "type": "string | null"
+            },
+            {
+              "name": "tablename",
+              "type": "string | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "captured_at",
+              "type": "string | null"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "idx_scan",
+              "type": "number | null"
+            },
+            {
+              "name": "idx_tup_fetch",
+              "type": "number | null"
+            },
+            {
+              "name": "idx_tup_read",
+              "type": "number | null"
+            },
+            {
+              "name": "index_size_bytes",
+              "type": "number | null"
+            },
+            {
+              "name": "index_type",
+              "type": "string | null"
+            },
+            {
+              "name": "indexname",
+              "type": "string | null"
+            },
+            {
+              "name": "is_primary",
+              "type": "boolean | null"
+            },
+            {
+              "name": "is_unique",
+              "type": "boolean | null"
+            },
+            {
+              "name": "recommendation",
+              "type": "string | null"
+            },
+            {
+              "name": "schemaname",
+              "type": "string | null"
+            },
+            {
+              "name": "tablename",
+              "type": "string | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "captured_at",
+              "type": "string | null"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "idx_scan",
+              "type": "number | null"
+            },
+            {
+              "name": "idx_tup_fetch",
+              "type": "number | null"
+            },
+            {
+              "name": "idx_tup_read",
+              "type": "number | null"
+            },
+            {
+              "name": "index_size_bytes",
+              "type": "number | null"
+            },
+            {
+              "name": "index_type",
+              "type": "string | null"
+            },
+            {
+              "name": "indexname",
+              "type": "string | null"
+            },
+            {
+              "name": "is_primary",
+              "type": "boolean | null"
+            },
+            {
+              "name": "is_unique",
+              "type": "boolean | null"
+            },
+            {
+              "name": "recommendation",
+              "type": "string | null"
+            },
+            {
+              "name": "schemaname",
+              "type": "string | null"
+            },
+            {
+              "name": "tablename",
+              "type": "string | null"
+            }
+          ]
+        },
+        "_dead_migration_watermark_20260820": {
+          "definition_sha1": "840e0dbbd4733698d7452fceddb8c965bdd7850f",
+          "insert_columns": [
+            {
+              "name": "_row_id",
+              "type": "number"
+            },
+            {
+              "name": "last_created_at",
+              "type": "string | null"
+            },
+            {
+              "name": "last_id",
+              "type": "string | null"
+            },
+            {
+              "name": "migration_name",
+              "type": "string | null"
+            },
+            {
+              "name": "rows_migrated",
+              "type": "number | null"
+            },
+            {
+              "name": "updated_at",
+              "type": "string | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "_row_id",
+              "type": "number"
+            },
+            {
+              "name": "last_created_at",
+              "type": "string | null"
+            },
+            {
+              "name": "last_id",
+              "type": "string | null"
+            },
+            {
+              "name": "migration_name",
+              "type": "string | null"
+            },
+            {
+              "name": "rows_migrated",
+              "type": "number | null"
+            },
+            {
+              "name": "updated_at",
+              "type": "string | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "_row_id",
+              "type": "number"
+            },
+            {
+              "name": "last_created_at",
+              "type": "string | null"
+            },
+            {
+              "name": "last_id",
+              "type": "string | null"
+            },
+            {
+              "name": "migration_name",
+              "type": "string | null"
+            },
+            {
+              "name": "rows_migrated",
+              "type": "number | null"
+            },
+            {
+              "name": "updated_at",
+              "type": "string | null"
+            }
+          ]
+        },
+        "_rabbit_probe": {
+          "definition_sha1": "06fd82540eb87de2423f85f50ccb5158f9b16cc3",
+          "insert_columns": [
+            {
+              "name": "req_id",
+              "type": "number"
+            },
+            {
+              "name": "requested_at",
+              "type": "string"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "req_id",
+              "type": "number"
+            },
+            {
+              "name": "requested_at",
+              "type": "string"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "req_id",
+              "type": "number"
+            },
+            {
+              "name": "requested_at",
+              "type": "string"
+            }
+          ]
+        },
+        "_recon_missing": {
+          "definition_sha1": "60f9a108d9dabeec26586b351473cd52cf6e8a5d",
+          "insert_columns": [
+            {
+              "name": "from_me",
+              "type": "boolean | null"
+            },
+            {
+              "name": "message_id",
+              "type": "string"
+            },
+            {
+              "name": "message_type",
+              "type": "string | null"
+            },
+            {
+              "name": "remote_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "ts",
+              "type": "number | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "from_me",
+              "type": "boolean | null"
+            },
+            {
+              "name": "message_id",
+              "type": "string"
+            },
+            {
+              "name": "message_type",
+              "type": "string | null"
+            },
+            {
+              "name": "remote_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "ts",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "from_me",
+              "type": "boolean | null"
+            },
+            {
+              "name": "message_id",
+              "type": "string"
+            },
+            {
+              "name": "message_type",
+              "type": "string | null"
+            },
+            {
+              "name": "remote_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "ts",
+              "type": "number | null"
+            }
+          ]
+        },
+        "_recon_pg14_ids": {
+          "definition_sha1": "61f5be3fbe6e51f2c5d51f2619cdb5917c469917",
+          "insert_columns": [
+            {
+              "name": "from_me",
+              "type": "boolean | null"
+            },
+            {
+              "name": "message_id",
+              "type": "string"
+            },
+            {
+              "name": "message_type",
+              "type": "string | null"
+            },
+            {
+              "name": "remote_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "ts",
+              "type": "number | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "from_me",
+              "type": "boolean | null"
+            },
+            {
+              "name": "message_id",
+              "type": "string"
+            },
+            {
+              "name": "message_type",
+              "type": "string | null"
+            },
+            {
+              "name": "remote_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "ts",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "from_me",
+              "type": "boolean | null"
+            },
+            {
+              "name": "message_id",
+              "type": "string"
+            },
+            {
+              "name": "message_type",
+              "type": "string | null"
+            },
+            {
+              "name": "remote_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "ts",
+              "type": "number | null"
+            }
+          ]
+        },
         "_secure_config": {
           "definition_sha1": "f7dd5b7a64daaa5d99fd1d20e3211cd68936f1c8",
           "insert_columns": [
@@ -1287,6 +1716,53 @@
             },
             {
               "name": "table_affected",
+              "type": "string | null"
+            }
+          ]
+        },
+        "_unknown_media_backfill_20260820": {
+          "definition_sha1": "9da11d7428c6b1168ad4b3b2909444283625b49f",
+          "insert_columns": [
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "media_status",
+              "type": "string | null"
+            },
+            {
+              "name": "media_url",
+              "type": "string | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "media_status",
+              "type": "string | null"
+            },
+            {
+              "name": "media_url",
+              "type": "string | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "media_status",
+              "type": "string | null"
+            },
+            {
+              "name": "media_url",
               "type": "string | null"
             }
           ]
@@ -11686,173 +12162,6 @@
             }
           ]
         },
-        "idx_usage_audit": {
-          "definition_sha1": "3e8d24c859447c1a85926a4eb4f46ba0464c9189",
-          "insert_columns": [
-            {
-              "name": "captured_at",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idx_scan",
-              "type": "number"
-            },
-            {
-              "name": "idx_tup_fetch",
-              "type": "number"
-            },
-            {
-              "name": "idx_tup_read",
-              "type": "number"
-            },
-            {
-              "name": "index_size_bytes",
-              "type": "number"
-            },
-            {
-              "name": "index_type",
-              "type": "string | null"
-            },
-            {
-              "name": "indexname",
-              "type": "string"
-            },
-            {
-              "name": "is_primary",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_unique",
-              "type": "boolean | null"
-            },
-            {
-              "name": "recommendation",
-              "type": "string | null"
-            },
-            {
-              "name": "schemaname",
-              "type": "string"
-            },
-            {
-              "name": "tablename",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "captured_at",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idx_scan",
-              "type": "number"
-            },
-            {
-              "name": "idx_tup_fetch",
-              "type": "number"
-            },
-            {
-              "name": "idx_tup_read",
-              "type": "number"
-            },
-            {
-              "name": "index_size_bytes",
-              "type": "number"
-            },
-            {
-              "name": "index_type",
-              "type": "string | null"
-            },
-            {
-              "name": "indexname",
-              "type": "string"
-            },
-            {
-              "name": "is_primary",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_unique",
-              "type": "boolean | null"
-            },
-            {
-              "name": "recommendation",
-              "type": "string | null"
-            },
-            {
-              "name": "schemaname",
-              "type": "string"
-            },
-            {
-              "name": "tablename",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "captured_at",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idx_scan",
-              "type": "number"
-            },
-            {
-              "name": "idx_tup_fetch",
-              "type": "number"
-            },
-            {
-              "name": "idx_tup_read",
-              "type": "number"
-            },
-            {
-              "name": "index_size_bytes",
-              "type": "number"
-            },
-            {
-              "name": "index_type",
-              "type": "string | null"
-            },
-            {
-              "name": "indexname",
-              "type": "string"
-            },
-            {
-              "name": "is_primary",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_unique",
-              "type": "boolean | null"
-            },
-            {
-              "name": "recommendation",
-              "type": "string | null"
-            },
-            {
-              "name": "schemaname",
-              "type": "string"
-            },
-            {
-              "name": "tablename",
-              "type": "string"
-            }
-          ]
-        },
         "ingest_ledger": {
           "definition_sha1": "91e4cd86cf5144d197b04e855a0fc87c694b1037",
           "insert_columns": [
@@ -12017,6 +12326,161 @@
             {
               "name": "remote_jid",
               "type": "string | null"
+            }
+          ]
+        },
+        "kpi_rollup_24h": {
+          "definition_sha1": "bb807f6555e002734d510cc64b43e1e5a60c4b72",
+          "insert_columns": [
+            {
+              "name": "consumer_drop_total",
+              "type": "number | null"
+            },
+            {
+              "name": "dedup_failures_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "dedup_tracked_rows",
+              "type": "number | null"
+            },
+            {
+              "name": "ipwatch_hits_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "last_ingest_at",
+              "type": "string | null"
+            },
+            {
+              "name": "msgs_1h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "pct_401_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "snapshot_at",
+              "type": "string"
+            },
+            {
+              "name": "webhook_events_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "webhook_latency_avg_ms_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "webhook_latency_p95_ms_24h",
+              "type": "number | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "consumer_drop_total",
+              "type": "number | null"
+            },
+            {
+              "name": "dedup_failures_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "dedup_tracked_rows",
+              "type": "number | null"
+            },
+            {
+              "name": "ipwatch_hits_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "last_ingest_at",
+              "type": "string | null"
+            },
+            {
+              "name": "msgs_1h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "pct_401_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "snapshot_at",
+              "type": "string"
+            },
+            {
+              "name": "webhook_events_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "webhook_latency_avg_ms_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "webhook_latency_p95_ms_24h",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "consumer_drop_total",
+              "type": "number | null"
+            },
+            {
+              "name": "dedup_failures_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "dedup_tracked_rows",
+              "type": "number | null"
+            },
+            {
+              "name": "ipwatch_hits_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "last_ingest_at",
+              "type": "string | null"
+            },
+            {
+              "name": "msgs_1h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "pct_401_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "snapshot_at",
+              "type": "string"
+            },
+            {
+              "name": "webhook_events_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "webhook_latency_avg_ms_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "webhook_latency_p95_ms_24h",
+              "type": "number | null"
             }
           ]
         },
@@ -12280,6 +12744,149 @@
             }
           ],
           "update_columns": [
+            {
+              "name": "confidence",
+              "type": "string"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "instance_name",
+              "type": "string"
+            },
+            {
+              "name": "lid_jid",
+              "type": "string"
+            },
+            {
+              "name": "phone_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "phone_number",
+              "type": "string | null"
+            },
+            {
+              "name": "raw_signal",
+              "type": "Json | null"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            }
+          ]
+        },
+        "lid_phone_map_invalid_archive": {
+          "definition_sha1": "bf136adc3039d0ecc8911d60400eb9ff7846ef22",
+          "insert_columns": [
+            {
+              "name": "archive_reason",
+              "type": "string | null"
+            },
+            {
+              "name": "archived_at",
+              "type": "string | null"
+            },
+            {
+              "name": "confidence",
+              "type": "string"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "instance_name",
+              "type": "string"
+            },
+            {
+              "name": "lid_jid",
+              "type": "string"
+            },
+            {
+              "name": "phone_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "phone_number",
+              "type": "string | null"
+            },
+            {
+              "name": "raw_signal",
+              "type": "Json | null"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "archive_reason",
+              "type": "string | null"
+            },
+            {
+              "name": "archived_at",
+              "type": "string | null"
+            },
+            {
+              "name": "confidence",
+              "type": "string"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "instance_name",
+              "type": "string"
+            },
+            {
+              "name": "lid_jid",
+              "type": "string"
+            },
+            {
+              "name": "phone_jid",
+              "type": "string | null"
+            },
+            {
+              "name": "phone_number",
+              "type": "string | null"
+            },
+            {
+              "name": "raw_signal",
+              "type": "Json | null"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "archive_reason",
+              "type": "string | null"
+            },
+            {
+              "name": "archived_at",
+              "type": "string | null"
+            },
             {
               "name": "confidence",
               "type": "string"
@@ -12676,7 +13283,7 @@
           ]
         },
         "media_download_queue": {
-          "definition_sha1": "913f9da60065e678d85a8602687e1a66a9101208",
+          "definition_sha1": "f8559fd5ef38bc4472b9c68e1461697677b3a643",
           "insert_columns": [
             {
               "name": "created_at",
@@ -12788,7 +13395,7 @@
             }
           ],
           "kind": "table",
-          "relationship_count": 4,
+          "relationship_count": 3,
           "row_columns": [
             {
               "name": "created_at",
@@ -14214,77 +14821,6 @@
             }
           ]
         },
-        "migration_watermark": {
-          "definition_sha1": "6c0840f5919e9fe63e6e839f1580b30ecb4ba107",
-          "insert_columns": [
-            {
-              "name": "last_created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_id",
-              "type": "string | null"
-            },
-            {
-              "name": "migration_name",
-              "type": "string"
-            },
-            {
-              "name": "rows_migrated",
-              "type": "number"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "last_created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_id",
-              "type": "string | null"
-            },
-            {
-              "name": "migration_name",
-              "type": "string"
-            },
-            {
-              "name": "rows_migrated",
-              "type": "number"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "last_created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_id",
-              "type": "string | null"
-            },
-            {
-              "name": "migration_name",
-              "type": "string"
-            },
-            {
-              "name": "rows_migrated",
-              "type": "number"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            }
-          ]
-        },
         "ops_runbooks": {
           "definition_sha1": "3b80c77ed89bd0142a46a789287593ae4fd53202",
           "insert_columns": [
@@ -14567,6 +15103,232 @@
             {
               "name": "remote_jid",
               "type": "string"
+            }
+          ]
+        },
+        "rabbitmq_backlog_history": {
+          "definition_sha1": "36fd6fac65ed1b4a33e0b5aa31ac7d8b44ab6f5b",
+          "insert_columns": [
+            {
+              "name": "captured_at",
+              "type": "string"
+            },
+            {
+              "name": "consumers",
+              "type": "number | null"
+            },
+            {
+              "name": "messages",
+              "type": "number | null"
+            },
+            {
+              "name": "queue_name",
+              "type": "string"
+            },
+            {
+              "name": "ready",
+              "type": "number | null"
+            },
+            {
+              "name": "source",
+              "type": "string | null"
+            },
+            {
+              "name": "unacked",
+              "type": "number | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "captured_at",
+              "type": "string"
+            },
+            {
+              "name": "consumers",
+              "type": "number | null"
+            },
+            {
+              "name": "messages",
+              "type": "number | null"
+            },
+            {
+              "name": "queue_name",
+              "type": "string"
+            },
+            {
+              "name": "ready",
+              "type": "number | null"
+            },
+            {
+              "name": "source",
+              "type": "string | null"
+            },
+            {
+              "name": "unacked",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "captured_at",
+              "type": "string"
+            },
+            {
+              "name": "consumers",
+              "type": "number | null"
+            },
+            {
+              "name": "messages",
+              "type": "number | null"
+            },
+            {
+              "name": "queue_name",
+              "type": "string"
+            },
+            {
+              "name": "ready",
+              "type": "number | null"
+            },
+            {
+              "name": "source",
+              "type": "string | null"
+            },
+            {
+              "name": "unacked",
+              "type": "number | null"
+            }
+          ]
+        },
+        "recon_coverage_daily": {
+          "definition_sha1": "7114987acc9c0e1b73090b061c26000fc19b30e8",
+          "insert_columns": [
+            {
+              "name": "captured_at",
+              "type": "string | null"
+            },
+            {
+              "name": "coverage_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "last_ingest_at",
+              "type": "string | null"
+            },
+            {
+              "name": "missing_bydesign_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_lid_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_real_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_mirror_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_source_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "snapshot_date",
+              "type": "string"
+            },
+            {
+              "name": "source",
+              "type": "string | null"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "captured_at",
+              "type": "string | null"
+            },
+            {
+              "name": "coverage_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "last_ingest_at",
+              "type": "string | null"
+            },
+            {
+              "name": "missing_bydesign_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_lid_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_real_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_mirror_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_source_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "snapshot_date",
+              "type": "string"
+            },
+            {
+              "name": "source",
+              "type": "string | null"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "captured_at",
+              "type": "string | null"
+            },
+            {
+              "name": "coverage_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "last_ingest_at",
+              "type": "string | null"
+            },
+            {
+              "name": "missing_bydesign_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_lid_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_real_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_mirror_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "msgs_source_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "snapshot_date",
+              "type": "string"
+            },
+            {
+              "name": "source",
+              "type": "string | null"
             }
           ]
         },
@@ -16676,6 +17438,157 @@
             }
           ]
         },
+        "v_ai_catalog": {
+          "definition_sha1": "59fbc2554f88766cd1c047e91e387d895e0020f0",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "fk_relations",
+              "type": "string | null"
+            },
+            {
+              "name": "key_columns",
+              "type": "string | null"
+            },
+            {
+              "name": "purpose",
+              "type": "string | null"
+            },
+            {
+              "name": "reader_functions",
+              "type": "string | null"
+            },
+            {
+              "name": "reader_views",
+              "type": "string | null"
+            },
+            {
+              "name": "schema_name",
+              "type": "unknown"
+            },
+            {
+              "name": "table_name",
+              "type": "unknown"
+            },
+            {
+              "name": "writers_crons",
+              "type": "string | null"
+            },
+            {
+              "name": "writers_triggers",
+              "type": "string | null"
+            }
+          ],
+          "update_columns": []
+        },
+        "v_ai_dataflow": {
+          "definition_sha1": "04df8f7c60c76208e6f41b2130dbddefb69b4bd9",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "event",
+              "type": "string | null"
+            },
+            {
+              "name": "firing_time",
+              "type": "string | null"
+            },
+            {
+              "name": "function_name",
+              "type": "unknown"
+            },
+            {
+              "name": "function_purpose",
+              "type": "string | null"
+            },
+            {
+              "name": "function_schema",
+              "type": "unknown"
+            },
+            {
+              "name": "source_schema",
+              "type": "unknown"
+            },
+            {
+              "name": "source_table",
+              "type": "unknown"
+            },
+            {
+              "name": "target_tables",
+              "type": "string | null"
+            },
+            {
+              "name": "trigger_name",
+              "type": "unknown"
+            }
+          ],
+          "update_columns": []
+        },
+        "v_ai_health_summary": {
+          "definition_sha1": "1b3fd495af60365a068399324ab3370fafc01cfd",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "agent_health_status",
+              "type": "string | null"
+            },
+            {
+              "name": "checked_at",
+              "type": "string | null"
+            },
+            {
+              "name": "doc_coverage_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "media_classified_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "mirror_coverage",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_real_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "recon_coverage_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "tables_documented",
+              "type": "number | null"
+            },
+            {
+              "name": "tables_total",
+              "type": "number | null"
+            },
+            {
+              "name": "total_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "triggers_classified",
+              "type": "number | null"
+            },
+            {
+              "name": "triggers_total",
+              "type": "number | null"
+            },
+            {
+              "name": "unknown_24h",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": []
+        },
         "v_alert_dashboard": {
           "definition_sha1": "47508cb14b415ee4ab9d9b99559bd35c6001f812",
           "insert_columns": [],
@@ -17039,6 +17952,43 @@
           ],
           "update_columns": []
         },
+        "v_cron_health_24h": {
+          "definition_sha1": "6672ec80a831bb0a23982eaf156c55e9596595c2",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "avg_duration_sec",
+              "type": "number | null"
+            },
+            {
+              "name": "command",
+              "type": "string | null"
+            },
+            {
+              "name": "failed_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "health_status",
+              "type": "string | null"
+            },
+            {
+              "name": "jobid",
+              "type": "number | null"
+            },
+            {
+              "name": "runs_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "schedule",
+              "type": "string | null"
+            }
+          ],
+          "update_columns": []
+        },
         "v_dedup_failures": {
           "definition_sha1": "f149cfe8f8109b2965bb7ade82c854438df76d38",
           "insert_columns": [],
@@ -17337,35 +18287,6 @@
             }
           ]
         },
-        "v_incident_metrics_48h": {
-          "definition_sha1": "e637b77dfcac95955f3851ea824027ac344ee71b",
-          "insert_columns": [],
-          "kind": "view",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "first_seen",
-              "type": "string | null"
-            },
-            {
-              "name": "last_1h",
-              "type": "number | null"
-            },
-            {
-              "name": "last_seen",
-              "type": "string | null"
-            },
-            {
-              "name": "metric",
-              "type": "string | null"
-            },
-            {
-              "name": "total",
-              "type": "number | null"
-            }
-          ],
-          "update_columns": []
-        },
         "v_ingest_reconciliation": {
           "definition_sha1": "426678d0c168f2a571f999e5bb39c6b539e1b433",
           "insert_columns": [],
@@ -17416,11 +18337,15 @@
           "update_columns": []
         },
         "v_kpi_overview": {
-          "definition_sha1": "7fada602c65d4092eb63dc6d64fd5302c8c90de1",
+          "definition_sha1": "81f04fc630e574c0f3369e9266496e24890bcd95",
           "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
           "row_columns": [
+            {
+              "name": "backlog_captured_at",
+              "type": "string | null"
+            },
             {
               "name": "checked_at",
               "type": "string | null"
@@ -17474,6 +18399,14 @@
               "type": "number | null"
             },
             {
+              "name": "missing_lid_24h",
+              "type": "number | null"
+            },
+            {
+              "name": "missing_real_24h",
+              "type": "number | null"
+            },
+            {
               "name": "msgs_1h",
               "type": "number | null"
             },
@@ -17498,6 +18431,10 @@
               "type": "number | null"
             },
             {
+              "name": "rollup_at",
+              "type": "string | null"
+            },
+            {
               "name": "webhook_events_24h",
               "type": "number | null"
             },
@@ -17507,22 +18444,6 @@
             },
             {
               "name": "webhook_latency_p95_ms_24h",
-              "type": "number | null"
-            },
-            {
-              "name": "wpp2_connects_24h",
-              "type": "number | null"
-            },
-            {
-              "name": "wpp2_disconnects_24h",
-              "type": "number | null"
-            },
-            {
-              "name": "wpp2_last_conn_event_at",
-              "type": "string | null"
-            },
-            {
-              "name": "wpp2_uptime_pct_24h",
               "type": "number | null"
             }
           ],
@@ -17780,521 +18701,6 @@
           ],
           "update_columns": []
         },
-        "v_messages_unified": {
-          "definition_sha1": "a9aad32f1a084cf7d0327836be064b9f8d76b071",
-          "insert_columns": [
-            {
-              "name": "_source_table",
-              "type": "never"
-            },
-            {
-              "name": "audio_meme_id",
-              "type": "string | null"
-            },
-            {
-              "name": "caption",
-              "type": "string | null"
-            },
-            {
-              "name": "category",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "content",
-              "type": "string | null"
-            },
-            {
-              "name": "conversation_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "direction",
-              "type": "string | null"
-            },
-            {
-              "name": "edited_at",
-              "type": "string | null"
-            },
-            {
-              "name": "follow_up_at",
-              "type": "string | null"
-            },
-            {
-              "name": "follow_up_done",
-              "type": "boolean | null"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_important",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_read",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_starred",
-              "type": "boolean | null"
-            },
-            {
-              "name": "link_preview",
-              "type": "Json | null"
-            },
-            {
-              "name": "media_filename",
-              "type": "string | null"
-            },
-            {
-              "name": "media_meta",
-              "type": "Json | null"
-            },
-            {
-              "name": "media_mimetype",
-              "type": "string | null"
-            },
-            {
-              "name": "media_size",
-              "type": "number | null"
-            },
-            {
-              "name": "media_type",
-              "type": "string | null"
-            },
-            {
-              "name": "media_url",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "quoted_message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "sent_by_bot",
-              "type": "boolean | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            },
-            {
-              "name": "status_at",
-              "type": "string | null"
-            },
-            {
-              "name": "sticker_id",
-              "type": "string | null"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "template_name",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 1,
-          "row_columns": [
-            {
-              "name": "_source_table",
-              "type": "string | null"
-            },
-            {
-              "name": "audio_meme_id",
-              "type": "string | null"
-            },
-            {
-              "name": "caption",
-              "type": "string | null"
-            },
-            {
-              "name": "category",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "content",
-              "type": "string | null"
-            },
-            {
-              "name": "conversation_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "direction",
-              "type": "string | null"
-            },
-            {
-              "name": "edited_at",
-              "type": "string | null"
-            },
-            {
-              "name": "follow_up_at",
-              "type": "string | null"
-            },
-            {
-              "name": "follow_up_done",
-              "type": "boolean | null"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_important",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_read",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_starred",
-              "type": "boolean | null"
-            },
-            {
-              "name": "link_preview",
-              "type": "Json | null"
-            },
-            {
-              "name": "media_filename",
-              "type": "string | null"
-            },
-            {
-              "name": "media_meta",
-              "type": "Json | null"
-            },
-            {
-              "name": "media_mimetype",
-              "type": "string | null"
-            },
-            {
-              "name": "media_size",
-              "type": "number | null"
-            },
-            {
-              "name": "media_type",
-              "type": "string | null"
-            },
-            {
-              "name": "media_url",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "quoted_message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "sent_by_bot",
-              "type": "boolean | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            },
-            {
-              "name": "status_at",
-              "type": "string | null"
-            },
-            {
-              "name": "sticker_id",
-              "type": "string | null"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "template_name",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "_source_table",
-              "type": "never"
-            },
-            {
-              "name": "audio_meme_id",
-              "type": "string | null"
-            },
-            {
-              "name": "caption",
-              "type": "string | null"
-            },
-            {
-              "name": "category",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "content",
-              "type": "string | null"
-            },
-            {
-              "name": "conversation_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "direction",
-              "type": "string | null"
-            },
-            {
-              "name": "edited_at",
-              "type": "string | null"
-            },
-            {
-              "name": "follow_up_at",
-              "type": "string | null"
-            },
-            {
-              "name": "follow_up_done",
-              "type": "boolean | null"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_important",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_read",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_starred",
-              "type": "boolean | null"
-            },
-            {
-              "name": "link_preview",
-              "type": "Json | null"
-            },
-            {
-              "name": "media_filename",
-              "type": "string | null"
-            },
-            {
-              "name": "media_meta",
-              "type": "Json | null"
-            },
-            {
-              "name": "media_mimetype",
-              "type": "string | null"
-            },
-            {
-              "name": "media_size",
-              "type": "number | null"
-            },
-            {
-              "name": "media_type",
-              "type": "string | null"
-            },
-            {
-              "name": "media_url",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "quoted_message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "sent_by_bot",
-              "type": "boolean | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            },
-            {
-              "name": "status_at",
-              "type": "string | null"
-            },
-            {
-              "name": "sticker_id",
-              "type": "string | null"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "template_name",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ]
-        },
         "v_pipeline_health": {
           "definition_sha1": "31885ceac97783c47c830103dd06556455f749fc",
           "insert_columns": [],
@@ -18550,6 +18956,75 @@
           ],
           "update_columns": []
         },
+        "v_reconnect_pattern_7d": {
+          "definition_sha1": "681736624d200e856dca419b55e5d9d4d71647fd",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "active_days",
+              "type": "number | null"
+            },
+            {
+              "name": "avg_gap_s",
+              "type": "number | null"
+            },
+            {
+              "name": "avg_hour_utc",
+              "type": "string | null"
+            },
+            {
+              "name": "connects_7d",
+              "type": "number | null"
+            },
+            {
+              "name": "connects_per_day",
+              "type": "number | null"
+            },
+            {
+              "name": "distinct_minute_of_day",
+              "type": "number | null"
+            },
+            {
+              "name": "instance_name",
+              "type": "string | null"
+            },
+            {
+              "name": "last_connect_at",
+              "type": "string | null"
+            },
+            {
+              "name": "max_burst_per_hour_le60s",
+              "type": "number | null"
+            },
+            {
+              "name": "median_gap_s",
+              "type": "number | null"
+            },
+            {
+              "name": "min_gap_s",
+              "type": "number | null"
+            },
+            {
+              "name": "pattern_class",
+              "type": "string | null"
+            },
+            {
+              "name": "rapid_reconnects_1min",
+              "type": "number | null"
+            },
+            {
+              "name": "rapid_reconnects_5min",
+              "type": "number | null"
+            },
+            {
+              "name": "stddev_hour_utc",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": []
+        },
         "v_security_audit": {
           "definition_sha1": "154ae7d33c5b62eec132d8e39a95542daccd03f0",
           "insert_columns": [],
@@ -18623,161 +19098,6 @@
             }
           ],
           "update_columns": []
-        },
-        "v_unused_index_candidates": {
-          "definition_sha1": "24c9a1c80cdcdb03d640cf3a40b55e6557b4758a",
-          "insert_columns": [
-            {
-              "name": "captured_at",
-              "type": "string | null"
-            },
-            {
-              "name": "current_state",
-              "type": "never"
-            },
-            {
-              "name": "idx_scan",
-              "type": "number | null"
-            },
-            {
-              "name": "index_size_bytes",
-              "type": "number | null"
-            },
-            {
-              "name": "index_size_pretty",
-              "type": "never"
-            },
-            {
-              "name": "index_type",
-              "type": "string | null"
-            },
-            {
-              "name": "indexname",
-              "type": "string | null"
-            },
-            {
-              "name": "is_primary",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_unique",
-              "type": "boolean | null"
-            },
-            {
-              "name": "recommendation",
-              "type": "string | null"
-            },
-            {
-              "name": "schemaname",
-              "type": "string | null"
-            },
-            {
-              "name": "tablename",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "captured_at",
-              "type": "string | null"
-            },
-            {
-              "name": "current_state",
-              "type": "string | null"
-            },
-            {
-              "name": "idx_scan",
-              "type": "number | null"
-            },
-            {
-              "name": "index_size_bytes",
-              "type": "number | null"
-            },
-            {
-              "name": "index_size_pretty",
-              "type": "string | null"
-            },
-            {
-              "name": "index_type",
-              "type": "string | null"
-            },
-            {
-              "name": "indexname",
-              "type": "string | null"
-            },
-            {
-              "name": "is_primary",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_unique",
-              "type": "boolean | null"
-            },
-            {
-              "name": "recommendation",
-              "type": "string | null"
-            },
-            {
-              "name": "schemaname",
-              "type": "string | null"
-            },
-            {
-              "name": "tablename",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "captured_at",
-              "type": "string | null"
-            },
-            {
-              "name": "current_state",
-              "type": "never"
-            },
-            {
-              "name": "idx_scan",
-              "type": "number | null"
-            },
-            {
-              "name": "index_size_bytes",
-              "type": "number | null"
-            },
-            {
-              "name": "index_size_pretty",
-              "type": "never"
-            },
-            {
-              "name": "index_type",
-              "type": "string | null"
-            },
-            {
-              "name": "indexname",
-              "type": "string | null"
-            },
-            {
-              "name": "is_primary",
-              "type": "boolean | null"
-            },
-            {
-              "name": "is_unique",
-              "type": "boolean | null"
-            },
-            {
-              "name": "recommendation",
-              "type": "string | null"
-            },
-            {
-              "name": "schemaname",
-              "type": "string | null"
-            },
-            {
-              "name": "tablename",
-              "type": "string | null"
-            }
-          ]
         },
         "v_vps_go_live_checklist": {
           "definition_sha1": "7a273fe09b56874dde07a22c8a4330e849875e70",
@@ -19411,7 +19731,67 @@
           "overloads": []
         }
       },
-      "Tables": {},
+      "Tables": {
+        "_grant_snapshot_gatea": {
+          "definition_sha1": "73edff7acde4ddada61b7f28f215427e3bfb7d71",
+          "insert_columns": [
+            {
+              "name": "_row_id",
+              "type": "number"
+            },
+            {
+              "name": "privilege_type",
+              "type": "string | null"
+            },
+            {
+              "name": "table_name",
+              "type": "unknown"
+            },
+            {
+              "name": "table_schema",
+              "type": "unknown"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "_row_id",
+              "type": "number"
+            },
+            {
+              "name": "privilege_type",
+              "type": "string | null"
+            },
+            {
+              "name": "table_name",
+              "type": "unknown"
+            },
+            {
+              "name": "table_schema",
+              "type": "unknown"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "_row_id",
+              "type": "number"
+            },
+            {
+              "name": "privilege_type",
+              "type": "string | null"
+            },
+            {
+              "name": "table_name",
+              "type": "unknown"
+            },
+            {
+              "name": "table_schema",
+              "type": "unknown"
+            }
+          ]
+        }
+      },
       "Views": {
         "agent_achievements": {
           "definition_sha1": "e72d98f6c3fdc8d9849c977148ef56c1256fdf10",
@@ -76323,256 +76703,6 @@
             }
           ]
         },
-        "sicoob_contact_mapping": {
-          "definition_sha1": "a9c736166a0d6f2ef39ccb82ab6e84a719c1f4b1",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_singular_id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_user_id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_vendedor_id",
-              "type": "string | null"
-            },
-            {
-              "name": "zappweb_agent_id",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 3,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_singular_id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_user_id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_vendedor_id",
-              "type": "string | null"
-            },
-            {
-              "name": "zappweb_agent_id",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_singular_id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_user_id",
-              "type": "string | null"
-            },
-            {
-              "name": "sicoob_vendedor_id",
-              "type": "string | null"
-            },
-            {
-              "name": "zappweb_agent_id",
-              "type": "string | null"
-            }
-          ]
-        },
-        "sicoob_reply_outbox": {
-          "definition_sha1": "79c681b9079f5263765bb18c6a9151963052bad2",
-          "insert_columns": [
-            {
-              "name": "agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "attempts",
-              "type": "number | null"
-            },
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "content",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "last_error",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "next_attempt_at",
-              "type": "string | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "attempts",
-              "type": "number | null"
-            },
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "content",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "last_error",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "next_attempt_at",
-              "type": "string | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "attempts",
-              "type": "number | null"
-            },
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "content",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "last_error",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string | null"
-            },
-            {
-              "name": "next_attempt_at",
-              "type": "string | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ]
-        },
         "sla_alert_preferences": {
           "definition_sha1": "caa66c0bef9476107b5ad4ce1e3d498d05031aef",
           "insert_columns": [
@@ -81993,7 +82123,7 @@
           ]
         },
         "user_settings": {
-          "definition_sha1": "1eb0b7574220479c3b06486eaf4e4193554510bc",
+          "definition_sha1": "570f46e304628504c29ae6af9d42cfdf6f9143ba",
           "insert_columns": [
             {
               "name": "auto_assignment_enabled",
@@ -82038,6 +82168,18 @@
             {
               "name": "created_at",
               "type": "string | null"
+            },
+            {
+              "name": "global_sla_critical_minutes",
+              "type": "number | null"
+            },
+            {
+              "name": "global_sla_notification_message",
+              "type": "string | null"
+            },
+            {
+              "name": "global_sla_warning_minutes",
+              "type": "number | null"
             },
             {
               "name": "goal_sound_type",
@@ -82094,6 +82236,10 @@
             {
               "name": "sentiment_consecutive_count",
               "type": "number | null"
+            },
+            {
+              "name": "simulation_mode_enabled",
+              "type": "boolean | null"
             },
             {
               "name": "sla_sound_type",
@@ -82188,6 +82334,18 @@
               "type": "string | null"
             },
             {
+              "name": "global_sla_critical_minutes",
+              "type": "number | null"
+            },
+            {
+              "name": "global_sla_notification_message",
+              "type": "string | null"
+            },
+            {
+              "name": "global_sla_warning_minutes",
+              "type": "number | null"
+            },
+            {
               "name": "goal_sound_type",
               "type": "string | null"
             },
@@ -82242,6 +82400,10 @@
             {
               "name": "sentiment_consecutive_count",
               "type": "number | null"
+            },
+            {
+              "name": "simulation_mode_enabled",
+              "type": "boolean | null"
             },
             {
               "name": "sla_sound_type",
@@ -82334,6 +82496,18 @@
               "type": "string | null"
             },
             {
+              "name": "global_sla_critical_minutes",
+              "type": "number | null"
+            },
+            {
+              "name": "global_sla_notification_message",
+              "type": "string | null"
+            },
+            {
+              "name": "global_sla_warning_minutes",
+              "type": "number | null"
+            },
+            {
               "name": "goal_sound_type",
               "type": "string | null"
             },
@@ -82388,6 +82562,10 @@
             {
               "name": "sentiment_consecutive_count",
               "type": "number | null"
+            },
+            {
+              "name": "simulation_mode_enabled",
+              "type": "boolean | null"
             },
             {
               "name": "sla_sound_type",
@@ -90083,6 +90261,11 @@
             }
           ]
         },
+        "fn_audit_storage_orphans": {
+          "definition_sha1": "a32165b79ca5786e32ec6c0ab195cf707532de3e",
+          "overload_count": 0,
+          "overloads": []
+        },
         "fn_audit_vocabulary_check_alert": {
           "definition_sha1": "c2d3f89ad3b475fe5ce1d3def40c3a5fe337ace3",
           "overload_count": 1,
@@ -91590,6 +91773,16 @@
             }
           ]
         },
+        "fn_fdw_delta_sentinel": {
+          "definition_sha1": "d58da19524b9bbad58fba89ffa6162dd0b846f46",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "undefined"
+            }
+          ]
+        },
         "fn_feed_401_disconnect_alerts": {
           "definition_sha1": "7e9e049722a9b1b4d3ec370f1f4504c3478395c8",
           "overload_count": 0,
@@ -92336,6 +92529,16 @@
           "overload_count": 0,
           "overloads": []
         },
+        "fn_media_queue_stalled_alert": {
+          "definition_sha1": "eab2bf98c225b79a91ea709b47223f0fbbc164a7",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "undefined"
+            }
+          ]
+        },
         "fn_message_rate_5min": {
           "definition_sha1": "35c1b1809280738337eee0f364f1ddeabcbb6c0f",
           "overload_count": 1,
@@ -92757,6 +92960,11 @@
               "returns": "Json"
             }
           ]
+        },
+        "fn_purge_warroom_alerts": {
+          "definition_sha1": "dbbe9b655696707cc6aa81eb80ec47897a2cac53",
+          "overload_count": 0,
+          "overloads": []
         },
         "fn_purge_webhook_logs": {
           "definition_sha1": "aecb285a454f179e784799f1df290e543ecefe81",
@@ -94280,11 +94488,24 @@
           ]
         },
         "get_contacts_360_batch": {
-          "definition_sha1": "d2265f488e838d5ed85e30062800b14c108a1c2b",
-          "overload_count": 1,
+          "definition_sha1": "332cec17e535136d2882fdf429f99f7b3d12df10",
+          "overload_count": 2,
           "overloads": [
             {
               "args": [
+                {
+                  "name": "p_phones",
+                  "type": "string[]"
+                }
+              ],
+              "returns": "Json"
+            },
+            {
+              "args": [
+                {
+                  "name": "p_instance",
+                  "type": "string"
+                },
                 {
                   "name": "p_phones",
                   "type": "string[]"
@@ -97076,7 +97297,7 @@
           "overloads": []
         },
         "rpc_get_reactions_batch": {
-          "definition_sha1": "6128384f7f3538c563e432b7572e8bfb6d680b17",
+          "definition_sha1": "048219db3ca9f67685d3268afb9ac532339e1cbc",
           "overload_count": 0,
           "overloads": []
         },
@@ -102178,987 +102399,6 @@
             }
           ]
         },
-        "_backfill_nomes_backup_20260814": {
-          "definition_sha1": "86dda79657d7c85ef40751acf8797f9ba7b48b80",
-          "insert_columns": [
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "backed_up_at",
-              "type": "string | null"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "dedup_hash",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_reason",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "first_contact_at",
-              "type": "string | null"
-            },
-            {
-              "name": "first_name",
-              "type": "string | null"
-            },
-            {
-              "name": "full_name",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_on_whatsapp",
-              "type": "boolean | null"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_name",
-              "type": "string | null"
-            },
-            {
-              "name": "last_presence_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_source",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_channel",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_data_sharing",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_deletion_requested_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_last_updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_marketing_consent",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_opt_out_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_profiling",
-              "type": "boolean | null"
-            },
-            {
-              "name": "merge_source_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_count",
-              "type": "number | null"
-            },
-            {
-              "name": "nickname",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone_number",
-              "type": "string | null"
-            },
-            {
-              "name": "pii_masked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "presence_status",
-              "type": "string | null"
-            },
-            {
-              "name": "profile_picture_url",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "role_title",
-              "type": "string | null"
-            },
-            {
-              "name": "search_vector",
-              "type": "unknown"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "version",
-              "type": "number | null"
-            },
-            {
-              "name": "whatsapp_checked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "backed_up_at",
-              "type": "string | null"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "dedup_hash",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_reason",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "first_contact_at",
-              "type": "string | null"
-            },
-            {
-              "name": "first_name",
-              "type": "string | null"
-            },
-            {
-              "name": "full_name",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_on_whatsapp",
-              "type": "boolean | null"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_name",
-              "type": "string | null"
-            },
-            {
-              "name": "last_presence_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_source",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_channel",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_data_sharing",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_deletion_requested_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_last_updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_marketing_consent",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_opt_out_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_profiling",
-              "type": "boolean | null"
-            },
-            {
-              "name": "merge_source_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_count",
-              "type": "number | null"
-            },
-            {
-              "name": "nickname",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone_number",
-              "type": "string | null"
-            },
-            {
-              "name": "pii_masked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "presence_status",
-              "type": "string | null"
-            },
-            {
-              "name": "profile_picture_url",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "role_title",
-              "type": "string | null"
-            },
-            {
-              "name": "search_vector",
-              "type": "unknown"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "version",
-              "type": "number | null"
-            },
-            {
-              "name": "whatsapp_checked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "backed_up_at",
-              "type": "string | null"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "dedup_hash",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_reason",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "first_contact_at",
-              "type": "string | null"
-            },
-            {
-              "name": "first_name",
-              "type": "string | null"
-            },
-            {
-              "name": "full_name",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_on_whatsapp",
-              "type": "boolean | null"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_name",
-              "type": "string | null"
-            },
-            {
-              "name": "last_presence_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_source",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_channel",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_data_sharing",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_deletion_requested_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_last_updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_marketing_consent",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_opt_out_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_profiling",
-              "type": "boolean | null"
-            },
-            {
-              "name": "merge_source_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_count",
-              "type": "number | null"
-            },
-            {
-              "name": "nickname",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone_number",
-              "type": "string | null"
-            },
-            {
-              "name": "pii_masked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "presence_status",
-              "type": "string | null"
-            },
-            {
-              "name": "profile_picture_url",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "role_title",
-              "type": "string | null"
-            },
-            {
-              "name": "search_vector",
-              "type": "unknown"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "version",
-              "type": "number | null"
-            },
-            {
-              "name": "whatsapp_checked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            }
-          ]
-        },
-        "_backup_contact_intelligence_lid_phone_20260811": {
-          "definition_sha1": "36e22188cd803aae59f32ce1614a144a5f051738",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_name",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "days_since_contact",
-              "type": "number | null"
-            },
-            {
-              "name": "disc_profile",
-              "type": "string | null"
-            },
-            {
-              "name": "engagement_score",
-              "type": "number | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inbound_ratio",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "string | null"
-            },
-            {
-              "name": "predicted_value",
-              "type": "number | null"
-            },
-            {
-              "name": "risk_level",
-              "type": "string | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_name",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "days_since_contact",
-              "type": "number | null"
-            },
-            {
-              "name": "disc_profile",
-              "type": "string | null"
-            },
-            {
-              "name": "engagement_score",
-              "type": "number | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inbound_ratio",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "string | null"
-            },
-            {
-              "name": "predicted_value",
-              "type": "number | null"
-            },
-            {
-              "name": "risk_level",
-              "type": "string | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_name",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "days_since_contact",
-              "type": "number | null"
-            },
-            {
-              "name": "disc_profile",
-              "type": "string | null"
-            },
-            {
-              "name": "engagement_score",
-              "type": "number | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inbound_ratio",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "string | null"
-            },
-            {
-              "name": "predicted_value",
-              "type": "number | null"
-            },
-            {
-              "name": "risk_level",
-              "type": "string | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ]
-        },
-        "_backup_repontagem_conversation_events_20260812": {
-          "definition_sha1": "55471825297d9f43d835a9815272f3e19fbab5a9",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "from_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idempotency_key",
-              "type": "string | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "performed_by",
-              "type": "string | null"
-            },
-            {
-              "name": "provider_message_log_id",
-              "type": "string | null"
-            },
-            {
-              "name": "thread_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "trace_id",
-              "type": "string | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "from_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idempotency_key",
-              "type": "string | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "performed_by",
-              "type": "string | null"
-            },
-            {
-              "name": "provider_message_log_id",
-              "type": "string | null"
-            },
-            {
-              "name": "thread_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "trace_id",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "from_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idempotency_key",
-              "type": "string | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "performed_by",
-              "type": "string | null"
-            },
-            {
-              "name": "provider_message_log_id",
-              "type": "string | null"
-            },
-            {
-              "name": "thread_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "trace_id",
-              "type": "string | null"
-            }
-          ]
-        },
         "_consumer_dlq": {
           "definition_sha1": "857933d0247f762ca0badeac93eda7dba78863bd",
           "insert_columns": [
@@ -103421,1058 +102661,6 @@
             }
           ]
         },
-        "_dedup_backup_20260813": {
-          "definition_sha1": "a0d3874aa034b40c35556a9a98b577f5160c7f18",
-          "insert_columns": [
-            {
-              "name": "_canonico_id",
-              "type": "string | null"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "dedup_hash",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_reason",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "first_contact_at",
-              "type": "string | null"
-            },
-            {
-              "name": "first_name",
-              "type": "string | null"
-            },
-            {
-              "name": "full_name",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_on_whatsapp",
-              "type": "boolean | null"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_name",
-              "type": "string | null"
-            },
-            {
-              "name": "last_presence_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_source",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_channel",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_data_sharing",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_deletion_requested_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_last_updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_marketing_consent",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_opt_out_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_profiling",
-              "type": "boolean | null"
-            },
-            {
-              "name": "merge_source_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_count",
-              "type": "number | null"
-            },
-            {
-              "name": "nickname",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone_number",
-              "type": "string | null"
-            },
-            {
-              "name": "pii_masked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "presence_status",
-              "type": "string | null"
-            },
-            {
-              "name": "profile_picture_url",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "role_title",
-              "type": "string | null"
-            },
-            {
-              "name": "search_vector",
-              "type": "unknown"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "version",
-              "type": "number | null"
-            },
-            {
-              "name": "whatsapp_checked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "_canonico_id",
-              "type": "string | null"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "dedup_hash",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_reason",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "first_contact_at",
-              "type": "string | null"
-            },
-            {
-              "name": "first_name",
-              "type": "string | null"
-            },
-            {
-              "name": "full_name",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_on_whatsapp",
-              "type": "boolean | null"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_name",
-              "type": "string | null"
-            },
-            {
-              "name": "last_presence_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_source",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_channel",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_data_sharing",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_deletion_requested_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_last_updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_marketing_consent",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_opt_out_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_profiling",
-              "type": "boolean | null"
-            },
-            {
-              "name": "merge_source_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_count",
-              "type": "number | null"
-            },
-            {
-              "name": "nickname",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone_number",
-              "type": "string | null"
-            },
-            {
-              "name": "pii_masked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "presence_status",
-              "type": "string | null"
-            },
-            {
-              "name": "profile_picture_url",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "role_title",
-              "type": "string | null"
-            },
-            {
-              "name": "search_vector",
-              "type": "unknown"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "version",
-              "type": "number | null"
-            },
-            {
-              "name": "whatsapp_checked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "_canonico_id",
-              "type": "string | null"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "dedup_hash",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_reason",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "first_contact_at",
-              "type": "string | null"
-            },
-            {
-              "name": "first_name",
-              "type": "string | null"
-            },
-            {
-              "name": "full_name",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_on_whatsapp",
-              "type": "boolean | null"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_name",
-              "type": "string | null"
-            },
-            {
-              "name": "last_presence_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_source",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_consent_channel",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_data_sharing",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_deletion_requested_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_last_updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_marketing_consent",
-              "type": "boolean | null"
-            },
-            {
-              "name": "lgpd_opt_out_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lgpd_profiling",
-              "type": "boolean | null"
-            },
-            {
-              "name": "merge_source_id",
-              "type": "string | null"
-            },
-            {
-              "name": "message_count",
-              "type": "number | null"
-            },
-            {
-              "name": "nickname",
-              "type": "string | null"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone_number",
-              "type": "string | null"
-            },
-            {
-              "name": "pii_masked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "presence_status",
-              "type": "string | null"
-            },
-            {
-              "name": "profile_picture_url",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "raw_data",
-              "type": "Json | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "role_title",
-              "type": "string | null"
-            },
-            {
-              "name": "search_vector",
-              "type": "unknown"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "version",
-              "type": "number | null"
-            },
-            {
-              "name": "whatsapp_checked_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            }
-          ]
-        },
-        "_dedup_backup_ci_20260813": {
-          "definition_sha1": "c217eae28dea621d5f34a3669f16e285608344bc",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_name",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "days_since_contact",
-              "type": "number | null"
-            },
-            {
-              "name": "disc_profile",
-              "type": "string | null"
-            },
-            {
-              "name": "engagement_score",
-              "type": "number | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inbound_ratio",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "string | null"
-            },
-            {
-              "name": "predicted_value",
-              "type": "number | null"
-            },
-            {
-              "name": "risk_level",
-              "type": "string | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_name",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "days_since_contact",
-              "type": "number | null"
-            },
-            {
-              "name": "disc_profile",
-              "type": "string | null"
-            },
-            {
-              "name": "engagement_score",
-              "type": "number | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inbound_ratio",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "string | null"
-            },
-            {
-              "name": "predicted_value",
-              "type": "number | null"
-            },
-            {
-              "name": "risk_level",
-              "type": "string | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "contact_name",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "days_since_contact",
-              "type": "number | null"
-            },
-            {
-              "name": "disc_profile",
-              "type": "string | null"
-            },
-            {
-              "name": "engagement_score",
-              "type": "number | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inbound_ratio",
-              "type": "number | null"
-            },
-            {
-              "name": "lead_status",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "string | null"
-            },
-            {
-              "name": "predicted_value",
-              "type": "number | null"
-            },
-            {
-              "name": "risk_level",
-              "type": "string | null"
-            },
-            {
-              "name": "sentiment",
-              "type": "string | null"
-            },
-            {
-              "name": "total_messages",
-              "type": "number | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ]
-        },
-        "_dedup_backup_events_20260813": {
-          "definition_sha1": "0204b7a0c7bb245e27b8e9911fcd3e2f14ca8727",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "from_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idempotency_key",
-              "type": "string | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "performed_by",
-              "type": "string | null"
-            },
-            {
-              "name": "provider_message_log_id",
-              "type": "string | null"
-            },
-            {
-              "name": "thread_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "trace_id",
-              "type": "string | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "from_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idempotency_key",
-              "type": "string | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "performed_by",
-              "type": "string | null"
-            },
-            {
-              "name": "provider_message_log_id",
-              "type": "string | null"
-            },
-            {
-              "name": "thread_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "trace_id",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "from_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "idempotency_key",
-              "type": "string | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "performed_by",
-              "type": "string | null"
-            },
-            {
-              "name": "provider_message_log_id",
-              "type": "string | null"
-            },
-            {
-              "name": "thread_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "to_queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "trace_id",
-              "type": "string | null"
-            }
-          ]
-        },
-        "_dedup_lid_pares_20260813": {
-          "definition_sha1": "0c6fb6e860dcce0b3340cd68196ffe017ff4065c",
-          "insert_columns": [
-            {
-              "name": "lid_contact_id",
-              "type": "string"
-            },
-            {
-              "name": "lid_jid",
-              "type": "string"
-            },
-            {
-              "name": "phone",
-              "type": "string"
-            },
-            {
-              "name": "s_contact_id",
-              "type": "string"
-            },
-            {
-              "name": "s_jid",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "lid_contact_id",
-              "type": "string"
-            },
-            {
-              "name": "lid_jid",
-              "type": "string"
-            },
-            {
-              "name": "phone",
-              "type": "string"
-            },
-            {
-              "name": "s_contact_id",
-              "type": "string"
-            },
-            {
-              "name": "s_jid",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "lid_contact_id",
-              "type": "string"
-            },
-            {
-              "name": "lid_jid",
-              "type": "string"
-            },
-            {
-              "name": "phone",
-              "type": "string"
-            },
-            {
-              "name": "s_contact_id",
-              "type": "string"
-            },
-            {
-              "name": "s_jid",
-              "type": "string"
-            }
-          ]
-        },
         "_encryption_keys": {
           "definition_sha1": "07e0b4e4539066e475f3917110520858cdf23664",
           "insert_columns": [
@@ -104651,147 +102839,6 @@
             }
           ]
         },
-        "_lgpd_b64": {
-          "definition_sha1": "d230370aab160c5bb6222b3c8668223cf242ab05",
-          "insert_columns": [
-            {
-              "name": "data",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "number"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "data",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "number"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "data",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "number"
-            }
-          ]
-        },
-        "_lgpd_growth_stats": {
-          "definition_sha1": "4e3b73175b9639d299347eb4def639c34ef356c1",
-          "insert_columns": [
-            {
-              "name": "id",
-              "type": "number"
-            },
-            {
-              "name": "measured_at",
-              "type": "string"
-            },
-            {
-              "name": "row_count",
-              "type": "number"
-            },
-            {
-              "name": "table_bytes",
-              "type": "number | null"
-            },
-            {
-              "name": "table_name",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "id",
-              "type": "number"
-            },
-            {
-              "name": "measured_at",
-              "type": "string"
-            },
-            {
-              "name": "row_count",
-              "type": "number"
-            },
-            {
-              "name": "table_bytes",
-              "type": "number | null"
-            },
-            {
-              "name": "table_name",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "id",
-              "type": "number"
-            },
-            {
-              "name": "measured_at",
-              "type": "string"
-            },
-            {
-              "name": "row_count",
-              "type": "number"
-            },
-            {
-              "name": "table_bytes",
-              "type": "number | null"
-            },
-            {
-              "name": "table_name",
-              "type": "string"
-            }
-          ]
-        },
-        "_lgpd_payload": {
-          "definition_sha1": "691a4299e1fed7afe353f8f58d8631eb2d16d149",
-          "insert_columns": [
-            {
-              "name": "chunk",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "number"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "chunk",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "number"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "chunk",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "number"
-            }
-          ]
-        },
         "_lgpd_retention_policies": {
           "definition_sha1": "1590521b48e3536c47f4263978385e39dc543d1b",
           "insert_columns": [
@@ -104967,160 +103014,6 @@
             {
               "name": "table_name",
               "type": "string"
-            }
-          ]
-        },
-        "_remap_backup_20260814_conversations": {
-          "definition_sha1": "111645be74b0f97bb4706893a83c5d5c64c8e810",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ]
-        },
-        "_remap_backup_20260814_messages": {
-          "definition_sha1": "a3589ee985bf1749d858a46868b21053eec1d65f",
-          "insert_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "conversation_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "conversation_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "contact_id",
-              "type": "string | null"
-            },
-            {
-              "name": "conversation_id",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
             }
           ]
         },
@@ -143323,7 +141216,7 @@
           ]
         },
         "realtime_message_fanout": {
-          "definition_sha1": "592abd49909a55b4546498482d23c237747b8933",
+          "definition_sha1": "10a9ea34fa7588ffaac12c8c28e7467c6c069f2d",
           "insert_columns": [
             {
               "name": "contact_id",
@@ -143376,6 +141269,10 @@
             {
               "name": "message_type",
               "type": "string | null"
+            },
+            {
+              "name": "mirrored_at",
+              "type": "string"
             },
             {
               "name": "remote_jid",
@@ -143450,6 +141347,10 @@
               "type": "string | null"
             },
             {
+              "name": "mirrored_at",
+              "type": "string"
+            },
+            {
               "name": "remote_jid",
               "type": "string | null"
             },
@@ -143518,6 +141419,10 @@
             {
               "name": "message_type",
               "type": "string | null"
+            },
+            {
+              "name": "mirrored_at",
+              "type": "string"
             },
             {
               "name": "remote_jid",
@@ -147087,7 +144992,7 @@
           ]
         },
         "sicoob_contact_mapping": {
-          "definition_sha1": "578aeb7cebe579f1a04620320bc135aaaae56cc8",
+          "definition_sha1": "89f9329fa8c2042632573623cc45ae68a0b8faec",
           "insert_columns": [
             {
               "name": "contact_id",
@@ -147095,7 +145000,7 @@
             },
             {
               "name": "created_at",
-              "type": "string | null"
+              "type": "string"
             },
             {
               "name": "id",
@@ -147127,7 +145032,7 @@
             },
             {
               "name": "created_at",
-              "type": "string | null"
+              "type": "string"
             },
             {
               "name": "id",
@@ -147157,7 +145062,7 @@
             },
             {
               "name": "created_at",
-              "type": "string | null"
+              "type": "string"
             },
             {
               "name": "id",
@@ -147178,161 +145083,6 @@
             {
               "name": "zappweb_agent_id",
               "type": "string | null"
-            }
-          ]
-        },
-        "sicoob_reply_outbox": {
-          "definition_sha1": "c73751b7730f49358d6f584d9b7e0cc91ca06fdf",
-          "insert_columns": [
-            {
-              "name": "agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "attempts",
-              "type": "number"
-            },
-            {
-              "name": "contact_id",
-              "type": "string"
-            },
-            {
-              "name": "content",
-              "type": "string"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "last_error",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string"
-            },
-            {
-              "name": "next_attempt_at",
-              "type": "string"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "attempts",
-              "type": "number"
-            },
-            {
-              "name": "contact_id",
-              "type": "string"
-            },
-            {
-              "name": "content",
-              "type": "string"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "last_error",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string"
-            },
-            {
-              "name": "next_attempt_at",
-              "type": "string"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "agent_id",
-              "type": "string | null"
-            },
-            {
-              "name": "attempts",
-              "type": "number"
-            },
-            {
-              "name": "contact_id",
-              "type": "string"
-            },
-            {
-              "name": "content",
-              "type": "string"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "last_error",
-              "type": "string | null"
-            },
-            {
-              "name": "message_id",
-              "type": "string"
-            },
-            {
-              "name": "next_attempt_at",
-              "type": "string"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
             }
           ]
         },
@@ -152982,7 +150732,7 @@
           ]
         },
         "user_settings": {
-          "definition_sha1": "875398194a2c68498035ed0f4e145b38643044b3",
+          "definition_sha1": "0c322523f4b8790a86d1b0f0c35adcf06dcea38f",
           "insert_columns": [
             {
               "name": "auto_assignment_enabled",
@@ -153027,6 +150777,18 @@
             {
               "name": "created_at",
               "type": "string"
+            },
+            {
+              "name": "global_sla_critical_minutes",
+              "type": "number"
+            },
+            {
+              "name": "global_sla_notification_message",
+              "type": "string"
+            },
+            {
+              "name": "global_sla_warning_minutes",
+              "type": "number"
             },
             {
               "name": "goal_sound_type",
@@ -153083,6 +150845,10 @@
             {
               "name": "sentiment_consecutive_count",
               "type": "number | null"
+            },
+            {
+              "name": "simulation_mode_enabled",
+              "type": "boolean"
             },
             {
               "name": "sla_sound_type",
@@ -153177,6 +150943,18 @@
               "type": "string"
             },
             {
+              "name": "global_sla_critical_minutes",
+              "type": "number"
+            },
+            {
+              "name": "global_sla_notification_message",
+              "type": "string"
+            },
+            {
+              "name": "global_sla_warning_minutes",
+              "type": "number"
+            },
+            {
               "name": "goal_sound_type",
               "type": "string | null"
             },
@@ -153231,6 +151009,10 @@
             {
               "name": "sentiment_consecutive_count",
               "type": "number | null"
+            },
+            {
+              "name": "simulation_mode_enabled",
+              "type": "boolean"
             },
             {
               "name": "sla_sound_type",
@@ -153323,6 +151105,18 @@
               "type": "string"
             },
             {
+              "name": "global_sla_critical_minutes",
+              "type": "number"
+            },
+            {
+              "name": "global_sla_notification_message",
+              "type": "string"
+            },
+            {
+              "name": "global_sla_warning_minutes",
+              "type": "number"
+            },
+            {
               "name": "goal_sound_type",
               "type": "string | null"
             },
@@ -153377,6 +151171,10 @@
             {
               "name": "sentiment_consecutive_count",
               "type": "number | null"
+            },
+            {
+              "name": "simulation_mode_enabled",
+              "type": "boolean"
             },
             {
               "name": "sla_sound_type",
@@ -186595,6 +184393,87 @@
           ],
           "update_columns": []
         },
+        "v_media_orphan_stats": {
+          "definition_sha1": "a525b6ca55465ce781aba8931696313b9fbf36c5",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "criados_7d",
+              "type": "number | null"
+            },
+            {
+              "name": "done",
+              "type": "number | null"
+            },
+            {
+              "name": "expired",
+              "type": "number | null"
+            },
+            {
+              "name": "failed",
+              "type": "number | null"
+            },
+            {
+              "name": "mais_antigo",
+              "type": "string | null"
+            },
+            {
+              "name": "mais_recente",
+              "type": "string | null"
+            },
+            {
+              "name": "pct_uuid_7d",
+              "type": "number | null"
+            },
+            {
+              "name": "pct_uuid_orphans",
+              "type": "number | null"
+            },
+            {
+              "name": "pending",
+              "type": "number | null"
+            },
+            {
+              "name": "permanently_lost",
+              "type": "number | null"
+            },
+            {
+              "name": "processing",
+              "type": "number | null"
+            },
+            {
+              "name": "ready",
+              "type": "number | null"
+            },
+            {
+              "name": "total_fila",
+              "type": "number | null"
+            },
+            {
+              "name": "total_media",
+              "type": "number | null"
+            },
+            {
+              "name": "ultimo_processamento",
+              "type": "string | null"
+            },
+            {
+              "name": "uuid_orphans_7d",
+              "type": "number | null"
+            },
+            {
+              "name": "uuid_orphans_total",
+              "type": "number | null"
+            },
+            {
+              "name": "whatsapp_hex_total",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": []
+        },
         "v_media_pipeline_health": {
           "definition_sha1": "1e32124b56e58d5f5862301668f9add16503a8b3",
           "insert_columns": [],
@@ -191337,14 +189216,14 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "c9fd87c4e5ac162c6c14b1c61ce392beee15a1aa"
+    "types_sha1": "1b8df069b5d516ae8dbc8f4697c18f504f0b8d07"
   },
   "summary": {
     "composite_types": 0,
     "enums": 22,
-    "functions": 906,
+    "functions": 914,
     "schemas": 3,
-    "tables": 471,
-    "views": 737
+    "tables": 467,
+    "views": 738
   }
 }

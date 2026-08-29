@@ -8,6 +8,7 @@ export type Json =
 
 export type Database = {
   zapp: {
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     Tables: {}
     Views: {
       contacts: {
@@ -71,7 +72,9 @@ export type Database = {
         | { Args: never; Returns: Json }
         | { Args: { p_window_minutes?: number }; Returns: Json }
     }
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     Enums: {}
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     CompositeTypes: {}
   }
 }
