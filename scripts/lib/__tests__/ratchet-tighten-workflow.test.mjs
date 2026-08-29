@@ -19,19 +19,35 @@ const blockBetween = (start, end) => {
 };
 
 test('ratchet usa token efêmero com contents:write somente para publicar a branch', () => {
-  assert.match(workflow, /^permissions:\n(?:  #.*\n)*  contents: write$/m);
+  const permissionBlocks = workflow.match(/^\s*permissions:\s*$/gm) ?? [];
+  const permissionsBlock = blockBetween('permissions:\n', 'concurrency:');
+  const permissionEntries = permissionsBlock
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && line !== 'permissions:');
+
+  assert.equal(permissionBlocks.length, 1);
+  assert.deepEqual(permissionEntries, ['contents: write', 'pull-requests: read']);
 
   const pushBlock = blockBetween(
     '      - name: Push ratchet branch',
     '      - name: Create PR for tightened baseline',
   );
+  const pushCommands = pushBlock.match(/^\s*git push .+$/gm) ?? [];
+  const tokenContexts = pushBlock.match(/\$\{\{ [^}]*token[^}]* \}\}/gi) ?? [];
 
   assert.match(pushBlock, /PUSH_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(
     pushBlock,
     /git remote set-url origin "https:\/\/x-access-token:\$\{PUSH_TOKEN\}@github\.com\/\$\{\{ github\.repository \}\}\.git"/,
   );
+  assert.deepEqual(tokenContexts, ['${{ github.token }}']);
+  assert.deepEqual(pushCommands.map((line) => line.trim()), [
+    'git push origin "$BRANCH"',
+  ]);
+  assert.equal(pushBlock.match(/\$\{PUSH_TOKEN\}/g)?.length, 1);
   assert.doesNotMatch(pushBlock, /secrets\.GH_TOKEN_ACTIONS/);
+  assert.doesNotMatch(pushBlock, /\bGH_TOKEN\b/);
 });
 
 test('PAT event-capable continua restrito à governança e criação do PR', () => {
