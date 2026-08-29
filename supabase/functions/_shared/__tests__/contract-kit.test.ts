@@ -21,7 +21,9 @@ import {
   buildContractErrorBody,
   normalizeVersion,
   resolveRequestedVersion,
+  respondWithContract,
   type ContractErrorBody,
+  type ParseOk,
 } from "../contract-kit.ts";
 import {
   CONTRACT_SCHEMAS,
@@ -235,7 +237,147 @@ Deno.test("422 contract_violation: schema com <=25 campos ausentes NÃO sinaliza
   assertEquals("truncated" in body, false, "sem corte real, a chave não deve aparecer");
 });
 
-// ─── 4. Registro central: todo contrato registrado tem schema para toda versão suportada ──
+// ─── Etapa 54/71 (PLANO-100-CONTRATOS-EDGE, 2026-08-25): respondWithContract ──
+
+Deno.test("etapa 71: contrato versionado v2 → respondWithContract devolve x-contract-version", () => {
+  const payload = { event: "messages.upsert", instance: "wpp2", data: {}, version: "2.0", timestamp: Date.now() };
+  const parsed = parseOrReject("evolution-webhook", EVOLUTION, req(), payload);
+  assert(parsed.ok === true);
+  const res = respondWithContract(parsed, { success: true }, {
+    status: 200,
+    headers: { "Access-Control-Allow-Origin": "*" },
+  });
+  assertEquals(res.status, 200);
+  assertEquals(res.headers.get("x-contract-version"), "v2");
+  assertEquals(res.headers.get("Content-Type"), "application/json");
+  assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*", "headers de init (CORS extras) preservados");
+});
+
+Deno.test("etapa 71: contrato em sunset ativo → headers sunset + x-contract-deprecated presentes", () => {
+  // v1 do evolution-webhook está em janela de sunset (o teste de retrocompat
+  // acima já garante data futura no registro) — a resposta de sucesso não
+  // pode perder os headers de deprecação na migração pro helper.
+  const payload = { event: "connection.update", instance: "wpp2", data: null, sender: null, apikey: null };
+  const parsed = parseOrReject("evolution-webhook", EVOLUTION, req(), payload);
+  assert(parsed.ok === true);
+  assert(parsed.deprecated === true, "teste pressupõe v1 em janela de sunset");
+  const res = respondWithContract(parsed, { ok: true });
+  assertEquals(res.status, 200, "sem init.status → 200 default");
+  assertEquals(res.headers.get("x-contract-version"), "v1");
+  assertEquals(res.headers.get("x-contract-deprecated"), "true");
+  assertEquals(res.headers.get("sunset"), CONTRACTS["evolution-webhook"].sunset?.v1);
+});
+
+Deno.test("etapa 71: merge não deixa init.headers derrubar headers de contrato nem Content-Type", () => {
+  // Risco simulado da etapa 54: um CORS extra (ou bug de call site) tentando
+  // sobrescrever x-contract-version/Content-Type — o contrato sempre vence.
+  const parsed: ParseOk = {
+    ok: true, data: null, version: "v9", deprecated: false,
+    headers: { "x-contract-version": "v9", "sunset": "Fri, 01 Jan 2027 00:00:00 GMT" },
+  };
+  const res = respondWithContract(parsed, {}, {
+    status: 201,
+    headers: { "x-contract-version": "v1", "Content-Type": "text/plain", "X-Extra": "kept" },
+  });
+  assertEquals(res.status, 201, "init.status preservado");
+  assertEquals(res.headers.get("x-contract-version"), "v9", "header de contrato vence init.headers");
+  assertEquals(res.headers.get("sunset"), "Fri, 01 Jan 2027 00:00:00 GMT");
+  assertEquals(res.headers.get("Content-Type"), "application/json");
+  assertEquals(res.headers.get("X-Extra"), "kept");
+});
+
+// ─── Etapa 59 (A4, PLANO-100-CONTRATOS-EDGE): `version` de negócio × hint ────
+
+Deno.test("etapa 59 (a): hint legítimo do body continua resolvido (contrato versionado real)", () => {
+  // sicoob-bridge manda version no body (v1 sem declaração no schema; v2
+  // declara z.literal("2.0") — marcador de envelope, não campo de negócio).
+  // A negociação explícita precisa continuar roteando pra versão pedida.
+  const r1 = parseOrReject("sicoob-bridge", CONTRACT_SCHEMAS["sicoob-bridge"], req(), {
+    action: "mark_read", external_ids: ["abc"], version: "v1",
+  });
+  assert(r1.ok === true);
+  assertEquals(r1.version, "v1", "hint body.version='v1' deve rotear pra v1");
+
+  const r2 = parseOrReject("sicoob-bridge", CONTRACT_SCHEMAS["sicoob-bridge"], req(), {
+    action: "mark_read", external_ids: ["abc"], version: "2.0", timestamp: 1750000000,
+  });
+  assert(r2.ok === true);
+  assertEquals(r2.version, "v2", "hint body.version='2.0' deve rotear pra v2 (literal)");
+});
+
+Deno.test("etapa 59 (a): hint literal do body segue sendo PEDIDO explícito (não só auto-detecção)", () => {
+  // Discriminante: payload com shape v1 + version:'2.0' sem timestamp. Se o
+  // hint fosse ignorado, a auto-detecção tentaria v2, falharia e CAIRIA pra
+  // v1 (aceito). Com o hint respeitado, o pedido explícito de v2 falha SOZINHO
+  // — 422 contract_violation, provando que o literal não foi descartado.
+  const payload = { event: "messages.upsert", instance: "wpp2", data: {}, sender: null, apikey: null, version: "2.0" };
+  const r = parseOrReject("evolution-webhook", EVOLUTION, req(), payload);
+  assert(r.ok === false, "pedido explícito de v2 com payload inválido deve 422, não cair pra v1");
+  assertEquals(r.body.code, "contract_violation");
+});
+
+Deno.test("etapa 59 (b): payload com campo de negócio `version` NÃO gera mais 422 espúrio", () => {
+  // Contrato hipotético cujo payload carrega `version` de NEGÓCIO (versão do
+  // app integrador) declarada no schema. Antes do fix: normalizeVersion("3.1.4")
+  // → "3.1.4" fora de supported → 422 unsupported_contract_version espúrio.
+  const businessV1 = z.object({ version: z.string(), event: z.string() }).passthrough();
+  // Valores string realistas de versão de app: "3" normaliza pra "v3" (fora
+  // de supported) e "3.1.4" passa cru — ambos geravam 422 espúrio antes.
+  for (const businessVersion of ["3.1.4", "3"]) {
+    const r = parseOrReject("truncation-test", { v1: businessV1 }, req(), {
+      version: businessVersion, event: "sync",
+    });
+    assert(r.ok === true, `version de negócio ${String(businessVersion)} não pode gerar 422`);
+    assertEquals(r.version, "v1", "deve resolver por auto-detecção de formato");
+  }
+});
+
+Deno.test("etapa 59: discriminatedUnion com campo version de negócio também é protegido", () => {
+  // Mesmo formato real do sicoob-bridge (branches introspectadas via
+  // _def.options) — aqui com version de NEGÓCIO no branch.
+  const du = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("sync"), version: z.string() }).passthrough(),
+  ]);
+  const r = parseOrReject("truncation-test", { v1: du }, req(), { action: "sync", version: "3.1.4" });
+  assert(r.ok === true, "hint não pode sequestrar branch com campo version de negócio");
+  assertEquals(r.version, "v1");
+});
+
+Deno.test("etapa 59: header x-contract-version segue mandando mesmo com campo version de negócio", () => {
+  const businessV1 = z.object({ version: z.string(), event: z.string() }).passthrough();
+  const r = parseOrReject("truncation-test", { v1: businessV1 }, req({ "x-contract-version": "v1" }), {
+    version: "3.1.4", event: "sync",
+  });
+  assert(r.ok === true);
+  assertEquals(r.version, "v1");
+});
+
+Deno.test("etapa 59: body.version pedindo versão inexistente continua 422 (quando não é campo de negócio)", () => {
+  // talkx-send não declara `version` → hint segue valendo; v9 não existe.
+  const r = parseOrReject("talkx-send", { v1: TalkxSendV1Schema }, req(), {
+    campaignId: UUID, action: "start", version: "v9",
+  });
+  assert(r.ok === false);
+  assertEquals(r.body.code, "unsupported_contract_version");
+});
+
+Deno.test("etapa 59: hint de body apontando pra versão SUPORTADA segue honrado (semântica sunset/410 preservada)", () => {
+  // Espelha o fixture do contract-sunset-policy.test.ts: schema v2 declara
+  // `version` (não-literal), mas o hint "1" aponta pra v1 SUPORTADA — o
+  // desarme da etapa 59 só vale para hint FORA de supported; pedido explícito
+  // de versão suportada (roteamento E 410 pós-sunset) não pode mudar.
+  // Discriminante: sem o hint, a auto-detecção tentaria v2 primeiro (que
+  // também valida este payload) → v2; com o hint honrado → v1.
+  const synth = {
+    v1: z.object({ legacy_field: z.string() }),
+    v2: z.object({ legacy_field: z.string(), version: z.string() }),
+  };
+  const r = parseOrReject("truncation-test", synth, req(), { legacy_field: "ok", version: "1" });
+  assert(r.ok === true);
+  assertEquals(r.version, "v1", "hint suportado do body não pode ser desarmado");
+});
+
+
 
 Deno.test("integridade: CONTRACT_SCHEMAS cobre todas as versões suportadas dos contratos registrados", () => {
   for (const [name, schemas] of Object.entries(CONTRACT_SCHEMAS)) {

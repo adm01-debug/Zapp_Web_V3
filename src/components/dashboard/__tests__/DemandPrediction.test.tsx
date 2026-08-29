@@ -11,7 +11,11 @@ vi.mock('@/integrations/datasource/db', () => ({ dbFrom: dbFromMock }));
 
 vi.mock('@/components/ui/motion', () => ({
   motion: {
-    div: ({ children, whileHover: _whileHover, ...props }: {
+    div: ({
+      children,
+      whileHover: _whileHover,
+      ...props
+    }: {
       children: ReactNode;
       whileHover?: unknown;
       [key: string]: unknown;

@@ -139,7 +139,10 @@ describe('connectivityMonitor — ciclo de vida do heartbeat', () => {
     subscribeSupabaseConnectivity(listener);
 
     await pingSupabaseBackend(true);
-    expect(listener).toHaveBeenCalledWith('backend-down', expect.objectContaining({ latencyMs: expect.any(Number) }));
+    expect(listener).toHaveBeenCalledWith(
+      'backend-down',
+      expect.objectContaining({ latencyMs: expect.any(Number) })
+    );
   });
 });
 

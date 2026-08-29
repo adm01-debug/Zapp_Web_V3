@@ -52,13 +52,16 @@ function makeWrapper() {
 }
 
 function mockPendingAbortableQuery() {
-  abortSignalMock.mockImplementationOnce((signal: AbortSignal) => new Promise((_, reject) => {
-    signal.addEventListener(
-      'abort',
-      () => reject(new DOMException('Query cancelled', 'AbortError')),
-      { once: true }
-    );
-  }));
+  abortSignalMock.mockImplementationOnce(
+    (signal: AbortSignal) =>
+      new Promise((_, reject) => {
+        signal.addEventListener(
+          'abort',
+          () => reject(new DOMException('Query cancelled', 'AbortError')),
+          { once: true }
+        );
+      })
+  );
 }
 
 function makeData(points: Partial<PredictionPoint>[]): PredictionPoint[] {
@@ -77,7 +80,7 @@ const HISTORY = makeData([
   { actual: 20, predicted: 20, lower: 20, upper: 20, isPrediction: false },
   { actual: 30, predicted: 30, lower: 30, upper: 30, isPrediction: false },
   { actual: 15, predicted: 15, lower: 15, upper: 15, isPrediction: false },
-  { actual: 5,  predicted: 5,  lower: 5,  upper: 5,  isPrediction: false },
+  { actual: 5, predicted: 5, lower: 5, upper: 5, isPrediction: false },
 ]);
 
 const PREDICTIONS = makeData([
@@ -92,10 +95,9 @@ const EXTERNAL_DATA: PredictionPoint[] = [...HISTORY, ...PREDICTIONS];
 // ── data passthrough ───────────────────────────────────────────────────────────
 describe('useDemandPrediction — repasse de dados', () => {
   it('retorna externalData sem alterações', () => {
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.data).toBe(EXTERNAL_DATA);
   });
 
@@ -139,9 +141,8 @@ describe('useDemandPrediction — repasse de dados', () => {
       externalData: undefined,
     };
     const { result, rerender } = renderHook(
-      ({ externalData }: { externalData: PredictionPoint[] | undefined }) => (
-        useDemandPrediction(externalData)
-      ),
+      ({ externalData }: { externalData: PredictionPoint[] | undefined }) =>
+        useDemandPrediction(externalData),
       {
         initialProps,
         wrapper: makeWrapper(),
@@ -168,9 +169,8 @@ describe('useDemandPrediction — repasse de dados', () => {
       externalData: undefined,
     };
     const switchingConsumer = renderHook(
-      ({ externalData }: { externalData: PredictionPoint[] | undefined }) => (
-        useDemandPrediction(externalData)
-      ),
+      ({ externalData }: { externalData: PredictionPoint[] | undefined }) =>
+        useDemandPrediction(externalData),
       { initialProps, wrapper }
     );
 
@@ -195,10 +195,7 @@ describe('useDemandPrediction — repasse de dados', () => {
     await waitFor(() => expect(abortSignalMock).toHaveBeenCalledOnce());
     const sharedSignal = abortSignalMock.mock.calls[0][0];
 
-    const externalConsumer = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper }
-    );
+    const externalConsumer = renderHook(() => useDemandPrediction(EXTERNAL_DATA), { wrapper });
 
     expect(externalConsumer.result.current.data).toBe(EXTERNAL_DATA);
     expect(sharedSignal.aborted).toBe(false);
@@ -211,10 +208,7 @@ describe('useDemandPrediction — repasse de dados', () => {
 
   it('trata externalData vazio sem consulta nem indicadores inválidos', () => {
     const emptyData: PredictionPoint[] = [];
-    const { result } = renderHook(
-      () => useDemandPrediction(emptyData),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(emptyData), { wrapper: makeWrapper() });
 
     expect(result.current.data).toBe(emptyData);
     expect(result.current.insights).toEqual({
@@ -232,10 +226,9 @@ describe('useDemandPrediction — repasse de dados', () => {
     const historyOnly = makeData([
       { actual: 17, predicted: 17, lower: 17, upper: 17, isPrediction: false },
     ]);
-    const { result } = renderHook(
-      () => useDemandPrediction(historyOnly),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(historyOnly), {
+      wrapper: makeWrapper(),
+    });
 
     expect(result.current.insights.currentActual).toBe(17);
     expect(result.current.insights.maxPredicted).toBe(0);
@@ -249,36 +242,32 @@ describe('useDemandPrediction — repasse de dados', () => {
 // ── insights ───────────────────────────────────────────────────────────────────
 describe('useDemandPrediction — indicadores', () => {
   it('maxPredicted contém o maior valor dos pontos previstos', () => {
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.maxPredicted).toBe(50);
   });
 
   it('avgPredicted contém a média dos pontos previstos', () => {
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     // (20 + 50 + 40 + 30) / 4 = 35
     expect(result.current.insights.avgPredicted).toBe(35);
   });
 
   it('currentActual contém o valor real do primeiro ponto histórico', () => {
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.currentActual).toBe(10);
   });
 
   it('trend é "up" quando a última previsão supera currentActual', () => {
     // Última previsão = 30, currentActual = 10 → up
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.trend).toBe('up');
   });
 
@@ -291,44 +280,39 @@ describe('useDemandPrediction — indicadores', () => {
       { predicted: 5, lower: 3, upper: 7, isPrediction: true, time: '10:00' },
       { predicted: 3, lower: 1, upper: 5, isPrediction: true, time: '11:00' }, // Última < 100
     ]);
-    const { result } = renderHook(
-      () => useDemandPrediction([...highActual, ...lowPredictions]),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction([...highActual, ...lowPredictions]), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.trend).toBe('down');
   });
 
   it('peakTime contém o horário do maior valor previsto', () => {
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.peakTime).toBe('07:00');
   });
 
   it('capacityRisk é true quando maxPredicted supera currentCapacity', () => {
     // maxPredicted=50, capacidade padrão=35 → risco
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.capacityRisk).toBe(true);
   });
 
   it('capacityRisk é false quando maxPredicted não supera currentCapacity', () => {
     // maxPredicted=50, capacidade informada=100 → sem risco
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA, 100),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA, 100), {
+      wrapper: makeWrapper(),
+    });
     expect(result.current.insights.capacityRisk).toBe(false);
   });
 
   it('capacityRisk é false quando maxPredicted é igual a currentCapacity', () => {
-    const { result } = renderHook(
-      () => useDemandPrediction(EXTERNAL_DATA, 50),
-      { wrapper: makeWrapper() }
-    );
+    const { result } = renderHook(() => useDemandPrediction(EXTERNAL_DATA, 50), {
+      wrapper: makeWrapper(),
+    });
     // 50 > 50 is false
     expect(result.current.insights.capacityRisk).toBe(false);
   });

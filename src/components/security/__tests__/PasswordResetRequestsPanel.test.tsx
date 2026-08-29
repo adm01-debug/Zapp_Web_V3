@@ -56,7 +56,9 @@ vi.mock('sonner', () => ({
 // AnimatePresence/motion quebram act no happy-dom — mock padrão do repo.
 vi.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+    div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+      <div {...props}>{children}</div>
+    ),
   },
   AnimatePresence: ({ children }: { children?: React.ReactNode }) => children,
 }));
@@ -75,7 +77,9 @@ vi.mock('@/components/ui/tabs', () => {
   }) => (
     <div data-probe-tabs>
       {React.Children.map(children, (child) =>
-        React.isValidElement<{ ctx?: { value?: string; onValueChange?: (v: string) => void } }>(child)
+        React.isValidElement<{ ctx?: { value?: string; onValueChange?: (v: string) => void } }>(
+          child
+        )
           ? React.cloneElement(child, { ctx: { value, onValueChange } })
           : child
       )}
@@ -90,7 +94,9 @@ vi.mock('@/components/ui/tabs', () => {
   }) => (
     <div data-probe-tabslist>
       {React.Children.map(children, (child) =>
-        React.isValidElement<{ ctx?: { value?: string; onValueChange?: (v: string) => void } }>(child)
+        React.isValidElement<{ ctx?: { value?: string; onValueChange?: (v: string) => void } }>(
+          child
+        )
           ? React.cloneElement(child, { ctx })
           : child
       )}
@@ -245,6 +251,78 @@ describe('PasswordResetRequestsPanel', () => {
       });
     });
     expect(toast.success).toHaveBeenCalled();
+  });
+
+  it('aprovação com 422 canônico (VALIDATION_ERROR) → toast.exibe details[] do contrato, sem sucesso', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: {
+        context: {
+          status: 422,
+          json: vi.fn().mockResolvedValue({
+            error: true,
+            code: 'VALIDATION_ERROR',
+            message: 'Corpo rejeitado pelo contrato approve-password-reset@v1',
+            details: [{ path: 'requestId', message: 'requestId é obrigatório' }],
+          }),
+        },
+      },
+    });
+    mockList([pendingRequest]);
+    render(<PasswordResetRequestsPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('usuario@exemplo.com')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /aprovar/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('requestId é obrigatório');
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it('rejeição com 422 canônico em rejectionReason → mensagem do campo no toast (não silenciada)', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: {
+        context: {
+          status: 422,
+          json: vi.fn().mockResolvedValue({
+            error: true,
+            code: 'VALIDATION_ERROR',
+            message: 'Corpo rejeitado pelo contrato approve-password-reset@v1',
+            details: [
+              {
+                path: 'rejectionReason',
+                message: 'rejectionReason deve ter no máximo 1000 caracteres',
+              },
+            ],
+          }),
+        },
+      },
+    });
+    mockList([pendingRequest]);
+    render(<PasswordResetRequestsPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText('usuario@exemplo.com')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /rejeitar/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText(/atividade suspeita/i), {
+      target: { value: 'Motivo'.repeat(300) },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rejeitar' }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'rejectionReason deve ter no máximo 1000 caracteres'
+      );
+    });
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('evento realtime → refetch da lista', async () => {

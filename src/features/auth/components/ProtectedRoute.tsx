@@ -323,17 +323,20 @@ export function ProtectedRoute({
   const devBypassAllowed = isDevBypassAllowed();
   if (isDevUser && devBypassAllowed) {
     // F3-02: registra bypass no log de auditoria com throttle por sessão
-    void supabase.rpc('log_security_event', {
-      p_event_type: 'dev_bypass_used',
-      p_resource: location.pathname,
-      p_action: 'route_access',
-      p_status: 'bypassed',
-      p_details: { roles },
-    }).then(({ error }) => {
-      if (error) log.warn('Failed to log dev bypass', { error: error.message });
-    }).then(undefined, (err: unknown) => {
-      log.warn('[ProtectedRoute] Falha ao registrar dev bypass (audit log):', err);
-    });
+    void supabase
+      .rpc('log_security_event', {
+        p_event_type: 'dev_bypass_used',
+        p_resource: location.pathname,
+        p_action: 'route_access',
+        p_status: 'bypassed',
+        p_details: { roles },
+      })
+      .then(({ error }) => {
+        if (error) log.warn('Failed to log dev bypass', { error: error.message });
+      })
+      .then(undefined, (err: unknown) => {
+        log.warn('[ProtectedRoute] Falha ao registrar dev bypass (audit log):', err);
+      });
     markTimeToMainScreen(location.pathname);
     return <>{children}</>;
   }

@@ -478,6 +478,7 @@ Deno.serve(async (req) => {
         });
         if (createRes.status === 401 || createRes.status === 403) return buildAuthError(createRes.status, 'create-instance');
         if (!createRes.ok) {
+          // Resposta OUTBOUND da Evolution API — {} é fallback inofensivo (message lida com || de fallback textual); não é o antipadrão de body de request (D1/etapa 27).
           const createData = await createRes.json().catch(() => ({}));
           return new Response(JSON.stringify({ version: EVOLUTION_ENVELOPE_VERSION, contract: 'evolution-api@v1', error: true, status: createRes.status, message: (createData as { message?: string }).message || 'Falha ao criar a instância na Evolution API', details: [{ path: 'instance', message: (createData as { message?: string }).message || 'Falha ao criar a instância na Evolution API' }] }), { status: createRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }

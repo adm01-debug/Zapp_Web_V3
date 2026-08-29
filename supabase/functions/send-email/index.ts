@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
           signal: AbortSignal.timeout(15_000),
         });
 
+        // Resposta OUTBOUND do gmail-send delegado — {} é fallback inofensivo (payload só ecoado); não é o antipadrão de body de request (D1/etapa 27).
         resData = await res.json().catch(() => ({}));
         if (!res.ok) {
           return json(resData, res.status >= 500 ? 502 : res.status);
@@ -116,6 +117,7 @@ Deno.serve(async (req) => {
         label: 'Resend',
       });
 
+      // Resposta OUTBOUND do Resend — {} é fallback inofensivo (message lida com typeof check); não é o antipadrão de body de request (D1/etapa 27).
       resendData = await resendRes.json().catch(() => ({}));
       if (!resendRes.ok) {
         const resendDataObj = resendData as Record<string, unknown>;

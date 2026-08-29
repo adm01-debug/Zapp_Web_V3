@@ -58,11 +58,9 @@ export function useAuthForm() {
   // Ambas aceitam SOMENTE paths relativos same-origin.
   const rawNext = searchParams.get('next');
   const stateFrom = (
-    location.state as
-      | {
-          from?: { pathname?: string; search?: string; hash?: string };
-        }
-      | null
+    location.state as {
+      from?: { pathname?: string; search?: string; hash?: string };
+    } | null
   )?.from;
   const rawStatePath = stateFrom?.pathname
     ? `${stateFrom.pathname}${stateFrom.search ?? ''}${stateFrom.hash ?? ''}`
@@ -136,12 +134,16 @@ export function useAuthForm() {
           const { data: factors } = await supabase.auth.mfa.listFactors();
           const hasVerifiedTotp = (factors?.totp ?? []).some((f) => f.status === 'verified');
           if (hasVerifiedTotp) {
-            log.warn('[useAuthForm] MFA exception com fator verified — exigindo /2fa (E52)', { err });
+            log.warn('[useAuthForm] MFA exception com fator verified — exigindo /2fa (E52)', {
+              err,
+            });
             navigate('/2fa', { replace: true });
             return;
           }
         } catch {
-          log.warn('[useAuthForm] MFA check indisponível sem fatores — seguindo fluxo (E52)', { err });
+          log.warn('[useAuthForm] MFA check indisponível sem fatores — seguindo fluxo (E52)', {
+            err,
+          });
         }
       }
       navigate(path, { replace: true });

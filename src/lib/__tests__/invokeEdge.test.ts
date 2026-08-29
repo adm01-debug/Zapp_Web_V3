@@ -129,6 +129,17 @@ describe('invokeEdge', () => {
     expect(result.fieldErrors).toEqual({});
   });
 
+  it('rejeição inesperada do SDK: preserva o contrato never-throw', async () => {
+    mockInvoke.mockRejectedValue(new TypeError('fetch adapter rejected'));
+
+    await expect(invokeEdge('foo')).resolves.toEqual({
+      ok: false,
+      code: 'network_error',
+      message: '',
+      fieldErrors: {},
+    });
+  });
+
   it('security envelope (details como objeto, não array) NÃO é tratado como contrato', async () => {
     mockInvoke.mockResolvedValue({
       data: null,

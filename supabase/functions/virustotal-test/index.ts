@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
       signal: AbortSignal.timeout(10_000),
     });
 
+    // Resposta OUTBOUND do VirusTotal — {} é fallback inofensivo (data.error?.message abaixo depende de objeto; null lançaria TypeError). Não é o antipadrão de body de request (D1/etapa 27).
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {

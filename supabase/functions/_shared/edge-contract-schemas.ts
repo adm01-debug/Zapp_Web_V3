@@ -157,7 +157,6 @@ export const EDGE_FUNCTION_NAMES = [
   'zapp-email-inbound-webhook',
   'zapp-email-send',
   'zapp-get-sip-credentials',
-  'zapp-google-calendar-sync',
   'zapp-n8n-sync',
   'zapp-notifications-dispatch',
   'zapp-sentry-sync',
@@ -450,13 +449,6 @@ const specificEdgeFunctionSchemas: Record<string, ContractVersionMap> = {
         z.object({ action: z.literal('status') }).strict(),
         z.object({ action: z.literal('configure'), baseUrl: z.string().min(1).max(2048) }).strict(),
       ]),
-  },
-  'zapp-google-calendar-sync': {
-    v1: z
-      .object({
-        dryRun: z.boolean().optional(),
-      })
-      .strict(),
   },
   // invite-user — convite REAL via GoTrue admin API (ADR 2026-08-18; banco
   // vivo sem RPC invite_user/tabela de convites). Espelho inline (sem ciclo).

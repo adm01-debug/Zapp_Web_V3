@@ -9,10 +9,7 @@ import { Calendar, Clock, Paperclip } from 'lucide-react';
 import { format, addDays, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
-import {
-  buildScheduledLocalDate,
-  type ScheduleMessageResult,
-} from './ScheduleMessageDialog.utils';
+import { buildScheduledLocalDate, type ScheduleMessageResult } from './ScheduleMessageDialog.utils';
 
 interface ScheduleMessageDialogProps {
   open: boolean;
@@ -202,11 +199,9 @@ export function ScheduleMessageDialog({
                   <>
                     A mensagem será enviada em{' '}
                     <span className="font-medium text-foreground">
-                      {format(
-                        previewScheduledDate,
-                        "EEEE, dd 'de' MMMM 'às' HH:mm",
-                        { locale: ptBR }
-                      )}
+                      {format(previewScheduledDate, "EEEE, dd 'de' MMMM 'às' HH:mm", {
+                        locale: ptBR,
+                      })}
                     </span>
                   </>
                 ) : (

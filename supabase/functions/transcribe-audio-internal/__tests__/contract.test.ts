@@ -75,13 +75,13 @@ const SSRF_TARGETS = [
 ];
 
 for (const url of SSRF_TARGETS) {
-  Deno.test(`Contract: transcribe-audio-internal v1 — SSRF bloqueado: ${url}`, () => {
+  Deno.test(`Contract: transcribe-audio-internal v1 — SSRF bloqueado (SEC-2): ${url}`, () => {
     const result = TranscribeAudioInternalV1Schema.safeParse({ ...VALID, audioUrl: url });
     assertEquals(result.success, false);
   });
 }
 
-Deno.test("Contract: transcribe-audio-internal v1 — audioUrl HTTPS público legítimo passa", () => {
+Deno.test("Contract: transcribe-audio-internal v1 — audioUrl HTTPS público legítimo passa (SEC-2)", () => {
   const result = TranscribeAudioInternalV1Schema.safeParse({
     ...VALID,
     audioUrl: "https://evolution.atomicabr.com.br/media/audio.ogg",

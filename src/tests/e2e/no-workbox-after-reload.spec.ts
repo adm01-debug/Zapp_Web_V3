@@ -56,30 +56,27 @@ async function readWorkboxState(page: Page): Promise<AuditResult> {
       const cleanup =
         typeof window === 'undefined'
           ? null
-          : ((window as typeof window & {
-              [key: string]:
-                | {
-                    phase?: string;
-                    error?: string | null;
-                  }
-                | undefined;
-            })[cleanupKey] ?? null);
+          : ((
+              window as typeof window & {
+                [key: string]:
+                  | {
+                      phase?: string;
+                      error?: string | null;
+                    }
+                  | undefined;
+              }
+            )[cleanupKey] ?? null);
       const workboxCaches =
         typeof caches === 'undefined'
           ? []
           : (await caches.keys()).filter((k) => /workbox-precache/i.test(k));
-      const workboxSWs =
-        !('serviceWorker' in navigator)
-          ? []
-          : (await navigator.serviceWorker.getRegistrations())
-              .map(
-                (r) =>
-                  r.active?.scriptURL ||
-                  r.waiting?.scriptURL ||
-                  r.installing?.scriptURL ||
-                  ''
-              )
-              .filter((u) => u && /workbox/i.test(u));
+      const workboxSWs = !('serviceWorker' in navigator)
+        ? []
+        : (await navigator.serviceWorker.getRegistrations())
+            .map(
+              (r) => r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || ''
+            )
+            .filter((u) => u && /workbox/i.test(u));
 
       return {
         workboxRequests: [],
@@ -169,19 +166,19 @@ async function auditWorkbox(page: Page, url: string): Promise<AuditResult | null
 function assertClean(result: AuditResult, label: string) {
   expect(
     result.workboxRequests,
-    `[${label}] Workbox JS requests após reload: ${result.workboxRequests.join(', ')}`,
+    `[${label}] Workbox JS requests após reload: ${result.workboxRequests.join(', ')}`
   ).toEqual([]);
   expect(
     result.workboxCaches,
-    `[${label}] Workbox caches após reload: ${result.workboxCaches.join(', ')}`,
+    `[${label}] Workbox caches após reload: ${result.workboxCaches.join(', ')}`
   ).toEqual([]);
   expect(
     result.workboxSWs,
-    `[${label}] Service Workers com Workbox após reload: ${result.workboxSWs.join(', ')}`,
+    `[${label}] Service Workers com Workbox após reload: ${result.workboxSWs.join(', ')}`
   ).toEqual([]);
   expect(
     result.cleanupError,
-    `[${label}] cleanup de SW reportou erro: ${result.cleanupError}`,
+    `[${label}] cleanup de SW reportou erro: ${result.cleanupError}`
   ).toBeNull();
 }
 

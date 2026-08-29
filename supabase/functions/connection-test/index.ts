@@ -5,6 +5,7 @@
 //  - entrega de webhook (POST sintético assinado contra a URL pública correta)
 import { getCorsHeaders, readJsonBodyOrEmpty } from "../_shared/validation.ts";
 import { requireAdminOrSupervisor } from "../_shared/auth.ts";
+import { WebhookSecurityService } from "../_shared/hmac-validation.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { evolutionClient, getBaseUrl } from "../_shared/providers/evolution/index.ts";
@@ -79,18 +80,6 @@ export function resolveConnectionStateClient(): Pick<typeof evolutionClient, "ge
     );
     return evolutionClient;
   }
-}
-
-async function hmacSha256Hex(payload: string, secret: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // ==================== Modo NÃO-OFICIAL (Evolution) ====================
@@ -291,7 +280,8 @@ function appendCloudWebhookChecks(checks: Check[], verifyToken: string, appSecre
       "x-lovable-test": "1",
     };
     if (appSecret) {
-      headers["x-hub-signature-256"] = `sha256=${await hmacSha256Hex(payload, appSecret)}`;
+      // Módulo canônico — signPayload já devolve "sha256=<hex>" (mesmo formato do header Meta).
+      headers["x-hub-signature-256"] = await new WebhookSecurityService(appSecret).signPayload(payload);
     }
     if (ANON_KEY) headers["Authorization"] = `Bearer ${ANON_KEY}`;
     const t0 = Date.now();
@@ -332,7 +322,8 @@ async function appendWebhookCheck(checks: Check[], _mode: Mode, secret: string):
     "x-lovable-test": "1",
   };
   if (secret) {
-    headers["x-evolution-signature"] = `sha256=${await hmacSha256Hex(payload, secret)}`;
+    // Módulo canônico — signPayload já devolve "sha256=<hex>" (mesmo formato do header Evolution).
+    headers["x-evolution-signature"] = await new WebhookSecurityService(secret).signPayload(payload);
   }
   if (ANON_KEY) headers["Authorization"] = `Bearer ${ANON_KEY}`;
 

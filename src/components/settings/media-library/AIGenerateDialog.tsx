@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { resolvePublicStorageUrl } from '@/lib/mediaUrl';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -41,23 +42,38 @@ export function AIGenerateDialog({
     if (!genPrompt.trim()) return;
     setGenerating(true);
     setGenPreviewUrl(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('elevenlabs-sfx', {
-        body: { prompt: genPrompt, duration: genDuration, mode: genMode },
-      });
-      if (error || data?.error) throw new Error(data?.error || 'Generation failed');
-      if (!data?.audioContent) throw new Error('Resposta sem conteúdo de áudio');
-      const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
-      setGenPreviewUrl(audioUrl);
-      audioRef.current?.pause();
-      const audio = new Audio(audioUrl);
-      audio.play().catch(() => {});
-      audioRef.current = audio;
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao gerar áudio');
-    } finally {
+    // Bloco 7 (etapa 84): invokeEdge expõe o 422 canônico do gate
+    // elevenlabs-sfx@v1 (ex.: prompt > 2000 chars → details[{path:'prompt'}]).
+    // Antes, `throw new Error(data?.error || 'Generation failed')` descartava
+    // o corpo do FunctionsHttpError — todo 422 virava "Generation failed".
+    const result = await invokeEdge<{ audioContent?: string; error?: string }>('elevenlabs-sfx', {
+      body: { prompt: genPrompt, duration: genDuration, mode: genMode },
+    });
+    if (!result.ok) {
+      const firstField = Object.values(result.fieldErrors)[0];
+      toast.error(firstField || result.message || 'Erro ao gerar áudio');
       setGenerating(false);
+      return;
     }
+    const data = result.data;
+    // Erro de domínio no body 200 (EF devolve {error} sem status de erro).
+    if (data?.error) {
+      toast.error(data.error);
+      setGenerating(false);
+      return;
+    }
+    if (!data?.audioContent) {
+      toast.error('Resposta sem conteúdo de áudio');
+      setGenerating(false);
+      return;
+    }
+    const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
+    setGenPreviewUrl(audioUrl);
+    audioRef.current?.pause();
+    const audio = new Audio(audioUrl);
+    audio.play().catch(() => {});
+    audioRef.current = audio;
+    setGenerating(false);
   };
 
   const handleSaveGenerated = async () => {
@@ -77,9 +93,12 @@ export function AIGenerateDialog({
       } = await supabase.auth.getUser();
       let aiCategory = 'outros';
       try {
-        const { data: classifyData, error: classifyError } = await supabase.functions.invoke('classify-audio-meme', {
-          body: { audio_url: savedUrl, file_name: genPrompt },
-        });
+        const { data: classifyData, error: classifyError } = await supabase.functions.invoke(
+          'classify-audio-meme',
+          {
+            body: { audio_url: savedUrl, file_name: genPrompt },
+          }
+        );
         if (!classifyError && classifyData?.category) aiCategory = classifyData.category;
       } catch (err) {
         log.error('Unexpected error in AIGenerateDialog:', err);

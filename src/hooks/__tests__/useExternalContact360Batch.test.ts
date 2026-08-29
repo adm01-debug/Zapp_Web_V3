@@ -337,7 +337,9 @@ describe('useExternalContact360Batch — parse defensivo do Map (BUG #9)', () =>
     expect(result.current.lookup('5511912345678')).toBeUndefined();
     expect(result.current.lookup('5511977777777')).toBeUndefined();
 
-    await waitFor(() => expect(result.current.lookup('5511988888888')?.company_name).toBe('BETA B2'));
+    await waitFor(() =>
+      expect(result.current.lookup('5511988888888')?.company_name).toBe('BETA B2')
+    );
     expect(result.current.lookup('5511977777777')?.company_name).toBe('GAMMA C');
   });
 });

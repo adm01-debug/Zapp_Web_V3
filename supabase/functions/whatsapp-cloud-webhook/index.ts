@@ -22,7 +22,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { createZappAdminClient } from '../_shared/db-client.ts';
 import { verifyHmacSignature } from "../_shared/hmac-validation.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { markEventProcessed, shouldUpdateStatus } from "../_shared/evolution-helpers.ts";
 import {
@@ -359,23 +359,27 @@ Deno.serve(async (req) => {
     // calculado: o gate já validou e aceitou o payload normalmente).
     const benign = entries.length === 0;
     void recordPing("event", { rid, processed, duplicates, ignoredFields, statusesUpdated, statusesSkipped, statusesOrphan, benign });
-    return new Response(
-      JSON.stringify({
+    // Bloco 5 (2026-08-21): propaga parsed.headers (x-contract-version/
+    // deprecated/sunset) — antes nunca chegava ao cliente.
+    // Etapa 54 (PLANO-100-CONTRATOS-EDGE): propagação agora via
+    // respondWithContract (contract-kit), sem spread manual.
+    return respondWithContract(
+      parsed,
+      {
         ok: true, processed, duplicates, ignoredFields,
         statusesUpdated, statusesSkipped, statusesOrphan,
         duplicate: duplicates > 0, ...(benign ? { benign: true } : {}), requestId: rid,
-      }),
-      // Bloco 5 (2026-08-21): propaga parsed.headers (x-contract-version/
-      // deprecated/sunset) — antes nunca chegava ao cliente.
-      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json", ...parsed.headers } },
+      },
+      { status: 200, headers: getCorsHeaders(req) },
     );
   } catch (e) {
     console.error(`[whatsapp-cloud-webhook][${rid}] error`, e);
-    return new Response(
-      JSON.stringify({ ok: false, requestId: rid }),
+    return respondWithContract(
+      parsed,
+      { ok: false, requestId: rid },
       {
         status: 200, // ack para evitar retry-storm da Meta
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json", ...parsed.headers },
+        headers: getCorsHeaders(req),
       },
     );
   }
