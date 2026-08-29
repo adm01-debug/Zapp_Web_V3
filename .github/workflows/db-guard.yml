@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/db-guard.yml"
       - "scripts/generate-schema-catalog.mjs"
+      - "scripts/compare-schema-catalog.mjs"
       - "scripts/check-mcp-exec-acl.mjs"
       - "src/integrations/supabase/types.ts"
       - "supabase/schema-catalog.json"
@@ -15,6 +16,7 @@ on:
     paths:
       - ".github/workflows/db-guard.yml"
       - "scripts/generate-schema-catalog.mjs"
+      - "scripts/compare-schema-catalog.mjs"
       - "scripts/check-mcp-exec-acl.mjs"
       - "src/integrations/supabase/types.ts"
       - "supabase/schema-catalog.json"
@@ -54,7 +56,7 @@ jobs:
 
       - name: Comparar contrato do catálogo commitado com o catálogo vivo
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
-        run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json --compare-file supabase/schema-catalog.json --ignore-source
+        run: node scripts/compare-schema-catalog.mjs --left supabase/schema-catalog.json --right reports/schema-catalog.live.json --ignore-source
 
       - name: Avisar quando a checagem viva não executar
         if: ${{ env.META_URL == '' || env.META_TOKEN == '' }}
