@@ -54,10 +54,13 @@ de execução. Os riscos mais importantes confirmados na baseline são:
 
 ### Atualização auditada em 29/08/2026
 
-O bloco acima permanece como fotografia da baseline de partida. Na `main@470f3625b`,
-as correções de resultado honesto da transferência single, remoção de `connection`,
-identidade `profiles.id`, parser canônico, TypeScript fail-closed e demanda externa já
-foram integradas e revalidadas. A evidência reproduzível está em
+O bloco acima permanece como fotografia da baseline de partida. A baseline funcional do
+app é `470f3625b6f5b40943b8d1ee3e7db6b702d58ab2`; a baseline final da `main`
+auditada é `391c186947f12d1a9105af8b2e4c6a6868e2e7c4`. O PR `#1455` alterou
+somente `scripts/data-layer-baseline.json` entre esses marcos. As correções de resultado
+honesto da transferência single, remoção de `connection`, identidade `profiles.id`,
+parser canônico, TypeScript fail-closed e demanda externa foram integradas e
+revalidadas. A evidência reproduzível está em
 [`2026-08-29-validacao-exaustiva-pos-p0.md`](./evidencias/008/2026-08-29-validacao-exaustiva-pos-p0.md).
 
 Continuam abertos: contrato/RLS/funções DB da transferência, bridge de mensagens que não

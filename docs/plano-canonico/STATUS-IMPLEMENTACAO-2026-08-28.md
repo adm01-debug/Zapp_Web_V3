@@ -32,10 +32,13 @@ declarado concluído: há overloads incompatíveis com as tabelas atuais e mutat
 `SECURITY DEFINER` expostos a `authenticated` sem autorização interna. Nenhum objeto foi
 alterado para produzir esse diagnóstico.
 
-## Veredito
+## Fotografia imutável da baseline de 28/08
 
-As 100 etapas ainda permanecem abertas sob a definição rigorosa do plano. Há trabalho
-real já construído, mas nenhuma etapa possui todo o conjunto de gates que lhe é
+### Veredito da baseline de 28/08
+
+No corte original de 28/08, as 100 etapas permaneciam abertas sob a definição rigorosa
+do plano. Havia trabalho real já construído, mas nenhuma etapa possuía todo o conjunto de
+gates que lhe era
 aplicável — implementação/decisão, testes, merge, deploy, observação, rollback e
 evidência conforme o caso — para receber `[x]`.
 
@@ -46,9 +49,9 @@ evidência conforme o caso — para receber `[x]`.
 | Aberta/não implementada | 23 | O defeito ou a ausência funcional continua reproduzível |
 | Decisão necessária | 1 | Implementar, suspender ou remover exige decisão do dono |
 
-A classificação foi normalizada após cruzar código, CI e banco. Em especial, a Etapa
+A classificação histórica foi normalizada após cruzar código, CI e banco. Em especial, a Etapa
 028 passou a `parcial` porque o frontend confirma os cinco campos sem roundtrip; a 031
-permanece `aberta` pelos diagnósticos TypeScript da baseline; e a 039 ficou `parcial`
+permanecia `aberta` pelos diagnósticos TypeScript daquela baseline; e a 039 ficou `parcial`
 porque o PR `#1442` possui Axe verde, embora o aceite completo ainda falte.
 
 ## 001–010 — Governança, baseline e proteção

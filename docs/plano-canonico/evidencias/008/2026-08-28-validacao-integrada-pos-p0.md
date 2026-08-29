@@ -37,10 +37,32 @@ gh run list --workflow deploy-vps.yml --limit 10 --json databaseId,headSha,statu
 gh run view 33217910209 --log
 gh run view 33216719352 --log
 gh run view 33216720001 --log
-curl -sS -D - -o /tmp/root.body https://zapp.atomicabr.com.br/
-curl -sS -D - -o /tmp/auth.body https://zapp.atomicabr.com.br/auth
-curl -sS -D - -o /tmp/favicon.body https://zapp.atomicabr.com.br/favicon.ico
-curl -sS https://zapp.atomicabr.com.br/version.json
+count=0
+passed=0
+for repetition in 1 2 3; do
+  for host in zapp.atomicabr.com.br zappweb.app.br; do
+    for path in / /auth /favicon.ico /version.json; do
+      code=$(curl -sS -L -o /dev/null --max-time 20 -w '%{http_code}' \
+        "https://${host}${path}")
+      count=$((count + 1))
+      if [ "$code" = 200 ]; then passed=$((passed + 1)); fi
+      printf 'repetition=%s host=%s path=%s status=%s\n' \
+        "$repetition" "$host" "$path" "$code"
+    done
+  done
+done
+test "$count" -eq 24
+test "$passed" -eq 24
+for url in \
+  https://supabase.atomicabr.com.br/rest/v1/whatsapp_connections \
+  https://supabase.atomicabr.com.br/functions/v1/evolution-api/status; do
+  curl -sS -D - -o /dev/null --max-time 20 -X OPTIONS "$url" \
+    -H "Origin: https://zapp.atomicabr.com.br" \
+    -H "Access-Control-Request-Method: GET" \
+    -H "Access-Control-Request-Headers: authorization, apikey, content-type"
+done
+if rg --hidden -n -P '\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b' \
+  docs/plano-canonico; then exit 1; fi
 ./node_modules/.bin/tsc --noEmit -p tsconfig.app.json
 ./node_modules/.bin/vitest run src/features/inbox/hooks/__tests__/useTransferConversation.test.ts src/features/inbox/components/__tests__/TransferDialog.test.tsx src/components/team-chat/__tests__/TeamMessageItem.status.test.ts src/components/team-chat/__tests__/team-chat-comprehensive.test.tsx src/components/team-chat/__tests__/team-chat-security-gaps.test.ts src/features/inbox/components/__tests__/MessageReactions.telemetry.test.tsx src/features/inbox/hooks/__tests__/useMessageReactions.test.tsx src/hooks/__tests__/useMessageReactions.test.tsx src/features/inbox/components/chat/__tests__/chatGroupInfo.date.test.ts src/features/inbox/components/chat/__tests__/media-retry.test.tsx src/features/inbox/components/chat/__tests__/p0-regressions.test.ts src/features/inbox/components/chat/__tests__/messageStatusLanguage.test.ts src/features/inbox/components/chat/__tests__/useChatPanelHandlers.burst.test.ts src/features/inbox/components/chat/__tests__/useChatPanelHandlers.edit.test.ts src/features/inbox/components/chat/__tests__/useChatPanelHandlers.retryLock.test.ts src/features/inbox/components/chat/__tests__/useChatPanelHandlers.sendContract.test.ts src/features/inbox/components/chat/__tests__/useChatPanelHandlers.whisper.test.ts src/features/inbox/hooks/__tests__/conversationDataLoaders.abortSignal.test.ts src/lib/__tests__/abortError.test.ts src/features/inbox/hooks/__tests__/useVirtualRows.test.tsx src/__tests__/auth-flows.test.tsx src/hooks/__tests__/useAuth.test.tsx
 ./node_modules/.bin/vite build
@@ -48,6 +70,9 @@ curl -sS https://zapp.atomicabr.com.br/version.json
 
 As verificações de banco desta prova foram somente leitura, via consultas ao contrato
 live auditado anteriormente, sem `DDL`, `DML` administrativo ou alteração de objeto.
+Sequências e publication Realtime não tiveram output preservado nesta execução original;
+a revalidação aditiva de 29/08 registrou as queries e resultados sanitizados em
+[`2026-08-29-validacao-exaustiva-pos-p0.md`](./2026-08-29-validacao-exaustiva-pos-p0.md).
 
 ## Matriz de cenários e falhas previstas
 
@@ -63,6 +88,8 @@ live auditado anteriormente, sem `DDL`, `DML` administrativo ou alteração de o
 | criação textual recebe ticket alfanumérico | corpo live (`v_tk int`) contra tipo live (`text`) | erro de conversão; além disso o INSERT autenticado é negado pela policy atual | inferência confirmada pelo catálogo |
 | comentário por qualquer um dos dois overloads | assinatura/corpo live contra `NOT NULL` live | cada overload omite campos obrigatórios diferentes e falha no INSERT | inferência confirmada pelo catálogo |
 | IDs válidos porém inexistentes de agente/fila | FKs live da tabela principal | o banco não garante integridade desses quatro vínculos | inferência confirmada pelo catálogo |
+| sequences de ticket | `pg_sequences` + `to_regclass`, revalidação aditiva de 29/08 | sequence esperada em `public` ausente; duas sequences distintas existem em `zapp` | executado/somente leitura no adendo |
+| publication Realtime | `pg_publication_tables`, revalidação aditiva de 29/08 | `conversation_transfers` e `transfer_comments` estão em `supabase_realtime` | executado/somente leitura no adendo |
 | requisições abortadas/saturação do log F12 | suíte focada de abort/loaders e análise temporal do log | contenções passam; falta teste integrado de fan-out/boot sob saturação real | executado com gap residual |
 
 Os cenários classificados como inferência não foram disparados contra dados de produção:
@@ -100,6 +127,11 @@ falha estrutural comprovada de hipótese não verificada.
   preflight CORS crítico → `200` com `Access-Control-Allow-Origin: *`.
 - Após o deploy, `24/24` probes independentes passaram (`2` domínios × `4` rotas ×
   `3` repetições): raiz, `/auth`, `/favicon.ico` e `/version.json` responderam `200`.
+- Em `2026-08-29T01:25:16-03:00`, a reexecução aditiva do loop acima confirmou
+  novamente `24/24`. Os dois `OPTIONS` reais retornaram `200`,
+  `Access-Control-Allow-Origin: *`, métodos incluindo `GET`, os três headers
+  solicitados e nenhum `Access-Control-Allow-Credentials`.
+- A varredura genérica de IPv4 literal em `docs/plano-canonico` retornou zero achado.
 - Na worktree de consolidação `#1451`, `tsc --noEmit -p tsconfig.app.json` passou, a
   suíte focada aprovou `23` arquivos e `345` testes, e `vite build` concluiu com warnings
   antigos de chunking, sem nova falha bloqueante.

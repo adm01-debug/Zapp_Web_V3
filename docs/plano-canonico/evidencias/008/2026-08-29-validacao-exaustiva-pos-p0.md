@@ -114,8 +114,8 @@ done < <(find "$root/evidencias" -mindepth 2 -maxdepth 2 \
 }
 
 git diff --check
-if git grep -n -E '209\.142\.67\.51|186\.207\.138\.55' \
-  -- docs/plano-canonico; then exit 1; fi
+if rg --hidden -n -P '\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b' \
+  docs/plano-canonico; then exit 1; fi
 git show origin/main:src/features/inbox/hooks/useTransferConversation.ts
 git show origin/main:src/features/inbox/components/TransferDialog.tsx
 git show origin/main:src/shared/webhookEventSchemas.ts
