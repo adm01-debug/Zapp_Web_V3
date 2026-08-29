@@ -60,7 +60,8 @@ identidade `profiles.id`, parser canônico, TypeScript fail-closed e demanda ext
 foram integradas e revalidadas. A evidência reproduzível está em
 [`2026-08-29-validacao-exaustiva-pos-p0.md`](./evidencias/008/2026-08-29-validacao-exaustiva-pos-p0.md).
 
-Continuam abertos: contrato/RLS/funções DB da transferência, trilha de bulk e handoff,
+Continuam abertos: contrato/RLS/funções DB da transferência, bridge de mensagens que não
+preserva `sender/agent_id`, bulk desabilitado e handoff com risco de sucesso falso,
 pipeline de relatórios agendados e permissão do secret do ratchet para criar PR sem
 intervenção. Nenhum objeto do banco foi alterado durante essa revalidação.
 
@@ -679,6 +680,10 @@ a concluído.
 - [ ] Desativar a transferência em massa enquanto ela não usar a mesma trilha auditável, ou fazê-la retornar resultado estruturado sem falso sucesso.
 - [x] Aguardar o resultado da operação antes de fechar o diálogo e bloquear duplo envio durante a promise.
 - [x] Não emitir toast final de sucesso quando a auditoria obrigatória não persistir.
+- [ ] Fazer o handoff colaborativo rejeitar ID inválido, erro/RLS e zero-row, preservando
+  o diálogo e distinguindo sucesso parcial quando a nota não persistir.
+- [ ] Garantir que a timeline preserve direção e `profiles.id`; o bridge atual de
+  `messages` ignora `NEW.sender` e `NEW.agent_id`.
 - [ ] Apresentar retry/compensação segura sem duplicar timeline ou transferência.
 
 **Concluída quando:** usuário nunca recebe confirmação plena de uma transferência sem trilha exigida, e nenhum tipo não suportado alcança uma escrita de agente/fila.

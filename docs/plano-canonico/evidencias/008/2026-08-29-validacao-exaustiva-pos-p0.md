@@ -57,6 +57,9 @@ gh run view 33229794279
 gh run view 33229794225
 gh run view 33230650615 --log-failed
 gh pr view 1455 --json files,body,headRefOid,baseRefOid,state,statusCheckRollup
+gh run view 33231609406 --json headSha,status,conclusion,jobs,url
+gh run view 33231609348 --json headSha,status,conclusion,jobs,url
+gh run view 33231609369 --json headSha,status,conclusion,jobs,url
 
 # Integridade do plano canônico (o script check-audit-docs-integrity.sh cobre
 # somente o plano legado em docs/audits/PLANO_IMPLEMENTACAO_100.md).
@@ -364,6 +367,10 @@ mutators, `nextval`, triggers, DDL, DML ou RPCs operacionais.
 - O head automático `c0e98478e` do PR `#1455` aprovou CI `33230702664`, Quality Gate
   `33230702684` e CodeQL `33230702670`; a suíte registrou `480` arquivos e `8.608`
   testes aprovados, além de E2E, Axe e build. O PR foi mergeado em `391c18694`.
+- O SHA exato da `main` `391c186947f12d1a9105af8b2e4c6a6868e2e7c4` também
+  aprovou CI `33231609406`, Quality Gate `33231609348` e CodeQL `33231609369`.
+  O CI pós-merge inclui o gate TypeScript hospedado, suíte unitária, E2E, Axe e build;
+  portanto a etapa 031 não depende apenas da equivalência de árvore do head do PR.
 - O ratchet seguinte, run `33231609413`, terminou verde em `11s` com
   `reason=no-change` e não gerou branch ou PR adicional.
 
@@ -380,9 +387,13 @@ mutators, `nextval`, triggers, DDL, DML ou RPCs operacionais.
 | `DemandPrediction` quebrar com array vazio | corrigido | vazio estável, `trend=stable`, cancelamento e testes dedicados |
 | ausência de testes do hook single | corrigido | suíte cobre preflight, CAS, ticket, sucesso, parcial e erro |
 
-No fluxo single, o identificador canônico resolvido é usado tanto em
-`messages.agent_id` quanto em `transfer_comments.agent_id`; ambos representam
-`zapp.profiles.id`, não `auth.users.id`.
+No fluxo single, o hook resolve `zapp.profiles.id` e o envia nos payloads de
+`messages.agent_id` e `transfer_comments.agent_id`, em vez de usar
+`auth.users.id`. Isso confirma a intenção e o shape do caller, mas não confirma
+persistência simétrica: `transfer_comments.agent_id` pertence ao contrato de profiles,
+enquanto o bridge de escrita de `messages` não propaga `NEW.agent_id` nem
+`NEW.sender` para `zapp.evolution_messages`. A atribuição persistida da timeline,
+portanto, continua aberta e não foi classificada como corrigida.
 
 ## Gaps reais remanescentes
 
@@ -394,8 +405,9 @@ No fluxo single, o identificador canônico resolvido é usado tanto em
 | P0 | quatro overloads têm drift estrutural de coluna/`NOT NULL` | criação UUID, comentários e um aceite falham antes de concluir |
 | P0 | criação textual adicional conflita com trigger, RLS e cast de ticket | agente autenticado não conclui o fluxo mesmo sem o drift dos quatro overloads |
 | P0 | gerador Zapp fixa `search_path=public` e usa sequência não qualificada | ticket automático com valor nulo procura sequência inexistente em `public` |
+| P0 | bridge `messages` ignora `sender/agent_id` do insert legado | timeline pode persistir como inbound/contact e sem atribuição do agente |
 | P1 | bulk transfer está desabilitada na UI e sem callback de produção; o helper legado só aparece em testes | função ainda não entregue; se reativado como está, atualizaria só `contacts`, ignoraria `_message` e não criaria trilha |
-| P0 | collaboration/handoff atualiza contato/nota sem trilha de transferência | segundo caminho visível contorna o contrato auditável |
+| P0 | collaboration/handoff ignora erro/zero-row e retorna normalmente para ID inválido | diálogo pode fechar com toast de sucesso sem transferência; falha da nota também pode ficar silenciosa |
 | P1 | quatro IDs de agente/fila não têm FK nem índice líder | referências órfãs e custo de joins não são impedidos pelo banco |
 | P1 | leitura usa visibilidade do contato, não vínculo `from/to_agent_id` | policy live é mais ampla/diferente que comentário e teste do repo |
 | P1 | modelo não possui `workspace_id` e mutators não validam tenant | isolamento depende de lógica externa ausente nesses corpos |
@@ -464,7 +476,11 @@ foram inferidos do catálogo. Eles não foram produzidos artificialmente em prod
 | duas tentativas sobre o mesmo estado | CAS + testes | perdedor recebe conflito; atomicidade completa ainda depende do DB |
 | bulk pelo toolbar | inspeção de `origin/main` | botão permanentemente desabilitado e sem callback; não há falso sucesso alcançável pelo usuário |
 | helper `bulkTransfer` residual | inspeção de `origin/main` + testes | sem caller de produção; se chamado, ignora a mensagem e não cria trilha |
-| handoff colaborativo | inspeção de `origin/main` | atualiza contato/nota sem trilha |
+| handoff: ID inválido | inspeção de `origin/main` | callback retorna normalmente; diálogo fecha e exibe sucesso falso |
+| handoff: RLS, erro ou zero-row | inspeção de `origin/main` | resultado do update é ignorado; a Promise pode resolver como sucesso |
+| handoff: falha ao salvar nota | inspeção de `origin/main` | ausência de usuário/profile ou erro da nota não chega à UI; texto pode ser perdido sem aviso |
+| handoff: falha ao listar agentes | inspeção de `origin/main` | diálogo não diferencia erro de lista vazia e não oferece retry explícito |
+| bridge `messages` com apenas `sender='agent'` | trigger e view versionados | trigger ignora `sender/agent_id`, deriva inbound/false e não persiste vínculo de agente |
 | evento canônico `expired/returned/completed` | parser + integração | aceito pelo ramo canônico |
 | ciclo completo de oito estados | cobertura atual | gap: não há simulação de lifecycle ponta a ponta |
 | `accept(text)` por terceiro autenticado | corpo/ACL/RLS live | bypass ativo de autorização por UUID conhecido |
@@ -473,6 +489,19 @@ foram inferidos do catálogo. Eles não foram produzidos artificialmente em prod
 | ticket nulo | cadeia trigger/função/sequence live | falha prevista ao resolver `public.transfer_ticket_seq` |
 | ratchet publica branch | run `33230650615` | passou; o antigo 403 de push foi eliminado |
 | ratchet cria PR | run `33230650615` | falhou: PAT sem permissão `createPullRequest` |
+
+### Critérios de teste ainda obrigatórios para o handoff
+
+- unitário do callback: ID inválido, erro explícito, RLS/zero-row, sucesso sem nota,
+  ausência de sessão/profile e erro ao persistir nota;
+- componente: `error` mantém diálogo, seleção e comentário; `partial` gera aviso;
+  `success` é o único estado que fecha com confirmação plena; duplo clique chama uma
+  única vez;
+- integração: contato removido entre abertura e confirmação, sessão expirada, agente
+  inválido e falha da nota depois do update principal;
+- E2E autenticado: happy path, stale contact, RLS negando update e rede intermitente,
+  sempre conferindo efeito persistido em vez de apenas o toast;
+- carregamento de agentes: erro e retry visíveis, sem tratar falha como lista vazia.
 
 ## Gap externo descoberto no ratchet
 
@@ -531,10 +560,14 @@ esta prova posterior limita explicitamente o que elas podiam concluir:
 3. testar em staging agentes comum/supervisor/admin/outro tenant e lifecycle completo;
 4. regenerar os tipos e adicionar guard contra writes pela fachada `public`, preservando
    separadamente o contrato estrito de `zapp`;
-5. antes de reativar bulk, migrar seu helper e o handoff para o mesmo executor auditável;
-6. corrigir KPI e testes residuais do contrato;
-7. fechar o pipeline de relatórios agendados em PR separado;
-8. ajustar a permissão do secret do ratchet e repetir o ensaio sem intervenção manual.
+5. corrigir o bridge `messages` ou retirar dele a responsabilidade por auditoria,
+   provando a persistência de direção e agente;
+6. migrar o handoff para o mesmo executor auditável e fazer seu resultado distinguir
+   `success`, `partial` e `error`; cobrir ID inválido, RLS, zero-row, nota recusada,
+   sessão expirada e duplo clique antes de reativar bulk;
+7. corrigir KPI e testes residuais do contrato;
+8. fechar o pipeline de relatórios agendados em PR separado;
+9. ajustar a permissão do secret do ratchet e repetir o ensaio sem intervenção manual.
 
 ## Rollback ou recuperação
 
@@ -548,7 +581,8 @@ de dados ou infraestrutura a executar.
 As correções frontend, TypeScript, CI, deploy e `DemandPrediction` listadas acima estão
 validadas no código atual e não devem voltar ao backlog como se ainda estivessem
 ausentes. O sistema, porém, não está certificado como `10/10`: transferência bulk está
-desabilitada e conserva um helper residual sem trilha; o handoff visível continua sem
-trilha; o banco contém mutators quebrados e mutators privilegiados sem autorização
-interna; relatórios agendados carecem de prova ponta a ponta; e o token do ratchet ainda
-não cria PR autonomamente. O veredito correto desta rodada é `parcial`.
+desabilitada e conserva um helper residual sem trilha; o handoff visível admite sucesso
+falso e o bridge de mensagens não preserva `sender/agent_id`; o banco contém mutators
+quebrados e mutators privilegiados sem autorização interna; relatórios agendados carecem
+de prova ponta a ponta; e o token do ratchet ainda não cria PR autonomamente. O veredito
+correto desta rodada é `parcial`.

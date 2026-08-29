@@ -21,7 +21,7 @@ produziu o seguinte delta sem recalcular retroativamente as quantidades originai
 | Etapa | Estado posterior | Evidência objetiva |
 |---:|---|---|
 | 031 | concluída com prova | `tsc` integral limpo, gate fail-closed `#1452`, CI/Quality Gate/deploy verdes |
-| 041 | parcial avançada | single transfer honesta, sem `connection`, parser canônico e diálogo aguardado; bulk/handoff ainda sem trilha |
+| 041 | parcial avançada | single transfer honesta, sem `connection`, parser canônico e diálogo aguardado; handoff admite sucesso falso, bulk está desabilitado e o bridge não preserva `sender/agent_id` |
 | 042 | parcial | `profiles.id` e CAS corrigidos no single; RLS/atomicidade DB continuam abertos |
 | 044 | parcial | compare-and-set local coberto; lifecycle transacional e multiagente em staging faltam |
 | 082 | parcial avançada | TypeScript e ratchets agora bloqueantes; demais advisories da etapa continuam |
