@@ -11,10 +11,34 @@ fotografia derivada, sem checkboxes, e não substitui o checklist editável em
 [`README.md`](./README.md). Mudanças locais não commitadas de outros agentes foram
 excluídas. O catálogo canônico foi consultado somente em leitura.
 
-## Veredito
+## Delta auditado em 29/08/2026
 
-As 100 etapas ainda permanecem abertas sob a definição rigorosa do plano. Há trabalho
-real já construído, mas nenhuma etapa possui todo o conjunto de gates que lhe é
+A fotografia de 28/08 abaixo permanece imutável como baseline. A revalidação posterior,
+registrada em
+[`2026-08-29-validacao-exaustiva-pos-p0.md`](./evidencias/008/2026-08-29-validacao-exaustiva-pos-p0.md),
+produziu o seguinte delta sem recalcular retroativamente as quantidades originais:
+
+| Etapa | Estado posterior | Evidência objetiva |
+|---:|---|---|
+| 031 | concluída com prova | `tsc` integral limpo, gate fail-closed `#1452`, CI/Quality Gate/deploy verdes |
+| 041 | parcial avançada | single transfer honesta, sem `connection`, parser canônico e diálogo aguardado; handoff admite sucesso falso, bulk está desabilitado e o bridge não preserva `sender/agent_id` |
+| 042 | parcial | `profiles.id` e CAS corrigidos no single; RLS/atomicidade DB continuam abertos |
+| 044 | parcial | compare-and-set local coberto; lifecycle transacional e multiagente em staging faltam |
+| 082 | parcial avançada | TypeScript e ratchets agora bloqueantes; demais advisories da etapa continuam |
+| 090 | parcial | branch automático passou após `#1454`; PAT ainda não cria o PR |
+
+O catálogo live também confirmou que o subsistema DB de transferências não pode ser
+declarado concluído: há overloads incompatíveis com as tabelas atuais e mutators
+`SECURITY DEFINER` expostos a `authenticated` sem autorização interna. Nenhum objeto foi
+alterado para produzir esse diagnóstico.
+
+## Fotografia imutável da baseline de 28/08
+
+### Veredito da baseline de 28/08
+
+No corte original de 28/08, as 100 etapas permaneciam abertas sob a definição rigorosa
+do plano. Havia trabalho real já construído, mas nenhuma etapa possuía todo o conjunto de
+gates que lhe era
 aplicável — implementação/decisão, testes, merge, deploy, observação, rollback e
 evidência conforme o caso — para receber `[x]`.
 
@@ -25,9 +49,9 @@ evidência conforme o caso — para receber `[x]`.
 | Aberta/não implementada | 23 | O defeito ou a ausência funcional continua reproduzível |
 | Decisão necessária | 1 | Implementar, suspender ou remover exige decisão do dono |
 
-A classificação foi normalizada após cruzar código, CI e banco. Em especial, a Etapa
+A classificação histórica foi normalizada após cruzar código, CI e banco. Em especial, a Etapa
 028 passou a `parcial` porque o frontend confirma os cinco campos sem roundtrip; a 031
-permanece `aberta` pelos diagnósticos TypeScript da baseline; e a 039 ficou `parcial`
+permanecia `aberta` pelos diagnósticos TypeScript daquela baseline; e a 039 ficou `parcial`
 porque o PR `#1442` possui Axe verde, embora o aceite completo ainda falte.
 
 ## 001–010 — Governança, baseline e proteção
