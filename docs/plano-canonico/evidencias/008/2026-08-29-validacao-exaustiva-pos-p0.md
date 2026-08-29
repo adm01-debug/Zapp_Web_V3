@@ -560,6 +560,10 @@ esta prova posterior limita explicitamente o que elas podiam concluir:
   parciais;
 - as consultas live sanitizadas estão registradas nesta prova, em vez de inferir o banco
   apenas das migrations históricas;
+- o veredito antigo de que o trigger mitigava `ticket_number` sem default está
+  invalidado: o trigger ligado chama `zapp.generate_transfer_ticket()`, cujo
+  `search_path=public` e `nextval('transfer_ticket_seq')` não qualificado procuram uma
+  sequence inexistente em `public`; inserts com ticket nulo podem abortar;
 - os probes atuais usam `GET`, não `HEAD`, para raiz, auth, favicon e versão.
 
 ## Limites e autorizações preservadas
