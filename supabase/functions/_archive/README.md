@@ -15,5 +15,11 @@ Modulo SLA nunca ligado: 11 tabelas vazias.
 Job declarado: sicoob-outbox-drain (ausente no banco).
 Pipeline inativo: sicoob_reply_outbox e outbox_events vazias.
 
+## zapp-google-calendar-sync
+Arquivada em 2026-08-25 (PLANO-100 fechamento): ZERO chamadores (front/edge/cron/N8N/externo)
+e contrato descrevendo API de sync que nunca existiu (endpoint sempre respondia synced:false;
+sem credenciais Google Calendar no ambiente — ver ADR 2026-08-18 preservado aqui).
+ADR completo: docs/_archive/zapp-google-calendar-sync-ADR-2026-08-25.md.
+
 ## Restaurar
 cp supabase/functions/_archive/<fn>/index.ts.archived supabase/functions/<fn>/index.ts

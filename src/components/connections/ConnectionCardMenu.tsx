@@ -216,7 +216,8 @@ export function ConnectionCardMenu({
             id="connection-delete-unavailable-reason"
             className="px-2 pb-1 text-xs leading-relaxed text-muted-foreground"
           >
-            Indisponível no momento: a exclusão ponta a ponta da instância Evolution ainda não está habilitada.
+            Indisponível no momento: a exclusão ponta a ponta da instância Evolution ainda não está
+            habilitada.
           </p>
         </DropdownMenuContent>
       </DropdownMenu>

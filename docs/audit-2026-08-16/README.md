@@ -1,5 +1,16 @@
 # Auditoria Exaustiva + Plano de 100 Etapas — ZAPP Web V3 (2026-08-16)
 
+## Status (2026-08-25) — SUPERADO, não executar deste ponto
+
+> **Decisão registrada em 25/08:** este plano funcional de 16/08 foi **superado e absorvido**
+> pelo plano-100 de melhorias de 20/08 (auditoria RELATORIO-20260820 →
+> [`docs/plano-100/VALIDACAO_PLANO_100_2026-08-20.md`](../plano-100/VALIDACAO_PLANO_100_2026-08-20.md))
+> e pelo [`PLANO-100-CONTRATOS-EDGE-20260821.md`](../PLANO-100-CONTRATOS-EDGE-20260821.md) de 21/08.
+> As fases temáticas 1–10 daqui mapeiam para os blocos dos planos novos, que já incorporaram
+> e avançaram sobre este conteúdo. **Manter a pasta como registro histórico** — a execução
+> corrente segue pelos planos de 20–21/08 (ver também
+> [`docs/plano-100/REVALIDACAO_2026-08-25.md`](../plano-100/REVALIDACAO_2026-08-25.md) §5).
+
 > **O que é esta pasta:** o inventário completo do sistema (o que existe, o que está parcial, o que nunca foi feito) e o plano de implementação/correção em **100 etapas × 10 subetapas**, validado pela camada de validação (Claude) em 3 rodadas — **APROVADO**.
 
 ## O que tem aqui

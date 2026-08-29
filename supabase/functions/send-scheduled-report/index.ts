@@ -17,10 +17,10 @@
 //   scheduled-reports-dispatch a cada 15 min chama com body '{}').
 //
 // Auth: requireServiceRoleOrCron (cron usa service_role do vault).
-import { handleCors, errorResponse, errorEnvelope, jsonResponse, Logger, getCorsHeaders } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, Logger, getCorsHeaders } from "../_shared/validation.ts";
 import { requireServiceRoleOrCron } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { fetchWithRetry } from "../_shared/retry-with-backoff.ts";
 
@@ -89,7 +89,9 @@ Deno.serve(async (req: Request) => {
       log.done(200, { claimed: 0, sent: 0, failed: 0, dryRun });
       // Bloco 5 (2026-08-21): propaga parsed.headers (x-contract-version/
       // deprecated/sunset) — antes nunca chegava ao cliente.
-      return jsonResponse({ claimed: 0, sent: 0, failed: 0, dryRun }, 200, req, parsed.headers);
+      // Etapa 54 (PLANO-100-CONTRATOS-EDGE): propagação agora via
+      // respondWithContract (contract-kit), sem spread manual.
+      return respondWithContract(parsed, { claimed: 0, sent: 0, failed: 0, dryRun }, { status: 200, headers: getCorsHeaders(req) });
     }
 
     let sent = 0;
@@ -177,7 +179,7 @@ Deno.serve(async (req: Request) => {
     }
 
     log.done(200, { claimed: runs.length, sent, failed, dryRun });
-    return jsonResponse({ claimed: runs.length, sent, failed, dryRun }, 200, req, parsed.headers);
+    return respondWithContract(parsed, { claimed: runs.length, sent, failed, dryRun }, { status: 200, headers: getCorsHeaders(req) });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     log.error("Error processing scheduled reports", { error: errorMessage });

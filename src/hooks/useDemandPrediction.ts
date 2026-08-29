@@ -23,7 +23,9 @@ export interface DemandInsights {
   capacityRisk: boolean;
 }
 
-function generatePredictionFromHistory(messageHistory: { hour: number; count: number }[]): PredictionPoint[] {
+function generatePredictionFromHistory(
+  messageHistory: { hour: number; count: number }[]
+): PredictionPoint[] {
   const now = new Date();
   const data: PredictionPoint[] = [];
 
@@ -35,7 +37,11 @@ function generatePredictionFromHistory(messageHistory: { hour: number; count: nu
     const hourCount = hourlyAvg.get(time.getHours()) || 0;
     data.push({
       time: time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      actual: hourCount, predicted: hourCount, lower: hourCount, upper: hourCount, isPrediction: false,
+      actual: hourCount,
+      predicted: hourCount,
+      lower: hourCount,
+      upper: hourCount,
+      isPrediction: false,
     });
   }
 
@@ -45,7 +51,10 @@ function generatePredictionFromHistory(messageHistory: { hour: number; count: nu
     const variance = Math.max(2, Math.round(predicted * 0.2)) + i;
     data.push({
       time: time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      predicted, lower: Math.max(0, predicted - variance), upper: predicted + variance, isPrediction: true,
+      predicted,
+      lower: Math.max(0, predicted - variance),
+      upper: predicted + variance,
+      isPrediction: true,
     });
   }
 
@@ -79,7 +88,8 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
       });
 
       return Array.from(hourCounts.entries()).map(([hour, counts]) => ({
-        hour, count: Math.round(counts.length / 7),
+        hour,
+        count: Math.round(counts.length / 7),
       }));
     },
     staleTime: 5 * 60 * 1000,
@@ -106,8 +116,8 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
   const data = externalData ?? generatePredictionFromHistory(messageHistory);
 
   const insights = useMemo<DemandInsights>(() => {
-    const predictions = data.filter(d => d.isPrediction);
-    const currentActual = data.find(d => !d.isPrediction && d.actual !== undefined)?.actual ?? 0;
+    const predictions = data.filter((d) => d.isPrediction);
+    const currentActual = data.find((d) => !d.isPrediction && d.actual !== undefined)?.actual ?? 0;
 
     // Dados externos podem estar vazios ou conter apenas pontos históricos.
     // Mantém o painel renderizável e as métricas finitas até haver previsões.
@@ -122,10 +132,10 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
       };
     }
 
-    const maxPredicted = Math.max(...predictions.map(p => p.predicted));
+    const maxPredicted = Math.max(...predictions.map((p) => p.predicted));
     const avgPredicted = predictions.reduce((a, b) => a + b.predicted, 0) / predictions.length;
     const trend = predictions[predictions.length - 1].predicted > currentActual ? 'up' : 'down';
-    const peakTime = predictions.find(p => p.predicted === maxPredicted)?.time || '';
+    const peakTime = predictions.find((p) => p.predicted === maxPredicted)?.time || '';
     const capacityRisk = maxPredicted > currentCapacity;
     return { maxPredicted, avgPredicted, currentActual, trend, peakTime, capacityRisk };
   }, [data, currentCapacity]);

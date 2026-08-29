@@ -380,7 +380,7 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       expect(result.current.intelligence).toBeNull();
     });
 
-    it("string vazia: NENHUMA query (enabled=false)", async () => {
+    it('string vazia: NENHUMA query (enabled=false)', async () => {
       const { result } = renderIntel('');
       // enabled=false → nunca há fetch; loading já é false no primeiro render
       expect(result.current.loading).toBe(false);
@@ -919,9 +919,7 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       });
 
       await waitFor(() => expect(result.current.loading).toBe(false));
-      await waitFor(() =>
-        expect(result.current.intelligence?.briefing.total_interactions).toBe(9)
-      );
+      await waitFor(() => expect(result.current.intelligence?.briefing.total_interactions).toBe(9));
 
       expect(qc.getQueryData(keyA)).toBeUndefined();
       expect(qc.getQueryData(keyB)).toEqual(
