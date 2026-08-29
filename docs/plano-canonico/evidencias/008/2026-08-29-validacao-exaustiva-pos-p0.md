@@ -13,6 +13,9 @@
 ## Identificação
 
 - Repositório auditado: `adm01-debug/Zapp_Web_V3`.
+- Branch/PR de autoria da prova: `docs/plano-canonico-status-20260828`, PR `#1446`.
+- Worktree de autoria: `/home/joaquim_ataides/projetos/Zapp_Web_V3_plan_status_20260828`;
+  a checkout raiz, compartilhada com outros agentes, não foi usada para editar a prova.
 - Fonte de código usada: `origin/main`, nunca a checkout raiz com mudanças concorrentes.
 - Baseline funcional do app: `470f3625b6f5b40943b8d1ee3e7db6b702d58ab2`, merge
   do PR `#1454`.
@@ -376,6 +379,25 @@ mutators, `nextval`, triggers, DDL, DML ou RPCs operacionais.
   portanto a etapa 031 não depende apenas da equivalência de árvore do head do PR.
 - O ratchet seguinte, run `33231609413`, terminou verde em `11s` com
   `reason=no-change` e não gerou branch ou PR adicional.
+
+## Gates executados e limitações por SHA
+
+| Gate | SHA/ambiente | Evidência executada | Veredito desta prova |
+|---|---|---|---|
+| `G000` | `391c18694` + worktree documental acima | owner, escopo, baseline, procedimento, integridade e limitações registrados | atendido para esta evidência |
+| `G001` | `391c186947f12d1a9105af8b2e4c6a6868e2e7c4` | CI `33231609406` e Quality Gate `33231609348`: TypeScript, lint, unit/integration, build, E2E e Axe verdes | atendido; fecha a etapa 031 |
+| `G002` | catálogo live + contrato versionado em `391c18694` | consultas somente leitura de funções, RLS, grants, triggers, constraints e sequences | parcial; sem migration autorizada, staging, ledger novo ou matriz RLS por papel |
+| `G003` | heads dos PRs listados | parse/boot de Edge e contratos genéricos passaram no CI | parcial para relatórios; sem pipeline agendado ponta a ponta |
+| `G004` | `391c18694` | E2E genérico do CI passou | parcial; não houve lifecycle autenticado focal de transferência nem relatório agendado |
+| `G005` | app `470f3625b` | deploy `33230650583`, digest, réplica `1/1`, health/CORS e `36/36` probes | atendido apenas para correlação da imagem; não prova aceite de negócio |
+| `G006` | runs de drift citados | gates estáticos/contratuais verdes | parcial; live drift pulado não é contado como verde |
+| `G007` | não executado nesta rodada | nenhuma prova de duas janelas consecutivas | aberto |
+| `G008` | autorização operacional do dono | merge/deploy por workflow autorizado; nenhum apply DB/VPS manual | parcial; correções DB continuam aguardando autorização explícita |
+| `G009` | fora do escopo mutante | nenhuma alteração em `evolution-stack` | não certifica compatibilidade cross-repo |
+
+Assim, a linha `031 = válida` do índice depende exclusivamente de `G001` no SHA
+exato da `main`. Os demais estágios referenciados continuam `parcial` e não herdam o
+verde genérico desse gate.
 
 ## Achados antigos que ficaram obsoletos
 
