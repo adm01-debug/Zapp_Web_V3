@@ -81,13 +81,28 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
     staleTime: 5 * 60 * 1000,
   });
 
-  const data = externalData || generatePredictionFromHistory(messageHistory);
+  const data = externalData ?? generatePredictionFromHistory(messageHistory);
 
   const insights = useMemo<DemandInsights>(() => {
     const predictions = data.filter(d => d.isPrediction);
+    const currentActual = data.find(d => !d.isPrediction && d.actual !== undefined)?.actual ?? 0;
+
+    // External datasets may legitimately be empty or contain only historical
+    // points. Keep the dashboard renderable and the derived metrics finite
+    // until prediction points are available.
+    if (predictions.length === 0) {
+      return {
+        maxPredicted: 0,
+        avgPredicted: 0,
+        currentActual,
+        trend: 'down',
+        peakTime: '',
+        capacityRisk: false,
+      };
+    }
+
     const maxPredicted = Math.max(...predictions.map(p => p.predicted));
     const avgPredicted = predictions.reduce((a, b) => a + b.predicted, 0) / predictions.length;
-    const currentActual = data.find(d => !d.isPrediction && d.actual !== undefined)?.actual || 0;
     const trend = predictions[predictions.length - 1].predicted > currentActual ? 'up' : 'down';
     const peakTime = predictions.find(p => p.predicted === maxPredicted)?.time || '';
     const capacityRisk = maxPredicted > currentCapacity;

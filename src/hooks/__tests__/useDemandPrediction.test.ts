@@ -10,6 +10,7 @@
  *
  * Covered:
  *   - data returned equals externalData when provided
+ *   - empty externalData is handled without querying or invalid insights
  *   - the datasource query remains enabled when externalData is omitted
  *   - insights.maxPredicted is the maximum predicted value among isPrediction=true points
  *   - insights.avgPredicted is the average of predicted values among isPrediction=true points
@@ -103,6 +104,41 @@ describe('useDemandPrediction — data passthrough', () => {
     });
     expect(selectMock).toHaveBeenCalledWith('created_at');
     expect(gteMock).toHaveBeenCalledOnce();
+  });
+
+  it('handles empty externalData without querying or invalid insights', () => {
+    const emptyData: PredictionPoint[] = [];
+    const { result } = renderHook(
+      () => useDemandPrediction(emptyData),
+      { wrapper: makeWrapper() }
+    );
+
+    expect(result.current.data).toBe(emptyData);
+    expect(result.current.insights).toEqual({
+      maxPredicted: 0,
+      avgPredicted: 0,
+      currentActual: 0,
+      trend: 'down',
+      peakTime: '',
+      capacityRisk: false,
+    });
+    expect(dbFromMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves the current actual value when externalData has no predictions yet', () => {
+    const historyOnly = makeData([
+      { actual: 17, predicted: 17, lower: 17, upper: 17, isPrediction: false },
+    ]);
+    const { result } = renderHook(
+      () => useDemandPrediction(historyOnly),
+      { wrapper: makeWrapper() }
+    );
+
+    expect(result.current.insights.currentActual).toBe(17);
+    expect(result.current.insights.maxPredicted).toBe(0);
+    expect(result.current.insights.avgPredicted).toBe(0);
+    expect(result.current.insights.capacityRisk).toBe(false);
+    expect(dbFromMock).not.toHaveBeenCalled();
   });
 });
 
