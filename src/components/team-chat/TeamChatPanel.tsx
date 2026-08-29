@@ -372,7 +372,7 @@ function TeamChatPanelContent({ conversation, onBack, onToggleDetails, showDetai
                         isEditing={s.editingId === msg.id}
                         editText={s.editText}
                         repliedMsg={repliedMsg ?? null}
-                        signedUrl={signedUrls.get(msg.id)}
+                        signedUrl={signedUrls.get(msg.id) ?? undefined}
                         reactions={aggregate(msg.id)}
                         isToggling={isToggling}
                         conversation={conversation}

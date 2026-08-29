@@ -15,8 +15,12 @@ export const SAME_GROUP_MS = 5 * 60 * 1000;
  * Com NaN: `NaN - NaN = NaN` e `isNaN(NaN) = true` → forçamos isFirstInGroup=true,
  * garantindo que mensagens sem timestamp nunca formem um grupo visual.
  */
-const toMs = (t: string | number | null | undefined): number =>
-  t == null ? NaN : new Date(t).getTime();
+type MessageTimestamp = string | number | Date | null | undefined;
+
+const toMs = (timestamp: MessageTimestamp): number => {
+  if (timestamp == null) return NaN;
+  return timestamp instanceof Date ? timestamp.getTime() : new Date(timestamp).getTime();
+};
 
 /**
  * Dado um array de mensagens, calcula para cada uma se é a primeira e/ou
@@ -38,14 +42,14 @@ const toMs = (t: string | number | null | undefined): number =>
  *   buildGroupInfo([{sender:'A', timestamp:'T1'}, {sender:'A', timestamp:'T2'}])
  *   // [{isFirstInGroup:true, isLastInGroup:false}, {isFirstInGroup:false, isLastInGroup:true}]
  */
-export function buildGroupInfo<
-  T extends { sender?: string | null; timestamp?: string | number | null },
->(messages: T[]): { isFirstInGroup: boolean; isLastInGroup: boolean }[] {
+export function buildGroupInfo<T extends { sender?: string | null; timestamp?: MessageTimestamp }>(
+  messages: T[]
+): { isFirstInGroup: boolean; isLastInGroup: boolean }[] {
   return messages.map((msg, i) => {
     const prev = messages[i - 1];
     const next = messages[i + 1];
 
-    const ts     = toMs(msg.timestamp);
+    const ts = toMs(msg.timestamp);
     const prevTs = prev ? toMs(prev.timestamp) : NaN;
     const nextTs = next ? toMs(next.timestamp) : NaN;
 
@@ -54,14 +58,14 @@ export function buildGroupInfo<
     const isFirstInGroup =
       !prev ||
       prev.sender !== msg.sender ||
-      isNaN(diffPrev) ||          // timestamp inválido em msg ou prev → não agrupar
+      isNaN(diffPrev) || // timestamp inválido em msg ou prev → não agrupar
       diffPrev > SAME_GROUP_MS;
 
     const diffNext = nextTs - ts;
     const isLastInGroup =
       !next ||
       next.sender !== msg.sender ||
-      isNaN(diffNext) ||          // timestamp inválido em msg ou next → não agrupar
+      isNaN(diffNext) || // timestamp inválido em msg ou next → não agrupar
       diffNext > SAME_GROUP_MS;
 
     return { isFirstInGroup, isLastInGroup };

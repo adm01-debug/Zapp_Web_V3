@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { RefreshCw, Mail, Star, Archive, Search, AlertTriangle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -94,6 +94,13 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
     onSelectThread?.(thread);
   };
 
+  const handleThreadKeyDown = (event: KeyboardEvent<HTMLDivElement>, thread: EmailThread) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleSelectThread(thread);
+  };
+
   // Estado: sem contas
   if (!isLoading && accounts.length === 0) {
     return (
@@ -127,7 +134,10 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
                 tokenStatus={
                   Object.fromEntries(
                     tokenStatus.map((s) => [s.account_id, s.token_status])
-                  ) as Record<string, TokenStatus> /* ignore-audit: fromEntries result narrowed to typed Record */
+                  ) as Record<
+                    string,
+                    TokenStatus
+                  > /* ignore-audit: fromEntries result narrowed to typed Record */
                 }
                 isSyncing={isSyncing}
                 onSelectAccount={setActiveAccountId}
@@ -197,7 +207,10 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
 
           {/* Erro */}
           {error && (
-            <div role="alert" className="shrink-0 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div
+              role="alert"
+              className="shrink-0 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            >
               {error}
             </div>
           )}
@@ -222,7 +235,7 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
                       onClick={() => handleSelectThread(thread)}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSelectThread(thread)}
+                      onKeyDown={(e) => handleThreadKeyDown(e, thread)}
                     >
                       {/* Avatar letra */}
                       <div
@@ -260,7 +273,8 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
                       <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded bg-background/90 px-1 py-0.5 shadow-sm group-hover:flex">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button"
+                            <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 starThread(thread.id, !thread.is_starred);
@@ -282,7 +296,8 @@ export function EmailInboxView({ onSelectThread }: EmailInboxViewProps) {
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button"
+                            <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 archiveThread(thread.id);

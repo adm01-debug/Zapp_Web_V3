@@ -5,22 +5,32 @@ on:
   push:
     branches: [main]
 permissions:
+  # O token efêmero do próprio workflow grava somente a branch do ratchet.
+  # O PAT continua responsável por criar o PR e disparar seus checks.
   contents: write
+  pull-requests: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   tighten:
-    # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): cálculo local + push com GITHUB_TOKEN genérico, sem DB/VPS.
+    # Cálculo local + branch/PR. Nunca grava diretamente na main protegida.
     runs-on: ubuntu-latest
-    env:
-      GH_PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Require event-capable GitHub token
+        env:
+          GH_ACTIONS_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+        run: |
+          if [ -z "$GH_ACTIONS_TOKEN" ]; then
+            echo "::error::GH_TOKEN_ACTIONS ausente — o token padrão não dispara os checks do PR gerado"
+            exit 1
+          fi
+
       - uses: actions/checkout@v7
         with:
-          persist-credentials: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -28,24 +38,314 @@ jobs:
           node-version: '22'
 
       - name: Tighten baseline (down-only nos escopos hard)
+        id: tighten
         run: |
           node - << 'EOF'
           const { execSync } = require('child_process');
           const fs = require('fs');
-          const before = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
+          const output = process.env.GITHUB_OUTPUT;
+          const readCalls = (label) => {
+            const calls = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
+            if (!calls || typeof calls !== 'object' || Array.isArray(calls)) {
+              throw new Error(`${label}: campo calls inválido`);
+            }
+            for (const [scope, value] of Object.entries(calls)) {
+              if (!Number.isSafeInteger(value) || value < 0) {
+                throw new Error(`${label}: contador inválido em ${scope}`);
+              }
+            }
+            return calls;
+          };
+          const before = readCalls('baseline anterior');
           execSync('node scripts/check-data-layer.mjs --update-baseline', {stdio:'inherit'});
-          const after = JSON.parse(fs.readFileSync('scripts/data-layer-baseline.json','utf8')).calls;
+          const after = readCalls('baseline gerado');
           const hard = ['src/components','src/pages'];
           const up = hard.filter(k => (after[k]??0) > (before[k]??0));
-          const totalUp = Object.values(after).reduce((a,b)=>a+b,0) > Object.values(before).reduce((a,b)=>a+b,0);
-          if (up.length || totalUp) { console.log('⛔ subida detectada em', up.join(',')||'TOTAL', '— não afrouxo. Revertendo.'); execSync('git checkout -- scripts/data-layer-baseline.json'); process.exit(0); }
+          const beforeTotal = Object.values(before).reduce((a,b)=>a+b,0);
+          const afterTotal = Object.values(after).reduce((a,b)=>a+b,0);
+          const totalUp = afterTotal > beforeTotal;
+          if (up.length || totalUp) {
+            console.log('⛔ subida detectada em', up.join(',')||'TOTAL', '— não afrouxo. Revertendo.');
+            execSync('git restore --source=HEAD --staged --worktree scripts/data-layer-baseline.json');
+            fs.appendFileSync(output, 'changed=false\n');
+            fs.appendFileSync(output, 'reason=upward-or-total-growth\n');
+            process.exit(0);
+          }
           const changed = execSync('git status --porcelain scripts/data-layer-baseline.json').toString().trim();
-          if (!changed) { console.log('baseline já justo — nada a fazer.'); process.exit(0); }
-          execSync('git config user.name "ratchet-bot" && git config user.email "bot@users.noreply.github.com"');
-          // Usar GH_PUSH_TOKEN para bypass de branch protection
-          const repo = process.env.GITHUB_REPOSITORY;
-          const token = process.env.GH_PUSH_TOKEN || process.env.GITHUB_TOKEN;
-          if (token) execSync(`git remote set-url origin https://x-access-token:${token}@github.com/${repo}.git`);
-          execSync('git add scripts/data-layer-baseline.json && git commit -m "chore(ratchet): auto-tighten data-layer baseline [skip ci]" && git push');
-          console.log('✅ baseline apertado e commitado.');
+          if (!changed) {
+            console.log('baseline já justo — nada a fazer.');
+            fs.appendFileSync(output, 'changed=false\n');
+            fs.appendFileSync(output, 'reason=no-change\n');
+            process.exit(0);
+          }
+          const branch = `chore/ratchet-tighten-${process.env.GITHUB_SHA.slice(0, 12)}`;
+          fs.appendFileSync(output, 'changed=true\n');
+          fs.appendFileSync(output, `branch=${branch}\n`);
+          fs.appendFileSync(output, `before_total=${beforeTotal}\n`);
+          fs.appendFileSync(output, `after_total=${afterTotal}\n`);
+          console.log(`✅ baseline apertado localmente (${beforeTotal} -> ${afterTotal}) e pronto para PR.`);
           EOF
+
+      - name: Create branch and commit
+        if: steps.tighten.outputs.changed == 'true'
+        run: |
+          git config user.name "ratchet-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git checkout -b "${{ steps.tighten.outputs.branch }}"
+          git add scripts/data-layer-baseline.json
+          # Não usar [skip ci]: o PR gerado também precisa satisfazer branch protection.
+          git commit -m "chore(ratchet): auto-tighten data-layer baseline"
+
+      - name: Check prior canonical ratchet PR state
+        id: prior_pr
+        if: steps.tighten.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="${{ steps.tighten.outputs.branch }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          BOT_LOGIN="$(gh api user --jq .login)"
+          MATCHES="$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state all \
+            --head "$BRANCH" \
+            --limit 1000 \
+            --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,state,url | \
+            jq -c \
+              --arg bot "$BOT_LOGIN" \
+              --arg owner "$REPO_OWNER" \
+              --arg branch "$BRANCH" \
+              '[.[] | select(
+                .headRefName == $branch and
+                .baseRefName == "main" and
+                .isCrossRepository == false and
+                .headRepositoryOwner.login == $owner and
+                .author.login == $bot and
+                ((.body // "") | contains("<!-- ratchet-tighten-automation -->"))
+              )]')"
+          MATCH_COUNT="$(jq 'length' <<< "$MATCHES")"
+
+          if [ "$MATCH_COUNT" -gt 1 ]; then
+            echo "::error::RATCHET_PR_AMBIGUOUS — mais de um PR canônico encontrado para ${BRANCH}"
+            exit 1
+          fi
+
+          if [ "$MATCH_COUNT" -eq 0 ]; then
+            echo "state=NONE" >> "$GITHUB_OUTPUT"
+            echo "completed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_STATE="$(jq -r '.[0].state' <<< "$MATCHES")"
+          PR_URL="$(jq -r '.[0].url' <<< "$MATCHES")"
+          echo "state=${PR_STATE}" >> "$GITHUB_OUTPUT"
+          echo "url=${PR_URL}" >> "$GITHUB_OUTPUT"
+
+          case "$PR_STATE" in
+            MERGED)
+              echo "completed=true" >> "$GITHUB_OUTPUT"
+              echo "Ratchet deste SHA já foi mergeado: $PR_URL"
+              ;;
+            OPEN)
+              echo "completed=false" >> "$GITHUB_OUTPUT"
+              echo "Ratchet deste SHA já está aberto: $PR_URL"
+              ;;
+            CLOSED)
+              echo "::error::RATCHET_PR_CLOSED — PR canônico foi fechado sem merge; revisão manual necessária: ${PR_URL}"
+              exit 1
+              ;;
+            *)
+              echo "::error::RATCHET_PR_STATE_INVALID — estado inesperado: ${PR_STATE}"
+              exit 1
+              ;;
+          esac
+
+      - name: Push ratchet branch
+        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
+        env:
+          # O PAT disponível é event-capable, mas pode ser read-only para contents.
+          # O token efêmero tem contents:write e seu push não grava na main.
+          PUSH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="${{ steps.tighten.outputs.branch }}"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null 2>&1; then
+            echo "Branch remota já existe; validando conteúdo para tornar rerun idempotente."
+            git fetch --no-tags origin "${BRANCH}:refs/remotes/origin/${BRANCH}"
+            REMOTE_PARENT="$(git rev-parse "origin/${BRANCH}^")"
+            if [ "$REMOTE_PARENT" != "$GITHUB_SHA" ]; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} não deriva do SHA esperado"
+              exit 1
+            fi
+            CHANGED_PATHS="$(git diff --name-only "$GITHUB_SHA" "origin/${BRANCH}")"
+            if [ "$CHANGED_PATHS" != "scripts/data-layer-baseline.json" ]; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} contém caminhos inesperados"
+              exit 1
+            fi
+            if ! REMOTE_CALLS="$(git show "origin/${BRANCH}:scripts/data-layer-baseline.json" | jq -e -cS '.calls | select(type == "object")')"; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} contém baseline remoto inválido"
+              exit 1
+            fi
+            if ! LOCAL_CALLS="$(jq -e -cS '.calls | select(type == "object")' scripts/data-layer-baseline.json)"; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — baseline local gerado é inválido"
+              exit 1
+            fi
+            if [ "$REMOTE_CALLS" != "$LOCAL_CALLS" ]; then
+              echo "::error::RATCHET_BRANCH_DIVERGED — ${BRANCH} existe com contagens de baseline diferentes"
+              exit 1
+            fi
+          else
+            git push origin "$BRANCH"
+          fi
+
+      - name: Create PR for tightened baseline
+        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          BEFORE_TOTAL: ${{ steps.tighten.outputs.before_total }}
+          AFTER_TOTAL: ${{ steps.tighten.outputs.after_total }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="${{ steps.tighten.outputs.branch }}"
+          EXISTING_URL="${{ steps.prior_pr.outputs.url }}"
+          if [ -n "$EXISTING_URL" ]; then
+            echo "PR já existente: $EXISTING_URL"
+            exit 0
+          fi
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(ratchet): tighten data-layer baseline [$(date +%Y-%m-%d)]" \
+            --body-file - <<EOF
+          <!-- ratchet-tighten-automation -->
+          Ajuste automático do baseline de data-layer detectado após merge na \`main\`.
+
+          - Antes: \`${BEFORE_TOTAL}\`
+          - Depois: \`${AFTER_TOTAL}\`
+          - Run: ${RUN_URL}
+
+          Este workflow não faz \`push\` direto na \`main\` protegida. A atualização segue o fluxo de PR do repositório.
+          EOF
+
+      - name: Mark stale bot-owned ratchet PRs after successor validation
+        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          TARGET_BRANCH: ${{ steps.tighten.outputs.branch }}
+        run: |
+          set -euo pipefail
+
+          REPO_OWNER="${{ github.repository_owner }}"
+          BOT_LOGIN="$(gh api user --jq .login)"
+
+          resolve_successor() {
+            local matches count state url
+            matches="$(gh pr list \
+              --repo "${{ github.repository }}" \
+              --state all \
+              --head "$TARGET_BRANCH" \
+              --limit 1000 \
+              --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,state,url | \
+              jq -c \
+                --arg bot "$BOT_LOGIN" \
+                --arg owner "$REPO_OWNER" \
+                --arg target "$TARGET_BRANCH" \
+                '[.[] | select(
+                  .headRefName == $target and
+                  .baseRefName == "main" and
+                  .isCrossRepository == false and
+                  .headRepositoryOwner.login == $owner and
+                  .author.login == $bot and
+                  ((.body // "") | contains("<!-- ratchet-tighten-automation -->"))
+                )]')"
+            count="$(jq 'length' <<< "$matches")"
+
+            if [ "$count" -eq 0 ]; then
+              echo "::error::RATCHET_SUCCESSOR_MISSING — PR substituto não existe; PRs anteriores serão preservados" >&2
+              return 1
+            fi
+            if [ "$count" -gt 1 ]; then
+              echo "::error::RATCHET_SUCCESSOR_AMBIGUOUS — múltiplos PRs substitutos canônicos encontrados" >&2
+              return 1
+            fi
+
+            state="$(jq -r '.[0].state' <<< "$matches")"
+            url="$(jq -r '.[0].url' <<< "$matches")"
+            case "$state" in
+              OPEN|MERGED)
+                printf '%s\t%s\n' "$state" "$url"
+                ;;
+              CLOSED)
+                echo "::error::RATCHET_SUCCESSOR_CLOSED — sucessor fechado sem merge; PRs anteriores serão preservados: ${url}" >&2
+                return 1
+                ;;
+              *)
+                echo "::error::RATCHET_SUCCESSOR_STATE_INVALID — estado inesperado: ${state}" >&2
+                return 1
+                ;;
+            esac
+          }
+
+          SUCCESSOR_RECORD="$(resolve_successor)"
+          IFS=$'\t' read -r CURRENT_STATE CURRENT_URL <<< "$SUCCESSOR_RECORD"
+          echo "Sucessor canônico validado em estado ${CURRENT_STATE}: ${CURRENT_URL}"
+
+          EXISTING="$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --limit 1000 \
+            --json author,baseRefName,body,headRefName,headRepositoryOwner,isCrossRepository,url | \
+            jq -r \
+              --arg bot "$BOT_LOGIN" \
+              --arg owner "$REPO_OWNER" \
+              --arg target "$TARGET_BRANCH" \
+              '.[] | select(
+                .headRefName != $target and
+                (.headRefName | startswith("chore/ratchet-tighten-")) and
+                .baseRefName == "main" and
+                .isCrossRepository == false and
+                .author.login == $bot and
+                .headRepositoryOwner.login == $owner and
+                (((.body // "") | contains("<!-- ratchet-tighten-automation -->")) or
+                 ((.body // "") | startswith("Ajuste automático do baseline de data-layer detectado após merge na")))
+              ) | [.headRefName, .url] | @tsv')"
+
+          if [ -z "$EXISTING" ]; then
+            echo "Nenhum ratchet obsoleto pertencente ao bot; sucessor: $CURRENT_URL"
+            exit 0
+          fi
+
+          while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
+            # Revalida imediatamente antes do aviso: OPEN→MERGED é seguro;
+            # CLOSED, ausência, ambiguidade ou troca de URL preservam o PR anterior.
+            LATEST_RECORD="$(resolve_successor)"
+            IFS=$'\t' read -r LATEST_STATE LATEST_URL <<< "$LATEST_RECORD"
+            if [ "$LATEST_URL" != "$CURRENT_URL" ]; then
+              echo "::error::RATCHET_SUCCESSOR_CHANGED — sucessor canônico mudou durante a execução" >&2
+              exit 1
+            fi
+            CURRENT_STATE="$LATEST_STATE"
+
+            NOTICE_MARKER="<!-- ratchet-tighten-stale-notice:${TARGET_BRANCH} -->"
+            COMMENTS_JSON="$(gh pr view "$EXISTING_URL" \
+              --repo "${{ github.repository }}" \
+              --json comments)"
+            if jq -e \
+              --arg marker "$NOTICE_MARKER" \
+              'any(.comments[]?; ((.body // "") | contains($marker)))' \
+              <<< "$COMMENTS_JSON" >/dev/null; then
+              echo "Aviso do sucessor já existe; preservando comentário único: $EXISTING_URL"
+            else
+              echo "Marcando ratchet anterior para revisão segura: $EXISTING_URL"
+              NOTICE_BODY="$(printf '%s\n%s' \
+                "$NOTICE_MARKER" \
+                "Há um ratchet mais novo em ${CURRENT_URL}, calculado da main em ${GITHUB_SHA}. Este PR permanece como fallback enquanto o sucessor está em validação. Depois que um baseline mais justo entrar na main, a proteção strict + o gate obrigatório de monotonicidade impedem que este teto antigo seja mergeado e afrouxe o baseline.")"
+              gh pr comment "$EXISTING_URL" \
+                --body "$NOTICE_BODY"
+            fi
+          done <<< "$EXISTING"

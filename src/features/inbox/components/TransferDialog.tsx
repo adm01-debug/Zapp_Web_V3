@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from '@/components/ui/motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -13,85 +13,100 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { User, Users, Send, ArrowRight, Loader2, Smartphone } from 'lucide-react';
+import { User, Users, Send, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getLogger } from '@/lib/logger';
 import { useAgents } from '@/features/admin';
 import { useQueues } from '@/hooks/useQueues';
-import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import type { TransferConversationResult } from '../hooks/useTransferConversation';
 
 const log = getLogger('TransferDialog');
 
 interface TransferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onTransfer: (type: 'agent' | 'queue' | 'connection', targetId: string, message?: string) => void;
+  onTransfer: (
+    type: 'agent' | 'queue',
+    targetId: string,
+    message?: string
+  ) => Promise<TransferConversationResult> | TransferConversationResult;
 }
 
 /** Transfer Dialog component. */
 export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialogProps) {
-  const [transferType, setTransferType] = useState<'agent' | 'queue' | 'connection'>('agent');
+  const [transferType, setTransferType] = useState<'agent' | 'queue'>('agent');
   const [selectedTarget, setSelectedTarget] = useState<string>('');
   const [message, setMessage] = useState('');
-  const [connections, setConnections] = useState<
-    { id: string; name: string; phone_number: string; status: string }[]
-  >([]);
-  const [loadingConnections, setLoadingConnections] = useState(false);
 
   const { agents, isLoading: loadingAgents } = useAgents();
   const { queues, loading: loadingQueues } = useQueues();
 
-  // Fetch WhatsApp connections
-  useEffect(() => {
-    if (transferType !== 'connection' || !open) return;
-    let cancelled = false;
-    setLoadingConnections(true);
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('whatsapp_connections')
-          .select('id, name, phone_number, status')
-          .eq('status', 'connected');
-        if (cancelled) return;
-        setConnections(
-          (data as { id: string; name: string; phone_number: string; status: string }[]) || []
-        );
-      } catch (err) {
-        // Antes: promise sem catch → unhandled rejection E setLoadingConnections
-        // nunca rodava → spinner infinito no diálogo de transferência.
-        if (!cancelled) log.error('[TransferDialog] Falha ao carregar conexões:', err);
-      } finally {
-        if (!cancelled) setLoadingConnections(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [transferType, open]);
-
   const [isTransferring, setIsTransferring] = useState(false);
+  const transferInFlightRef = useRef(false);
+  const transferAttemptRef = useRef(0);
 
   const handleTransfer = async () => {
-    if (!selectedTarget || isTransferring) return;
+    if (!selectedTarget || transferInFlightRef.current) return;
+    transferInFlightRef.current = true;
+    const attemptId = ++transferAttemptRef.current;
     setIsTransferring(true);
     try {
-      onTransfer(transferType, selectedTarget, message || undefined);
+      const result = await onTransfer(transferType, selectedTarget, message || undefined);
+      if (attemptId !== transferAttemptRef.current) return;
+      if (result.status === 'error') {
+        toast.error(result.title, { description: result.description });
+        return;
+      }
+
       onOpenChange(false);
       setSelectedTarget('');
       setMessage('');
+      if (result.status === 'partial') {
+        toast.warning(result.title, { description: result.description });
+        return;
+      }
+
+      toast.success(result.title, { description: result.description });
+    } catch (err) {
+      if (attemptId !== transferAttemptRef.current) return;
+      log.error('[TransferDialog] Falha inesperada ao transferir:', err);
+      toast.error('Erro na transferência', {
+        description: 'Não foi possível transferir o chat. Tente novamente.',
+      });
     } finally {
-      setIsTransferring(false);
+      if (attemptId === transferAttemptRef.current) {
+        transferInFlightRef.current = false;
+        setIsTransferring(false);
+      }
     }
   };
 
   // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
+      transferAttemptRef.current += 1;
+      transferInFlightRef.current = false;
       setSelectedTarget('');
       setMessage('');
       setIsTransferring(false);
     }
   }, [open]);
+
+  // Trocar de conversa desmonta este diálogo sem necessariamente renderizar open=false.
+  // Invalide a continuação antiga para que ela não feche a instância da nova conversa.
+  useEffect(
+    () => () => {
+      transferAttemptRef.current += 1;
+      transferInFlightRef.current = false;
+    },
+    []
+  );
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isTransferring) return;
+    onOpenChange(nextOpen);
+  };
 
   const availableAgents = useMemo(
     () => agents.filter((a) => a.status === 'online' || a.status === 'away'),
@@ -99,7 +114,7 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -113,10 +128,10 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
           <RadioGroup
             value={transferType}
             onValueChange={(v) => {
-              setTransferType(v as 'agent' | 'queue' | 'connection');
+              setTransferType(v as 'agent' | 'queue');
               setSelectedTarget('');
             }}
-            className="grid grid-cols-3 gap-3"
+            className="grid grid-cols-2 gap-3"
           >
             <Label
               htmlFor="agent"
@@ -159,28 +174,6 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
               <div>
                 <p className="font-medium">Departamento</p>
                 <p className="text-xs text-muted-foreground">Transferir para uma fila</p>
-              </div>
-            </Label>
-
-            <Label
-              htmlFor="connection"
-              className={cn(
-                'flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-all',
-                transferType === 'connection'
-                  ? 'border-whatsapp bg-whatsapp/5'
-                  : 'border-border hover:border-muted-foreground'
-              )}
-            >
-              <RadioGroupItem value="connection" id="connection" className="sr-only" />
-              <Smartphone
-                className={cn(
-                  'h-5 w-5',
-                  transferType === 'connection' ? 'text-whatsapp' : 'text-muted-foreground'
-                )}
-              />
-              <div>
-                <p className="font-medium">Conexão</p>
-                <p className="text-xs text-muted-foreground">Outro WhatsApp</p>
               </div>
             </Label>
           </RadioGroup>
@@ -238,46 +231,6 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
             </div>
           )}
 
-          {transferType === 'connection' && (
-            <div className="space-y-2">
-              <Label>Selecione uma conexão WhatsApp</Label>
-              {loadingConnections ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : connections.length > 0 ? (
-                <div className="max-h-48 space-y-2 overflow-y-auto">
-                  {connections.map((conn) => (
-                    <motion.button
-                      key={conn.id}
-                      whileHover={{ x: 4 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSelectedTarget(conn.id)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all',
-                        selectedTarget === conn.id
-                          ? 'border-whatsapp bg-whatsapp/5'
-                          : 'border-border hover:border-muted-foreground'
-                      )}
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                        <Smartphone className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{conn.name}</p>
-                        <p className="text-xs text-muted-foreground">{conn.phone_number}</p>
-                      </div>
-                    </motion.button>
-                  ))}
-                </div>
-              ) : (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  Nenhuma conexão disponível
-                </p>
-              )}
-            </div>
-          )}
-
           {transferType === 'queue' && (
             <div className="space-y-2">
               <Label htmlFor="transfer-queue">Selecione um departamento</Label>
@@ -322,7 +275,7 @@ export function TransferDialog({ open, onOpenChange, onTransfer }: TransferDialo
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isTransferring}>
               Cancelar
             </Button>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>

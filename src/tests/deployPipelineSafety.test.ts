@@ -1,9 +1,13 @@
 import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const workflow = readFileSync('.github/workflows/deploy-vps.yml', 'utf8');
-const dockerfile = readFileSync('Dockerfile', 'utf8');
-const dockerignore = readFileSync('.dockerignore', 'utf8');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+const workflow = readFileSync(resolve(repoRoot, '.github/workflows/deploy-vps.yml'), 'utf8');
+const dockerfile = readFileSync(resolve(repoRoot, 'Dockerfile'), 'utf8');
+const dockerignore = readFileSync(resolve(repoRoot, '.dockerignore'), 'utf8');
 
 describe('deploy production resource isolation', () => {
   it('never builds the frontend on the production VPS', () => {
@@ -32,5 +36,17 @@ describe('deploy production resource isolation', () => {
     expect(workflow).toContain("needs.deploy.result == 'success'");
     expect(workflow).toContain('Preflight CORS dos endpoints críticos');
     expect(workflow).not.toContain('sudo apt-get');
+  });
+
+  it('fails the deploy when Swarm converges only in spec but not in running tasks', () => {
+    expect(workflow).toContain('✅ Convergência verificada (Swarm × imagem do deploy)');
+    expect(workflow).toContain(
+      'docker service ps "$SVC" --filter desired-state=running --no-trunc'
+    );
+    expect(workflow).toContain('CONVERGENCE_TASKS_MISSING');
+    expect(workflow).toContain('CONVERGENCE_TASK_NOT_RUNNING');
+    expect(workflow).toContain('CONVERGENCE_TASK_ERROR');
+    expect(workflow).toContain('CONVERGENCE_TASK_IMAGE_MISMATCH');
+    expect(workflow).toContain('{{.ID}}|{{.CurrentState}}|{{.Error}}|{{.Image}}');
   });
 });
