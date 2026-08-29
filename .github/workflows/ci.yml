@@ -31,7 +31,7 @@ env:
 
 jobs:
   lockfile:
-    name: Verify Lockfile
+    name: Lockfile and data-layer guards
     # Piloto de migração pra ubuntu-latest (auditoria 2026-08-21): o repo está
     # PÚBLICO hoje (confirmado via `gh repo view --json visibility` — a
     # premissa "repo privado + cota billing esgotada" de 2026-08-18 não se
@@ -112,6 +112,77 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin "$BASE_BRANCH"
           node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "origin/$BASE_BRANCH"
+
+  typescript-gates:
+    name: TypeScript gates (hosted, blocking)
+    # Os gates são herméticos e não recebem secrets. Dois runners diferentes
+    # do pool vps-zapp abortaram o tsc com SIGABRT após ~60 s. Para um dos SHAs
+    # afetados, o mesmo gate passou no ubuntu-latest; no outro incidente, o
+    # rerun passou em um terceiro runner self-hosted. Isolar estes passos no
+    # runner hospedado remove a fonte observada de falso vermelho sem retry e
+    # sem relaxar o comportamento fail-closed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lockfile
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies (hermetic)
+        run: bun install --ignore-scripts
+
+      - name: TypeScript gate regression tests (blocking)
+        run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
+
+      - name: TypeScript check (ratchet, blocking)
+        run: node scripts/check-tsc-ratchet.mjs
+
+      - name: TypeScript check — chat components (blocking, strict)
+        run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
+
+      - name: ts-nocheck drift gate (blocking)
+        run: node scripts/check-ts-nocheck.mjs
+
+  required-merge-gate:
+    # A proteção de main exige este contexto nominal. O fan-in preserva o
+    # contrato existente e torna tanto o lockfile/ratchet monotônico quanto os
+    # gates TypeScript hospedados obrigatórios para merge.
+    name: Verify Lockfile
+    runs-on: ubuntu-latest
+    needs: [lockfile, typescript-gates]
+    if: always()
+    steps:
+      - name: Confirm required guards
+        env:
+          LOCKFILE_RESULT: ${{ needs.lockfile.result }}
+          TYPESCRIPT_RESULT: ${{ needs.typescript-gates.result }}
+        run: |
+          set -euo pipefail
+          if [ "$LOCKFILE_RESULT" != "success" ] || [ "$TYPESCRIPT_RESULT" != "success" ]; then
+            echo "::error title=Required merge guards::lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
+            exit 1
+          fi
+          echo "Required merge guards passed: lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
 
   quality:
     name: Quality diagnostics
@@ -222,18 +293,6 @@ jobs:
           META_URL: ${{ secrets.ZAPP_META_URL }}
           META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
         run: node scripts/check-types-schemas.mjs
-
-      - name: TypeScript gate regression tests (blocking)
-        run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
-
-      - name: TypeScript check (ratchet, blocking)
-        run: node scripts/check-tsc-ratchet.mjs
-
-      - name: TypeScript check — chat components (blocking, strict)
-        run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
-
-      - name: ts-nocheck drift gate (blocking)
-        run: node scripts/check-ts-nocheck.mjs
 
   # audit-contract-scan: SEMPRE corre (inclusive em PRs de fork sem secrets).
   # Valida: edge function invoke() tem diretório correspondente + script roda sem
