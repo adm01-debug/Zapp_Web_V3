@@ -54,7 +54,26 @@ gh run view 33229794279
 gh run view 33229794225
 gh run view 33230650615 --log-failed
 gh pr view 1455 --json files,body,headRefOid,baseRefOid,state,statusCheckRollup
-bash scripts/check-audit-docs-integrity.sh
+
+# Integridade do plano canônico (o script check-audit-docs-integrity.sh cobre
+# somente o plano legado em docs/audits/PLANO_IMPLEMENTACAO_100.md).
+plan=docs/plano-canonico/README.md
+test "$(rg -c '^### [0-9]{3} — ' "$plan")" -eq 100
+test "$(rg -c '^\*\*Concluída quando:\*\*' "$plan")" -eq 100
+test "$(rg -c '^\*\*Evidência mínima:\*\*' "$plan")" -eq 100
+rg -o '^### [0-9]{3} — ' "$plan" \
+  | sed -E 's/^### ([0-9]{3}) — $/\1/' \
+  > /tmp/zapp-plan-actual.txt
+seq -w 001 100 > /tmp/zapp-plan-expected.txt
+diff -u /tmp/zapp-plan-expected.txt /tmp/zapp-plan-actual.txt
+
+# Todos os arquivos Markdown apontados pelo índice de evidências devem existir.
+evidence_dir=docs/plano-canonico/evidencias
+while IFS= read -r relative_path; do
+  test -f "$evidence_dir/${relative_path#./}"
+done < <(rg -o '\]\(\./[^)#]+\.md\)' "$evidence_dir/README.md" \
+  | sed -E 's/^\]\((.*)\)$/\1/')
+
 git diff --check
 git grep -n -E '209\.142\.67\.51|186\.207\.138\.55' -- docs/plano-canonico
 git show origin/main:src/features/inbox/hooks/useTransferConversation.ts
@@ -88,6 +107,11 @@ WHERE n.nspname = 'zapp'
                     'fn_create_transfer', 'fn_return_transfer',
                     'fn_transfer_comment');
 ```
+
+Os gates específicos do plano canônico acima observaram `100/100` títulos ordenados,
+`100/100` critérios de conclusão, `100/100` requisitos de evidência e nenhum link
+Markdown inexistente no índice. O gate do plano legado também permaneceu verde, mas
+não foi usado como prova substituta da topologia canônica.
 
 No banco, a validação usou apenas `SELECT` em `pg_catalog`, `information_schema`,
 policies, ACLs e definições retornadas por `pg_get_functiondef`. Não foram chamados
