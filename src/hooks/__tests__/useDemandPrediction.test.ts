@@ -118,7 +118,7 @@ describe('useDemandPrediction — data passthrough', () => {
       maxPredicted: 0,
       avgPredicted: 0,
       currentActual: 0,
-      trend: 'down',
+      trend: 'stable',
       peakTime: '',
       capacityRisk: false,
     });
@@ -137,6 +137,7 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(result.current.insights.currentActual).toBe(17);
     expect(result.current.insights.maxPredicted).toBe(0);
     expect(result.current.insights.avgPredicted).toBe(0);
+    expect(result.current.insights.trend).toBe('stable');
     expect(result.current.insights.capacityRisk).toBe(false);
     expect(dbFromMock).not.toHaveBeenCalled();
   });

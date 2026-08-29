@@ -24,13 +24,26 @@ import {
   ReferenceLine,
   Tooltip as RechartsTooltip,
 } from 'recharts';
-import { useDemandPrediction, PredictionPoint } from '@/hooks/useDemandPrediction';
+import {
+  useDemandPrediction,
+  type DemandInsights,
+  type PredictionPoint,
+} from '@/hooks/useDemandPrediction';
 
 interface DemandPredictionProps {
   data?: PredictionPoint[];
   currentCapacity?: number;
   className?: string;
 }
+
+const TREND_PRESENTATION = {
+  up: { label: 'Subindo', icon: TrendingUp, color: 'text-warning' },
+  down: { label: 'Descendo', icon: TrendingDown, color: 'text-success' },
+  stable: { label: 'Estável', icon: Minus, color: 'text-muted-foreground' },
+} satisfies Record<
+  DemandInsights['trend'],
+  { label: string; icon: typeof TrendingUp; color: string }
+>;
 
 /** Demand Prediction component for the dashboard section. */
 export function DemandPrediction({
@@ -40,6 +53,7 @@ export function DemandPrediction({
 }: DemandPredictionProps) {
   const { data, insights } = useDemandPrediction(externalData, currentCapacity);
   const [_hoveredPoint, _setHoveredPoint] = useState<PredictionPoint | null>(null);
+  const trendPresentation = TREND_PRESENTATION[insights.trend];
 
   interface TooltipPayload {
     payload: PredictionPoint;
@@ -100,9 +114,9 @@ export function DemandPrediction({
         <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <InsightCard
             label="Tendência"
-            value={insights.trend === 'up' ? 'Subindo' : 'Descendo'}
-            icon={insights.trend === 'up' ? TrendingUp : TrendingDown}
-            color={insights.trend === 'up' ? 'text-warning' : 'text-success'}
+            value={trendPresentation.label}
+            icon={trendPresentation.icon}
+            color={trendPresentation.color}
           />
           <InsightCard
             label="Pico Previsto"

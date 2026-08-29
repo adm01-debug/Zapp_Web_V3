@@ -18,7 +18,7 @@ export interface DemandInsights {
   maxPredicted: number;
   avgPredicted: number;
   currentActual: number;
-  trend: 'up' | 'down';
+  trend: 'up' | 'down' | 'stable';
   peakTime: string;
   capacityRisk: boolean;
 }
@@ -95,7 +95,7 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
         maxPredicted: 0,
         avgPredicted: 0,
         currentActual,
-        trend: 'down',
+        trend: 'stable',
         peakTime: '',
         capacityRisk: false,
       };
