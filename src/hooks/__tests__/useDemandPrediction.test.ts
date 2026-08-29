@@ -53,6 +53,16 @@ function makeWrapper() {
     createElement(QueryClientProvider, { client: qc }, children);
 }
 
+function mockPendingAbortableQuery() {
+  abortSignalMock.mockImplementationOnce((signal: AbortSignal) => new Promise((_, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => reject(new DOMException('Query cancelled', 'AbortError')),
+      { once: true }
+    );
+  }));
+}
+
 function makeData(points: Partial<PredictionPoint>[]): PredictionPoint[] {
   return points.map((p, i) => ({
     time: `${String(i).padStart(2, '0')}:00`,
@@ -111,13 +121,7 @@ describe('useDemandPrediction — data passthrough', () => {
   });
 
   it('aborts an in-flight datasource query when the consumer unmounts', async () => {
-    abortSignalMock.mockImplementationOnce((signal: AbortSignal) => new Promise((_, reject) => {
-      signal.addEventListener(
-        'abort',
-        () => reject(new DOMException('Query cancelled', 'AbortError')),
-        { once: true }
-      );
-    }));
+    mockPendingAbortableQuery();
 
     const { unmount } = renderHook(() => useDemandPrediction(), { wrapper: makeWrapper() });
 
@@ -131,13 +135,7 @@ describe('useDemandPrediction — data passthrough', () => {
   });
 
   it('aborts an in-flight query when externalData becomes the active source', async () => {
-    abortSignalMock.mockImplementationOnce((signal: AbortSignal) => new Promise((_, reject) => {
-      signal.addEventListener(
-        'abort',
-        () => reject(new DOMException('Query cancelled', 'AbortError')),
-        { once: true }
-      );
-    }));
+    mockPendingAbortableQuery();
 
     const initialProps: { externalData: PredictionPoint[] | undefined } = {
       externalData: undefined,
@@ -161,6 +159,56 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(result.current.data).toBe(EXTERNAL_DATA);
     expect(dbFromMock).toHaveBeenCalledOnce();
     await waitFor(() => expect(forwardedSignal.aborted).toBe(true));
+  });
+
+  it('keeps a shared in-flight query alive while another DB observer is active', async () => {
+    mockPendingAbortableQuery();
+
+    const wrapper = makeWrapper();
+    const dbConsumer = renderHook(() => useDemandPrediction(), { wrapper });
+    const initialProps: { externalData: PredictionPoint[] | undefined } = {
+      externalData: undefined,
+    };
+    const switchingConsumer = renderHook(
+      ({ externalData }: { externalData: PredictionPoint[] | undefined }) => (
+        useDemandPrediction(externalData)
+      ),
+      { initialProps, wrapper }
+    );
+
+    await waitFor(() => expect(abortSignalMock).toHaveBeenCalledOnce());
+    const sharedSignal = abortSignalMock.mock.calls[0][0];
+
+    switchingConsumer.rerender({ externalData: EXTERNAL_DATA });
+
+    expect(switchingConsumer.result.current.data).toBe(EXTERNAL_DATA);
+    expect(sharedSignal.aborted).toBe(false);
+
+    dbConsumer.unmount();
+    switchingConsumer.unmount();
+    await waitFor(() => expect(sharedSignal.aborted).toBe(true));
+  });
+
+  it('does not cancel a shared DB query when another consumer mounts with externalData', async () => {
+    mockPendingAbortableQuery();
+
+    const wrapper = makeWrapper();
+    const dbConsumer = renderHook(() => useDemandPrediction(), { wrapper });
+    await waitFor(() => expect(abortSignalMock).toHaveBeenCalledOnce());
+    const sharedSignal = abortSignalMock.mock.calls[0][0];
+
+    const externalConsumer = renderHook(
+      () => useDemandPrediction(EXTERNAL_DATA),
+      { wrapper }
+    );
+
+    expect(externalConsumer.result.current.data).toBe(EXTERNAL_DATA);
+    expect(sharedSignal.aborted).toBe(false);
+
+    externalConsumer.unmount();
+    expect(sharedSignal.aborted).toBe(false);
+    dbConsumer.unmount();
+    await waitFor(() => expect(sharedSignal.aborted).toBe(true));
   });
 
   it('handles empty externalData without querying or invalid insights', () => {

@@ -57,21 +57,6 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
   const queryClient = useQueryClient();
   const previousExternalData = useRef(externalData);
 
-  useEffect(() => {
-    const queryWasEnabled = previousExternalData.current === undefined;
-    previousExternalData.current = externalData;
-
-    // Setting enabled=false prevents future fetches but does not cancel one
-    // already in flight. Cancel only on the DB -> external-data transition;
-    // an initial external dataset must not disturb another observer's cache.
-    if (queryWasEnabled && externalData !== undefined) {
-      void queryClient.cancelQueries({
-        queryKey: queryKeys.demandPrediction.history(),
-        exact: true,
-      });
-    }
-  }, [externalData, queryClient]);
-
   const { data: messageHistory = [] } = useQuery({
     queryKey: queryKeys.demandPrediction.history(),
     // Dados externos já são a fonte completa desta renderização. Manter a
@@ -99,6 +84,24 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  useEffect(() => {
+    const queryWasEnabled = previousExternalData.current === undefined;
+    previousExternalData.current = externalData;
+
+    // Setting enabled=false prevents future fetches but does not cancel one
+    // already in flight. This effect is declared after useQuery so its observer
+    // options are current before isActive() is checked. Cancellation is
+    // query-wide, therefore abort only when no enabled observer remains.
+    if (queryWasEnabled && externalData !== undefined) {
+      const queryKey = queryKeys.demandPrediction.history();
+      const sharedQuery = queryClient.getQueryCache().find({ queryKey, exact: true });
+
+      if (sharedQuery && !sharedQuery.isActive()) {
+        void queryClient.cancelQueries({ queryKey, exact: true });
+      }
+    }
+  }, [externalData, queryClient]);
 
   const data = externalData ?? generatePredictionFromHistory(messageHistory);
 
