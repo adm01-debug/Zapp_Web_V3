@@ -296,13 +296,16 @@ export function useEmail() {
   });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session && mountedRef.current) setIsAuthenticated(true);
-    }).catch((err: unknown) => {
-      // getSession pode rejeitar por rede/timeout — sem handler vira
-      // unhandled rejection no load da tela de email.
-      log.warn('[Email] getSession falhou na checagem inicial:', err);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data.session && mountedRef.current) setIsAuthenticated(true);
+      })
+      .catch((err: unknown) => {
+        // getSession pode rejeitar por rede/timeout — sem handler vira
+        // unhandled rejection no load da tela de email.
+        log.warn('[Email] getSession falhou na checagem inicial:', err);
+      });
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -318,7 +321,9 @@ export function useEmail() {
     // TTL 5min: email_accounts é quase-estático — evita refetch a cada mount.
     // `force` (pós OAuth connect) ignora o cache.
     const cached =
-      !force && emailAccountsCache && Date.now() - emailAccountsCache.fetchedAt < EMAIL_ACCOUNTS_TTL_MS
+      !force &&
+      emailAccountsCache &&
+      Date.now() - emailAccountsCache.fetchedAt < EMAIL_ACCOUNTS_TTL_MS
         ? emailAccountsCache
         : null;
 

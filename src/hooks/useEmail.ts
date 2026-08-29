@@ -140,65 +140,70 @@ export function useEmail() {
   }, []);
 
   // ── Carregar contas Email ───────────────────────────────────────────
-  const loadAccounts = useCallback(async (force = false) => {
-    setIsLoading(true);
-    setError(null);
+  const loadAccounts = useCallback(
+    async (force = false) => {
+      setIsLoading(true);
+      setError(null);
 
-    // TTL 5min: email_accounts é quase-estático — evita refetch a cada mount.
-    // `force` (pós OAuth connect) ignora o cache.
-    const cached =
-      !force && emailAccountsCache && Date.now() - emailAccountsCache.fetchedAt < EMAIL_ACCOUNTS_TTL_MS
-        ? emailAccountsCache
-        : null;
+      // TTL 5min: email_accounts é quase-estático — evita refetch a cada mount.
+      // `force` (pós OAuth connect) ignora o cache.
+      const cached =
+        !force &&
+        emailAccountsCache &&
+        Date.now() - emailAccountsCache.fetchedAt < EMAIL_ACCOUNTS_TTL_MS
+          ? emailAccountsCache
+          : null;
 
-    if (cached) {
+      if (cached) {
+        if (!mountedRef.current) return;
+        setAccounts(cached.accounts);
+        if (cached.accounts.length > 0 && !activeAccountId) {
+          setActiveAccountId(cached.accounts[0].id);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const {
+        data,
+        error: dbErr,
+        requestId,
+      } = await safeClient.from('email_accounts', (q) =>
+        q
+          .select('id, user_id, email, display_name, is_active, token_expiry, watch_expiry')
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+      );
+
       if (!mountedRef.current) return;
-      setAccounts(cached.accounts);
-      if (cached.accounts.length > 0 && !activeAccountId) {
-        setActiveAccountId(cached.accounts[0].id);
+
+      if (dbErr) {
+        if (dbErr.message.includes('disponível') || dbErr.message.includes('not found')) {
+          log.warn('Email schema unavailable — using mock accounts');
+          setAccounts(GMAIL_MOCKS.accounts);
+          if (GMAIL_MOCKS.accounts.length > 0 && !activeAccountId) {
+            setActiveAccountId(GMAIL_MOCKS.accounts[0].id);
+          }
+          setSchemaStatus({ ok: false, lastChecked: new Date() });
+        } else {
+          setLastRequestId(requestId || null);
+          setError(`Não foi possível carregar as contas Email. ${dbErr.message}`);
+        }
+      } else {
+        setSchemaStatus({ ok: true, lastChecked: new Date() });
+        const accs = emailMappers.accounts(
+          (Array.isArray(data) ? data : []) as Parameters<typeof emailMappers.accounts>[0]
+        );
+        emailAccountsCache = { accounts: accs, fetchedAt: Date.now() };
+        setAccounts(accs);
+        if (accs.length > 0 && !activeAccountId) {
+          setActiveAccountId(accs[0].id);
+        }
       }
       setIsLoading(false);
-      return;
-    }
-
-    const {
-      data,
-      error: dbErr,
-      requestId,
-    } = await safeClient.from('email_accounts', (q) =>
-      q
-        .select('id, user_id, email, display_name, is_active, token_expiry, watch_expiry')
-        .eq('is_active', true)
-        .order('created_at', { ascending: true })
-    );
-
-    if (!mountedRef.current) return;
-
-    if (dbErr) {
-      if (dbErr.message.includes('disponível') || dbErr.message.includes('not found')) {
-        log.warn('Email schema unavailable — using mock accounts');
-        setAccounts(GMAIL_MOCKS.accounts);
-        if (GMAIL_MOCKS.accounts.length > 0 && !activeAccountId) {
-          setActiveAccountId(GMAIL_MOCKS.accounts[0].id);
-        }
-        setSchemaStatus({ ok: false, lastChecked: new Date() });
-      } else {
-        setLastRequestId(requestId || null);
-        setError(`Não foi possível carregar as contas Email. ${dbErr.message}`);
-      }
-    } else {
-      setSchemaStatus({ ok: true, lastChecked: new Date() });
-      const accs = emailMappers.accounts(
-        (Array.isArray(data) ? data : []) as Parameters<typeof emailMappers.accounts>[0]
-      );
-      emailAccountsCache = { accounts: accs, fetchedAt: Date.now() };
-      setAccounts(accs);
-      if (accs.length > 0 && !activeAccountId) {
-        setActiveAccountId(accs[0].id);
-      }
-    }
-    setIsLoading(false);
-  }, [activeAccountId]);
+    },
+    [activeAccountId]
+  );
 
   // ── Status dos tokens (auto-refresh a cada 5 minutos) ──────────────
   const { data: tokenStatus = [], refetch: refetchTokenStatus } = useQuery({

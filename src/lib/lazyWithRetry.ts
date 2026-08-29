@@ -27,6 +27,26 @@ export const CHUNK_RELOAD_COUNT_SESSION_KEY = '__zapp_chunk_reload_count';
 export const MAX_CHUNK_RELOADS = 2;
 
 /**
+ * WebKit can reject in-flight dynamic imports with the same generic message
+ * used for a stale chunk while a legitimate full-document navigation is
+ * already leaving the page. Reloading then cancels the requested URL and
+ * restores the previous document.
+ *
+ * The zero-delay reset covers a cancelled beforeunload. When navigation really
+ * commits, the old document (and its timer) is discarded.
+ */
+let documentNavigationInProgress = false;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    documentNavigationInProgress = true;
+    window.setTimeout(() => {
+      documentNavigationInProgress = false;
+    }, 0);
+  });
+}
+
+/**
  * Maximum future-clock-skew tolerance when reading the cooldown timestamp.
  *
  * Exported so that any module that duplicates the cooldown guard (e.g.
@@ -137,6 +157,10 @@ export function resetChunkReloadGuard(): void {
  *   '1750000000'  -> timestamp -> isFinite,>=0,<=60+now-> last=ts-> cooldown logic
  */
 export function triggerChunkReload(): boolean {
+  // A dynamic import aborted by document unload is not a stale deployment.
+  // Do not race the browser and replace the URL the user just requested.
+  if (documentNavigationInProgress) return false;
+
   try {
     // Budget check comes first: an exhausted tab must never reload again, no
     // matter how long the cooldown says it has been waiting.
