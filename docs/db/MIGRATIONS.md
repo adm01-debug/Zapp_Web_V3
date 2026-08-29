@@ -1,5 +1,9 @@
 # Migrations
 
+> **Nota normativa (2026-08-26):** este arquivo é visão histórica/arquitetural.
+> O fluxo vigente de aplicação é **DB-as-source** e a referência operacional
+> canônica está em `supabase/migrations/README.md`.
+
 **Retrato de:** 27/07/2026.
 
 ## O fato central: drift entre banco e repositório
@@ -11,7 +15,10 @@
 | Primeira versão registrada | `20260716` |
 | Última versão registrada | `20260727161000` |
 
-**Leitura:** o banco de produção **não foi construído aplicando as 944 migrations** — o tracking formal começou em 16/07/2026. Reconstruir do zero a partir dos arquivos **não reproduz** o estado atual. Por isso a etapa 16 do plano prevê um **baseline squash** (dump do estado real → `baseline.sql`) validado em staging por diff de schema.
+**Leitura:** historicamente o banco de produção **não foi construído aplicando
+linearmente todas as migrations do repo**. Hoje o modelo correto é:
+`supabase/migrations/*.sql` = registro histórico/espelho do DB, e
+`supabase_migrations.schema_migrations` = ledger do aplicador DB-as-source.
 
 ## Versões malformadas (corrigir + gate de CI)
 

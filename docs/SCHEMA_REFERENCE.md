@@ -333,21 +333,24 @@ const { data } = await supabase
 
 ## ⚠️ Governança de migrations — LEIA ANTES DE RODAR QUALQUER COISA
 
-**Auditoria 2026-07-17.** Este banco **não usa o ledger padrão do Supabase CLI**.
+**Nota histórica (2026-07-17, superada pelo fluxo DB-as-source atual).**
+Esta seção abaixo retrata um momento anterior ao cleanup de migrations e NÃO é a
+fonte normativa do ledger vigente.
 
 | Fato | Medição |
 |---|---|
-| `supabase_migrations.schema_migrations` | **NÃO EXISTE** |
-| Ledger real em uso | `zapp.schema_migrations` — **39 registros** (2021-07-06 → 2026-07-12) |
-| Arquivos em `supabase/migrations/` | **828** |
-| Workflows/scripts que rodam `db push`/`db reset` | **0** (verificado) |
+| Ledger vigente do fluxo DB-as-source | `supabase_migrations.schema_migrations` |
+| Ledger auxiliar / legado | `zapp.schema_migrations` (histórico de app/drift-check; não é o ledger canônico do aplicador) |
+| Fonte normativa do processo | `supabase/migrations/README.md` + `infra/db-migrate/apply-migrations.sh` |
+| Observação | `supabase db push` não é o mecanismo de aplicação deste banco self-hosted |
 
 ### O que isso significa
 
-O schema canônico foi construído por **execução direta de SQL** (via MCP/psql), não por
-`supabase db push`. A pasta `supabase/migrations/` é **registro histórico**, não fonte da
-verdade aplicada. Os 789 arquivos fora do ledger **não são drift** — nunca foram destinados
-ao CLI.
+O schema canônico continua sendo alinhado por **execução versionada DB-as-source**
+(MCP SQL versionado + aplicador `infra/db-migrate/apply-migrations.sh`), não por
+`supabase db push`. A pasta `supabase/migrations/` é o **registro histórico/espelho**
+do que roda no banco; o ledger normativo do aplicador é
+`supabase_migrations.schema_migrations`.
 
 ### Regras
 

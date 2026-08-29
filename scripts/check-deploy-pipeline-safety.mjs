@@ -36,19 +36,54 @@ const checks = [
     "falta o gate explícito de convergência Swarm×imagem",
   ],
   [
-    /if: \$\{\{ format\('\{0\}', vars\.ENFORCE_CONVERGENCE\) != '0' \}\}/,
+    /outputs:\s*[\s\S]*?image_digest:\s*\$\{\{ steps\.release_identity\.outputs\.digest \}\}[\s\S]*?canonical_image:\s*\$\{\{ steps\.release_identity\.outputs\.canonical_image \}\}/,
     workflow,
-    "gate de convergência deve normalizar variável ausente antes de comparar com 0",
+    "falta propagar digest/imagem canônica como outputs do build",
   ],
   [
-    /docker service ps "\$SVC" --filter desired-state=running --no-trunc --format '\{\{\.ID\}\}\|\{\{\.CurrentState\}\}\|\{\{\.Error\}\}\|\{\{\.Image\}\}'/,
+    /id:\s*build_push[\s\S]*?uses:\s*docker\/build-push-action@v7[\s\S]*?Derive canonical release identity[\s\S]*?steps\.build_push\.outputs\.digest/,
     workflow,
-    "convergência não valida as tasks desired-state=running",
+    "falta capturar o digest OCI produzido pelo build",
   ],
   [
-    /CONVERGENCE_TASK_IMAGE_MISMATCH/,
+    /canonical_image=\$\{IMAGE_TAG\}@\$\{BUILD_DIGEST\}/,
     workflow,
-    "convergência não falha quando task running fica em imagem divergente",
+    "imagem canônica deve preservar tag de rollback e fixar o digest",
+  ],
+  [
+    /REQUESTED_TAG:\s*\$\{\{ inputs\.image_tag \}\}[\s\S]*TAG="\$REQUESTED_TAG"/,
+    workflow,
+    "image_tag deve chegar ao shell via env, sem interpolação direta",
+  ],
+  [
+    /ZAPP_IMAGE:\s*\$\{\{ needs\.build-and-push\.outputs\.canonical_image \}\}/,
+    workflow,
+    "deploy ainda não usa a imagem canônica pinada por digest",
+  ],
+  [
+    /Em main o gate é fail-closed: sem escape hatch silencioso por repo var\./,
+    workflow,
+    "falta documentar que a convergência em main é fail-closed",
+  ],
+  [
+    /docker service ps "\$SVC" --filter desired-state=running --no-trunc --format '\{\{json \.\}\}'/,
+    workflow,
+    "convergência não valida as tasks desired-state=running via JSON estruturado",
+  ],
+  [
+    /extract_digest\(\) \{[\s\S]*sed -nE 's\/\.\*@\(sha256:\[0-9a-f\]\{64\}\)\.\*\/\\1\/p'/,
+    workflow,
+    "convergência não extrai digest OCI de forma explícita",
+  ],
+  [
+    /CONVERGENCE_SPEC_IMAGE_MALFORMED/,
+    workflow,
+    "convergência não falha quando a spec do serviço não expõe digest válido",
+  ],
+  [
+    /CONVERGENCE_SPEC_DIGEST_MISMATCH/,
+    workflow,
+    "convergência não falha quando a spec do serviço aponta para digest divergente",
   ],
   [
     /CONVERGENCE_TASK_NOT_RUNNING/,
@@ -59,6 +94,37 @@ const checks = [
     /CONVERGENCE_TASK_ERROR/,
     workflow,
     "convergência não falha quando task desired-state=running reporta erro",
+  ],
+  [
+    /CONVERGENCE_TASK_JSON_MALFORMED/,
+    workflow,
+    "convergência não rejeita linhas JSON malformadas das tasks",
+  ],
+  [
+    /CONVERGENCE_TASK_IMAGE_MALFORMED/,
+    workflow,
+    "convergência não rejeita task sem digest OCI válido",
+  ],
+  [
+    /CONVERGENCE_TASK_DIGEST_MISMATCH/,
+    workflow,
+    "convergência não falha quando task running fica em digest divergente",
+  ],
+  [
+    /- name: 🧾 Release identity canônica confirmada[\s\S]*CANONICAL_IMAGE:\s*\$\{\{ needs\.build-and-push\.outputs\.canonical_image \}\}[\s\S]*EXPECTED_DIGEST:\s*\$\{\{ needs\.build-and-push\.outputs\.image_digest \}\}/,
+    workflow,
+    "falta registrar a identidade canônica da release após a convergência",
+  ],
+  [
+    /- name: 🌐 Release publicada corresponde ao commit[\s\S]*PUBLIC_RELEASE_SHA_MISMATCH[\s\S]*PUBLIC_RELEASE_ENTRY_MISMATCH/,
+    workflow,
+    "falta comprovar que version.json e index públicos correspondem ao commit implantado",
+  ],
+  [
+    /vars\.ENFORCE_CONVERGENCE/,
+    workflow,
+    "escape hatch ENFORCE_CONVERGENCE ainda existe no workflow",
+    true,
   ],
   [
     /if: \$\{\{ needs\.deploy\.result == 'success' \}\}/,
@@ -92,7 +158,9 @@ const checks = [
   ],
 ];
 
-const failures = checks.filter(([pattern, source]) => !pattern.test(source));
+const failures = checks.filter(([pattern, source, , shouldBeAbsent]) =>
+  shouldBeAbsent ? pattern.test(source) : !pattern.test(source),
+);
 if (failures.length) {
   for (const [, , message] of failures) console.error(`ERRO: ${message}`);
   process.exit(1);

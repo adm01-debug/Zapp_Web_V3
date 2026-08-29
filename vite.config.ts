@@ -32,6 +32,29 @@ const resolvePublicEnv = (mode: string) => {
 // serves and force a hard refresh.
 const BUILD_ID = `${Date.now()}`;
 
+// Immutable source identity for the artifact. CI injects the full GitHub SHA
+// through Docker's VITE_GIT_SHA build argument. Local/dev builds deliberately
+// fall back to a non-ambiguous sentinel instead of inventing a commit id.
+export const resolveGitSha = (value: string | undefined): string => value?.trim() || 'dev';
+
+const GIT_SHA = resolveGitSha(process.env.VITE_GIT_SHA);
+
+export const createVersionPayload = (
+  entry: string | null,
+  options: { buildId?: string; gitSha?: string; builtAt?: string } = {},
+) => {
+  const gitSha = resolveGitSha(options.gitSha ?? process.env.VITE_GIT_SHA);
+  return {
+    buildId: options.buildId ?? BUILD_ID,
+    // releaseId is intentionally the immutable source revision. buildId stays
+    // unique per build invocation for the existing browser/SW refresh logic.
+    gitSha,
+    releaseId: gitSha,
+    builtAt: options.builtAt ?? new Date().toISOString(),
+    entry,
+  };
+};
+
 // Vite plugin: writes dist/version.json at the end of each production build.
 // Inclui o nome REAL do entry JS (index-<hash>.js) — o buildVersion usa para o
 // HEAD check de propagação de CDN (isBundleReachable) e para o prefetch:
@@ -51,11 +74,9 @@ const emitVersionJsonPlugin = () => ({
     this.emitFile({
       type: 'asset',
       fileName: 'version.json',
-      source: JSON.stringify({
-        buildId: BUILD_ID,
-        builtAt: new Date().toISOString(),
-        entry: entry ?? null,
-      }),
+      source: JSON.stringify(
+        createVersionPayload(entry ?? null, { buildId: BUILD_ID, gitSha: GIT_SHA }),
+      ),
     });
   },
 });
