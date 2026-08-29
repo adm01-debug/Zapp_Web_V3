@@ -63,24 +63,31 @@ jobs:
         run: |
           echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. Só a consistência local do schema-catalog foi validada nesta run."
 
-      - name: Garantir psql disponível
-        if: ${{ env.SUPABASE_DB_URL != '' }}
+      - name: Assertion ACL RPC MCP
         run: |
-          if command -v psql >/dev/null 2>&1; then
-            psql --version
+          # Mesmo contrato dos outros guards DB do repositório: sem secret,
+          # sem psql ou sem conectividade -> avisa e passa. Com conexão de pé,
+          # a assertion ACL é bloqueante de verdade.
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::notice title=ACL RPC MCP nao verificada::secret SUPABASE_DB_URL ausente. A assertion foi pulada nesta run."
             exit 0
           fi
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
 
-      - name: Assertion ACL RPC MCP
-        if: ${{ env.SUPABASE_DB_URL != '' }}
-        run: node scripts/check-mcp-exec-acl.mjs
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client || true
+          fi
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "::warning title=ACL RPC MCP nao verificada::psql indisponivel no runner. Assertion nao verificada."
+            exit 0
+          fi
 
-      - name: Avisar quando a assertion ACL não executar
-        if: ${{ env.SUPABASE_DB_URL == '' }}
-        run: |
-          echo "::notice title=ACL RPC MCP não verificada::SUPABASE_DB_URL ausente. O gate de ACL foi pulado nesta run."
+          if ! psql "$SUPABASE_DB_URL" -Atc 'SELECT 1' >/dev/null 2>&1; then
+            echo "::warning title=ACL RPC MCP nao verificada::sem conectividade com o banco a partir do runner. Assertion nao verificada."
+            exit 0
+          fi
+
+          echo "Conectividade OK — rodando a assertion ACL em modo bloqueante."
+          node scripts/check-mcp-exec-acl.mjs
 
       - name: Publicar catálogo vivo
         if: always() && env.META_URL != '' && env.META_TOKEN != ''
