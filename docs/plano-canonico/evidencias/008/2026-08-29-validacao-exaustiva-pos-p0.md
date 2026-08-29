@@ -105,7 +105,10 @@ while IFS= read -r -d '' file; do
   done
 done < <(find "$root/evidencias" -mindepth 2 -maxdepth 2 \
   -type f -name '*.md' -print0)
-)
+) || {
+  printf 'CANONICAL_PLAN_INTEGRITY_FAILED\n' >&2
+  exit 1
+}
 
 git diff --check
 if git grep -n -E '209\.142\.67\.51|186\.207\.138\.55' \
