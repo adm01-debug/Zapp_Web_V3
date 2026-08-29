@@ -8953,34 +8953,68 @@ CREATE OR REPLACE FUNCTION zapp.fn_force_autovacuum(p_schema text, p_table text)
     AS $$
 DECLARE
   v_relid oid; v_dead int; v_live int; v_relkind char;
+  v_all     text[] := '{}';
+  v_saved   text[] := '{}';   -- reloptions de vacuum vigentes ('nome=valor')
+  v_set     text[] := '{}';   -- partes SET do comando restaurador
+  v_reset   text[] := '{}';   -- nomes sem valor previo (restaurar = RESET)
+  v_restore text := '';
+  v_opt text; v_name text;
 BEGIN
   IF p_schema NOT IN ('public','zapp','evo') THEN
     RETURN jsonb_build_object('error','schema_not_allowed','schema',p_schema);
   END IF;
-  SELECT c.oid, c.relkind INTO v_relid, v_relkind
-  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname=p_schema AND c.relname=p_table;
+  SELECT c.oid, c.relkind, coalesce(c.reloptions, '{}')
+    INTO v_relid, v_relkind, v_all
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = p_schema AND c.relname = p_table;
   IF v_relid IS NULL THEN
     RETURN jsonb_build_object('error','table_not_found','table',p_schema||'.'||p_table);
   END IF;
   IF v_relkind != 'r' THEN
     RETURN jsonb_build_object('error','not_a_table','relkind',v_relkind,'table',p_schema||'.'||p_table);
   END IF;
-  SELECT n_dead_tup, n_live_tup INTO v_dead, v_live FROM pg_stat_user_tables WHERE relid=v_relid;
+
+  -- captura os 3 reloptions de vacuum VIGENTES (o que sera restaurado)
+  FOREACH v_opt IN ARRAY v_all LOOP
+    v_name := split_part(v_opt, '=', 1);
+    IF v_name IN ('autovacuum_vacuum_scale_factor',
+                  'autovacuum_vacuum_threshold',
+                  'autovacuum_vacuum_cost_delay') THEN
+      v_saved := v_saved || array[v_opt];
+    END IF;
+  END LOOP;
+  v_reset := ARRAY['autovacuum_vacuum_scale_factor',
+                   'autovacuum_vacuum_threshold',
+                   'autovacuum_vacuum_cost_delay'];
+  FOREACH v_opt IN ARRAY v_saved LOOP
+    v_set   := v_set || array[v_opt];
+    v_reset := array_remove(v_reset, split_part(v_opt, '=', 1));
+  END LOOP;
+
+  SELECT n_dead_tup, n_live_tup INTO v_dead, v_live FROM pg_stat_user_tables WHERE relid = v_relid;
   EXECUTE 'ANALYZE '||p_schema||'.'||quote_ident(p_table);
   IF v_dead > 0 THEN
     EXECUTE format('ALTER TABLE %I.%I SET (autovacuum_vacuum_scale_factor=0.0001, autovacuum_vacuum_threshold=0, autovacuum_vacuum_cost_delay=2)', p_schema, p_table);
+    -- comando restaurador: volta aos valores SALVOS (RESET so onde nao havia)
+    IF array_length(v_set, 1) > 0 THEN
+      v_restore := v_restore || format('ALTER TABLE %I.%I SET (%s); ', p_schema, p_table, array_to_string(v_set, ', '));
+    END IF;
+    IF array_length(v_reset, 1) > 0 THEN
+      v_restore := v_restore || format('ALTER TABLE %I.%I RESET (%s); ', p_schema, p_table, array_to_string(v_reset, ', '));
+    END IF;
     PERFORM cron.schedule(
       'restore_av_'||p_schema||'_'||p_table,
       to_char(now()+INTERVAL '2 minutes','MI HH24')||' * * *',
-      format('ALTER TABLE %I.%I RESET (autovacuum_vacuum_scale_factor, autovacuum_vacuum_threshold, autovacuum_vacuum_cost_delay); SELECT cron.unschedule(''restore_av_%s_%s'');', p_schema, p_table, p_schema, p_table)
+      v_restore || format('SELECT cron.unschedule(''restore_av_%s_%s'');', p_schema, p_table)
     );
   END IF;
   RETURN jsonb_build_object(
     'analyzed',true,'table',p_schema||'.'||p_table,
     'dead_tuples_before',v_dead,'live_tuples',v_live,
     'autovacuum_triggered',v_dead>0,'restore_scheduled',v_dead>0,
-    'note',CASE WHEN v_dead>0 THEN 'ANALYZE + scale_factor=0.0001 + threshold=0. Restaurado em 2min.' ELSE 'ANALYZE feito. Sem dead tuples.' END
+    'saved_reloptions',v_saved,
+    'restore_command',v_restore,
+    'note',CASE WHEN v_dead>0 THEN 'ANALYZE + scale_factor=0.0001 + threshold=0. Restaura valores PREVIOS em 2min (nunca defaults cegos).' ELSE 'ANALYZE feito. Sem dead tuples.' END
   );
 EXCEPTION WHEN OTHERS THEN
   RETURN jsonb_build_object('error',SQLERRM,'table',p_schema||'.'||p_table);
@@ -45496,7 +45530,7 @@ CREATE TABLE IF NOT EXISTS zapp.webhook_audit_log (
     received_at timestamp with time zone DEFAULT now(),
     CONSTRAINT webhook_audit_log_status_check CHECK ((status = ANY (ARRAY['received'::text, 'processed'::text, 'duplicate'::text, 'failed'::text, 'rejected'::text])))
 )
-WITH (autovacuum_vacuum_scale_factor='0', autovacuum_vacuum_threshold='20000', autovacuum_analyze_scale_factor='0', autovacuum_analyze_threshold='15000', autovacuum_vacuum_cost_delay='2');
+WITH (autovacuum_analyze_scale_factor='0', autovacuum_analyze_threshold='15000', autovacuum_vacuum_scale_factor='0.0001', autovacuum_vacuum_threshold='0', autovacuum_vacuum_cost_delay='2');
 
 
 

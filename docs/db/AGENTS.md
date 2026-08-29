@@ -56,7 +56,7 @@
 - Mover extensões do schema `public` (ADR-DB-003: DEFERIDO)
 - Fazer `DROP INDEX` sem `CONCURRENTLY`
 - Fazer `DROP INDEX CONCURRENTLY` dentro de transaction
-- Modificar `cron.job` sem via `supabase db push`
+- Modificar `cron.job` sem via migration versionada / fluxo DB-as-source
 - Alterar buckets com PII para public (whatsapp-media, recibos-entrega)
 
 ---
@@ -84,16 +84,17 @@ Regras:
 # 1. Criar migration
 touch supabase/migrations/20260801000001_descricao.sql
 
-# 2. Testar em staging
-supabase db push --db-url postgresql://user:<SECRETO>@staging:5432/postgres
+# 2. Testar em staging / banco efêmero
+# (o guia canônico fica em supabase/migrations/README.md)
+bash scripts/check-fe-be-sync.sh
 
 # 3. Validar gates
 psql $STAGING_URL -c "SELECT * FROM ops.fn_ci_run_all_gates();"
 
 # 4. Code review + merge para main
 
-# 5. Push produção
-supabase db push --db-url postgresql://user:<SECRETO>@prod:5432/postgres
+# 5. Produção self-hosted
+# aplicar via MCP SQL versionado e/ou infra/db-migrate/apply-migrations.sh
 ```
 
 ---
