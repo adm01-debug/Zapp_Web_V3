@@ -21,7 +21,9 @@ vi.mock('@/components/ui/motion', () => ({
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  AreaChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  // Do not render the chart children: they contain SVG defs that are valid
+  // under Recharts' SVG tree but would be mounted under a test <div> here.
+  AreaChart: () => <div data-testid="demand-chart" />,
   Area: () => null,
   XAxis: () => null,
   YAxis: () => null,
