@@ -80,3 +80,9 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 068 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
 | 082 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
 | 090 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
+| 095 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
+| 096 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
+| 097 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
+| 098 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
+| 099 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
+| 100 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |

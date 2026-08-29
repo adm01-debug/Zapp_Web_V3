@@ -18,10 +18,13 @@
   do PR `#1454`.
 - Baseline final de governança: `391c186947f12d1a9105af8b2e4c6a6868e2e7c4`,
   merge do PR `#1455`; entre os dois SHAs mudou somente o ratchet JSON.
+- O índice ancora esta prova em `391c18694` por ser a `main` final auditada; a imagem
+  funcional correlacionada continua sendo `470f3625b`, pois `#1455` não alterou app,
+  banco, workflow de deploy ou artefato executável.
 - Baseline automático gerado: `c0e98478ee726c4c1600914e1b8e69ecfa5044d7`, filho
   direto de `470f3625b6f5`, alterando somente `scripts/data-layer-baseline.json` de
   `666` para `665`.
-- Catálogo canônico consultado: PostgreSQL `15.8`, em `2026-08-29T02:54–02:59Z`.
+- Catálogo canônico consultado: PostgreSQL `15.8`, em `2026-08-29T02:54–03:52Z`.
 - Escopo de banco: schemas `zapp` e fachada `public`; nenhuma consulta mutante foi
   executada.
 
@@ -57,6 +60,8 @@ gh pr view 1455 --json files,body,headRefOid,baseRefOid,state,statusCheckRollup
 
 # Integridade do plano canônico (o script check-audit-docs-integrity.sh cobre
 # somente o plano legado em docs/audits/PLANO_IMPLEMENTACAO_100.md).
+(
+set -euo pipefail
 plan=docs/plano-canonico/README.md
 test "$(rg -c '^### [0-9]{3} — ' "$plan")" -eq 100
 test "$(rg -c '^\*\*Concluída quando:\*\*' "$plan")" -eq 100
@@ -67,15 +72,41 @@ rg -o '^### [0-9]{3} — ' "$plan" \
 seq -w 001 100 > /tmp/zapp-plan-expected.txt
 diff -u /tmp/zapp-plan-expected.txt /tmp/zapp-plan-actual.txt
 
-# Todos os arquivos Markdown apontados pelo índice de evidências devem existir.
-evidence_dir=docs/plano-canonico/evidencias
-while IFS= read -r relative_path; do
-  test -f "$evidence_dir/${relative_path#./}"
-done < <(rg -o '\]\(\./[^)#]+\.md\)' "$evidence_dir/README.md" \
-  | sed -E 's/^\]\((.*)\)$/\1/')
+# Todo link Markdown relativo do plano deve apontar para um arquivo existente.
+root=docs/plano-canonico
+while IFS= read -r -d '' md; do
+  while IFS= read -r target; do
+    case "$target" in
+      http://*|https://*|mailto:*|'#'*) continue ;;
+    esac
+    path=${target%%#*}
+    test -n "$path"
+    test -e "$(dirname "$md")/$path" || {
+      printf 'BROKEN_LINK file=%s target=%s\n' "$md" "$target" >&2
+      exit 1
+    }
+  done < <(perl -nle 'while(/\[[^\]]+\]\(([^)]+)\)/g){print $1}' "$md")
+done < <(find "$root" -type f -name '*.md' -print0)
+
+# Cada etapa declarada no cabeçalho de uma evidência precisa de lookup no índice.
+index=$root/evidencias/README.md
+while IFS= read -r -d '' file; do
+  relative_path=${file#${root}/evidencias/}
+  stages=$(sed -n '1,/^$/p' "$file" | rg -o '`[0-9]{3}`' | tr -d '`' || true)
+  for stage in $stages; do
+    if ! rg -nF "| $stage |" "$index" | rg -F "$relative_path" >/dev/null; then
+      printf 'MISSING_INDEX_ROW stage=%s evidence=%s\n' \
+        "$stage" "$relative_path" >&2
+      exit 1
+    fi
+  done
+done < <(find "$root/evidencias" -mindepth 2 -maxdepth 2 \
+  -type f -name '*.md' -print0)
+)
 
 git diff --check
-git grep -n -E '209\.142\.67\.51|186\.207\.138\.55' -- docs/plano-canonico
+if git grep -n -E '209\.142\.67\.51|186\.207\.138\.55' \
+  -- docs/plano-canonico; then exit 1; fi
 git show origin/main:src/features/inbox/hooks/useTransferConversation.ts
 git show origin/main:src/features/inbox/components/TransferDialog.tsx
 git show origin/main:src/shared/webhookEventSchemas.ts
@@ -90,28 +121,203 @@ bash -lc 'for host in zapp.atomicabr.com.br zappweb.app.br www.zappweb.app.br; d
   done
 done'
 
-SELECT pg_postmaster_start_time();
-SELECT relname, n_tup_ins, n_tup_upd, n_tup_del
+-- Ambiente e fronteira dos contadores estatísticos.
+SELECT current_database() AS database_name,
+       current_setting('server_version') AS server_version,
+       clock_timestamp() AS observed_at,
+       pg_postmaster_start_time() AS postmaster_started_at,
+       d.stats_reset AS database_stats_reset,
+       current_setting('track_functions') AS track_functions
+FROM pg_stat_database d
+WHERE d.datname = current_database();
+
+-- Linhas atuais e contadores acumulados na época estatística corrente.
+SELECT 'conversation_transfers' AS table_name, count(*)::bigint AS exact_rows
+FROM zapp.conversation_transfers
+UNION ALL
+SELECT 'transfer_comments', count(*)::bigint
+FROM zapp.transfer_comments;
+
+SELECT relname, n_live_tup, n_tup_ins, n_tup_upd, n_tup_del, seq_scan, idx_scan
 FROM pg_stat_user_tables
 WHERE schemaname = 'zapp'
-  AND relname IN ('conversation_transfers', 'transfer_comments');
-SELECT (SELECT count(*) FROM zapp.conversation_transfers) AS transfers,
-       (SELECT count(*) FROM zapp.transfer_comments) AS comments;
-SELECT p.oid::regprocedure, p.prosecdef,
-       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_exec,
-       has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_exec
+  AND relname IN ('conversation_transfers', 'transfer_comments')
+ORDER BY relname;
+
+-- Superfície, ACL, modo, guardas e corpo das nove funções.
+SELECT p.oid::regprocedure::text AS signature,
+       CASE WHEN p.prosecdef THEN 'DEFINER' ELSE 'INVOKER' END AS security_mode,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS exec_authenticated,
+       has_function_privilege('anon', p.oid, 'EXECUTE') AS exec_anon,
+       p.proconfig,
+       POSITION('auth.uid' IN pg_get_functiondef(p.oid)) > 0 AS has_auth_uid,
+       POSITION('get_profile_id_for_user' IN pg_get_functiondef(p.oid)) > 0
+         AS has_profile_guard,
+       POSITION('is_admin_or_supervisor' IN pg_get_functiondef(p.oid)) > 0
+         AS has_role_guard,
+       POSITION('is_contact_visible_to_user' IN pg_get_functiondef(p.oid)) > 0
+         AS has_contact_visibility_guard,
+       (POSITION('workspace' IN pg_get_functiondef(p.oid)) > 0
+         OR POSITION('tenant' IN pg_get_functiondef(p.oid)) > 0) AS has_tenant_guard,
+       pg_get_function_arguments(p.oid) AS arguments,
+       pg_get_function_result(p.oid) AS result_type,
+       pg_get_functiondef(p.oid) AS definition
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'zapp'
   AND p.proname IN ('fn_accept_transfer', 'fn_complete_transfer',
                     'fn_create_transfer', 'fn_return_transfer',
-                    'fn_transfer_comment');
+                    'fn_transfer_comment')
+ORDER BY p.proname, pg_get_function_identity_arguments(p.oid);
+
+SELECT p.oid::regprocedure::text AS signature,
+       COALESCE(s.calls, 0) AS calls,
+       COALESCE(s.total_time, 0) AS total_time,
+       COALESCE(s.self_time, 0) AS self_time
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+LEFT JOIN pg_stat_user_functions s ON s.funcid = p.oid
+WHERE n.nspname = 'zapp'
+  AND p.proname IN ('fn_accept_transfer', 'fn_complete_transfer',
+                    'fn_create_transfer', 'fn_return_transfer',
+                    'fn_transfer_comment')
+ORDER BY p.proname, pg_get_function_identity_arguments(p.oid);
+
+-- Colunas, nulabilidade, defaults, constraints, FKs e índices reais.
+SELECT table_name, ordinal_position, column_name, data_type, udt_schema, udt_name,
+       is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'zapp'
+  AND table_name IN ('conversation_transfers', 'transfer_comments')
+ORDER BY table_name, ordinal_position;
+
+SELECT c.relname AS table_name, con.conname, con.contype, con.convalidated,
+       con.condeferrable, con.condeferred,
+       pg_get_constraintdef(con.oid, true) AS definition,
+       CASE WHEN con.confrelid <> 0 THEN con.confrelid::regclass::text END
+         AS referenced_table
+FROM pg_constraint con
+JOIN pg_class c ON c.oid = con.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'zapp'
+  AND c.relname IN ('conversation_transfers', 'transfer_comments')
+ORDER BY c.relname, con.contype, con.conname;
+
+SELECT schemaname, tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'zapp'
+  AND tablename IN ('conversation_transfers', 'transfer_comments')
+ORDER BY tablename, indexname;
+
+-- RLS, policies e ACL de tabela.
+SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled,
+       c.relforcerowsecurity AS force_rls
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'zapp'
+  AND c.relname IN ('conversation_transfers', 'transfer_comments')
+ORDER BY c.relname;
+
+SELECT tablename, policyname, permissive, roles, cmd, qual, with_check
+FROM pg_policies
+WHERE schemaname = 'zapp'
+  AND tablename IN ('conversation_transfers', 'transfer_comments')
+ORDER BY tablename, policyname;
+
+SELECT table_name, grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_schema = 'zapp'
+  AND table_name IN ('conversation_transfers', 'transfer_comments')
+  AND grantee IN ('anon', 'authenticated', 'service_role')
+ORDER BY table_name, grantee, privilege_type;
+
+-- Triggers, função efetivamente ligada e cadeia de ticket.
+SELECT c.relname AS table_name, t.tgname, t.tgenabled,
+       p.oid::regprocedure::text AS trigger_function,
+       pg_get_triggerdef(t.oid, true) AS trigger_definition,
+       pg_get_functiondef(p.oid) AS function_definition
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_proc p ON p.oid = t.tgfoid
+WHERE n.nspname = 'zapp'
+  AND c.relname IN ('conversation_transfers', 'transfer_comments')
+  AND NOT t.tgisinternal
+ORDER BY c.relname, t.tgname;
+
+SELECT n.nspname AS schema_name, p.oid::regprocedure::text AS signature,
+       CASE WHEN p.prosecdef THEN 'DEFINER' ELSE 'INVOKER' END AS security_mode,
+       has_function_privilege('authenticated', p.oid, 'EXECUTE') AS exec_authenticated,
+       has_function_privilege('anon', p.oid, 'EXECUTE') AS exec_anon,
+       p.proconfig, pg_get_function_result(p.oid) AS result_type,
+       pg_get_functiondef(p.oid) AS definition
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE p.proname IN ('generate_transfer_ticket', 'trg_fn_set_transfer_ticket')
+ORDER BY n.nspname, p.proname;
+
+-- Sequências: somente catálogo; não há nextval nem avanço de estado.
+SELECT sequence_schema, sequence_name, data_type, start_value, increment
+FROM information_schema.sequences
+WHERE sequence_schema IN ('zapp', 'public')
+  AND sequence_name ILIKE '%transfer%'
+ORDER BY sequence_schema, sequence_name;
+
+SELECT to_regclass('public.transfer_ticket_seq')::text
+         AS public_transfer_ticket_seq,
+       to_regclass('zapp.transfer_ticket_seq')::text
+         AS zapp_transfer_ticket_seq,
+       to_regclass('public.conversation_transfers_ticket_number_seq')::text
+         AS public_column_owned_seq,
+       to_regclass('zapp.conversation_transfers_ticket_number_seq')::text
+         AS zapp_column_owned_seq;
+
+-- Realtime e views/proxies invoker.
+SELECT pubname, schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'supabase_realtime'
+  AND schemaname = 'zapp'
+  AND tablename IN ('conversation_transfers', 'transfer_comments')
+ORDER BY tablename;
+
+SELECT n.nspname AS schema_name, c.relname AS view_name, c.reloptions,
+       pg_get_viewdef(c.oid, true) AS definition
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'v'
+  AND ((n.nspname = 'public'
+        AND c.relname IN ('conversation_transfers', 'transfer_comments'))
+    OR (n.nspname = 'zapp'
+        AND c.relname IN ('v_pending_transfers', 'v_transfer_metrics')))
+ORDER BY n.nspname, c.relname;
 ```
 
+### Saída live sanitizada
+
+As consultas acima foram reexecutadas somente com `SELECT`. O snapshot persistido nesta
+prova não contém UUID, JID, contato, comentário ou payload de cliente:
+
+| Superfície | Resultado observado |
+|---|---|
+| fronteira estatística | observação `2026-08-29T03:51:53.418Z`; postmaster desde `2026-08-25T19:12:29.089Z`; `database_stats_reset=NULL`; `track_functions=all` |
+| tabelas | `conversation_transfers=0` e `transfer_comments=0`; `n_tup_ins/upd/del=0` para ambas na época estatística corrente |
+| funções | `9` overloads; `8` definer e `1` invoker; `authenticated=true`, `anon=false` e guardas internas auditadas `false` nas nove; contador `calls=0` na época corrente |
+| colunas | `34` em `conversation_transfers` e `8` em `transfer_comments`; `conversation_id` ausente; `priority` inteiro; obrigatórias sem default registradas pelo catálogo |
+| constraints/índices | `11` constraints no conjunto; só `contact_id` tem FK na tabela principal; nenhum índice listado começa pelos quatro IDs de agente/fila |
+| RLS | ambas com RLS ativo e não forçado; transferência concede ao autenticado somente `SELECT`; comentário exige admin/supervisor para write |
+| triggers | `5` na tabela principal; dois atualizam `updated_at`; o trigger de ticket chama `zapp.trg_fn_set_transfer_ticket()` |
+| ticket | não existe sequence homônima em `public`; existem duas em `zapp`; gerador Zapp usa `search_path=public` e referência não qualificada |
+| Realtime/views | as duas tabelas estão em `supabase_realtime`; quatro proxies/métricas auditados usam `security_invoker` |
+
+Como `database_stats_reset` veio `NULL`, o PostgreSQL não fornece o início exato dessa
+época estatística. Portanto, os zeros acima são um snapshot dos contadores correntes e
+não foram correlacionados artificialmente ao uptime do postmaster.
+
 Os gates específicos do plano canônico acima observaram `100/100` títulos ordenados,
-`100/100` critérios de conclusão, `100/100` requisitos de evidência e nenhum link
-Markdown inexistente no índice. O gate do plano legado também permaneceu verde, mas
-não foi usado como prova substituta da topologia canônica.
+`100/100` critérios de conclusão, `100/100` requisitos de evidência, nenhum link
+Markdown relativo quebrado e nenhuma etapa declarada sem lookup no índice. O gate do
+plano legado também permaneceu verde, mas não foi usado como prova substituta da
+topologia canônica.
 
 No banco, a validação usou apenas `SELECT` em `pg_catalog`, `information_schema`,
 policies, ACLs e definições retornadas por `pg_get_functiondef`. Não foram chamados
@@ -188,7 +394,7 @@ No fluxo single, o identificador canônico resolvido é usado tanto em
 | P0 | quatro overloads têm drift estrutural de coluna/`NOT NULL` | criação UUID, comentários e um aceite falham antes de concluir |
 | P0 | criação textual adicional conflita com trigger, RLS e cast de ticket | agente autenticado não conclui o fluxo mesmo sem o drift dos quatro overloads |
 | P0 | gerador Zapp fixa `search_path=public` e usa sequência não qualificada | ticket automático com valor nulo procura sequência inexistente em `public` |
-| P0 | bulk transfer atualiza somente `contacts` e ignora `_message` | UI confirma transferência sem `conversation_transfers`/comentário |
+| P1 | bulk transfer está desabilitada na UI e sem callback de produção; o helper legado só aparece em testes | função ainda não entregue; se reativado como está, atualizaria só `contacts`, ignoraria `_message` e não criaria trilha |
 | P0 | collaboration/handoff atualiza contato/nota sem trilha de transferência | segundo caminho visível contorna o contrato auditável |
 | P1 | quatro IDs de agente/fila não têm FK nem índice líder | referências órfãs e custo de joins não são impedidos pelo banco |
 | P1 | leitura usa visibilidade do contato, não vínculo `from/to_agent_id` | policy live é mais ampla/diferente que comentário e teste do repo |
@@ -201,10 +407,11 @@ No fluxo single, o identificador canônico resolvido é usado tanto em
 | P1 | relatórios agendados só têm contrato HTTP da Edge bem coberto | CRUD, RLS, cron, claim, retry e DLQ continuam sem prova ponta a ponta |
 | P2 | teste unitário do schema ainda enfatiza expectativas do ramo legado | o runtime canônico está correto, mas falta uma guarda anti-drift/lifecycle derivada do contrato fonte |
 
-As duas tabelas de transferência tinham `0` linhas e zero mutações na janela observável
-desde o restart do PostgreSQL de `2026-08-25`. Isso não prova ausência histórica nem
-distingue falta de chamadas de tentativas que falharam antes do `INSERT`; tampouco
-autoriza classificar tabelas ou índices como lixo.
+As duas tabelas de transferência tinham `0` linhas e contadores de mutação zerados na
+época estatística corrente, cujo início exato não está registrado (`stats_reset=NULL`).
+Separadamente, o postmaster atual está ativo desde `2026-08-25`. Esses fatos não provam
+ausência histórica nem distinguem falta de chamadas de tentativas que falharam antes do
+`INSERT`; tampouco autorizam classificar tabelas ou índices como lixo.
 
 ## Matriz das nove funções de transferência
 
@@ -255,7 +462,8 @@ foram inferidos do catálogo. Eles não foram produzidos artificialmente em prod
 | fluxo single, update principal falha | unit/integration | retorna `error`, mantém contexto e não confirma |
 | fluxo single, trilha recusada por RLS | unit + catálogo live | retorna `partial`; atribuição já ocorreu |
 | duas tentativas sobre o mesmo estado | CAS + testes | perdedor recebe conflito; atomicidade completa ainda depende do DB |
-| bulk com mensagem | inspeção de `origin/main` | mensagem é ignorada e nenhuma trilha é criada |
+| bulk pelo toolbar | inspeção de `origin/main` | botão permanentemente desabilitado e sem callback; não há falso sucesso alcançável pelo usuário |
+| helper `bulkTransfer` residual | inspeção de `origin/main` + testes | sem caller de produção; se chamado, ignora a mensagem e não cria trilha |
 | handoff colaborativo | inspeção de `origin/main` | atualiza contato/nota sem trilha |
 | evento canônico `expired/returned/completed` | parser + integração | aceito pelo ramo canônico |
 | ciclo completo de oito estados | cobertura atual | gap: não há simulação de lifecycle ponta a ponta |
@@ -323,7 +531,7 @@ esta prova posterior limita explicitamente o que elas podiam concluir:
 3. testar em staging agentes comum/supervisor/admin/outro tenant e lifecycle completo;
 4. regenerar os tipos e adicionar guard contra writes pela fachada `public`, preservando
    separadamente o contrato estrito de `zapp`;
-5. migrar bulk e handoff para o mesmo executor auditável;
+5. antes de reativar bulk, migrar seu helper e o handoff para o mesmo executor auditável;
 6. corrigir KPI e testes residuais do contrato;
 7. fechar o pipeline de relatórios agendados em PR separado;
 8. ajustar a permissão do secret do ratchet e repetir o ensaio sem intervenção manual.
@@ -339,7 +547,8 @@ de dados ou infraestrutura a executar.
 
 As correções frontend, TypeScript, CI, deploy e `DemandPrediction` listadas acima estão
 validadas no código atual e não devem voltar ao backlog como se ainda estivessem
-ausentes. O sistema, porém, não está certificado como `10/10`: transferência bulk e
-handoff continuam sem trilha; o banco contém mutators quebrados e mutators privilegiados
-sem autorização interna; relatórios agendados carecem de prova ponta a ponta; e o token
-do ratchet ainda não cria PR autonomamente. O veredito correto desta rodada é `parcial`.
+ausentes. O sistema, porém, não está certificado como `10/10`: transferência bulk está
+desabilitada e conserva um helper residual sem trilha; o handoff visível continua sem
+trilha; o banco contém mutators quebrados e mutators privilegiados sem autorização
+interna; relatórios agendados carecem de prova ponta a ponta; e o token do ratchet ainda
+não cria PR autonomamente. O veredito correto desta rodada é `parcial`.
