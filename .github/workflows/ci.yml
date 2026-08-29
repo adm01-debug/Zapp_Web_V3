@@ -65,29 +65,31 @@ jobs:
             git fetch origin ${{ github.base_ref }}
             BASE="origin/${{ github.base_ref }}"
             LOCK_DIFF=$(git diff "$BASE"...HEAD --name-only -- bun.lock)
-            OLD_RAW=$(git show "$BASE:package.json" 2>/dev/null || echo '{}')
-            if echo "$OLD_RAW" | jq '.' >/dev/null 2>&1; then
-              OLD_PKG="$OLD_RAW"
-            else
-              OLD_PKG=$(echo "$OLD_RAW" | base64 -d 2>/dev/null || echo '{}')
+            if ! OLD_RAW=$(git show "$BASE:package.json" 2>/dev/null); then
+              echo "::error::Base package.json could not be read from $BASE."
+              exit 1
             fi
             NEW_PKG=$(cat package.json)
           else
             LOCK_DIFF=$(git diff HEAD^ HEAD --name-only -- bun.lock 2>/dev/null || true)
-            OLD_RAW=$(git show "HEAD^:package.json" 2>/dev/null || echo '{}')
-            if echo "$OLD_RAW" | jq '.' >/dev/null 2>&1; then
-              OLD_PKG="$OLD_RAW"
-            else
-              OLD_PKG=$(echo "$OLD_RAW" | base64 -d 2>/dev/null || echo '{}')
+            if ! OLD_RAW=$(git show "HEAD^:package.json" 2>/dev/null); then
+              echo "::error::Base package.json could not be read from HEAD^."
+              exit 1
             fi
             NEW_PKG=$(cat package.json)
           fi
+          if ! OLD_PKG=$(printf '%s' "$OLD_RAW" | node scripts/normalize-package-json-input.mjs); then
+            echo "::error::Base package.json is neither valid JSON nor a valid legacy base64-encoded JSON object."
+            exit 1
+          fi
           # Compare only the dependency fields — scripts/version changes are irrelevant.
-          # If OLD_PKG is not valid JSON (e.g. base branch has corrupted content), fail closed.
-          # Approving the required fan-in without a trustworthy base would turn corruption into
-          # a branch-protection bypass and could accept dependency drift without a lock update.
+          # Defense in depth: both the trusted base and the candidate must be JSON objects.
           if ! echo "$OLD_PKG" | jq empty 2>/dev/null; then
             echo "::error::Base package.json could not be parsed as JSON — lockfile consistency cannot be proven."
+            exit 1
+          fi
+          if ! echo "$NEW_PKG" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "::error::Candidate package.json is not a valid JSON object."
             exit 1
           fi
           OLD_DEPS=$(echo "$OLD_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
@@ -101,7 +103,10 @@ jobs:
           echo "Lockfile consistency check passed."
 
       - name: Data-layer baseline monotonicity regression tests
-        run: node --test scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
+        run: >-
+          node --test
+          scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
+          scripts/lib/__tests__/normalize-package-json-input.test.mjs
 
       - name: Data-layer baseline monotonicity (blocking)
         if: github.event_name == 'pull_request'
