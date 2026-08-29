@@ -3,7 +3,7 @@
 > - Etapa primária: `008`
 > - Etapas relacionadas: `009`, `027`, `031`, `041`, `042`, `044`, `056`, `068`,
 >   `082`, `090`, `095`, `096`, `097`, `098`, `099`, `100`
-> - Data/hora: `2026-08-29T00:10:00-03:00`
+> - Data/hora: `2026-08-29T00:33:00-03:00`
 > - Owner: engenharia Zapp Web V3, com cinco revisores especializados independentes
 > - Ambiente: GitHub Actions, produção HTTP somente leitura, catálogo PostgreSQL somente
 >   leitura e worktrees isoladas
@@ -14,8 +14,10 @@
 
 - Repositório auditado: `adm01-debug/Zapp_Web_V3`.
 - Fonte de código usada: `origin/main`, nunca a checkout raiz com mudanças concorrentes.
-- Baseline funcional principal: `470f3625b6f5b40943b8d1ee3e7db6b702d58ab2`,
-  merge do PR `#1454`.
+- Baseline funcional do app: `470f3625b6f5b40943b8d1ee3e7db6b702d58ab2`, merge
+  do PR `#1454`.
+- Baseline final de governança: `391c186947f12d1a9105af8b2e4c6a6868e2e7c4`,
+  merge do PR `#1455`; entre os dois SHAs mudou somente o ratchet JSON.
 - Baseline automático gerado: `c0e98478ee726c4c1600914e1b8e69ecfa5044d7`, filho
   direto de `470f3625b6f5`, alterando somente `scripts/data-layer-baseline.json` de
   `666` para `665`.
@@ -121,6 +123,11 @@ mutators, `nextval`, triggers, DDL, DML ou RPCs operacionais.
 - Depois desse deploy, `36/36` probes passaram e os três domínios serviram o mesmo
   build `1787972967543`, construído em `2026-08-29T03:10:07.160Z`, com entrypoint
   `assets/index-DBetfEnk.js`.
+- O head automático `c0e98478e` do PR `#1455` aprovou CI `33230702664`, Quality Gate
+  `33230702684` e CodeQL `33230702670`; a suíte registrou `480` arquivos e `8.608`
+  testes aprovados, além de E2E, Axe e build. O PR foi mergeado em `391c18694`.
+- O ratchet seguinte, run `33231609413`, terminou verde em `11s` com
+  `reason=no-change` e não gerou branch ou PR adicional.
 
 ## Achados antigos que ficaram obsoletos
 
@@ -233,8 +240,9 @@ O passo de push com `github.token` passou. O passo seguinte falhou com:
 GraphQL: Resource not accessible by personal access token (createPullRequest)
 ```
 
-O PR `#1455` foi então aberto manualmente, preservando o branch, o commit, o marcador de
-automação e o diff de apenas um arquivo. Para futuros merges, o secret
+O PR `#1455` foi então aberto manualmente e mergeado, preservando o branch, o commit, o
+marcador de automação e o diff de apenas um arquivo. O rerun pós-merge sem mudança ficou
+verde. Para uma futura redução real de baseline, porém, o secret
 `GH_TOKEN_ACTIONS` precisa receber permissão de Pull Requests ou ser substituído por uma
 credencial event-capable equivalente. Não houve rotação ou alteração de segredo nesta
 rodada.
