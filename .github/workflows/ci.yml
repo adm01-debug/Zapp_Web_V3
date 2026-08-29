@@ -83,13 +83,12 @@ jobs:
             NEW_PKG=$(cat package.json)
           fi
           # Compare only the dependency fields — scripts/version changes are irrelevant.
-          # If OLD_PKG is not valid JSON (e.g. base branch has corrupted content), skip the
-          # comparison entirely rather than comparing against a synthetic empty object, which
-          # would always appear as a "dep change" and produce a false-positive failure.
+          # If OLD_PKG is not valid JSON (e.g. base branch has corrupted content), fail closed.
+          # Approving the required fan-in without a trustworthy base would turn corruption into
+          # a branch-protection bypass and could accept dependency drift without a lock update.
           if ! echo "$OLD_PKG" | jq empty 2>/dev/null; then
-            echo "::warning::Base package.json could not be parsed as JSON — lockfile diff skipped."
-            echo "Lockfile consistency check skipped (base package.json unreadable)."
-            exit 0
+            echo "::error::Base package.json could not be parsed as JSON — lockfile consistency cannot be proven."
+            exit 1
           fi
           OLD_DEPS=$(echo "$OLD_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
           NEW_DEPS=$(echo "$NEW_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
