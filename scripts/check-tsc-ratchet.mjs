@@ -2,95 +2,185 @@
 /**
  * TypeScript error ratchet.
  *
- * Roda `tsc --noEmit -p tsconfig.app.json` e compara o número de erros
- * contra o baseline em `scripts/tsc-error-baseline.json`. Falha o CI se:
- *   - Aparecerem novos erros em arquivos que hoje estão limpos (regressão).
- *   - O total de erros crescer.
+ * Executa o `typescript/bin/tsc` instalado localmente e compara diagnósticos de
+ * código com `scripts/tsc-error-baseline.json`. Falhas de resolução/execução do
+ * compilador nunca são interpretadas como uma suíte limpa.
  *
- * Como avançar (destravar melhoria):
+ * Para congelar uma redução real de dívida:
  *   node scripts/check-tsc-ratchet.mjs --update
- *
- * O baseline é congelado por causa do mismatch entre o
- * `@supabase/postgrest-js` publicado no Google Artifact Registry privado
- * (usado pelo ambiente de build original) e a versão pública que o CI do GitHub
- * Actions consegue baixar — não é regressão de código do projeto.
  */
-import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const BASELINE_PATH = join(__dirname, 'tsc-error-baseline.json');
-const UPDATE = process.argv.includes('--update');
+import { runLocalTsc, TypeScriptInvocationError } from './lib/run-local-tsc.mjs';
 
-function runTsc() {
-  // Preferimos tsgo (bundle interno do ambiente de build original) quando disponível;
-  // caímos para tsc padrão em ambientes que não têm.
-  const candidates = [
-    ['bunx', ['tsgo', '--noEmit', '-p', 'tsconfig.app.json']],
-    ['npx', ['tsc', '--noEmit', '-p', 'tsconfig.app.json']],
-  ];
-  for (const [cmd, args] of candidates) {
-    const res = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    if (res.error && res.error.code === 'ENOENT') continue;
-    return (res.stdout ?? '') + (res.stderr ?? '');
+const SCRIPT_PATH = fileURLToPath(import.meta.url);
+const BASELINE_PATH = join(dirname(SCRIPT_PATH), 'tsc-error-baseline.json');
+
+export function summarizeDiagnostics(diagnostics) {
+  const files = new Map();
+  for (const diagnostic of diagnostics) {
+    files.set(diagnostic.file, (files.get(diagnostic.file) ?? 0) + 1);
   }
-  throw new Error('Nem tsgo nem tsc encontrados no PATH.');
+
+  return {
+    total: diagnostics.length,
+    files: Object.fromEntries([...files.entries()].sort(([a], [b]) => a.localeCompare(b))),
+  };
 }
 
-function parseErrors(output) {
-  const files = new Map(); // file → count
-  let total = 0;
-  const re = /^([^\s(]+\.(?:ts|tsx))\((\d+),(\d+)\): error TS\d+:/gm;
-  let m;
-  while ((m = re.exec(output)) !== null) {
-    total += 1;
-    const file = m[1].replace(/\\/g, '/');
-    files.set(file, (files.get(file) ?? 0) + 1);
+export function validateErrorSummary(summary, label = 'baseline') {
+  if (!summary || !Number.isSafeInteger(summary.total) || summary.total < 0) {
+    throw new Error(`${label} inválido: total deve ser um inteiro não negativo.`);
   }
-  return { total, files: Object.fromEntries([...files.entries()].sort()) };
-}
-
-const output = runTsc();
-const current = parseErrors(output);
-
-if (UPDATE) {
-  writeFileSync(BASELINE_PATH, JSON.stringify(current, null, 2) + '\n');
-  console.log(`baseline atualizado: ${current.total} erros em ${Object.keys(current.files).length} arquivos.`);
-  process.exit(0);
-}
-
-if (!existsSync(BASELINE_PATH)) {
-  console.error(`baseline ausente em ${BASELINE_PATH}. Gere com --update.`);
-  process.exit(1);
-}
-
-const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
-
-const regressions = [];
-for (const [file, count] of Object.entries(current.files)) {
-  const prev = baseline.files[file] ?? 0;
-  if (count > prev) regressions.push({ file, prev, count });
-}
-
-if (current.total > baseline.total || regressions.length > 0) {
-  console.error('❌ TypeScript ratchet: regressão detectada.');
-  console.error(`   total: baseline=${baseline.total} atual=${current.total}`);
-  for (const r of regressions) {
-    console.error(`   ${r.file}: ${r.prev} → ${r.count}`);
+  if (!summary.files || typeof summary.files !== 'object' || Array.isArray(summary.files)) {
+    throw new Error(`${label} inválido: files deve ser um objeto.`);
   }
-  console.error('\nCorrija os erros ou, se removeu erros, avance o baseline:');
-  console.error('  node scripts/check-tsc-ratchet.mjs --update');
-  process.exit(1);
+
+  let fileTotal = 0;
+  for (const [file, count] of Object.entries(summary.files)) {
+    if (!file || !Number.isSafeInteger(count) || count < 1) {
+      throw new Error(`${label} inválido: contagem inválida para '${file || '(arquivo vazio)'}'.`);
+    }
+    fileTotal += count;
+  }
+  if (fileTotal !== summary.total) {
+    throw new Error(`${label} inválido: total=${summary.total}, soma por arquivo=${fileTotal}.`);
+  }
+
+  return summary;
 }
 
-if (current.total < baseline.total) {
-  console.log(
-    `✅ TypeScript ratchet: ${baseline.total - current.total} erros removidos ` +
-      `(${baseline.total} → ${current.total}). Rode --update para congelar o progresso.`
+export function evaluateRatchet(current, baseline) {
+  validateErrorSummary(current, 'resultado atual');
+  validateErrorSummary(baseline, 'baseline');
+
+  const regressions = [];
+  for (const [file, count] of Object.entries(current.files)) {
+    const previous = baseline.files[file] ?? 0;
+    if (count > previous) regressions.push({ file, previous, count });
+  }
+
+  return {
+    passed: current.total <= baseline.total && regressions.length === 0,
+    regressions,
+    removed: Math.max(0, baseline.total - current.total),
+  };
+}
+
+export function executeRatchet({
+  update = false,
+  baselinePath = BASELINE_PATH,
+  runTscImpl = runLocalTsc,
+} = {}) {
+  if (update && !existsSync(baselinePath)) {
+    throw new Error(
+      `--update recusado: baseline ausente em ${baselinePath}. Restaure o baseline versionado antes de atualizá-lo.`
+    );
+  }
+
+  // runLocalTsc lança antes de qualquer leitura/escrita se o compilador não puder
+  // ser executado. Isso impede que --update grave um falso baseline zero.
+  const compilerResult = runTscImpl();
+  const current = validateErrorSummary(
+    summarizeDiagnostics(compilerResult.diagnostics),
+    'resultado atual'
   );
-} else {
-  console.log(`✅ TypeScript ratchet: ${current.total} erros (baseline preservado).`);
+
+  if (update) {
+    let existingBaseline;
+    try {
+      existingBaseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    } catch (cause) {
+      throw new Error(`baseline inválido em ${baselinePath}: ${cause.message}`, { cause });
+    }
+    validateErrorSummary(existingBaseline, 'baseline');
+    const updateEvaluation = evaluateRatchet(current, existingBaseline);
+    if (!updateEvaluation.passed) {
+      throw new Error(
+        '--update recusado: o resultado atual aumenta ou desloca a dívida TypeScript do baseline.'
+      );
+    }
+    writeFileSync(baselinePath, `${JSON.stringify(current, null, 2)}\n`);
+    return { mode: 'updated', current };
+  }
+
+  if (!existsSync(baselinePath)) {
+    throw new Error(`baseline ausente em ${baselinePath}. Gere com --update.`);
+  }
+
+  let baseline;
+  try {
+    baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+  } catch (cause) {
+    throw new Error(`baseline inválido em ${baselinePath}: ${cause.message}`, {
+      cause,
+    });
+  }
+  validateErrorSummary(baseline, 'baseline');
+
+  return {
+    mode: 'checked',
+    current,
+    baseline,
+    ...evaluateRatchet(current, baseline),
+  };
 }
-process.exit(0);
+
+function printResult(result) {
+  if (result.mode === 'updated') {
+    console.log(
+      `baseline atualizado: ${result.current.total} erros em ${Object.keys(result.current.files).length} arquivos.`
+    );
+    return 0;
+  }
+
+  if (!result.passed) {
+    console.error('❌ TypeScript ratchet: regressão detectada.');
+    console.error(`   total: baseline=${result.baseline.total} atual=${result.current.total}`);
+    for (const regression of result.regressions) {
+      console.error(`   ${regression.file}: ${regression.previous} → ${regression.count}`);
+    }
+    console.error('\nCorrija os erros ou, após remover erros, avance o baseline:');
+    console.error('  node scripts/check-tsc-ratchet.mjs --update');
+    return 1;
+  }
+
+  if (result.removed > 0) {
+    console.log(
+      `✅ TypeScript ratchet: ${result.removed} erros removidos ` +
+        `(${result.baseline.total} → ${result.current.total}). Rode --update para congelar o progresso.`
+    );
+  } else {
+    console.log(`✅ TypeScript ratchet: ${result.current.total} erros (baseline preservado).`);
+  }
+  return 0;
+}
+
+function canonicalEntrypoint(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+export function isMainModule(candidate = process.argv[1], scriptPath = SCRIPT_PATH) {
+  return Boolean(candidate) && canonicalEntrypoint(candidate) === canonicalEntrypoint(scriptPath);
+}
+
+if (isMainModule()) {
+  try {
+    process.exitCode = printResult(executeRatchet({ update: process.argv.includes('--update') }));
+  } catch (error) {
+    const infrastructure = error instanceof TypeScriptInvocationError;
+    console.error(
+      infrastructure
+        ? '❌ TypeScript ratchet: falha de infraestrutura; resultado recusado (fail-closed).'
+        : '❌ TypeScript ratchet: configuração inválida.'
+    );
+    console.error(`   ${error.message}`);
+    process.exitCode = 2;
+  }
+}

@@ -4,6 +4,7 @@ import { ExternalProduct } from '@/hooks/useExternalApiManagement';
 import { ExternalProductCatalog } from '@/components/catalog/ExternalProductCatalog';
 import type { SearchResult } from '../useGlobalSearchData';
 import type { DialogKey, DialogState } from './hooks/useChatDialogs';
+import type { TransferConversationResult } from '../../hooks/useTransferConversation';
 
 const TransferDialog = lazy(() =>
   import('../TransferDialog').then((m) => ({ default: m.TransferDialog }))
@@ -41,8 +42,12 @@ interface ChatDialogsProps {
   forwardMessage: Message | null;
   callDirection: 'inbound' | 'outbound';
   contactId: string;
-  onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => void;
-  onScheduleMessage: (message: string, scheduledAt: Date, attachment?: File) => Promise<void>;
+  onTransfer: (
+    type: 'agent' | 'queue',
+    targetId: string,
+    message?: string
+  ) => Promise<TransferConversationResult>;
+  onScheduleMessage: (message: string, scheduledAt: Date, attachment?: File) => Promise<boolean>;
   onSendInteractiveMessage: (interactive: InteractiveMessage) => void;
   onForwardToTargets: (targetIds: string[], targetType: 'contact' | 'group') => void;
   onSendLocation: (location: LocationMessage) => void;
@@ -82,13 +87,7 @@ export const ChatDialogs = memo(function ChatDialogs({
           <TransferDialog
             open={dialogs.transferDialog}
             onOpenChange={(v) => (v ? openDialog('transferDialog') : closeDialog('transferDialog'))}
-            onTransfer={
-              onTransfer as (
-                type: 'agent' | 'connection' | 'queue',
-                targetId: string,
-                message?: string
-              ) => void
-            }
+            onTransfer={onTransfer}
           />
         )}
         {dialogs.scheduleDialog && (

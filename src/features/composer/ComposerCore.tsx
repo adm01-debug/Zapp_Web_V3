@@ -15,8 +15,7 @@ import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Send, Mic, Plus, Loader2, Check } from 'lucide-react';
-// i18n-todo: mover copy.ts para src/lib/chat-copy.ts quando ComposerCore sair do escopo inbox
-import { COPY } from '@/features/inbox/components/chat/copy';
+import { COPY } from '@/lib/chat-copy';
 
 export interface ComposerCoreProps {
   // ─── Valor e callbacks obrigatórios ────────────────────────────────────────

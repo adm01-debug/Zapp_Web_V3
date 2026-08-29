@@ -12,7 +12,6 @@ import {
   EXTENDED_EMOJIS,
 } from '@/components/ui/message-reactions';
 import { useMessageReactions } from '../hooks/useMessageReactions';
-import { useReactionMutations } from '../hooks/reactions/useReactionMutations';
 
 /** Configuração de emojis do WhatsApp expostos pelo inbox */
 export { WHATSAPP_EMOJIS as WHATSAPP_REACTIONS, EXTENDED_EMOJIS };
@@ -48,9 +47,11 @@ export const MessageReactions = memo(function MessageReactions({
     senderType,
     refreshKey,
     disableRealtime,
+    reactionSource: 'bar',
   });
   const { reactions, addReaction, removeReaction, currentProfileId } = reactionState;
-  const { trackReactionEvent } = useReactionMutations(messageId, currentProfileId);
+  // addReaction/removeReaction já registram sucesso/erro no mutation owner.
+  // O wrapper apenas delega para evitar analytics/audit_logs duplicados.
 
   /** Adapta MessageReaction[] → ReactionGroup[] canônico */
   const reactionGroups = useMemo(() => {
@@ -74,14 +75,9 @@ export const MessageReactions = memo(function MessageReactions({
     async (emoji: string) => {
       const group = reactionGroups.find((g) => g.emoji === emoji);
       if (group?.reactedByMe) await removeReaction(emoji);
-      else {
-        await addReaction(emoji);
-        if (typeof trackReactionEvent === 'function') {
-          trackReactionEvent('add', { messageId });
-        }
-      }
+      else await addReaction(emoji);
     },
-    [reactionGroups, addReaction, removeReaction, trackReactionEvent, messageId]
+    [reactionGroups, addReaction, removeReaction]
   );
 
   return (
@@ -119,21 +115,16 @@ export const QuickReactionBar = memo(function QuickReactionBar({
     senderType,
     refreshKey,
     disableRealtime,
+    reactionSource: 'quick',
   });
-  const { addReaction, removeReaction, hasReacted, currentProfileId } = reactionState;
-  const { trackReactionEvent } = useReactionMutations(messageId, currentProfileId);
+  const { addReaction, removeReaction, hasReacted } = reactionState;
 
   const handleReact = useCallback(
     async (emoji: string) => {
       if (hasReacted(emoji)) await removeReaction(emoji);
-      else {
-        await addReaction(emoji);
-        if (typeof trackReactionEvent === 'function') {
-          trackReactionEvent('quick_add', { messageId });
-        }
-      }
+      else await addReaction(emoji);
     },
-    [hasReacted, addReaction, removeReaction, trackReactionEvent, messageId]
+    [hasReacted, addReaction, removeReaction]
   );
 
   return (
