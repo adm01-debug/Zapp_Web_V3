@@ -72,6 +72,8 @@ export async function sendTransactionalEmail(
     return { ok: false, status: 504, error: msg };
   }
 
+  // Resposta OUTBOUND do Resend — {} é fallback inofensivo (message/id lidos com typeof checks);
+  // não é o antipadrão de parse de body de request (D1/etapa 27), que o _shared/validation.ts resolve.
   const body = await res.json().catch(() => ({})) as Record<string, unknown>;
 
   if (!res.ok) {

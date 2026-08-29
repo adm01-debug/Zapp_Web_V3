@@ -67,17 +67,34 @@ Deno.test("Contract: download-wa-status-media v1 — payload {} é rejeitado (ca
 });
 
 // SEC-3 — path traversal via status_id.
-Deno.test("Contract: download-wa-status-media v1 — status_id com '../' (path traversal) é rejeitado", () => {
+Deno.test("Contract: download-wa-status-media v1 — status_id com '../' (path traversal, SEC-3) é rejeitado", () => {
   const result = DownloadWaStatusMediaV1Schema.safeParse({ ...VALID, status_id: "../../etc/passwd" });
   assertEquals(result.success, false);
 });
 
-Deno.test("Contract: download-wa-status-media v1 — status_id com '/' é rejeitado", () => {
+Deno.test("Contract: download-wa-status-media v1 — status_id com '../x' curto (SEC-3) é rejeitado", () => {
+  const result = DownloadWaStatusMediaV1Schema.safeParse({ ...VALID, status_id: "../x" });
+  assertEquals(result.success, false);
+});
+
+Deno.test("Contract: download-wa-status-media v1 — status_id com '/' é rejeitado (SEC-3)", () => {
   const result = DownloadWaStatusMediaV1Schema.safeParse({ ...VALID, status_id: "a/b" });
   assertEquals(result.success, false);
 });
 
-Deno.test("Contract: download-wa-status-media v1 — status_id com espaço/caractere especial é rejeitado", () => {
+Deno.test("Contract: download-wa-status-media v1 — status_id com espaço simples 'a b' (SEC-3) é rejeitado", () => {
+  const result = DownloadWaStatusMediaV1Schema.safeParse({ ...VALID, status_id: "a b" });
+  assertEquals(result.success, false);
+});
+
+Deno.test("Contract: download-wa-status-media v1 — status_id com espaço/caractere especial é rejeitado (SEC-3)", () => {
   const result = DownloadWaStatusMediaV1Schema.safeParse({ ...VALID, status_id: "abc def;rm -rf" });
   assertEquals(result.success, false);
+});
+
+Deno.test("Contract: download-wa-status-media v1 — status_id limpo [A-Za-z0-9_-] passa (SEC-3)", () => {
+  // O formato real é um WhatsApp msg id (alfanumérico); hífen/underscore são
+  // seguros para nome de arquivo em path de storage.
+  const result = DownloadWaStatusMediaV1Schema.safeParse({ ...VALID, status_id: "3EB0C767_d26a-1e5c" });
+  assertEquals(result.success, true);
 });

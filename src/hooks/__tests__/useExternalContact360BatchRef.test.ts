@@ -192,9 +192,7 @@ describe('useExternalContact360BatchRef — abort e troca de lotes', () => {
     );
 
     await waitFor(() =>
-      expect(
-        result.current.data?.get('5511988888888')?.company?.nome_fantasia
-      ).toBe('BETA A')
+      expect(result.current.data?.get('5511988888888')?.company?.nome_fantasia).toBe('BETA A')
     );
     expect(result.current.data?.get('5511912345678')?.company?.nome_fantasia).toBe('ACME A');
 
@@ -207,9 +205,7 @@ describe('useExternalContact360BatchRef — abort e troca de lotes', () => {
 
     resolveB({ data: payloadB, error: null });
     await waitFor(() =>
-      expect(
-        result.current.data?.get('5511988888888')?.company?.nome_fantasia
-      ).toBe('BETA B')
+      expect(result.current.data?.get('5511988888888')?.company?.nome_fantasia).toBe('BETA B')
     );
 
     expect(result.current.data?.get('5511912345678')).toBeUndefined();

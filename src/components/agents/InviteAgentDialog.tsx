@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, Mail, UserPlus } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { toast } from 'sonner';
 
 interface InviteAgentDialogProps {
@@ -40,39 +40,39 @@ export function InviteAgentDialog({ open, onOpenChange }: InviteAgentDialogProps
     }
 
     setIsSending(true);
-    try {
-      // Send invite email via edge function
-      const { error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: email,
-          subject: 'Convite para a plataforma ZAPP',
-          html: `
-            <h2>Você foi convidado!</h2>
-            <p>Olá ${name || 'colega'},</p>
-            <p>Você foi convidado para participar da plataforma ZAPP como <strong>${
-              role === 'admin'
-                ? 'Administrador'
-                : role === 'supervisor'
-                  ? 'Supervisor'
-                  : 'Atendente'
-            }</strong>.</p>
-            <p>Acesse a plataforma e crie sua conta para começar.</p>
-          `,
-        },
-      });
+    // Bloco 7 (etapa 80): invokeEdge expõe o 422 canônico do gate de contrato
+    // send-email@v1 (ex.: details[{path:'to'}] para email inválido). O catch
+    // anterior descartava o corpo — o usuário via um genérico mesmo quando o
+    // servidor dizia exatamente o que corrigir. Formulário sem mapa campo→erro
+    // → padrão toast com a primeira mensagem de details[] (nunca silenciar).
+    const result = await invokeEdge('send-email', {
+      body: {
+        to: email,
+        subject: 'Convite para a plataforma ZAPP',
+        html: `
+          <h2>Você foi convidado!</h2>
+          <p>Olá ${name || 'colega'},</p>
+          <p>Você foi convidado para participar da plataforma ZAPP como <strong>${
+            role === 'admin' ? 'Administrador' : role === 'supervisor' ? 'Supervisor' : 'Atendente'
+          }</strong>.</p>
+          <p>Acesse a plataforma e crie sua conta para começar.</p>
+        `,
+      },
+    });
 
-      if (error) throw error;
-
+    if (result.ok) {
       toast.success(`Convite enviado para ${email}!`);
       setEmail('');
       setName('');
       setRole('agent');
       onOpenChange(false);
-    } catch {
-      toast.error('Erro ao enviar convite. Verifique a configuração de email.');
-    } finally {
-      setIsSending(false);
+    } else {
+      const firstField = Object.values(result.fieldErrors)[0];
+      toast.error(
+        firstField || result.message || 'Erro ao enviar convite. Verifique a configuração de email.'
+      );
     }
+    setIsSending(false);
   };
 
   return (

@@ -106,6 +106,15 @@ Decisao de arquivar e do responsavel — esta lista e diagnostico, nao sentenca.
 > edge nao existe, dado real vem do RPC"), nao so ausencia de chamador. ADR
 > completo em `docs/_archive/email-health-ADR-2026-08-22.md`.
 
+> `zapp-google-calendar-sync` arquivada em 2026-08-25 (PLANO-100 fechamento,
+> sessao multi-frente) — ZERO chamadores (front/edge/cron/N8N/externo) e
+> contrato descrevendo API de sync que nunca existiu: endpoint sempre
+> respondia `synced:false` (sem credenciais Google Calendar no ambiente; o
+> ADR de 2026-08-18, que a mantinha como "status honesto", e preservado no
+> proprio `_archive`). Nao constava da tabela F acima por ter sido mantida
+> "por design" naquele ADR. ADR completo em
+> `docs/_archive/zapp-google-calendar-sync-ADR-2026-08-25.md`.
+
 | Funcao | Mencoes em teste | Mencoes em doc |
 |---|---|---|
 | `ai-auto-tag` | 0 | 0 |

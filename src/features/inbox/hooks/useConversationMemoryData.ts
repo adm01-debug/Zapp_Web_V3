@@ -4,12 +4,9 @@ import { isValidUUID } from '@/utils/uuid';
 
 export async function fetchConversationMemory(contactId: string, signal?: AbortSignal) {
   if (!isValidUUID(contactId)) return null;
-  const { data } = await supabase
-    .from('conversation_memory')
-    .select('*')
-    .eq('contact_id', contactId)
-    .abortSignal(signal)
-  .maybeSingle();
+  const query = supabase.from('conversation_memory').select('*').eq('contact_id', contactId);
+  if (signal) query.abortSignal(signal);
+  const { data } = await query.maybeSingle();
   return data ?? null;
 }
 

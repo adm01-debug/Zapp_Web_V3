@@ -27,6 +27,7 @@
  */
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 import { timingSafeStringEqual } from '../_shared/auth.ts';
+import { verifySvixWebhookSignature } from '../_shared/hmac-validation.ts';
 import { checkRateLimit } from '../_shared/validation.ts';
 import { createZappAdminClient } from '../_shared/db-client.ts';
 import { parseOrReject } from '../_shared/contract-kit.ts';
@@ -72,44 +73,6 @@ function parseFrom(from: string): { email: string; name: string | null } {
   return { email: from.trim().toLowerCase(), name: null };
 }
 
-/** Verifica assinatura Svix (formato Resend: svix-id/svix-timestamp/svix-signature). */
-async function verifySvixSignature(
-  req: Request,
-  rawBody: string,
-  secret: string
-): Promise<boolean> {
-  const id = req.headers.get('svix-id');
-  const timestamp = req.headers.get('svix-timestamp');
-  const signatureHeader = req.headers.get('svix-signature');
-  if (!id || !timestamp || !signatureHeader) return false;
-
-  const ts = Number(timestamp);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > SVIX_TOLERANCE_SEC) {
-    return false; // replay/stale
-  }
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const mac = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`${id}.${timestamp}.${rawBody}`)
-  );
-  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
-
-  // Formato: "v1,<sig> v1,<sig2> ..." — aceita qualquer entrada v1.
-  for (const part of signatureHeader.split(' ')) {
-    const [version, sig] = part.split(',');
-    if (version === 'v1' && sig && timingSafeStringEqual(sig, expected)) return true;
-  }
-  return false;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return handleCorsPreflight(req);
 
@@ -125,7 +88,7 @@ Deno.serve(async (req) => {
 
     const rawText = await req.text().catch(() => '');
     if (signingSecret) {
-      const ok = await verifySvixSignature(req, rawText, signingSecret);
+      const ok = await verifySvixWebhookSignature(req, rawText, signingSecret, SVIX_TOLERANCE_SEC);
       if (!ok) return json({ error: 'Invalid Svix signature' }, 401, req);
     }
     if (webhookSecret) {

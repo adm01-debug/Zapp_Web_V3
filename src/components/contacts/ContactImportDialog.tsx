@@ -25,7 +25,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { parseCsvFile, downloadCsv } from '@/lib/csvUtils';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -144,15 +144,28 @@ export const ContactImportDialog: React.FC<ContactImportDialogProps> = ({
 
       setProgress(30);
 
-      const { data, error: fnError } = await supabase.functions.invoke('contacts-import', {
+      // Bloco 7 (etapa 84): invokeEdge expõe o 422 canônico do gate
+      // contacts-import@v1. O catch anterior fazia `String(err)` sobre o
+      // FunctionsHttpError — o usuário via "FunctionsHttpError: ..." em vez
+      // da mensagem real do servidor (ex.: "rows vazio").
+      const result = await invokeEdge<ImportResult>('contacts-import', {
         body: { rows },
       });
 
       setProgress(90);
 
-      if (fnError) throw fnError;
+      if (!result.ok) {
+        const firstField = Object.values(result.fieldErrors)[0];
+        setError(
+          `Erro na importação: ${
+            firstField || result.message || 'falha inesperada. Tente novamente.'
+          }`
+        );
+        setProgress(0);
+        return;
+      }
 
-      const res = data as ImportResult; // ignore-audit: narrows Supabase query result to local interface
+      const res = result.data;
       setResult(res);
       setProgress(100);
 

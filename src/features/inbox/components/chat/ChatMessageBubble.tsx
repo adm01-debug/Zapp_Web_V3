@@ -1,9 +1,11 @@
 import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import { Message, MessageReaction, InteractiveButton } from '@/types/chat';
 import { useSwipeGesture } from '@/hooks/useSwipeControl';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { motion } from '@/components/ui/motion';
+import { bubbleVariants } from '@/components/ui/bubble';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MessageReactions } from '../MessageReactions';
 import { MessageImage } from '../ImagePreview';
