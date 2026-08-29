@@ -113,7 +113,7 @@ export function SicoobBridgeDashboard() {
     queryKey: queryKeys.adminOps.sicoobOutbox(),
     queryFn: async (): Promise<SicoobOutboxItem[]> => {
       const { data, error } = await supabase
-        .from('sicoob_reply_outbox')
+        .from('sicoob_reply_outbox' as never)
         .select(
           'id, contact_id, message_id, agent_id, content, status, attempts, created_at, next_attempt_at, processed_at, last_error'
         )
@@ -265,10 +265,11 @@ export function SicoobBridgeDashboard() {
         <AlertTitle>Sinalização DASHBOARD-13 — pg_cron ausente</AlertTitle>
         <AlertDescription>
           O edge <code>sicoob-outbox-consumer</code> é invocado por pg_cron a cada 1 min
-          (supabase/functions/sicoob-outbox-consumer/index.ts), mas <b>nenhum job cron existe</b> em produção
-          (db_crons não lista sicoob). Sem o job, itens <code>pending/failed</code> de{' '}
+          (supabase/functions/sicoob-outbox-consumer/index.ts), mas <b>nenhum job cron existe</b> em
+          produção (db_crons não lista sicoob). Sem o job, itens <code>pending/failed</code> de{' '}
           <code>sicoob_reply_outbox</code> nunca são entregues ao Sicoob. Criação do job (e da RPC{' '}
-          <code>sicoob_outbox_claim</code>, se desejada) fica fora do escopo desta branch — exige migration.
+          <code>sicoob_outbox_claim</code>, se desejada) fica fora do escopo desta branch — exige
+          migration.
         </AlertDescription>
       </Alert>
 
@@ -300,7 +301,9 @@ export function SicoobBridgeDashboard() {
                   className={`rounded-lg p-3 text-center ${statusColor[status] ?? 'bg-muted/30'}`}
                 >
                   <p className="text-xl font-bold">{outboxCounts[status] ?? 0}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{status}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {status}
+                  </p>
                 </div>
               ))}
             </div>
@@ -317,9 +320,7 @@ export function SicoobBridgeDashboard() {
             </span>
             <span>Abandonados: {abandonedCount}</span>
             {lastProcessedAt && (
-              <span>
-                Último processamento: {new Date(lastProcessedAt).toLocaleString('pt-BR')}
-              </span>
+              <span>Último processamento: {new Date(lastProcessedAt).toLocaleString('pt-BR')}</span>
             )}
             {!lastProcessedAt && !outboxQuery.isLoading && (
               <span>Nenhum item processado ainda (consumidor nunca rodou?).</span>
@@ -333,7 +334,9 @@ export function SicoobBridgeDashboard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <MessageSquare className="h-5 w-5" /> Fila de Respostas (sicoob_reply_outbox)
-            <Badge variant="secondary" className="ml-auto text-[10px]">{outbox.length}</Badge>
+            <Badge variant="secondary" className="ml-auto text-[10px]">
+              {outbox.length}
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -350,19 +353,34 @@ export function SicoobBridgeDashboard() {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-background">
                   <tr className="border-b">
-                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Status</th>
-                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Conteúdo</th>
-                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Tentativas</th>
-                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Criado</th>
-                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Próx. tentativa</th>
-                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">Erro</th>
+                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">
+                      Status
+                    </th>
+                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">
+                      Conteúdo
+                    </th>
+                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">
+                      Tentativas
+                    </th>
+                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">
+                      Criado
+                    </th>
+                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">
+                      Próx. tentativa
+                    </th>
+                    <th scope="col" className="p-2 text-left font-medium text-muted-foreground">
+                      Erro
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {outbox.map((item) => (
                     <tr key={item.id} className="border-b hover:bg-muted/30">
                       <td className="p-2">
-                        <Badge variant="outline" className={`text-[9px] ${statusColor[item.status ?? ''] ?? ''}`}>
+                        <Badge
+                          variant="outline"
+                          className={`text-[9px] ${statusColor[item.status ?? ''] ?? ''}`}
+                        >
                           {item.status ?? 'unknown'}
                         </Badge>
                       </td>
@@ -372,9 +390,13 @@ export function SicoobBridgeDashboard() {
                         {item.created_at ? new Date(item.created_at).toLocaleString('pt-BR') : '—'}
                       </td>
                       <td className="p-2 text-muted-foreground">
-                        {item.next_attempt_at ? new Date(item.next_attempt_at).toLocaleString('pt-BR') : '—'}
+                        {item.next_attempt_at
+                          ? new Date(item.next_attempt_at).toLocaleString('pt-BR')
+                          : '—'}
                       </td>
-                      <td className="max-w-[180px] truncate p-2 text-destructive">{item.last_error ?? '—'}</td>
+                      <td className="max-w-[180px] truncate p-2 text-destructive">
+                        {item.last_error ?? '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
