@@ -1,27 +1,25 @@
 /**
- * Tests for useDemandPrediction().
+ * Testes de useDemandPrediction().
  *
- * When externalData is provided the hook skips the Supabase query entirely
- * and computes insights purely from the supplied data. That makes the hook
- * testable without any DB or QueryClient mocking.
+ * Quando externalData é fornecido, o hook ignora completamente a consulta ao
+ * Supabase e calcula os indicadores apenas com os dados recebidos.
  *
- * The hook must still be rendered inside a QueryClientProvider because it
- * calls useQuery() even when externalData is present.
+ * O hook ainda precisa ser renderizado dentro de QueryClientProvider porque
+ * chama useQuery() mesmo quando externalData está presente.
  *
- * Covered:
- *   - data returned equals externalData when provided
- *   - empty externalData is handled without querying or invalid insights
- *   - the datasource query remains enabled when externalData is omitted
- *   - the React Query cancellation signal reaches the datasource builder
- *   - insights.maxPredicted is the maximum predicted value among isPrediction=true points
- *   - insights.avgPredicted is the average of predicted values among isPrediction=true points
- *   - insights.currentActual is the actual value of the first non-prediction point
- *   - insights.trend is 'up' when last prediction > currentActual
- *   - insights.trend is 'down' when last prediction < currentActual
- *   - insights.peakTime is the time string of the point with the highest predicted value
- *   - insights.capacityRisk is true when maxPredicted > currentCapacity
- *   - insights.capacityRisk is false when maxPredicted <= currentCapacity
- *   - default currentCapacity is 35
+ * Cobertura:
+ *   - os dados retornados preservam externalData quando fornecido
+ *   - externalData vazio não consulta nem gera indicadores inválidos
+ *   - a consulta permanece habilitada quando externalData é omitido
+ *   - o sinal de cancelamento do React Query chega ao builder da fonte de dados
+ *   - maxPredicted contém o maior valor dos pontos previstos
+ *   - avgPredicted contém a média dos pontos previstos
+ *   - currentActual contém o valor real do primeiro ponto histórico
+ *   - trend é 'up' quando a última previsão supera currentActual
+ *   - trend é 'down' quando a última previsão fica abaixo de currentActual
+ *   - peakTime contém o horário do maior valor previsto
+ *   - capacityRisk reflete a comparação entre maxPredicted e currentCapacity
+ *   - currentCapacity usa 35 como padrão
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -92,8 +90,8 @@ const PREDICTIONS = makeData([
 const EXTERNAL_DATA: PredictionPoint[] = [...HISTORY, ...PREDICTIONS];
 
 // ── data passthrough ───────────────────────────────────────────────────────────
-describe('useDemandPrediction — data passthrough', () => {
-  it('returns externalData unchanged as data', () => {
+describe('useDemandPrediction — repasse de dados', () => {
+  it('retorna externalData sem alterações', () => {
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -101,7 +99,7 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(result.current.data).toBe(EXTERNAL_DATA);
   });
 
-  it('does not query the datasource when externalData is provided', () => {
+  it('não consulta a fonte de dados quando externalData é fornecido', () => {
     renderHook(() => useDemandPrediction(EXTERNAL_DATA), { wrapper: makeWrapper() });
 
     expect(dbFromMock).not.toHaveBeenCalled();
@@ -109,7 +107,7 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(gteMock).not.toHaveBeenCalled();
   });
 
-  it('queries the datasource when externalData is omitted', async () => {
+  it('consulta a fonte de dados quando externalData é omitido', async () => {
     renderHook(() => useDemandPrediction(), { wrapper: makeWrapper() });
 
     await waitFor(() => {
@@ -120,7 +118,7 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(abortSignalMock).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 
-  it('aborts an in-flight datasource query when the consumer unmounts', async () => {
+  it('cancela a consulta em voo quando o consumidor desmonta', async () => {
     mockPendingAbortableQuery();
 
     const { unmount } = renderHook(() => useDemandPrediction(), { wrapper: makeWrapper() });
@@ -134,7 +132,7 @@ describe('useDemandPrediction — data passthrough', () => {
     await waitFor(() => expect(forwardedSignal.aborted).toBe(true));
   });
 
-  it('aborts an in-flight query when externalData becomes the active source', async () => {
+  it('cancela a consulta em voo quando externalData vira a fonte ativa', async () => {
     mockPendingAbortableQuery();
 
     const initialProps: { externalData: PredictionPoint[] | undefined } = {
@@ -161,7 +159,7 @@ describe('useDemandPrediction — data passthrough', () => {
     await waitFor(() => expect(forwardedSignal.aborted).toBe(true));
   });
 
-  it('keeps a shared in-flight query alive while another DB observer is active', async () => {
+  it('mantém a consulta compartilhada enquanto outro observer do banco está ativo', async () => {
     mockPendingAbortableQuery();
 
     const wrapper = makeWrapper();
@@ -189,7 +187,7 @@ describe('useDemandPrediction — data passthrough', () => {
     await waitFor(() => expect(sharedSignal.aborted).toBe(true));
   });
 
-  it('does not cancel a shared DB query when another consumer mounts with externalData', async () => {
+  it('não cancela a consulta compartilhada quando outro consumidor monta com externalData', async () => {
     mockPendingAbortableQuery();
 
     const wrapper = makeWrapper();
@@ -211,7 +209,7 @@ describe('useDemandPrediction — data passthrough', () => {
     await waitFor(() => expect(sharedSignal.aborted).toBe(true));
   });
 
-  it('handles empty externalData without querying or invalid insights', () => {
+  it('trata externalData vazio sem consulta nem indicadores inválidos', () => {
     const emptyData: PredictionPoint[] = [];
     const { result } = renderHook(
       () => useDemandPrediction(emptyData),
@@ -230,7 +228,7 @@ describe('useDemandPrediction — data passthrough', () => {
     expect(dbFromMock).not.toHaveBeenCalled();
   });
 
-  it('preserves the current actual value when externalData has no predictions yet', () => {
+  it('preserva o valor atual quando externalData ainda não possui previsões', () => {
     const historyOnly = makeData([
       { actual: 17, predicted: 17, lower: 17, upper: 17, isPrediction: false },
     ]);
@@ -249,8 +247,8 @@ describe('useDemandPrediction — data passthrough', () => {
 });
 
 // ── insights ───────────────────────────────────────────────────────────────────
-describe('useDemandPrediction — insights', () => {
-  it('maxPredicted is the highest predicted value among isPrediction=true points', () => {
+describe('useDemandPrediction — indicadores', () => {
+  it('maxPredicted contém o maior valor dos pontos previstos', () => {
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -258,7 +256,7 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.maxPredicted).toBe(50);
   });
 
-  it('avgPredicted is the mean of predicted values among isPrediction=true points', () => {
+  it('avgPredicted contém a média dos pontos previstos', () => {
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -267,7 +265,7 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.avgPredicted).toBe(35);
   });
 
-  it('currentActual is the actual value of the first non-prediction data point', () => {
+  it('currentActual contém o valor real do primeiro ponto histórico', () => {
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -275,8 +273,8 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.currentActual).toBe(10);
   });
 
-  it('trend is "up" when last prediction exceeds currentActual', () => {
-    // last prediction = 30, currentActual = 10 → up
+  it('trend é "up" quando a última previsão supera currentActual', () => {
+    // Última previsão = 30, currentActual = 10 → up
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -284,14 +282,14 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.trend).toBe('up');
   });
 
-  it('trend is "down" when last prediction is below currentActual', () => {
-    // Build data where last prediction < currentActual
+  it('trend é "down" quando a última previsão fica abaixo de currentActual', () => {
+    // Monta dados em que a última previsão é menor que currentActual.
     const highActual = makeData([
       { actual: 100, predicted: 100, lower: 100, upper: 100, isPrediction: false },
     ]);
     const lowPredictions = makeData([
       { predicted: 5, lower: 3, upper: 7, isPrediction: true, time: '10:00' },
-      { predicted: 3, lower: 1, upper: 5, isPrediction: true, time: '11:00' }, // last < 100
+      { predicted: 3, lower: 1, upper: 5, isPrediction: true, time: '11:00' }, // Última < 100
     ]);
     const { result } = renderHook(
       () => useDemandPrediction([...highActual, ...lowPredictions]),
@@ -300,7 +298,7 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.trend).toBe('down');
   });
 
-  it('peakTime is the time string of the point with the highest predicted value', () => {
+  it('peakTime contém o horário do maior valor previsto', () => {
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -308,8 +306,8 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.peakTime).toBe('07:00');
   });
 
-  it('capacityRisk is true when maxPredicted > currentCapacity', () => {
-    // maxPredicted=50, default capacity=35 → risk
+  it('capacityRisk é true quando maxPredicted supera currentCapacity', () => {
+    // maxPredicted=50, capacidade padrão=35 → risco
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA),
       { wrapper: makeWrapper() }
@@ -317,8 +315,8 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.capacityRisk).toBe(true);
   });
 
-  it('capacityRisk is false when maxPredicted <= currentCapacity', () => {
-    // maxPredicted=50, pass capacity=100 → no risk
+  it('capacityRisk é false quando maxPredicted não supera currentCapacity', () => {
+    // maxPredicted=50, capacidade informada=100 → sem risco
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA, 100),
       { wrapper: makeWrapper() }
@@ -326,7 +324,7 @@ describe('useDemandPrediction — insights', () => {
     expect(result.current.insights.capacityRisk).toBe(false);
   });
 
-  it('capacityRisk is false when maxPredicted equals currentCapacity', () => {
+  it('capacityRisk é false quando maxPredicted é igual a currentCapacity', () => {
     const { result } = renderHook(
       () => useDemandPrediction(EXTERNAL_DATA, 50),
       { wrapper: makeWrapper() }

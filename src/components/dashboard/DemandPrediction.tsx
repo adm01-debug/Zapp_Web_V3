@@ -121,7 +121,7 @@ export function DemandPrediction({
           <InsightCard
             label="Pico Previsto"
             value={`${insights.maxPredicted} msgs`}
-            subValue={`às ${insights.peakTime}`}
+            subValue={insights.peakTime ? `às ${insights.peakTime}` : undefined}
             icon={Clock}
           />
           <InsightCard

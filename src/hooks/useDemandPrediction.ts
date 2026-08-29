@@ -89,10 +89,10 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
     const queryWasEnabled = previousExternalData.current === undefined;
     previousExternalData.current = externalData;
 
-    // Setting enabled=false prevents future fetches but does not cancel one
-    // already in flight. This effect is declared after useQuery so its observer
-    // options are current before isActive() is checked. Cancellation is
-    // query-wide, therefore abort only when no enabled observer remains.
+    // enabled=false impede novas consultas, mas não cancela uma já em voo. O
+    // efeito vem após useQuery para que as opções do observer estejam atuais
+    // antes de isActive(). Como o cancelamento afeta toda a query, só interrompe
+    // quando nenhum observer habilitado permanece.
     if (queryWasEnabled && externalData !== undefined) {
       const queryKey = queryKeys.demandPrediction.history();
       const sharedQuery = queryClient.getQueryCache().find({ queryKey, exact: true });
@@ -109,9 +109,8 @@ export function useDemandPrediction(externalData?: PredictionPoint[], currentCap
     const predictions = data.filter(d => d.isPrediction);
     const currentActual = data.find(d => !d.isPrediction && d.actual !== undefined)?.actual ?? 0;
 
-    // External datasets may legitimately be empty or contain only historical
-    // points. Keep the dashboard renderable and the derived metrics finite
-    // until prediction points are available.
+    // Dados externos podem estar vazios ou conter apenas pontos históricos.
+    // Mantém o painel renderizável e as métricas finitas até haver previsões.
     if (predictions.length === 0) {
       return {
         maxPredicted: 0,

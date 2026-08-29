@@ -21,8 +21,8 @@ vi.mock('@/components/ui/motion', () => ({
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  // Do not render the chart children: they contain SVG defs that are valid
-  // under Recharts' SVG tree but would be mounted under a test <div> here.
+  // Não renderiza os filhos do gráfico: eles contêm definições SVG válidas na
+  // árvore do Recharts, mas seriam montados dentro de uma <div> no teste.
   AreaChart: () => <div data-testid="demand-chart" />,
   Area: () => null,
   XAxis: () => null,
@@ -33,7 +33,7 @@ vi.mock('recharts', () => ({
 }));
 
 describe('DemandPrediction', () => {
-  it('renders an empty external dataset as stable without querying the datasource', () => {
+  it('renderiza dados externos vazios como estáveis sem consultar a fonte', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -49,6 +49,7 @@ describe('DemandPrediction', () => {
     expect(screen.getByText('Previsão de Demanda')).toBeInTheDocument();
     expect(screen.getByText('Estável')).toBeInTheDocument();
     expect(screen.queryByText('Descendo')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^às$/)).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/NaN|Infinity/);
     expect(dbFromMock).not.toHaveBeenCalled();
   });
