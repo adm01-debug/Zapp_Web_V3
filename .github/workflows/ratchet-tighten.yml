@@ -5,7 +5,9 @@ on:
   push:
     branches: [main]
 permissions:
-  contents: read
+  # O token efêmero do próprio workflow grava somente a branch do ratchet.
+  # O PAT continua responsável por criar o PR e disparar seus checks.
+  contents: write
   pull-requests: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,9 +30,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # PAT de usuário permite que o push/PR dispare os checks obrigatórios e
-          # fornece identidade verificável via `gh api user` na limpeza conservadora.
-          token: ${{ secrets.GH_TOKEN_ACTIONS }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -166,10 +165,12 @@ jobs:
       - name: Push ratchet branch
         if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          # O PAT disponível é event-capable, mas pode ser read-only para contents.
+          # O token efêmero tem contents:write e seu push não grava na main.
+          PUSH_TOKEN: ${{ github.token }}
         run: |
           BRANCH="${{ steps.tighten.outputs.branch }}"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
           if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null 2>&1; then
             echo "Branch remota já existe; validando conteúdo para tornar rerun idempotente."
             git fetch --no-tags origin "${BRANCH}:refs/remotes/origin/${BRANCH}"

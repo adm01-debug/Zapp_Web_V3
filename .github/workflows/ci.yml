@@ -107,6 +107,7 @@ jobs:
           node --test
           scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
           scripts/lib/__tests__/normalize-package-json-input.test.mjs
+          scripts/lib/__tests__/ratchet-tighten-workflow.test.mjs
 
       - name: Monotonicidade do baseline da camada de dados (bloqueante)
         if: github.event_name == 'pull_request'
