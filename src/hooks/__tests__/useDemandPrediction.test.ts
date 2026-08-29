@@ -130,6 +130,39 @@ describe('useDemandPrediction — data passthrough', () => {
     await waitFor(() => expect(forwardedSignal.aborted).toBe(true));
   });
 
+  it('aborts an in-flight query when externalData becomes the active source', async () => {
+    abortSignalMock.mockImplementationOnce((signal: AbortSignal) => new Promise((_, reject) => {
+      signal.addEventListener(
+        'abort',
+        () => reject(new DOMException('Query cancelled', 'AbortError')),
+        { once: true }
+      );
+    }));
+
+    const initialProps: { externalData: PredictionPoint[] | undefined } = {
+      externalData: undefined,
+    };
+    const { result, rerender } = renderHook(
+      ({ externalData }: { externalData: PredictionPoint[] | undefined }) => (
+        useDemandPrediction(externalData)
+      ),
+      {
+        initialProps,
+        wrapper: makeWrapper(),
+      }
+    );
+
+    await waitFor(() => expect(abortSignalMock).toHaveBeenCalledOnce());
+    const forwardedSignal = abortSignalMock.mock.calls[0][0];
+    expect(forwardedSignal.aborted).toBe(false);
+
+    rerender({ externalData: EXTERNAL_DATA });
+
+    expect(result.current.data).toBe(EXTERNAL_DATA);
+    expect(dbFromMock).toHaveBeenCalledOnce();
+    await waitFor(() => expect(forwardedSignal.aborted).toBe(true));
+  });
+
   it('handles empty externalData without querying or invalid insights', () => {
     const emptyData: PredictionPoint[] = [];
     const { result } = renderHook(

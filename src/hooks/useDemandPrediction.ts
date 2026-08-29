@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { dbFrom } from '@/integrations/datasource/db';
 import { queryKeys } from '@/services/api/queryKeys';
 
@@ -54,6 +54,24 @@ function generatePredictionFromHistory(messageHistory: { hour: number; count: nu
 
 /** Hook: use Demand Prediction. */
 export function useDemandPrediction(externalData?: PredictionPoint[], currentCapacity = 35) {
+  const queryClient = useQueryClient();
+  const previousExternalData = useRef(externalData);
+
+  useEffect(() => {
+    const queryWasEnabled = previousExternalData.current === undefined;
+    previousExternalData.current = externalData;
+
+    // Setting enabled=false prevents future fetches but does not cancel one
+    // already in flight. Cancel only on the DB -> external-data transition;
+    // an initial external dataset must not disturb another observer's cache.
+    if (queryWasEnabled && externalData !== undefined) {
+      void queryClient.cancelQueries({
+        queryKey: queryKeys.demandPrediction.history(),
+        exact: true,
+      });
+    }
+  }, [externalData, queryClient]);
+
   const { data: messageHistory = [] } = useQuery({
     queryKey: queryKeys.demandPrediction.history(),
     // Dados externos já são a fonte completa desta renderização. Manter a
