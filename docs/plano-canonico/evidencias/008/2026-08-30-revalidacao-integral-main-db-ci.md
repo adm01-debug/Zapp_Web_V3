@@ -3,7 +3,7 @@
 > - Etapa primária: `008`
 > - Etapas relacionadas: `001`, `009`, `011`, `014`, `015`, `017`, `019`, `022`, `024`,
 >   `025`, `026`, `027`, `029`, `030`, `031`, `041`, `042`, `044`, `056`, `061`, `062`,
->   `063`, `064`, `068`, `081`, `082`, `084`, `086`, `088`, `089`, `090`, `096`, `097`,
+>   `063`, `064`, `068`, `081`, `082`, `084`, `086`, `087`, `088`, `089`, `090`, `096`, `097`,
 >   `098`, `099`, `100`
 > - Data/hora: `2026-08-30T07:51:33-03:00`
 > - Owner: engenharia Zapp Web V3
@@ -24,13 +24,15 @@ limpeza, acesso a dados de clientes ou mudança na VPS.
 ```text
 git fetch origin --prune
 git worktree add --detach <worktree-limpa> 8d9ec472a7ea45d366355e48dd4dff5e911e44cb
-git -C <worktree-limpa> rev-parse HEAD
+cd <worktree-limpa>  # todos os gates abaixo rodam dentro do worktree da baseline
+git rev-parse HEAD   # deve imprimir 8d9ec472a7ea45d366355e48dd4dff5e911e44cb
 bun install --frozen-lockfile
 bash scripts/check-fe-be-sync.sh
 bun test scripts/decouple/__tests__/schema-registry-validate.test.mjs
 bunx tsc --noEmit -p tsconfig.app.json
 bun run test
 bun run test:migrations
+NODE_OPTIONS=--max-old-space-size=4096 bun run build   # gera dist/ (gitignored): pre-requisito do perf:budget; heap no valor comprovado do runner (quality-gate.yml) — o default estourou e 6144 foi morto por OOM
 bun run perf:budget
 node scripts/audit-rls-coverage.mjs --check
 node scripts/check-deploy-pipeline-safety.mjs
@@ -77,7 +79,23 @@ FROM cron.job j LEFT JOIN LATERAL (
   SELECT status, start_time, return_message FROM cron.job_run_details
   WHERE jobid=j.jobid ORDER BY start_time DESC LIMIT 1
 ) d ON true
-WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
+WHERE j.jobid IN (527,528,529,530,531) ORDER BY j.jobid;
+
+-- Realtime: relações críticas presentes na publication supabase_realtime.
+SELECT n.nspname, c.relname
+FROM pg_publication_rel pr
+JOIN pg_publication p ON p.oid = pr.prpubid
+JOIN pg_class c ON c.oid = pr.prrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE p.pubname = 'supabase_realtime' AND n.nspname IN ('zapp','evo')
+ORDER BY 1, 2;
+
+-- Realtime: flag de publicação via raiz particionada.
+SELECT pubname, pubviaroot FROM pg_publication WHERE pubname = 'supabase_realtime';
+
+-- Ledger de migrations aplicadas: reproduz a contagem de versoes e a ultima versao registrada.
+SELECT count(*) AS total_versoes, max(version) AS ultima_versao
+FROM supabase_migrations.schema_migrations;
 ```
 
 ## Resultado observado
@@ -90,8 +108,8 @@ WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
 | `tsc --noEmit -p tsconfig.app.json` | verde | Prova direta, mas isolada; não substitui o gate oficial associado à etapa 031. |
 | `bun run test` | **falhou**: 1 teste, `deployConvergenceDefaultOn.test.ts` | O teste ainda espera a expressão antiga de `ENFORCE_CONVERGENCE`; 8.648 testes passaram, mas a suíte não é integralmente verde. |
 | `test:migrations` | verde: 25 testes | Prova somente os contratos cobertos por essas migrations. |
-| `perf:budget` | verde | Budget de bundle passa; Web Vitals/Lighthouse não foram fornecidos. |
-| RLS estático | verde, 14/31 tabelas críticas | É uma checagem estática; não substitui matriz por papel/workspace. |
+| `perf:budget` | verde | Budget de bundle passa; Web Vitals/Lighthouse não foram fornecidos. O gate exige `dist/index.html` e `dist/` é gitignored: em checkout limpo o `bun run build` do SHA pinado precisa rodar antes (passo incluído no procedimento acima). |
+| RLS estático | **cobertura incompleta: 14/31 tabelas críticas** | O script omite do relatório as tabelas críticas nunca encontradas nas migrations parseadas em vez de marcá-las como faltantes, podendo sair 0 com 17/31 sem evidência. Não é gate verde: exige correção do checker (materializar as 31 entradas de `CRITICAL_TABLES`) antes de servir como prova; também não substitui matriz por papel/workspace. |
 | schema registry | **falhou** | `docs/decouple/schema-registry/evo.json` possui `tables` vazio e falha no próprio teste. |
 
 ### Catálogo canônico em leitura
@@ -103,8 +121,8 @@ WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
 | Views | 417/440 views `public` e 27/257 views `zapp` não expõem `security_invoker=on` no catálogo. | Contradiz a alegação ampla de cobertura total; a etapa 029 permanece parcial. |
 | Funções de transferência | Duas assinaturas de `increment_snapshot_version` continuam ativas (`text` e `character varying`). As mutadoras `SECURITY DEFINER` de transferência são executáveis por `authenticated` e não contêm guarda interna de `auth.uid()`, papel ou workspace. | Etapas 026, 027, 041 e 042 não podem fechar; nenhuma alteração DB é autorizada por esta prova. |
 | Policies de transferência | `conversation_transfers` tem apenas leitura para `authenticated`; `transfer_comments` permite escrita autenticada somente para admin/supervisor. | Confirma o gap para agente comum e a necessidade de contrato/RPC transacional. |
-| Realtime | As sete relações críticas consultadas estão na publication e `publish_via_partition_root=true`. | Configuração é real; entrega/reconexão/dedupe ainda requerem E2E. |
-| Jobs | 244 jobs, 241 ativos. Jobs 527–529 e 531 existem e as execuções recentes consultadas estavam `succeeded`. | O agendamento existe; não prova relatório entregue nem retry/DLQ completos. |
+| Realtime | As sete relações críticas consultadas (`evo.evolution_messages`, `evo.evolution_conversations`, `evo.evolution_contacts`, `zapp.conversation_transfers`, `zapp.whatsapp_connections`, `zapp.failed_messages`, `zapp.message_reactions`) estão na publication e `publish_via_partition_root=true`. | Configuração é real; entrega/reconexão/dedupe ainda requerem E2E. |
+| Jobs | 244 jobs, 241 ativos. Jobs 527–531 existem e estão ativos — 530 é `sentinel-teste-mensal`. Na rodada original (07:51): 527, 529 e 531 `succeeded`; 528 (semanal) sem execução registrada. Limitação metodológica da rodada original: `ORDER BY start_time DESC` coloca `NULL` primeiro no PostgreSQL, e uma run `connecting` sem `start_time` pode ocultar a última execução concluída — por isso a re-consulta de 30/08 16:30, com ordenação monotônica (`runid DESC`) e runs transitórias isoladas, virou artefato próprio: [`2026-08-30-cron-reconsulta-jobs-527-531.md`](./2026-08-30-cron-reconsulta-jobs-527-531.md). | O agendamento existe; não prova relatório entregue nem retry/DLQ completos. |
 | Ledger | 792 versões; última `20260825093000`. | Requer reconciliação versionada repo×ledger para concluir 023/030. |
 | RPCs parciais | `export_user_data`, `import_user_data`, `enrich_contact`, `sync_to_crm` e `get_latest_analysis` continuam com mensagem de implementação ausente. | Etapas 061–064 permanecem abertas. |
 
