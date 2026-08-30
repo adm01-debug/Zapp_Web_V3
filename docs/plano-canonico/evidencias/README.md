@@ -88,6 +88,7 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 100 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
 | 001 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 008 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 008 | [`2026-08-30-cron-reconsulta-jobs-527-531.md`](./008/2026-08-30-cron-reconsulta-jobs-527-531.md) | `8d9ec472a` | parcial |
 | 009 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 011 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 014 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
@@ -101,11 +102,12 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 027 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 029 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 030 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
-| 031 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | válida |
+| 031 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 041 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 042 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 044 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 056 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 056 | [`2026-08-30-cron-reconsulta-jobs-527-531.md`](./008/2026-08-30-cron-reconsulta-jobs-527-531.md) | `8d9ec472a` | parcial |
 | 061 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 062 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 063 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
@@ -115,6 +117,7 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 082 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 084 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 086 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 087 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 088 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 089 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 090 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
