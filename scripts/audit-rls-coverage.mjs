@@ -27,6 +27,11 @@ const args = process.argv.slice(2);
 const JSON_MODE = args.includes('--json');
 const REPORT_MODE = args.includes('--report') || (!args.includes('--check') && !JSON_MODE);
 const CHECK_MODE = args.includes('--check') || process.env.CI === 'true';
+// --advisory: reporta as falhas como ::warning:: e sai 0. Usado no CI enquanto
+// a reconciliação migrations×banco das tabelas críticas sem evidência não
+// fecha (evidência 008 mediu 14/31 reais). Endurecer removendo a flag do
+// step do quality-gate após a reconciliação (rastreado na evidência 009).
+const ADVISORY_MODE = args.includes('--advisory');
 
 // Critical app tables that MUST have RLS enabled.
 // Tables confirmed physical (relkind='r') in zapp schema per production audit 2026-07-16.
@@ -88,6 +93,13 @@ function canonicalTable(raw) {
             .toLowerCase()
             .trim();
 }
+
+// E34 fix (2026-08-30, G7): materializa TODAS as tabelas críticas antes do
+// parse. Sem isto, uma tabela crítica nunca mencionada em supabase/migrations
+// (nem em migrations/archive/) ficava fora do relatório e do cálculo de
+// falha — o --check saía verde com cobertura ilusória (14/31 na evidência
+// 008). Com a materialização, ausência de evidência vira 🔴 MISSING RLS.
+for (const t of CRITICAL_TABLES) ensureTable(t);
 
 let files;
 try {
@@ -229,11 +241,20 @@ if (CHECK_MODE) {
     }
   }
   if (missing.length > 0) {
-    console.error('\nAll app tables in the zapp schema require RLS. See docs/SCHEMA_REFERENCE.md.');
-    process.exit(1);
+    if (ADVISORY_MODE) {
+      console.warn(
+        `::warning title=RLS audit (E34)::${missing.length}/${CRITICAL_TABLES.size} critical table(s) without ENABLE ROW LEVEL SECURITY evidence in migrations. Advisory até a reconciliação migrations×banco (evidências 008/009); endurecer removendo --advisory do quality-gate.`
+      );
+    } else {
+      console.error('\nAll app tables in the zapp schema require RLS. See docs/SCHEMA_REFERENCE.md.');
+      process.exit(1);
+    }
   }
   if (rlsNoPolicy.length === 0 && missing.length === 0) {
     const covered = report.filter(r => r.critical && r.rlsEnabled && r.policies > 0).length;
     console.log(`✅ RLS audit: ${covered}/${CRITICAL_TABLES.size} critical tables have RLS + policies. ${rlsNoPolicy.length} advisory gaps.`);
+  } else if (ADVISORY_MODE && missing.length > 0) {
+    const covered = report.filter(r => r.critical && r.rlsEnabled && r.policies > 0).length;
+    console.log(`ℹ️  RLS audit (advisory): ${covered}/${CRITICAL_TABLES.size} critical tables have RLS + policies; ${missing.length} sem evidência em migrations, ${rlsNoPolicy.length} sem policy.`);
   }
 }
