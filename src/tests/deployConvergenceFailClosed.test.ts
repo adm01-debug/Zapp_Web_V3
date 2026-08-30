@@ -21,7 +21,7 @@ describe('deploy convergence gate (fail-closed)', () => {
 
   it('runs the Swarm convergence check unconditionally (no if: guard)', () => {
     const step = workflow.match(
-      /- name: ✅ Convergência verificada \(Swarm × imagem do deploy\)\n([\s\S]*?)(?=\n      - name:|\n  \w)/,
+      /- name: ✅ Convergência verificada \(Swarm × imagem do deploy\)\n([\s\S]*?)(?=\n {6}- name:|\n {2}\w)/,
     )?.[0];
     expect(step).toBeDefined();
     expect(step).not.toMatch(/^\s+if:/m);
