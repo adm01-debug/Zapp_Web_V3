@@ -88,6 +88,7 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 100 | [`2026-08-29-validacao-exaustiva-pos-p0.md`](./008/2026-08-29-validacao-exaustiva-pos-p0.md) | `391c18694` | parcial |
 | 001 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 008 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 009 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 011 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 014 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 015 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
@@ -109,8 +110,10 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 062 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
 | 063 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
 | 064 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
+| 068 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 081 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 082 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 084 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 086 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 088 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 089 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
