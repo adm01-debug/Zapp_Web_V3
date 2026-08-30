@@ -32,6 +32,41 @@ declarado concluído: há overloads incompatíveis com as tabelas atuais e mutat
 `SECURITY DEFINER` expostos a `authenticated` sem autorização interna. Nenhum objeto foi
 alterado para produzir esse diagnóstico.
 
+## Delta auditado em 30/08/2026
+
+> Baseline revalidada: `origin/main@8d9ec472a7ea45d366355e48dd4dff5e911e44cb`.
+> A evidência reproduzível desta rodada está em
+> [`2026-08-30-revalidacao-integral-main-db-ci.md`](./evidencias/008/2026-08-30-revalidacao-integral-main-db-ci.md).
+
+Esta revalidação substituiu o SHA de 29/08 por uma `main` mais nova, que incorporou o
+catálogo de schema e o guard de ACL MCP. Ela não autoriza nem executa mudanças no banco,
+na VPS ou em objetos candidatos a limpeza.
+
+| Grupo de etapas | Resultado revalidado | Consequência de status |
+|---|---|---|
+| 001–010 | O registro de evidências e o catálogo avançaram, mas ownership, baseline operacional única e critérios de GO continuam incompletos. | Permanecem parciais. |
+| 011–020 | Catálogo vivo confirmou a topologia, RLS e jobs; ainda há relações RLS sem policy, views fora de `security_invoker` e inventário `evo.json` inválido. | Permanecem parciais. |
+| 021–030 | O novo checker FE↔BE passou; o registry `evo.json` falha no próprio teste, o overload de snapshot continua duplicado e o contrato de transferências continua sem escrita autenticada direta segura. | 024 avançou, mas 021–030 não fecham. |
+| 031–040 | TypeScript direto permanece verde; persistência completa de preferências, canais e superfícies visíveis sem efeito continuam sem prova fim a fim. | 031 continua concluída; demais não avançam. |
+| 041–050 | Transferência single tem contenções já integradas, mas bulk/handoff/timeline, atomicidade, ticket persistente, concorrência e delete-instance seguem abertos. | 041/042/044 permanecem parciais; os demais mantêm a classificação anterior. |
+| 051–070 | As RPCs `export_user_data`, `import_user_data`, `enrich_contact`, `sync_to_crm` e `get_latest_analysis` ainda declaram implementação ausente no catálogo vivo. | Itens de stubs e integrações não avançam. |
+| 071–080 | Os guards existem, porém evidência de isolamento efetivo, execução live e fechamento das exceções ainda é incompleta. | Permanecem parciais. |
+| 081–090 | A suíte local atual falha em um teste de convergência; o teste do schema registry falha; a proteção de branch e o alerta N8N falham em CI. | Permanecem parciais. |
+| 091–100 | E2E contra VPS, cleanup E2E, health pós-deploy e drift Edge têm falhas reais na evidência atual. | Permanecem parciais; 100 continua aberto. |
+
+### Contagem atual, sob o critério rigoroso do plano
+
+| Estado | Quantidade | Observação |
+|---|---:|---|
+| Concluída com prova | 1 | Somente 031: TypeScript direto e gate oficial no SHA aplicável. |
+| Parcial | 79 | Existe implementação ou controle, mas falta ao menos um gate de integração, banco, produção ou recuperação. |
+| Aberta/não implementada | 19 | Inclui stubs/RPCs e fluxos visíveis sem backend ou contrato concluído. |
+| Decisão necessária | 1 | Etapa 070: limpeza não é autorizada por esta auditoria. |
+
+Nenhuma checkbox adicional deve ser marcada com base nesta rodada. Há documentação histórica
+que usa formulações como “plano executado”; ela deve ser tratada como relato histórico, não
+como aceite do plano canônico vigente (Etapa 022).
+
 ## Fotografia imutável da baseline de 28/08
 
 ### Veredito da baseline de 28/08
