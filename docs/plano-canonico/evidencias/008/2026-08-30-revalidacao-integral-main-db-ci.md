@@ -32,7 +32,7 @@ bun test scripts/decouple/__tests__/schema-registry-validate.test.mjs
 bunx tsc --noEmit -p tsconfig.app.json
 bun run test
 bun run test:migrations
-bun run build          # gera dist/ (gitignored): pre-requisito do perf:budget
+NODE_OPTIONS=--max-old-space-size=4096 bun run build   # gera dist/ (gitignored): pre-requisito do perf:budget; heap no valor comprovado do runner (quality-gate.yml) — o default estourou e 6144 foi morto por OOM
 bun run perf:budget
 node scripts/audit-rls-coverage.mjs --check
 node scripts/check-deploy-pipeline-safety.mjs
@@ -79,7 +79,7 @@ FROM cron.job j LEFT JOIN LATERAL (
   SELECT status, start_time, return_message FROM cron.job_run_details
   WHERE jobid=j.jobid ORDER BY start_time DESC LIMIT 1
 ) d ON true
-WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
+WHERE j.jobid IN (527,528,529,530,531) ORDER BY j.jobid;
 
 -- Realtime: relações críticas presentes na publication supabase_realtime.
 SELECT n.nspname, c.relname
@@ -122,7 +122,7 @@ FROM supabase_migrations.schema_migrations;
 | Funções de transferência | Duas assinaturas de `increment_snapshot_version` continuam ativas (`text` e `character varying`). As mutadoras `SECURITY DEFINER` de transferência são executáveis por `authenticated` e não contêm guarda interna de `auth.uid()`, papel ou workspace. | Etapas 026, 027, 041 e 042 não podem fechar; nenhuma alteração DB é autorizada por esta prova. |
 | Policies de transferência | `conversation_transfers` tem apenas leitura para `authenticated`; `transfer_comments` permite escrita autenticada somente para admin/supervisor. | Confirma o gap para agente comum e a necessidade de contrato/RPC transacional. |
 | Realtime | As sete relações críticas consultadas (`evo.evolution_messages`, `evo.evolution_conversations`, `evo.evolution_contacts`, `zapp.conversation_transfers`, `zapp.whatsapp_connections`, `zapp.failed_messages`, `zapp.message_reactions`) estão na publication e `publish_via_partition_root=true`. | Configuração é real; entrega/reconexão/dedupe ainda requerem E2E. |
-| Jobs | 244 jobs, 241 ativos. Jobs 527–529 e 531 existem; as últimas execuções de 527, 529 e 531 estavam `succeeded` e o 528 (semanal) ainda não possui execução registrada. | O agendamento existe; não prova relatório entregue nem retry/DLQ completos. |
+| Jobs | 244 jobs, 241 ativos. Jobs 527–531 existem e estão ativos — 530 é `sentinel-teste-mensal` (incluído na re-consulta de 30/08 16:30, em que os cinco jobs exibiam última run `connecting` sem `start_time`: estado transitório do pg_cron, não comprova execução). Na rodada original: 527, 529 e 531 `succeeded`; 528 (semanal) sem execução registrada. | O agendamento existe; não prova relatório entregue nem retry/DLQ completos. |
 | Ledger | 792 versões; última `20260825093000`. | Requer reconciliação versionada repo×ledger para concluir 023/030. |
 | RPCs parciais | `export_user_data`, `import_user_data`, `enrich_contact`, `sync_to_crm` e `get_latest_analysis` continuam com mensagem de implementação ausente. | Etapas 061–064 permanecem abertas. |
 
