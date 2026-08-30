@@ -34,7 +34,9 @@ const CHECK_MODE = args.includes('--check') || process.env.CI === 'true';
 const ADVISORY_MODE = args.includes('--advisory');
 
 // Critical app tables that MUST have RLS enabled.
-// Tables confirmed physical (relkind='r') in zapp schema per production audit 2026-07-16.
+// 28 tabelas físicas (relkind='r') no schema zapp — audit 2026-07-16, com
+// cross-check DB de 2026-08-30 (evidência 009) que reclassificou 3 entradas
+// como views security_invoker (ver CRITICAL_VIEWS abaixo).
 const CRITICAL_TABLES = new Set([
   'profiles',
   'workspaces',
@@ -42,9 +44,6 @@ const CRITICAL_TABLES = new Set([
   'whatsapp_connections',
   'instance_registry',
   'user_roles',
-  'contacts',
-  'conversations',
-  'messages',
   'departments',
   'queues',
   'queue_members',
@@ -68,6 +67,16 @@ const CRITICAL_TABLES = new Set([
   'email_accounts',
   'email_threads',
 ]);
+
+// G8-5 (2026-08-30): zapp.contacts / zapp.conversations / zapp.messages NÃO
+// são tabelas físicas — são views security_invoker sobre evo.evolution_*.
+// Views não aceitam ENABLE ROW LEVEL SECURITY, então a recomendação que o
+// --check emitia para elas ("add ALTER TABLE ... ENABLE ROW LEVEL SECURITY")
+// era tecnicamente inválida. A proteção vem das tabelas base evo.* (RLS
+// confirmado no cross-check DB de 2026-08-30) e é validada pela suíte viva
+// rls-role-matrix.test.ts. Elas seguem no relatório como 🔎 view e ficam
+// fora do cálculo de falha do gate.
+const CRITICAL_VIEWS = new Set(['contacts', 'conversations', 'messages']);
 
 // Roles recognized in policy definitions
 const KNOWN_ROLES = ['anon', 'authenticated', 'service_role', 'supabase_admin'];
@@ -100,6 +109,9 @@ function canonicalTable(raw) {
 // falha — o --check saía verde com cobertura ilusória (14/31 na evidência
 // 008). Com a materialização, ausência de evidência vira 🔴 MISSING RLS.
 for (const t of CRITICAL_TABLES) ensureTable(t);
+// Views security_invoker críticas aparecem no relatório (🔎), mas fora do
+// cálculo de falha — ver CRITICAL_VIEWS.
+for (const v of CRITICAL_VIEWS) ensureTable(v);
 
 let files;
 try {
@@ -128,16 +140,89 @@ try {
   process.exit(1);
 }
 
+// G8-3 (2026-08-30): comentários SQL NÃO são evidência. Antes deste fix,
+// `-- ALTER TABLE ... ENABLE ROW LEVEL SECURITY` e blocos /* ... */ eram
+// parseados como DDL real — falso-positivo inaceitável num gate de
+// segurança. O strip preserva o conteúdo de string literals ('...' com
+// escape ''), mantendo visível o DDL dinâmico emitido via EXECUTE '...'
+// (ex.: criação dinâmica de partições). Newlines são preservados para não
+// fundir tokens de linhas distintas.
+function stripSqlComments(src) {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  let state = 'code'; // code | line | block | string
+  while (i < n) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (state === 'code') {
+      if (c === '-' && next === '-') {
+        state = 'line';
+        out += '  ';
+        i += 2;
+        continue;
+      }
+      if (c === '/' && next === '*') {
+        state = 'block';
+        out += '  ';
+        i += 2;
+        continue;
+      }
+      if (c === "'") {
+        state = 'string';
+      }
+      out += c;
+      i += 1;
+      continue;
+    }
+    if (state === 'line') {
+      if (c === '\n') {
+        state = 'code';
+        out += c;
+      } else {
+        out += ' ';
+      }
+      i += 1;
+      continue;
+    }
+    if (state === 'block') {
+      if (c === '*' && next === '/') {
+        state = 'code';
+        out += '  ';
+        i += 2;
+        continue;
+      }
+      out += c === '\n' ? '\n' : ' ';
+      i += 1;
+      continue;
+    }
+    // string literal: preserva; '' é escape de aspa dentro de string
+    out += c;
+    if (c === "'") {
+      if (next === "'") {
+        out += next;
+        i += 2;
+        continue;
+      }
+      state = 'code';
+    }
+    i += 1;
+  }
+  return out;
+}
+
 for (const filePath of files) {
-  const src = readFileSync(filePath, 'utf8');
+  const src = stripSqlComments(readFileSync(filePath, 'utf8'));
   const lines = src.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Detect: ALTER TABLE [IF EXISTS] [schema.]table ENABLE ROW LEVEL SECURITY
+    // Detect: ALTER TABLE [IF EXISTS] [ONLY] [schema.]table ENABLE ROW LEVEL SECURITY
+    // G8-4 (2026-08-30): a gramática aceita ONLY (ALTER TABLE [IF EXISTS]
+    // [ONLY] name); sem ele o gate perdia evidência válida (falso-negativo).
     const rlsMatch = line.match(
-      /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?([`"'\w.]+)\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i
+      /ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?([`"'\w.]+)\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i
     );
     if (rlsMatch) {
       const tbl = canonicalTable(rlsMatch[1].replace(/[`"']/g, ''));
@@ -186,17 +271,21 @@ for (const filePath of files) {
 const report = [];
 for (const [table, info] of [...state.tables.entries()].sort()) {
   const isCritical = CRITICAL_TABLES.has(table);
+  const isCriticalView = CRITICAL_VIEWS.has(table);
   const hasAnyPolicy = info.policies.length > 0;
   const coveredOps = new Set(info.policies.map(p => p.operation));
   const coveredRoles = new Set(info.policies.flatMap(p => p.roles));
 
-  const status = info.rlsEnabled
-    ? (hasAnyPolicy ? '✅ RLS+policy' : '⚠️  RLS enabled, no policy')
-    : (isCritical ? '🔴 MISSING RLS' : '⬜ no RLS');
+  const status = isCriticalView
+    ? '🔎 view security_invoker (RLS na base evo.*)'
+    : info.rlsEnabled
+      ? (hasAnyPolicy ? '✅ RLS+policy' : '⚠️  RLS enabled, no policy')
+      : (isCritical ? '🔴 MISSING RLS' : '⬜ no RLS');
 
   report.push({
     table,
     critical: isCritical,
+    criticalView: isCriticalView,
     rlsEnabled: info.rlsEnabled,
     policies: info.policies.length,
     coveredOps: [...coveredOps].join(', ') || '—',

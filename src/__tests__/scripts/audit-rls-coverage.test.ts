@@ -15,6 +15,11 @@ const listMatch = scriptSrc.match(/const CRITICAL_TABLES = new Set\(\[([\s\S]*?)
 const criticalTables = listMatch
   ? [...listMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
   : [];
+// G8-5: views security_invoker críticas (protegidas pelas tabelas base evo.*)
+const viewMatch = scriptSrc.match(/const CRITICAL_VIEWS = new Set\(\[([\s\S]*?)\]\);/);
+const criticalViews = viewMatch
+  ? [...viewMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+  : [];
 
 const makeFixture = (sql: string): string => {
   const dir = mkdtempSync(join(tmpdir(), 'rls-audit-'));
@@ -33,7 +38,11 @@ const runAudit = (cwd: string, extraArgs: string[] = []) =>
 // antes do parse e a ausência de evidência derruba o --check.
 describe('audit-rls-coverage (E34)', () => {
   it('exposes a non-trivial critical list parsed from the script itself', () => {
-    expect(criticalTables.length).toBeGreaterThanOrEqual(31);
+    // 28 tabelas físicas + 3 views security_invoker = 31 relações críticas
+    // (cross-check DB 2026-08-30, evidência 009).
+    expect(criticalTables.length).toBeGreaterThanOrEqual(28);
+    expect(criticalViews).toEqual(['contacts', 'conversations', 'messages']);
+    expect(criticalTables.length + criticalViews.length).toBeGreaterThanOrEqual(31);
   });
 
   it('fails closed when critical tables have no migration evidence', () => {
@@ -70,5 +79,59 @@ describe('audit-rls-coverage (E34)', () => {
     const result = runAudit(fixture, ['--advisory']);
     expect(result.status).toBe(0);
     expect(result.stderr).toContain('::warning title=RLS audit (E34)::');
+  });
+
+  it('ignores RLS evidence inside SQL comments (G8-3)', () => {
+    // profiles aparece SÓ em comentários (-- e bloco /* */): antes do fix o
+    // parser contava comentário como evidência e o gate saía verde.
+    const sql = criticalTables
+      .map((t) => {
+        if (t === 'profiles') {
+          return (
+            `-- ALTER TABLE zapp.${t} ENABLE ROW LEVEL SECURITY;\n` +
+            `/*\nALTER TABLE zapp.${t} ENABLE ROW LEVEL SECURITY;\n*/`
+          );
+        }
+        return (
+          `ALTER TABLE zapp.${t} ENABLE ROW LEVEL SECURITY;\n` +
+          `CREATE POLICY ${t}_sel ON zapp.${t} FOR SELECT TO authenticated USING (true);`
+        );
+      })
+      .join('\n');
+    const result = runAudit(makeFixture(sql));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('1 critical table(s) without');
+    expect(result.stderr).toContain('zapp.profiles');
+  });
+
+  it('accepts ALTER TABLE ONLY as valid RLS evidence (G8-4)', () => {
+    const sql = criticalTables
+      .map(
+        (t) =>
+          `ALTER TABLE ONLY zapp.${t} ENABLE ROW LEVEL SECURITY;\n` +
+          `CREATE POLICY ${t}_sel ON zapp.${t} FOR SELECT TO authenticated USING (true);`,
+      )
+      .join('\n');
+    const result = runAudit(makeFixture(sql));
+    expect(result.status).toBe(0);
+  });
+
+  it('does not require RLS evidence for security_invoker views (G8-5)', () => {
+    // O fixture cobre apenas as tabelas físicas — contacts, conversations e
+    // messages ficam sem evidência e o gate deve passar: são views
+    // security_invoker protegidas pelas tabelas base evo.* (validação viva
+    // em rls-role-matrix.test.ts).
+    const sql = criticalTables
+      .map(
+        (t) =>
+          `ALTER TABLE zapp.${t} ENABLE ROW LEVEL SECURITY;\n` +
+          `CREATE POLICY ${t}_sel ON zapp.${t} FOR SELECT TO authenticated USING (true);`,
+      )
+      .join('\n');
+    const result = runAudit(makeFixture(sql));
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      `${criticalTables.length}/${criticalTables.length} critical tables have RLS + policies`,
+    );
   });
 });
