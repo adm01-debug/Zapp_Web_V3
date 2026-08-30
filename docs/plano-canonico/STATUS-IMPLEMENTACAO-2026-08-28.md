@@ -51,8 +51,8 @@ na VPS ou em objetos candidatos a limpeza.
 | 041–050 | Transferência single tem contenções já integradas, mas bulk/handoff/timeline, atomicidade, ticket persistente, concorrência e delete-instance seguem abertos. | 041/042/044 permanecem parciais; os demais mantêm a classificação anterior. |
 | 051–070 | As RPCs `export_user_data`, `import_user_data`, `enrich_contact`, `sync_to_crm` e `get_latest_analysis` ainda declaram implementação ausente no catálogo vivo. | Itens de stubs e integrações não avançam. |
 | 071–080 | Os guards existem, porém evidência de isolamento efetivo, execução live e fechamento das exceções ainda é incompleta. | Permanecem parciais. |
-| 081–090 | A suíte local atual falha em um teste de convergência; o teste do schema registry falha; a proteção de branch e o alerta N8N falham em CI. | Permanecem parciais. |
-| 091–100 | E2E contra VPS, cleanup E2E, health pós-deploy e drift Edge têm falhas reais na evidência atual. | Permanecem parciais; 100 continua aberto. |
+| 081–090 | A suíte local atual falha em um teste de convergência; o teste do schema registry falha; o E2E representativo contra a VPS falha (086), o cleanup E2E/Nightly falha ao operar uma view (087) e o drift de Edge Functions/`_shared` entre repo e volume permanece aberto (088); a proteção de branch e o alerta N8N falham em CI. | Permanecem parciais. |
+| 091–100 | Health pós-deploy não foi comprovado e segue falho na evidência atual; não há staging representativo, rollout progressivo ensaiado nem aceite produtivo registrado. | Permanecem parciais; 100 continua aberto. |
 
 ### Contagem atual, sob o critério rigoroso do plano
 

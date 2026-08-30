@@ -3,7 +3,7 @@
 > - Etapa primária: `008`
 > - Etapas relacionadas: `001`, `009`, `011`, `014`, `015`, `017`, `019`, `022`, `024`,
 >   `025`, `026`, `027`, `029`, `030`, `031`, `041`, `042`, `044`, `056`, `061`, `062`,
->   `063`, `064`, `068`, `081`, `082`, `084`, `086`, `088`, `089`, `090`, `096`, `097`,
+>   `063`, `064`, `068`, `081`, `082`, `084`, `086`, `087`, `088`, `089`, `090`, `096`, `097`,
 >   `098`, `099`, `100`
 > - Data/hora: `2026-08-30T07:51:33-03:00`
 > - Owner: engenharia Zapp Web V3
@@ -24,13 +24,15 @@ limpeza, acesso a dados de clientes ou mudança na VPS.
 ```text
 git fetch origin --prune
 git worktree add --detach <worktree-limpa> 8d9ec472a7ea45d366355e48dd4dff5e911e44cb
-git -C <worktree-limpa> rev-parse HEAD
+cd <worktree-limpa>  # todos os gates abaixo rodam dentro do worktree da baseline
+git rev-parse HEAD   # deve imprimir 8d9ec472a7ea45d366355e48dd4dff5e911e44cb
 bun install --frozen-lockfile
 bash scripts/check-fe-be-sync.sh
 bun test scripts/decouple/__tests__/schema-registry-validate.test.mjs
 bunx tsc --noEmit -p tsconfig.app.json
 bun run test
 bun run test:migrations
+bun run build          # gera dist/ (gitignored): pre-requisito do perf:budget
 bun run perf:budget
 node scripts/audit-rls-coverage.mjs --check
 node scripts/check-deploy-pipeline-safety.mjs
@@ -78,6 +80,10 @@ FROM cron.job j LEFT JOIN LATERAL (
   WHERE jobid=j.jobid ORDER BY start_time DESC LIMIT 1
 ) d ON true
 WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
+
+-- Ledger de migrations aplicadas: reproduz a contagem de versoes e a ultima versao registrada.
+SELECT count(*) AS total_versoes, max(version) AS ultima_versao
+FROM supabase_migrations.schema_migrations;
 ```
 
 ## Resultado observado
@@ -90,8 +96,8 @@ WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
 | `tsc --noEmit -p tsconfig.app.json` | verde | Prova direta, mas isolada; não substitui o gate oficial associado à etapa 031. |
 | `bun run test` | **falhou**: 1 teste, `deployConvergenceDefaultOn.test.ts` | O teste ainda espera a expressão antiga de `ENFORCE_CONVERGENCE`; 8.648 testes passaram, mas a suíte não é integralmente verde. |
 | `test:migrations` | verde: 25 testes | Prova somente os contratos cobertos por essas migrations. |
-| `perf:budget` | verde | Budget de bundle passa; Web Vitals/Lighthouse não foram fornecidos. |
-| RLS estático | verde, 14/31 tabelas críticas | É uma checagem estática; não substitui matriz por papel/workspace. |
+| `perf:budget` | verde | Budget de bundle passa; Web Vitals/Lighthouse não foram fornecidos. O gate exige `dist/index.html` e `dist/` é gitignored: em checkout limpo o `bun run build` do SHA pinado precisa rodar antes (passo incluído no procedimento acima). |
+| RLS estático | **cobertura incompleta: 14/31 tabelas críticas** | O script omite do relatório as tabelas críticas nunca encontradas nas migrations parseadas em vez de marcá-las como faltantes, podendo sair 0 com 17/31 sem evidência. Não é gate verde: exige correção do checker (materializar as 31 entradas de `CRITICAL_TABLES`) antes de servir como prova; também não substitui matriz por papel/workspace. |
 | schema registry | **falhou** | `docs/decouple/schema-registry/evo.json` possui `tables` vazio e falha no próprio teste. |
 
 ### Catálogo canônico em leitura
