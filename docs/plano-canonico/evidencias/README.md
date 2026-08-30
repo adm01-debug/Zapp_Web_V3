@@ -97,7 +97,7 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 022 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 024 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 025 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
-| 026 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
+| 026 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 027 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 029 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 030 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
@@ -106,10 +106,10 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 042 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 044 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 056 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
-| 061 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
-| 062 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
-| 063 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
-| 064 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | aberto |
+| 061 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 062 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 063 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 064 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 068 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 081 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 082 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |

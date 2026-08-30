@@ -7,7 +7,7 @@
 >   `098`, `099`, `100`
 > - Data/hora: `2026-08-30T07:51:33-03:00`
 > - Owner: engenharia Zapp Web V3
-> - Ambiente: checkout limpo de `origin/main`, GitHub Actions e PostgreSQL canônico em
+> - Ambiente: checkout limpo e destacado na baseline, GitHub Actions e PostgreSQL canônico em
 >   consultas exclusivamente `SELECT`
 > - Baseline: `8d9ec472a7ea45d366355e48dd4dff5e911e44cb`
 > - Veredito: `parcial`
@@ -23,7 +23,8 @@ limpeza, acesso a dados de clientes ou mudança na VPS.
 
 ```text
 git fetch origin --prune
-git worktree add --detach <worktree-limpa> origin/main
+git worktree add --detach <worktree-limpa> 8d9ec472a7ea45d366355e48dd4dff5e911e44cb
+git -C <worktree-limpa> rev-parse HEAD
 bun install --frozen-lockfile
 bash scripts/check-fe-be-sync.sh
 bun test scripts/decouple/__tests__/schema-registry-validate.test.mjs
@@ -35,9 +36,49 @@ node scripts/audit-rls-coverage.mjs --check
 node scripts/check-deploy-pipeline-safety.mjs
 ```
 
-No catálogo, as consultas foram agregadas e somente leitura: `pg_class`, `pg_proc`,
-`pg_policy`, `pg_publication_tables`, `cron.job`, `cron.job_run_details`,
-`pg_extension`, `pg_default_acl` e `supabase_migrations.schema_migrations`.
+No catálogo, as consultas foram agregadas e somente leitura. As consultas de referência
+abaixo permitem repetir os resultados sem acessar dados de clientes; os nomes das relações
+sensíveis devem ser tratados como metadados de auditoria.
+
+```sql
+-- Contagem de relações por tipo nos schemas de domínio.
+SELECT n.nspname, c.relkind, count(*)
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname IN ('zapp', 'evo', 'public') AND c.relkind IN ('r','p','v','m','S')
+GROUP BY 1, 2 ORDER BY 1, 2;
+
+-- RLS sem policy (não conclui se é intencional: apenas lista para classificação).
+SELECT n.nspname, c.relname
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname IN ('zapp','evo','public') AND c.relkind IN ('r','p')
+  AND c.relrowsecurity AND NOT EXISTS (
+    SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid
+  )
+ORDER BY 1,2;
+
+-- Views que não declaram explicitamente security_invoker.
+SELECT n.nspname, count(*) FILTER (WHERE NOT (COALESCE(c.reloptions, ARRAY[]::text[]) @> ARRAY['security_invoker=on'])) AS sem_opcao,
+       count(*) AS total
+FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname IN ('zapp','evo','public') AND c.relkind='v'
+GROUP BY 1 ORDER BY 1;
+
+-- Assinatura, privilégio e corpo das funções alvo, sem executá-las.
+SELECT n.nspname, p.proname, pg_get_function_identity_arguments(p.oid),
+       p.prosecdef, p.proconfig, has_function_privilege('authenticated', p.oid, 'EXECUTE'),
+       pg_get_functiondef(p.oid) AS function_definition
+FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname='zapp' AND p.proname IN ('increment_snapshot_version','fn_create_transfer',
+  'fn_accept_transfer','fn_complete_transfer','fn_return_transfer','fn_transfer_comment');
+
+-- Jobs ativos e último resultado dos jobs de relatórios/dispatch.
+SELECT j.jobid, j.jobname, j.active, d.status, d.start_time, d.return_message
+FROM cron.job j LEFT JOIN LATERAL (
+  SELECT status, start_time, return_message FROM cron.job_run_details
+  WHERE jobid=j.jobid ORDER BY start_time DESC LIMIT 1
+) d ON true
+WHERE j.jobid IN (527,528,529,531) ORDER BY j.jobid;
+```
 
 ## Resultado observado
 
@@ -46,7 +87,7 @@ No catálogo, as consultas foram agregadas e somente leitura: `pg_class`, `pg_pr
 | Verificação | Resultado | Leitura correta |
 |---|---|---|
 | `check-fe-be-sync.sh` | verde: 84 RPCs e 179 relações resolvidas | O erro estático anterior foi corrigido pelo catálogo/snapshot incorporado em `main`; a etapa 024 ainda exige fixtures e reconciliação semântica completa. |
-| `tsc --noEmit -p tsconfig.app.json` | verde | Sustenta a conclusão já registrada da etapa 031. |
+| `tsc --noEmit -p tsconfig.app.json` | verde | Prova direta, mas isolada; não substitui o gate oficial associado à etapa 031. |
 | `bun run test` | **falhou**: 1 teste, `deployConvergenceDefaultOn.test.ts` | O teste ainda espera a expressão antiga de `ENFORCE_CONVERGENCE`; 8.648 testes passaram, mas a suíte não é integralmente verde. |
 | `test:migrations` | verde: 25 testes | Prova somente os contratos cobertos por essas migrations. |
 | `perf:budget` | verde | Budget de bundle passa; Web Vitals/Lighthouse não foram fornecidos. |
@@ -74,7 +115,7 @@ Os check-runs do mesmo SHA não permitem chamar release/observação de concluí
 | Check/run | Resultado | Fato observado |
 |---|---|---|
 | `E39 — hash drift` / run `33303402251` | falhou | 2 Edge Functions e 5 arquivos `_shared` estão no volume, mas não no repo; nenhuma remoção foi feita. |
-| `Playwright Inbox contra VPS` / run `33303058854` | falhou | artefatos foram publicados; o job finalizou com falha contra a VPS. |
+| [`Playwright Inbox contra VPS`](https://github.com/adm01-debug/Zapp_Web_V3/actions/runs/33303058854) | falhou | O job finalizou com falha contra a VPS. Artefatos: [`test-results-e2e-inbox` (9729580464)](https://github.com/adm01-debug/Zapp_Web_V3/actions/runs/33303058854/artifacts/9729580464) e [`e2e-inbox-vps-report` (9729580636)](https://github.com/adm01-debug/Zapp_Web_V3/actions/runs/33303058854/artifacts/9729580636). |
 | `rpc_e2e_cleanup` / run `33298591843` | falhou | tentativa de `ALTER ... DISABLE TRIGGER` em `evolution_contacts`, que é view naquele caminho. |
 | alerta N8N / run `33303140466` | falhou | webhook de alerta retornou erro HTTP (curl 22) após a falha de Inbox. |
 | proteção de branch / run `33296312904` | falhou | governança não possui prova verde nessa execução. |
