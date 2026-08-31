@@ -57,6 +57,10 @@ export function isPermanentQueryError(error: unknown): boolean {
   const errName = (e['name'] as string | undefined) ?? '';
   if (errName === 'SupabaseQueueSaturatedError') return true;
   if (errName === 'SupabaseQueueTimeoutError') return true;
+  if (msg.includes('supabasequeuesaturatederror')) return true;
+  if (msg.includes('supabasequeuetimeouterror')) return true;
+  if (msg.includes('supabase queue saturated')) return true;
+  if (msg.includes('supabase queue wait timed out')) return true;
 
   return false;
 }

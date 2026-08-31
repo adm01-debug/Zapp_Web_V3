@@ -5,6 +5,7 @@ import { sendMessageToContact } from './messageSender';
 import { isValidUUID } from '@/utils/uuid';
 import { touchLastSeen } from '../../services/touchLastSeen';
 import type { ConversationWithMessages } from './types';
+import { isTransientMarkReadError, persistMessagesRead } from '../../services/markMessagesRead';
 
 const log = getLogger('ConversationActions');
 
@@ -24,36 +25,73 @@ export function useConversationActions({ commitConversations }: UseConversationA
   // e descarregadas em UM PATCH .in('contact_id', ids). O update otimista
   // (commitConversations) permanece imediato por chamada.
   const MARK_READ_FLUSH_MS = 250;
+  const MARK_READ_RETRY_BASE_MS = 1_000;
+  const MARK_READ_MAX_RETRIES = 3;
   const pendingMarkReadRef = useRef<Set<string>>(new Set());
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markReadRetryCountRef = useRef(0);
+  const markReadUnmountingRef = useRef(false);
+  const flushMarkAsReadRef = useRef<(allowRetry?: boolean) => Promise<void>>(async () => {});
 
-  const flushMarkAsRead = useCallback(async () => {
-    if (markReadTimerRef.current !== null) {
-      clearTimeout(markReadTimerRef.current);
-      markReadTimerRef.current = null;
-    }
-    const ids = Array.from(pendingMarkReadRef.current);
-    pendingMarkReadRef.current = new Set();
-    if (ids.length === 0) return;
-
-    const { error } = await dbFrom('messages')
-      .update({ is_read: true })
-      .in('contact_id', ids)
-      .eq('sender', 'contact')
-      .eq('is_read', false);
-    if (error) log.error('Error marking messages as read (batch):', error);
-
-    // Touch last_seen throttled global (máx. 1 PATCH a cada 2min, deduplicado entre instâncias)
-    touchLastSeen();
-  }, []);
-
-  const scheduleMarkAsReadFlush = useCallback(() => {
+  const scheduleMarkAsReadFlush = useCallback((delayMs = MARK_READ_FLUSH_MS) => {
     if (markReadTimerRef.current !== null) clearTimeout(markReadTimerRef.current);
     markReadTimerRef.current = setTimeout(() => {
       markReadTimerRef.current = null;
-      void flushMarkAsRead();
-    }, MARK_READ_FLUSH_MS);
-  }, [flushMarkAsRead]);
+      void flushMarkAsReadRef.current(true);
+    }, delayMs);
+  }, []);
+
+  const flushMarkAsRead = useCallback(
+    async (allowRetry = true) => {
+      if (markReadTimerRef.current !== null) {
+        clearTimeout(markReadTimerRef.current);
+        markReadTimerRef.current = null;
+      }
+      const ids = Array.from(pendingMarkReadRef.current);
+      pendingMarkReadRef.current = new Set();
+      if (ids.length === 0) return;
+
+      let error: unknown = null;
+      try {
+        ({ error } = await persistMessagesRead(ids));
+      } catch (err) {
+        error = err;
+      }
+      if (error) {
+        const shouldRetry = isTransientMarkReadError(error);
+        if (shouldRetry) {
+          for (const id of ids) pendingMarkReadRef.current.add(id);
+          markReadRetryCountRef.current += 1;
+        } else {
+          markReadRetryCountRef.current = 0;
+        }
+        log.error(
+          shouldRetry
+            ? 'Error marking messages as read (batch); ids mantidos para retry:'
+            : 'Error marking messages as read (batch) is permanent; retry descartado:',
+          error
+        );
+        if (
+          shouldRetry &&
+          allowRetry &&
+          !markReadUnmountingRef.current &&
+          markReadRetryCountRef.current <= MARK_READ_MAX_RETRIES
+        ) {
+          scheduleMarkAsReadFlush(
+            MARK_READ_RETRY_BASE_MS * 2 ** (markReadRetryCountRef.current - 1)
+          );
+        }
+        return;
+      }
+      markReadRetryCountRef.current = 0;
+
+      // Touch last_seen throttled global (máx. 1 PATCH a cada 2min, deduplicado entre instâncias)
+      touchLastSeen();
+    },
+    [scheduleMarkAsReadFlush]
+  );
+
+  flushMarkAsReadRef.current = flushMarkAsRead;
 
   const applyOptimisticRead = useCallback(
     (contactIds: string[]) => {
@@ -103,12 +141,14 @@ export function useConversationActions({ commitConversations }: UseConversationA
   // Flush pendente no unmount (fire-and-forget) — evita perder writes quando
   // o usuário navega antes do debounce disparar.
   useEffect(() => {
+    markReadUnmountingRef.current = false;
     return () => {
+      markReadUnmountingRef.current = true;
       if (markReadTimerRef.current !== null) {
         clearTimeout(markReadTimerRef.current);
         markReadTimerRef.current = null;
       }
-      void flushMarkAsRead();
+      void flushMarkAsRead(false);
     };
   }, [flushMarkAsRead]);
   const sendMessage = async (

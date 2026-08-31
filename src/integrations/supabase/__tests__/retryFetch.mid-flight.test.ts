@@ -27,17 +27,22 @@ function makeControllableFetch() {
       // Rejeita também se o signal interno do boundedFetch disparar
       // (para evitar que o timer de 12s segure o teste se algo der errado)
       const sig = (init as RequestInit)?.signal;
-      if (sig?.aborted) { reject(new DOMException('pre-aborted', 'AbortError')); return; }
-      sig?.addEventListener('abort', () => {
-        reject(new DOMException('internal-timeout-abort', 'AbortError'));
-      }, { once: true });
+      if (sig?.aborted) {
+        reject(new DOMException('pre-aborted', 'AbortError'));
+        return;
+      }
+      sig?.addEventListener(
+        'abort',
+        () => {
+          reject(new DOMException('internal-timeout-abort', 'AbortError'));
+        },
+        { once: true }
+      );
     });
   });
   return {
-    resolveNow: (status = 200) =>
-      settle?.(new Response(JSON.stringify([]), { status })),
-    rejectNow: (err = new DOMException('test-abort', 'AbortError')) =>
-      settleReject?.(err),
+    resolveNow: (status = 200) => settle?.(new Response(JSON.stringify([]), { status })),
+    rejectNow: (err = new DOMException('test-abort', 'AbortError')) => settleReject?.(err),
   };
 }
 
@@ -54,7 +59,7 @@ describe('retryFetch — BUG-D regression: slot release mid-flight abort', () =>
   // ---------------------------------------------------------------------------
   // TESTE 1 — caminho crítico: slot liberado MID-FLIGHT
   // ---------------------------------------------------------------------------
-  it('inFlight cai de 1→0 imediatamente ao abortar mid-flight (core BUG-D)', async () => {
+  it('inFlight cai de 1→0 quando a rede confirma o abort mid-flight', async () => {
     const { resolveNow } = makeControllableFetch();
     const ctrl = new AbortController();
 
@@ -69,17 +74,47 @@ describe('retryFetch — BUG-D regression: slot release mid-flight abort', () =>
     expect(getSupabaseSemaphoreState().inFlight).toBe(1);
 
     // — PONTO CRÍTICO DO BUG-D —
-    // ctrl.abort() dispara o listener 'abort' SINCRONAMENTE.
-    // releaseOnCallerAbort() → _releaseSupabaseSlot() → inFlight--.
+    // ctrl.abort() cancela o controller usado pela request real. O slot so
+    // fica livre quando a promise de rede rejeita e o finally confirma o fim
+    // do trabalho — sem declarar capacidade ficticia.
     ctrl.abort();
 
-    // BUG-D (antes fix): inFlight = 1 (slot preso até fetch completar ~12s)
-    // BUG-D (após fix):  inFlight = 0 (slot liberado no mesmo tick do abort)
+    await promise;
     expect(getSupabaseSemaphoreState().inFlight).toBe(0);
 
-    // Resolve o mock para que withRetry complete e o teste não seja cancelado
+    // No-op se o mock ja rejeitou pelo abort; mantem o helper completamente assentado.
     resolveNow();
+  });
+
+  it('propaga o abort do caller para a request de rede real', async () => {
+    let networkSignal: AbortSignal | null = null;
+    let resolveFetch!: (response: Response) => void;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      networkSignal = init?.signal ?? null;
+      return new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    });
+    const ctrl = new AbortController();
+
+    const promise = retryFetch(NON_AUTH_URL, { signal: ctrl.signal }).catch(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(networkSignal).not.toBeNull();
+    const observedSignal = networkSignal as unknown as AbortSignal;
+    expect(observedSignal.aborted).toBe(false);
+
+    ctrl.abort();
+
+    expect(observedSignal.aborted).toBe(true);
+    // O transporte deste teste ignora o signal; o semaforo deve refletir que
+    // ainda existe trabalho real vivo, em vez de promover outro request.
+    expect(getSupabaseSemaphoreState().inFlight).toBe(1);
+    resolveFetch(new Response(JSON.stringify([]), { status: 200 }));
     await promise;
+    expect(getSupabaseSemaphoreState().inFlight).toBe(0);
   });
 
   // ---------------------------------------------------------------------------
@@ -111,10 +146,11 @@ describe('retryFetch — BUG-D regression: slot release mid-flight abort', () =>
     await Promise.resolve();
     expect(getSupabaseSemaphoreState().queueLength).toBe(1);
 
-    // Abort do 1º request → slot liberado imediatamente
+    // Abort do 1º request → a rede confirma o cancelamento e então libera o slot.
     ctrl1.abort();
+    await promise1;
 
-    // Waiter é promovido na mesma passagem de microtasks
+    // Waiter é promovido assim que a promise de rede confirma o abort.
     await Promise.resolve(); // promoção do waiter
     await Promise.resolve();
     expect(waiterDone).toBe(true); // waiter adquiriu e liberou o slot
@@ -122,7 +158,6 @@ describe('retryFetch — BUG-D regression: slot release mid-flight abort', () =>
     // Cleanup
     for (const rel of extras) rel();
     resolveNow();
-    await promise1;
     await waiterPromise;
   });
 
