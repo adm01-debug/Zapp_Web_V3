@@ -1,8 +1,9 @@
 # Evidência 008 — re-consulta dos jobs 527–531 com ordenação monotônica
 
 > - Etapa primária: `008`
-> - Etapas relacionadas: `056`
-> - Data/hora: `2026-08-30T16:30:00-03:00`
+> - Etapas relacionadas: `056`, `068`
+> - Data/hora: `2026-08-30T16:30:00-03:00` (errata pós-merge #1458 aplicada em
+>   `2026-08-30T22:05:00-03:00`)
 > - Owner: engenharia Zapp Web V3
 > - Ambiente: PostgreSQL canônico em consultas exclusivamente `SELECT`
 > - Baseline: `8d9ec472a7ea45d366355e48dd4dff5e911e44cb`
@@ -58,12 +59,18 @@ ORDER BY run.jobid, run.runid DESC;
 
 ## Limitações e riscos residuais
 
-- `connecting` sem `start_time` é transitório: não distingue execução iminente de
-  travamento; concluir exige nova consulta em janela posterior.
+- `connecting` sem `start_time` é transitório **apenas dentro da janela agendada**:
+  observado fora da janela (527, diário 08:00, visto às 16:30; 530, cuja janela é o
+  dia 2 do mês), o registro pendente é **stale** — run que nunca iniciou de fato,
+  que não comprova execução iminente nem ocorrida. Não distingue execução iminente
+  de travamento; concluir exige nova consulta em janela posterior.
 - Nenhuma das duas rodadas prova relatório entregue nem retry/DLQ completos —
   a etapa `056` permanece aberta.
-- A próxima janela útil do `sentinel-teste-mensal` (530) é 31/08; re-consultar após
-  o horário agendado antes de qualquer conclusão.
+- ~~A próxima janela útil do `sentinel-teste-mensal` (530) é 31/08.~~ **Errata
+  (30/08, pós-merge #1458):** o schedule real do 530 é `0 12 2 * *` — **dia 2 do
+  mês, 12:00** (confirmado por leitura de `cron.job` em 30/08) — portanto a próxima
+  janela útil é **02/09 12:00**, não 31/08. Re-consultar após o horário agendado
+  antes de qualquer conclusão.
 
 ## Rollback ou recuperação
 
