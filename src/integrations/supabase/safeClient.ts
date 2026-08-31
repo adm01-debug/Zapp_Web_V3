@@ -338,8 +338,7 @@ export const safeClient = {
     // cancelRefetch, fila do semáforo saturada, timeout local, page unload)
     // são ruído esperado sob carga — rebaixados a WARN para não inundar
     // console/Sentry durante o próprio incidente que os causou.
-    const effectiveLevel =
-      level === 'error' && isClientSideTransientError(detail) ? 'warn' : level;
+    const effectiveLevel = level === 'error' && isClientSideTransientError(detail) ? 'warn' : level;
     if (effectiveLevel === 'error') _log.error(message, meta);
     else if (effectiveLevel === 'warn') _log.warn(message, meta);
     else _log.info(message, meta);
@@ -415,12 +414,35 @@ export const safeClient = {
   },
 
   formatError(error: PostgrestError | unknown): Error {
-    if (error && typeof error === 'object' && 'message' in error) {
-      const msg = (error as { message: string }).message;
-      if (msg.toLowerCase().includes('does not exist')) {
-        return new Error(`Recurso indisponível: ${msg}`);
+    if (error instanceof Error) {
+      if (!error.message.toLowerCase().includes('does not exist')) return error;
+
+      const formatted = new Error(`Recurso indisponível: ${error.message}`) as Error &
+        Record<string, unknown>;
+      formatted['cause'] = error;
+      for (const key of ['name', 'code', 'status', 'details', 'hint']) {
+        const value = (error as Error & Record<string, unknown>)[key];
+        if (value !== undefined) formatted[key] = value;
       }
-      return new Error(msg);
+      return formatted;
+    }
+
+    if (error && typeof error === 'object' && 'message' in error) {
+      const source = error as Record<string, unknown>;
+      const msg = String(source['message']);
+      const formatted = new Error(
+        msg.toLowerCase().includes('does not exist') ? `Recurso indisponível: ${msg}` : msg
+      ) as Error & Record<string, unknown>;
+      formatted['cause'] = error;
+
+      for (const key of ['name', 'code', 'status', 'details', 'hint']) {
+        if (source[key] !== undefined) formatted[key] = source[key];
+      }
+
+      if (msg.toLowerCase().includes('does not exist')) {
+        return formatted;
+      }
+      return formatted;
     }
     return new Error(String(error));
   },
