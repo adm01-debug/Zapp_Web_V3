@@ -30,9 +30,9 @@ describe('retryFetch — retry policy (F9-04)', () => {
 
   beforeEach(() => {
     calls.length = 0;
-    fetchImpl = vi.fn<
-      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-    >(() => Promise.reject(networkError()));
+    fetchImpl = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() =>
+      Promise.reject(networkError())
+    );
     const tracker = vi.fn((input: RequestInfo | URL) => {
       calls.push(String(input));
       return fetchImpl(input);
@@ -76,6 +76,19 @@ describe('retryFetch — retry policy (F9-04)', () => {
 
     await assertion;
     expect(calls.filter((u) => u.includes('/rest/v1/contacts'))).toHaveLength(3);
+  });
+
+  it('POST sem chave de idempotencia nao e retentado em HTTP 503', async () => {
+    fetchImpl.mockResolvedValue(fakeResponse(503));
+
+    await expect(
+      retryFetch('https://supabase.test/functions/v1/gmail-oauth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getAuthUrl' }),
+      })
+    ).rejects.toMatchObject({ name: 'RetryableHttpError', status: 503 });
+
+    expect(calls.filter((u) => u.includes('/functions/v1/gmail-oauth'))).toHaveLength(1);
   });
 
   it('HTTP 429 é retentado (rate-limit é transitório)', async () => {
