@@ -134,3 +134,6 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 082 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
 | 083 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
 | 088 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 009 | [`2026-08-31-reconciliacao-rls-canonico.md`](./009/2026-08-31-reconciliacao-rls-canonico.md) | `d983cbb67` | válida |
+| 083 | [`2026-08-31-reconciliacao-rls-canonico.md`](./009/2026-08-31-reconciliacao-rls-canonico.md) | `d983cbb67` | válida |
+| 088 | [`2026-08-31-reconciliacao-rls-canonico.md`](./009/2026-08-31-reconciliacao-rls-canonico.md) | `d983cbb67` | válida |
