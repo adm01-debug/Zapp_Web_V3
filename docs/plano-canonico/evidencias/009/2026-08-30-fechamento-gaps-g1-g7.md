@@ -17,7 +17,10 @@
 > pertencentes a outro sistema são declarados em allowlist fail-closed, sem mover
 > nem alterar esses objetos no banco. M2 e M3 continuam apenas como backlog, sem
 > autorização de DDL/DML. Objetos financeiros permanecem expressamente fora do
-> escopo do Zapp Web V3 até confirmação do schema-dono pelo proprietário.
+> escopo do Zapp Web V3 até confirmação do schema-dono pelo proprietário. A PR
+> #1463 também já está na `main`: o auditor agora separa 28 tabelas físicas das
+> três views `security_invoker`, elimina os falsos positivos dessas views e mantém
+> visíveis 14 lacunas de evidência estática (`14/28`) em modo advisory.
 
 ## Identificação
 
@@ -245,8 +248,8 @@ nenhum objeto de banco foi alterado.
 
 ## Decisão
 
-`parcial`: G6 e G7 estão fechados **no repo** pelas PRs #1459/#1460; a trilha da
-#1458 fecha por completo. M1 foi substituído pela solução não destrutiva da PR
-#1474. M2/M3 permanecem formalmente registrados com escopo, risco, rollback e
-testes, mas não estão autorizados para execução. Nenhum objeto financeiro faz
-parte desta incorporação.
+`parcial`: G6 e G7 estão fechados **no repo** pelas PRs #1459/#1460 e endurecidos
+pela PR #1463; a trilha da #1458 fecha por completo. M1 foi substituído pela
+solução não destrutiva da PR #1474. M2/M3 permanecem formalmente registrados com
+escopo, risco, rollback e testes, mas não estão autorizados para execução. Nenhum
+objeto financeiro faz parte desta incorporação.
