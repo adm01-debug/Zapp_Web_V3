@@ -11,6 +11,14 @@
 > - Baseline: `9e2a08dafeeffad5cefa4b68622e006a1eccf36e` (`origin/main` após #1457)
 > - Veredito: `parcial`
 
+> **Atualização de incorporação — 2026-08-31:** este documento preserva o retrato
+> histórico de 30/08. As PRs #1459 e #1460 já estão na `main`. O item M1 foi
+> superado pela decisão implementada na PR #1474: os seis objetos `public`
+> pertencentes a outro sistema são declarados em allowlist fail-closed, sem mover
+> nem alterar esses objetos no banco. M2 e M3 continuam apenas como backlog, sem
+> autorização de DDL/DML. Objetos financeiros permanecem expressamente fora do
+> escopo do Zapp Web V3 até confirmação do schema-dono pelo proprietário.
+
 ## Identificação
 
 - Repositório: `adm01-debug/Zapp_Web_V3`
@@ -143,12 +151,17 @@ deixando o teste da #1449 órfão. Decisão do dono em 30/08/2026: o design fail
 registro. Nenhuma variável de escape deve ser reintroduzida sem nova decisão
 explícita.
 
-## Backlog de banco M1–M3 (não executado — decisão do dono, 30/08/2026)
+## Backlog histórico de banco M1–M3 (não executar sem nova decisão)
 
 Cada item exige migration versionada, teste, staging e autorização explícita antes
 de qualquer execução (ver `supabase/migrations/README.md`).
 
 ### M1 — `public._grant_snapshot_gatea` → schema `ops`
+
+> **Estado em 31/08/2026: proposta superada; não executar.** A PR #1474 registrou
+> o objeto como externo ao Zapp em `supabase/schema-catalog-external-objects.json`
+> e tornou a exceção exata e fail-closed no DB Guard. Mover ou alterar o objeto
+> violaria a separação entre os dois sistemas que compartilham o banco.
 
 - **Fato:** única tabela física no schema `public` (que o contrato reserva a views
   `security_invoker` + RPCs); snapshot de grants do linter; RLS ativo sem policy;
@@ -232,7 +245,8 @@ nenhum objeto de banco foi alterado.
 
 ## Decisão
 
-`parcial`: G6 e G7 fecham **no repo** (pendente apenas o merge das PRs e a CI
-verde), a trilha da #1458 fecha por completo, e o backlog M1–M3 fica formalmente
-registrado com escopo, risco, rollback e testes — aguardando autorização explícita
-do dono para qualquer execução.
+`parcial`: G6 e G7 estão fechados **no repo** pelas PRs #1459/#1460; a trilha da
+#1458 fecha por completo. M1 foi substituído pela solução não destrutiva da PR
+#1474. M2/M3 permanecem formalmente registrados com escopo, risco, rollback e
+testes, mas não estão autorizados para execução. Nenhum objeto financeiro faz
+parte desta incorporação.
