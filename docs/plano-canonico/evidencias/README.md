@@ -127,3 +127,10 @@ Use [`TEMPLATE.md`](./TEMPLATE.md) como base. O primeiro preenchimento está em
 | 098 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 099 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
 | 100 | [`2026-08-30-revalidacao-integral-main-db-ci.md`](./008/2026-08-30-revalidacao-integral-main-db-ci.md) | `8d9ec472a` | parcial |
+| 009 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 017 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 027 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 029 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 082 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 083 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
+| 088 | [`2026-08-30-fechamento-gaps-g1-g7.md`](./009/2026-08-30-fechamento-gaps-g1-g7.md) | `9e2a08daf` | parcial |
