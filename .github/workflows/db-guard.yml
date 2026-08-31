@@ -12,6 +12,8 @@ on:
       - "src/integrations/supabase/types.ts"
       - "supabase/schema-catalog.json"
       - "supabase/schema-catalog-external-objects.json"
+      - "supabase/rls-catalog.json"
+      - "scripts/audit-rls-coverage.mjs"
       - "supabase/migrations/**"
   pull_request:
     branches: [main, develop]
@@ -24,6 +26,8 @@ on:
       - "src/integrations/supabase/types.ts"
       - "supabase/schema-catalog.json"
       - "supabase/schema-catalog-external-objects.json"
+      - "supabase/rls-catalog.json"
+      - "scripts/audit-rls-coverage.mjs"
       - "supabase/migrations/**"
   workflow_dispatch:
 
@@ -56,6 +60,9 @@ jobs:
 
       - name: Catálogo local está determinístico
         run: node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --check
+
+      - name: Contrato RLS canônico + deltas pendentes
+        run: node scripts/audit-rls-coverage.mjs --check --require-canonical
 
       - name: Gerar catálogo vivo via postgres-meta
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}

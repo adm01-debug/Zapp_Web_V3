@@ -34,11 +34,13 @@ schema foi alterado. Nenhum DDL/DML foi executado no banco.
    - `pg_rewrite` + `pg_depend` para descobrir tabelas-base das views;
    - `pg_class.reloptions` para confirmar `security_invoker=on`.
 
-3. Confirmar que a evidência literal das tabelas vivas existe em
-   `scripts/decouple/snapshots/zapp_schema_snapshot.sql`.
+3. Materializar o estado vivo em `supabase/rls-catalog.json`, incluindo o
+   watermark do ledger, os nomes reais das policies, as seis views e suas seis
+   tabelas-base.
 
-4. Fazer o E34 ler migrations, archive e snapshot DB-as-source; remover
-   `--advisory` do quality-gate e rodar o checker em modo estrito.
+4. Fazer o E34 iniciar nesse catálogo e reaplicar, em ordem, somente migrations
+   posteriores ao watermark; remover `--advisory` do quality-gate e rodar o
+   checker em modo estrito.
 
 ## Resultado observado no banco canônico
 
@@ -47,11 +49,12 @@ schema foi alterado. Nenhum DDL/DML foi executado no banco.
 - **6 views críticas:** `contacts`, `conversations`, `messages`,
   `email_accounts`, `email_threads` e `payment_links`.
 - **6/6 views:** `security_invoker=on`.
-- **Bases das views:** `evo.evolution_contacts`,
+- **Bases primárias das views:** `evo.evolution_contacts`,
   `evo.evolution_conversations`, `evo.evolution_messages`,
-  `zapp.whatsapp_connections`, `email_app.email_accounts`,
-  `email_app.email_threads` e `financeiro.payment_links`.
-- **7/7 bases físicas:** RLS ativo e policies presentes.
+  `email_app.email_accounts`, `email_app.email_threads` e
+  `financeiro.payment_links`.
+- **6/6 bases:** RLS ativo e policies presentes. As duas tabelas da Evolution
+  particionadas foram validadas no respectivo pai (`relkind='p'`).
 - `ops-guardrails-deadman` (job 82): ativo; última execução consultada com
   status `succeeded`.
 - DDL concorrente: nenhum; sessões aguardando lock: zero.
@@ -61,29 +64,34 @@ diagnósticos combinados:
 
 1. `email_accounts`, `email_threads` e `payment_links` eram views, reduzindo o
    conjunto físico de 28 para 25;
-2. o auditor não lia o snapshot canônico, embora ele contenha os `ALTER TABLE
-   ... ENABLE ROW LEVEL SECURITY` e `CREATE POLICY` das 11 tabelas restantes.
+2. o auditor não possuía um catálogo RLS canônico capaz de representar também
+   os schemas-dono das tabelas-base.
 
 ## Correção implementada no repositório
 
 - `CRITICAL_TABLES`: 25 tabelas físicas.
 - `CRITICAL_VIEWS`: seis views `security_invoker`.
-- Fonte estática: migrations vivas + archive + snapshot canônico DB-as-source.
-- Teste de regressão: topologia 25+6 e execução estrita contra as fontes reais.
+- `CRITICAL_VIEW_BASES`: mapeamento explícito das seis tabelas-base.
+- Fonte estática: catálogo RLS vivo no watermark `20260831124500` + replay das
+  migrations posteriores, incluindo operações destrutivas.
+- O hash SHA-256 das migrations até o watermark impede que inclusão ou edição
+  retroativa seja silenciosamente ignorada pelo replay incremental.
+- Testes de regressão: topologia 25+6+6, nomes de policy entre aspas, remoção da
+  última policy, `DISABLE RLS`, base desprotegida e view sem `security_invoker`.
 - Quality Gate: E34 volta a ser bloqueante, sem `--advisory`.
 
 Resultado local após a correção:
 
 ```text
-RLS audit: 25/25 critical tables have RLS + policies. 0 advisory gaps.
+RLS audit: 25/25 zapp tables, 6/6 view bases, and 6/6 security_invoker views protected.
 ```
 
 ## Validação executada
 
 | Verificação | Resultado |
 |---|---|
-| Teste unitário/regressão do E34 | 9/9 aprovados |
-| Suíte Vitest integral com `bun.lock` congelado | 493 arquivos e 8.700 testes aprovados; 4 arquivos e 17 testes ignorados; 22 `todo` |
+| Teste unitário/regressão do E34 | 14/14 aprovados |
+| Suíte Vitest integral com `bun.lock` congelado | 493 arquivos e 8.705 testes aprovados; 4 arquivos e 17 testes ignorados; 22 `todo` |
 | TypeScript direto (`tsconfig.app.json`) | aprovado |
 | ESLint | 0 erros; 2 warnings preexistentes |
 | Design-system ratchet | 102 violações sob o teto 130 |
@@ -107,8 +115,12 @@ esta entrega nem afeta a validação de RLS.
 | RLS presente somente em comentário SQL | comentário é ignorado; checker falha |
 | `ALTER TABLE ONLY ... ENABLE RLS` | reconhecido como evidência válida |
 | View tratada como tabela física | teste de topologia falha |
-| Snapshot ausente em fixture isolado | testes continuam usando apenas a migration fixture |
-| Banco vivo protegido, migration limpa pelo squash | snapshot canônico fornece a evidência DB-as-source |
+| View crítica recriada sem `security_invoker` | checker estrito falha |
+| Tabela-base da view com RLS desativado | checker estrito falha |
+| Nome de policy entre aspas e com espaços | reconhecido corretamente |
+| `DROP POLICY` após o watermark remove a última policy | replay detecta e falha |
+| `DISABLE ROW LEVEL SECURITY` após o watermark | replay detecta e falha |
+| Snapshot positivo anterior a migration destrutiva | não mascara o delta; catálogo é baseline |
 
 ## Decisão de DDL
 
@@ -123,8 +135,9 @@ commit/PR; não existe rollback de banco porque o banco não foi modificado.
 
 ## Limitações
 
-- O auditor continua sendo aproximação estática. A fonte autoritativa permanece
-  a consulta viva de `pg_class`/`pg_policies` e a suíte `rls-role-matrix`.
+- O auditor é uma projeção determinística do último catálogo vivo mais as
+  migrations pendentes. A fonte autoritativa permanece a consulta viva de
+  `pg_class`/`pg_policies` e a suíte `rls-role-matrix`.
 - `FORCE ROW LEVEL SECURITY` está desligado nas tabelas verificadas; isso é o
   estado vigente e não foi alterado por não fazer parte do gap E34.
 - A policy do schema `financeiro` foi apenas verificada para sustentar a view;
