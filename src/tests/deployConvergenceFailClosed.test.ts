@@ -27,6 +27,23 @@ describe('deploy convergence gate (fail-closed)', () => {
     expect(step).not.toMatch(/^\s+if:/m);
   });
 
+  it('cannot be muted via continue-on-error (mutant M-B, evidence 009)', () => {
+    const step = workflow.match(
+      /- name: ✅ Convergência verificada \(Swarm × imagem do deploy\)\n([\s\S]*?)(?=\n {6}- name:|\n {2}\w)/,
+    )?.[0];
+    expect(step).toBeDefined();
+    expect(step).not.toMatch(/^\s+continue-on-error:/m);
+  });
+
+  it('keeps the rollback path fail-fast with exit 1 (mutant M-F, evidence 009)', () => {
+    const rollbackCase = workflow.match(
+      /case\s"\$STATUS"\sin([\s\S]*?)esac/,
+    )?.[0];
+    expect(rollbackCase).toBeDefined();
+    expect(rollbackCase).toContain('rollback_completed|rollback_paused|paused)');
+    expect(rollbackCase).toMatch(/exit\s1\s*;;/);
+  });
+
   it('documents the fail-closed design decision next to the gate', () => {
     expect(workflow).toContain(
       'Em main o gate é fail-closed: sem escape hatch silencioso por repo var.',
