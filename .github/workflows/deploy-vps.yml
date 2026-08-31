@@ -701,3 +701,19 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -d "$PAYLOAD" || true
           fi
+
+      # 2026-08-30 (incidente pós-#1462): o sparse-checkout da etapa 73 deixa
+      # core.sparseCheckout=true no clone do WORKSPACE PERSISTENTE do runner
+      # self-hosted (vps-zapp). Os próximos jobs daquele runner (quality e
+      # contract-gate do ci.yml) herdam o checkout parcial — sem package.json
+      # nem scripts/ — e falham com "Bun could not find a package.json" /
+      # MODULE_NOT_FOUND. Em runner efêmero (ubuntu-latest) o efeito não
+      # existe. Desfazer SEMPRE (inclusive em falha): é limpeza de infra do
+      # workspace, não gate de deploy — não altera o contrato "roda só em
+      # deploy verde" do gate acima.
+      - name: "🧹 Desfazer sparse-checkout do workspace (runner persistente)"
+        if: always()
+        run: |
+          git sparse-checkout disable || true
+          git config --local --unset core.sparseCheckout 2>/dev/null || true
+          git config --local --unset core.sparseCheckoutConeMode 2>/dev/null || true
