@@ -135,11 +135,15 @@ const realtimeReconnectAfterMs = (tries: number): number =>
 const SUPABASE_FETCH_TIMEOUT_MS = 12_000;
 
 // Cooldown global de rate-limit — após um 429, pausa novas aquisições de
-// slot por RATE_LIMIT_COOLDOWN_MS. O semaforo canônico vive em retryFetch;
-// boundedFetch apenas aguarda o cooldown mantendo o MESMO slot ocupado.
-// Assim nao existe uma segunda fila capaz de divergir do trabalho de rede.
+// slot por RATE_LIMIT_COOLDOWN_MS. A espera acontece ANTES do semáforo em
+// retryFetch: timers de cooldown/backoff nunca ocupam capacidade de rede.
+// Ao fim da pausa, as admissões são espaçadas para os 8 callers não acordarem
+// juntos e recriarem imediatamente a rajada que causou o 429.
 let _rateLimitCooldownUntil = 0;
 const RATE_LIMIT_COOLDOWN_MS = 2000; // 2s global pause after 429
+const COOLDOWN_DRAIN_INTERVAL_MS = 200; // no máximo 5 novas admissões/s após cooldown
+const COOLDOWN_GRACE_MS = 50;
+let _cooldownNextAdmissionAt = 0;
 
 // FIX 2026-08-03: Detector de DB degradado.
 // Quando queries lentas (>5s) ocorrem, ativa cooldown temporário que
@@ -186,20 +190,40 @@ const makeTimeoutReason = (): unknown =>
     ? new DOMException('Supabase request timed out', 'TimeoutError')
     : Object.assign(new Error('Supabase request timed out'), { name: 'TimeoutError' });
 
+function isSupabaseCooldownActive(): boolean {
+  const now = Date.now();
+  const active =
+    Math.max(_rateLimitCooldownUntil, _slowQueryCooldownUntil) > now ||
+    _cooldownNextAdmissionAt > now;
+  if (!active) _cooldownNextAdmissionAt = 0;
+  return active;
+}
+
 async function waitForSupabaseCooldown(signal?: AbortSignal | null): Promise<void> {
   while (true) {
-    const remaining = Math.max(
-      _rateLimitCooldownUntil - Date.now(),
-      _slowQueryCooldownUntil - Date.now(),
-      0
+    const now = Date.now();
+    const cooldownUntil = Math.max(_rateLimitCooldownUntil, _slowQueryCooldownUntil);
+    const drainStillActive = _cooldownNextAdmissionAt > now;
+    if (cooldownUntil <= now && !drainStillActive) {
+      _cooldownNextAdmissionAt = 0;
+      return;
+    }
+
+    // Reserva uma posição no dreno. Callers concorrentes recebem instantes
+    // distintos (ex.: T+50, T+250, T+450), em vez de todos despertarem em T.
+    const admissionAt = Math.max(
+      now,
+      _cooldownNextAdmissionAt,
+      cooldownUntil > now ? cooldownUntil + COOLDOWN_GRACE_MS : now
     );
-    if (remaining <= 0) return;
+    _cooldownNextAdmissionAt = admissionAt + COOLDOWN_DRAIN_INTERVAL_MS;
+    const remaining = Math.max(0, admissionAt - now);
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         signal?.removeEventListener('abort', onAbort);
         resolve();
-      }, remaining + 50);
+      }, remaining);
       const onAbort = () => {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
@@ -211,16 +235,14 @@ async function waitForSupabaseCooldown(signal?: AbortSignal | null): Promise<voi
       }
       signal?.addEventListener('abort', onAbort, { once: true });
     });
+
+    // Se outro 429 estendeu o cooldown enquanto este caller aguardava, ele
+    // volta à fila de dreno. Caso contrário, a reserva acima já foi cumprida.
+    if (Math.max(_rateLimitCooldownUntil, _slowQueryCooldownUntil) <= Date.now()) return;
   }
 }
 
 const boundedFetch: typeof fetch = async (input, init) => {
-  // O unico gate de concorrencia e o semaforo de retryFetch. Aqui apenas
-  // respeitamos cooldowns mantendo o slot ja adquirido ocupado.
-  if (!isAuthRequest(input)) {
-    await waitForSupabaseCooldown(init?.signal);
-  }
-
   const controller = new AbortController();
   _activeControllers.add(controller);
   const timeoutId = setTimeout(
@@ -685,10 +707,23 @@ function hasIdempotencyKey(init?: RequestInit): boolean {
   return headers.has('Idempotency-Key');
 }
 
+// PostgREST executa RPCs via POST mesmo quando a função é somente leitura.
+// A allowlist é deliberadamente pequena e baseada em funções SQL auditadas;
+// RPCs mutantes continuam sem retry, salvo Idempotency-Key explícita.
+const RETRY_SAFE_READ_RPC_NAMES = new Set(['get_contact_360_by_phone', 'rpc_list_messages_lite']);
+
+function getPostgrestRpcName(input: RequestInfo | URL): string | null {
+  const match = getRequestUrl(input).match(/\/rest\/v1\/rpc\/([^/?#]+)/);
+  return match?.[1] ?? null;
+}
+
 /** Somente leituras e mutacoes explicitamente idempotentes podem ter retry de transporte. */
 function isRetrySafeRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
   const method = getRequestMethod(input, init);
-  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || hasIdempotencyKey(init);
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+  if (hasIdempotencyKey(init)) return true;
+  const rpcName = method === 'POST' ? getPostgrestRpcName(input) : null;
+  return rpcName !== null && RETRY_SAFE_READ_RPC_NAMES.has(rpcName);
 }
 
 /** Fetch customizado injetado no supabase-js: timeout (boundedFetch) + retry (F9-04) + semáforo de concorrência. */
@@ -703,36 +738,45 @@ export const retryFetch: typeof fetch = async (input, init) => {
     });
   }
 
-  // Semáforo: adquire slot antes de disparar a requisição.
+  // Cada tentativa aguarda o cooldown ANTES de adquirir o semáforo e libera o
+  // slot ao terminar. Logo backoff/cooldown nunca retêm capacidade de rede.
   // Evita que 10+ RPCs simultâneas saturem o pool TCP e o Supavisor.
   // Prioridade high (contexto withSupabaseHighPriority, contador de
   // profundidade) fura a fila FIFO.
   // O signal do caller é repassado ao acquire e ao boundedFetch: abort durante
   // a fila nao consome slot; abort em voo cancela a request real.
-  // Se o acquire rejeitar (timeout de fila/abort), o try abaixo não roda e o
-  // finally não libera slot — correto, a entrada nunca teve slot.
-  await _acquireSupabaseSlot({
-    priority: _highPriorityDepth > 0 || isHighPrioritySignal(init?.signal) ? 'high' : 'normal',
-    signal: init?.signal,
-  });
-
+  const priority = _highPriorityDepth > 0 || isHighPrioritySignal(init?.signal) ? 'high' : 'normal';
+  const retrySafe = !hasStreamBody(init) && isRetrySafeRequest(input, init);
+  let successfulSlotHeld = false;
   try {
-    const retrySafe = !hasStreamBody(init) && isRetrySafeRequest(input, init);
     return await withRetry(
       async () => {
-        const response = await boundedFetch(input, init);
-        if (response.status === 429) {
-          // Rate-limit: ativa o cooldown global ANTES do retry para que as
-          // demais aquisições de slot esperem e não formem cascata de 429.
-          _rateLimitCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-          // Não consumimos o body: a resposta será descartada e refeita.
-          throw new RetryableHttpError(response.status);
+        // Sem cooldown, o acquire começa sincronicamente e preserva a ordem de
+        // prioridade. Com cooldown, a espera ocorre fora de qualquer slot.
+        if (isSupabaseCooldownActive()) await waitForSupabaseCooldown(init?.signal);
+        await _acquireSupabaseSlot({ priority, signal: init?.signal });
+        let releaseAfterAttempt = true;
+        try {
+          const response = await boundedFetch(input, init);
+          if (response.status === 429) {
+            // Rate-limit: ativa o cooldown global ANTES do retry para que as
+            // demais aquisições de slot esperem e não formem cascata de 429.
+            _rateLimitCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+            // Não consumimos o body: a resposta será descartada e refeita.
+            throw new RetryableHttpError(response.status);
+          }
+          if (response.status >= 500) {
+            // Não consumimos o body: a resposta será descartada e refeita.
+            throw new RetryableHttpError(response.status);
+          }
+          // No sucesso, mantém o slot até retryFetch resolver. Isso preserva a
+          // ordem de prioridade; tentativas falhas liberam antes do backoff.
+          releaseAfterAttempt = false;
+          successfulSlotHeld = true;
+          return response;
+        } finally {
+          if (releaseAfterAttempt) _releaseSupabaseSlot();
         }
-        if (response.status >= 500) {
-          // Não consumimos o body: a resposta será descartada e refeita.
-          throw new RetryableHttpError(response.status);
-        }
-        return response;
       },
       {
         maxRetries: retrySafe ? SUPABASE_RETRY_MAX_RETRIES : 0,
@@ -746,16 +790,15 @@ export const retryFetch: typeof fetch = async (input, init) => {
           );
         },
       }
-    ).catch((err: unknown) => {
-      // Só acusa o monitor após esgotar as tentativas.
-      reportRealFailure(err);
-      throw err;
-    });
+    );
+  } catch (err) {
+    // Só acusa o monitor após esgotar as tentativas.
+    reportRealFailure(err);
+    throw err;
   } finally {
-    // O slot representa trabalho real: so e liberado quando o fetch conclui
-    // ou confirma o abort. Se um transporte ignorar AbortSignal, o slot fica
-    // ocupado ate resposta/timeout em vez de declarar capacidade ficticia.
-    _releaseSupabaseSlot();
+    // Se o transporte ignorar AbortSignal, boundedFetch só conclui após a
+    // resposta/timeout; portanto não declaramos capacidade fictícia.
+    if (successfulSlotHeld) _releaseSupabaseSlot();
   }
 };
 

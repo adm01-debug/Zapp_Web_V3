@@ -5,7 +5,7 @@ import { sendMessageToContact } from './messageSender';
 import { isValidUUID } from '@/utils/uuid';
 import { touchLastSeen } from '../../services/touchLastSeen';
 import type { ConversationWithMessages } from './types';
-import { persistMessagesRead } from '../../services/markMessagesRead';
+import { isTransientMarkReadError, persistMessagesRead } from '../../services/markMessagesRead';
 
 const log = getLogger('ConversationActions');
 
@@ -58,10 +58,21 @@ export function useConversationActions({ commitConversations }: UseConversationA
         error = err;
       }
       if (error) {
-        for (const id of ids) pendingMarkReadRef.current.add(id);
-        markReadRetryCountRef.current += 1;
-        log.error('Error marking messages as read (batch); ids mantidos para retry:', error);
+        const shouldRetry = isTransientMarkReadError(error);
+        if (shouldRetry) {
+          for (const id of ids) pendingMarkReadRef.current.add(id);
+          markReadRetryCountRef.current += 1;
+        } else {
+          markReadRetryCountRef.current = 0;
+        }
+        log.error(
+          shouldRetry
+            ? 'Error marking messages as read (batch); ids mantidos para retry:'
+            : 'Error marking messages as read (batch) is permanent; retry descartado:',
+          error
+        );
         if (
+          shouldRetry &&
           allowRetry &&
           !markReadUnmountingRef.current &&
           markReadRetryCountRef.current <= MARK_READ_MAX_RETRIES

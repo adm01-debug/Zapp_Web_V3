@@ -25,7 +25,10 @@ import type { ConversationWithMessages } from '../types';
 
 // ===== Mocks =====
 type EqResult = { data: null; error: null };
-type EqResultWithError = { data: null; error: { message: string } | null };
+type EqResultWithError = {
+  data: null;
+  error: { message: string; status?: number; code?: string } | null;
+};
 type EqFn = (
   column: string,
   value: unknown
@@ -329,5 +332,22 @@ describe('E37 — markAsRead batch flush (MARK_READ_FLUSH_MS=250)', () => {
     expect(mockUpdate).toHaveBeenCalledTimes(2);
     expect(mockIn.mock.calls[1][1]).toEqual([UUID_A]);
     expect(mockTouchLastSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('12. erro permanente 403 nao e recolocado na fila nem retentado', async () => {
+    mockEqLast.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Forbidden', status: 403 },
+    });
+    const { result } = setup();
+
+    act(() => void result.current.markAsRead(UUID_A));
+    await advance(250);
+    await advance(10_000);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockLogError).toHaveBeenCalledTimes(1);
+    expect(String(mockLogError.mock.calls[0][0])).toContain('is permanent');
+    expect(mockTouchLastSeen).not.toHaveBeenCalled();
   });
 });
