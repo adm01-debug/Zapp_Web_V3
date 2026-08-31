@@ -22,6 +22,11 @@
 > três views `security_invoker`, elimina os falsos positivos dessas views e mantém
 > visíveis 14 lacunas de evidência estática (`14/28`) em modo advisory.
 
+> **Correção posterior — 2026-08-31:** a consulta pelo MCP canônico reclassificou
+> mais três entradas como views e confirmou RLS+policies nas 25 tabelas físicas.
+> O diagnóstico `14/28` foi encerrado pela
+> [reconciliação viva de RLS](./2026-08-31-reconciliacao-rls-canonico.md).
+
 ## Identificação
 
 - Repositório: `adm01-debug/Zapp_Web_V3`

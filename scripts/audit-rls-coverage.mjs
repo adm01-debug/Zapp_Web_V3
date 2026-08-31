@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * E34 — RLS Coverage Audit (static, migration-derived)
+ * E34 — RLS Coverage Audit (static, canonical-source-derived)
  *
- * Parses supabase/migrations/*.sql to build a table × role × operation
- * coverage matrix. Outputs a machine-readable summary and blocks CI
- * when critical app tables are missing RLS enablement in migrations.
+ * Parses supabase/migrations/*.sql plus the canonical production snapshot to
+ * build a table × role × operation coverage matrix. Outputs a machine-readable
+ * summary and blocks CI when critical app tables are missing RLS evidence from
+ * every canonical repository source.
  *
  * NOTE: This is a static approximation. The authoritative check is the
  * rls-role-matrix.test.ts suite that runs against a live DB. This script
@@ -17,26 +18,25 @@
  *   --json     Emit JSON for downstream consumption
  */
 
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 const MIGRATION_DIR = 'supabase/migrations';
+const CANONICAL_SNAPSHOT = 'scripts/decouple/snapshots/zapp_schema_snapshot.sql';
 const TIMESTAMP_RE = /^\d{14}_.*\.sql$/;
 
 const args = process.argv.slice(2);
 const JSON_MODE = args.includes('--json');
 const REPORT_MODE = args.includes('--report') || (!args.includes('--check') && !JSON_MODE);
 const CHECK_MODE = args.includes('--check') || process.env.CI === 'true';
-// --advisory: reporta as falhas como ::warning:: e sai 0. Usado no CI enquanto
-// a reconciliação migrations×banco das tabelas críticas sem evidência não
-// fecha (evidência 008 mediu 14/31 reais). Endurecer removendo a flag do
-// step do quality-gate após a reconciliação (rastreado na evidência 009).
+// --advisory: compatibilidade para diagnósticos locais. O quality-gate canônico
+// roda em modo estrito desde a reconciliação viva de 2026-08-31 (evidência 009).
 const ADVISORY_MODE = args.includes('--advisory');
 
 // Critical app tables that MUST have RLS enabled.
-// 28 tabelas físicas (relkind='r') no schema zapp — audit 2026-07-16, com
-// cross-check DB de 2026-08-30 (evidência 009) que reclassificou 3 entradas
-// como views security_invoker (ver CRITICAL_VIEWS abaixo).
+// 25 tabelas físicas (relkind='r') no schema zapp — cross-check ao vivo no
+// banco canônico em 2026-08-31 (evidência 009). Seis entradas históricas da
+// lista são views security_invoker e ficam em CRITICAL_VIEWS.
 const CRITICAL_TABLES = new Set([
   'profiles',
   'workspaces',
@@ -63,20 +63,23 @@ const CRITICAL_TABLES = new Set([
   'talkx_recipients',
   'team_messages',
   'calls',
-  'payment_links',
-  'email_accounts',
-  'email_threads',
 ]);
 
-// G8-5 (2026-08-30): zapp.contacts / zapp.conversations / zapp.messages NÃO
-// são tabelas físicas — são views security_invoker sobre evo.evolution_*.
+// G8-5/G9-1 (2026-08-30/31): estas relações NÃO são tabelas físicas no zapp.
+// São views security_invoker sobre tabelas protegidas nos schemas-dono.
 // Views não aceitam ENABLE ROW LEVEL SECURITY, então a recomendação que o
 // --check emitia para elas ("add ALTER TABLE ... ENABLE ROW LEVEL SECURITY")
-// era tecnicamente inválida. A proteção vem das tabelas base evo.* (RLS
-// confirmado no cross-check DB de 2026-08-30) e é validada pela suíte viva
-// rls-role-matrix.test.ts. Elas seguem no relatório como 🔎 view e ficam
-// fora do cálculo de falha do gate.
-const CRITICAL_VIEWS = new Set(['contacts', 'conversations', 'messages']);
+// era tecnicamente inválida. A proteção das bases evo.*, email_app.* e
+// financeiro.payment_links foi confirmada ao vivo em 2026-08-31. Elas seguem
+// no relatório como 🔎 view e ficam fora do cálculo de falha do gate.
+const CRITICAL_VIEWS = new Set([
+  'contacts',
+  'conversations',
+  'messages',
+  'email_accounts',
+  'email_threads',
+  'payment_links',
+]);
 
 // Roles recognized in policy definitions
 const KNOWN_ROLES = ['anon', 'authenticated', 'service_role', 'supabase_admin'];
@@ -134,6 +137,15 @@ try {
     files = files.concat(archiveFiles);
   } catch {
     // archive/ não existe neste repo — ignorar silenciosamente
+  }
+
+  // G9-2 (2026-08-31): o modelo vigente é DB-as-source e o snapshot canônico
+  // é a fonte local dos objetos VIVOS removidos da fila durante o cleanup.
+  // O próprio guia de migrations já exige esse fallback no guard FE↔BE.
+  // Sem ele, 11 tabelas com RLS+policies reais apareciam como MISSING apesar
+  // de a evidência literal existir no snapshot regenerado do banco canônico.
+  if (existsSync(CANONICAL_SNAPSHOT)) {
+    files.push(CANONICAL_SNAPSHOT);
   }
 } catch {
   console.error(`Cannot read ${MIGRATION_DIR}`);
@@ -277,7 +289,7 @@ for (const [table, info] of [...state.tables.entries()].sort()) {
   const coveredRoles = new Set(info.policies.flatMap(p => p.roles));
 
   const status = isCriticalView
-    ? '🔎 view security_invoker (RLS na base evo.*)'
+    ? '🔎 view security_invoker (RLS na tabela-base do schema-dono)'
     : info.rlsEnabled
       ? (hasAnyPolicy ? '✅ RLS+policy' : '⚠️  RLS enabled, no policy')
       : (isCritical ? '🔴 MISSING RLS' : '⬜ no RLS');
@@ -301,7 +313,7 @@ if (JSON_MODE) {
 }
 
 if (REPORT_MODE) {
-  console.log('\n## RLS Coverage Matrix (migration-derived)\n');
+  console.log('\n## RLS Coverage Matrix (canonical-source-derived)\n');
   console.log('| Table | Critical | RLS | Policies | Ops | Roles | Status |');
   console.log('|-------|----------|-----|----------|-----|-------|--------|');
   for (const r of report) {
@@ -329,21 +341,21 @@ if (CHECK_MODE) {
       console.error(`   ⚠️  zapp.${r.table} (from ${r.rlsSource}) — add at least one CREATE POLICY`);
     }
   }
-  if (missing.length > 0) {
+  if (missing.length > 0 || rlsNoPolicy.length > 0) {
     if (ADVISORY_MODE) {
       console.warn(
-        `::warning title=RLS audit (E34)::${missing.length}/${CRITICAL_TABLES.size} critical table(s) without ENABLE ROW LEVEL SECURITY evidence in migrations. Advisory até a reconciliação migrations×banco (evidências 008/009); endurecer removendo --advisory do quality-gate.`
+        `::warning title=RLS audit (E34)::${missing.length} critical table(s) without RLS and ${rlsNoPolicy.length} with RLS but no policy evidence in canonical repository sources.`
       );
     } else {
-      console.error('\nAll app tables in the zapp schema require RLS. See docs/SCHEMA_REFERENCE.md.');
+      console.error('\nAll critical app tables in zapp require RLS and at least one policy. See docs/SCHEMA_REFERENCE.md.');
       process.exit(1);
     }
   }
   if (rlsNoPolicy.length === 0 && missing.length === 0) {
     const covered = report.filter(r => r.critical && r.rlsEnabled && r.policies > 0).length;
     console.log(`✅ RLS audit: ${covered}/${CRITICAL_TABLES.size} critical tables have RLS + policies. ${rlsNoPolicy.length} advisory gaps.`);
-  } else if (ADVISORY_MODE && missing.length > 0) {
+  } else if (ADVISORY_MODE && (missing.length > 0 || rlsNoPolicy.length > 0)) {
     const covered = report.filter(r => r.critical && r.rlsEnabled && r.policies > 0).length;
-    console.log(`ℹ️  RLS audit (advisory): ${covered}/${CRITICAL_TABLES.size} critical tables have RLS + policies; ${missing.length} sem evidência em migrations, ${rlsNoPolicy.length} sem policy.`);
+    console.log(`ℹ️  RLS audit (advisory): ${covered}/${CRITICAL_TABLES.size} critical tables have RLS + policies; ${missing.length} sem evidência nas fontes canônicas, ${rlsNoPolicy.length} sem policy.`);
   }
 }
