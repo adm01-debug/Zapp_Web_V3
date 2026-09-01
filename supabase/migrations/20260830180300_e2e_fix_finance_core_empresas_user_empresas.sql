@@ -66,8 +66,24 @@ CREATE INDEX IF NOT EXISTS idx_user_empresas_empresa ON public.user_empresas (em
 CREATE INDEX IF NOT EXISTS idx_user_empresas_user ON public.user_empresas (user_id);
 CREATE INDEX IF NOT EXISTS idx_user_empresas_scim ON public.user_empresas (scim_external_id) WHERE scim_external_id IS NOT NULL;
 
--- public.update_updated_at_column() é utilitário genérico pré-existente
--- (compartilhado por storage/public/zapp) — não criado por esta migration.
+-- public.update_updated_at_column() é utilitário genérico já rodando em
+-- produção (idêntico a zapp.update_updated_at_column(), storage.update_
+-- updated_at_column()), mas SEM nenhuma migration no repo que o crie —
+-- gap de rastreabilidade pré-existente já documentado em
+-- docs/audits/triggers-whatsapp-connections.md ("Triggers migrados de
+-- public → zapp sem migration correspondente no repo"). CREATE OR REPLACE
+-- aqui torna esta migration autocontida: aplicável em banco novo (fresh
+-- apply, disaster recovery) sem depender de estado só-em-produção.
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$;
+
 DROP TRIGGER IF EXISTS trg_user_empresas_updated ON public.user_empresas;
 CREATE TRIGGER trg_user_empresas_updated
   BEFORE UPDATE ON public.user_empresas

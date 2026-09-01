@@ -83,11 +83,30 @@ Deno.test("180300: as 4 policies existem com DROP POLICY IF EXISTS antes de cada
   }
 });
 
-Deno.test("180300: GAP-1 — trigger de updated_at em user_empresas presente", () => {
+Deno.test("180300: GAP-1 — trigger de updated_at em user_empresas presente, DROP antes de CREATE", () => {
   assertMatch(TABLES_MIG, /DROP TRIGGER IF EXISTS trg_user_empresas_updated ON public\.user_empresas/);
   assertMatch(
     TABLES_MIG,
     /CREATE TRIGGER trg_user_empresas_updated\s+BEFORE UPDATE ON public\.user_empresas\s+FOR EACH ROW EXECUTE FUNCTION public\.update_updated_at_column\(\)/,
+  );
+  const dropIdx = TABLES_MIG.indexOf("DROP TRIGGER IF EXISTS trg_user_empresas_updated");
+  const createIdx = TABLES_MIG.indexOf("CREATE TRIGGER trg_user_empresas_updated");
+  assert(
+    dropIdx >= 0 && createIdx > dropIdx,
+    "CREATE TRIGGER antes de DROP TRIGGER falharia com 'trigger already exists' em reaplicação",
+  );
+});
+
+Deno.test("180300: GAP-3 (achado cubic) — função do trigger é autocontida, não depende de estado só-em-produção", () => {
+  assertMatch(
+    TABLES_MIG,
+    /CREATE OR REPLACE FUNCTION public\.update_updated_at_column\(\)[\s\S]{0,20}RETURNS trigger/,
+  );
+  const fnIdx = TABLES_MIG.indexOf("CREATE OR REPLACE FUNCTION public.update_updated_at_column()");
+  const triggerIdx = TABLES_MIG.indexOf("CREATE TRIGGER trg_user_empresas_updated");
+  assert(
+    fnIdx >= 0 && triggerIdx > fnIdx,
+    "a função deve ser criada ANTES do CREATE TRIGGER que a referencia — senão apply-from-scratch falha",
   );
 });
 
