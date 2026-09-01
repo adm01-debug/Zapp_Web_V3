@@ -26,22 +26,26 @@ interface ChatToolbarProps {
   showRichToolbar: boolean;
   onToggleRichToolbar: () => void;
   // SecondaryToolbar forwarded props
-  inputRef: React.RefObject<HTMLTextAreaElement>;
+  // Refs seguem o formato produzido por `useRef<T>(null)` — RefObject<T | null>.
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   inputValue: string;
-  onSendSticker: (sticker: { url: string; type: string }) => void;
+  /** Contrato real do StickerPicker: recebe a URL do sticker. */
+  onSendSticker: (stickerUrl: string) => void;
   onSendAudioMeme: (url: string) => void;
-  onSendCustomEmoji: (emoji: string) => void;
-  onOpenCatalog: () => void;
+  onSendCustomEmoji: (emojiUrl: string) => void;
+  onOpenCatalog?: () => void;
   onAudioSend: (blob: Blob) => void;
-  fileUploaderRef: React.RefObject<FileUploaderRef>;
+  fileUploaderRef: React.RefObject<FileUploaderRef | null>;
   instanceName?: string;
   contactPhone: string;
   contactId: string;
   contactName: string;
-  onVoiceDictation: () => void;
-  onFileSelect: (files: File[]) => void;
-  isWhisper: boolean;
-  onToggleWhisper: () => void;
+  /** Ditado por voz devolve o texto transcrito. */
+  onVoiceDictation: (text: string) => void;
+  /** Contrato real do FileUploader: um arquivo por vez + categoria detectada. */
+  onFileSelect: (file: File, category: string) => void;
+  isWhisper?: boolean;
+  onToggleWhisper?: () => void;
   // Mobile quick tools
   onRewrite: (text: string) => void;
 }

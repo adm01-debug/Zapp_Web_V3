@@ -22,7 +22,8 @@ const makeAtt = (overrides: Partial<ChatInputAttachment> = {}): ChatInputAttachm
     id: 'att-1',
     file: new File([''], 'file.png', { type: 'image/png' }),
     category: 'image',
-    preview: null,
+    // useChatInputLogic.handleFileSelect grava `undefined` (não null) quando não há preview.
+    preview: undefined,
     ...overrides,
   }) as ChatInputAttachment;
 
@@ -43,7 +44,7 @@ describe('ChatAttachmentPreview', () => {
 
   it('renderiza ícone FileText para categoria document', () => {
     const att = makeAtt({
-      preview: null,
+      preview: undefined,
       category: 'document',
       file: new File([''], 'doc.pdf', { type: 'application/pdf' }),
     });

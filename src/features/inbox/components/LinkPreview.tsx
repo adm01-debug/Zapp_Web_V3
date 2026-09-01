@@ -148,8 +148,6 @@ export function LinkPreview({
             src={metadata.image}
             alt={metadata.title || 'Imagem do link'}
             onError={() => setImageError(true)}
-            loading="lazy"
-            decoding="async"
             className="max-h-64 max-w-full rounded-xl object-cover transition-transform hover:scale-[1.02]"
           />
         </a>
@@ -208,8 +206,6 @@ export function LinkPreview({
             src={metadata.image}
             alt={metadata.title || metadata.siteName || getDomain(url)}
             onError={() => setImageError(true)}
-            loading="lazy"
-            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
           {metadata.type === 'video' && (

@@ -25,7 +25,7 @@ describe('ComposerCore — contrato de props (integração)', () => {
 
   it('onSend tem assinatura compatível com ChatInputArea caller', () => {
     // ChatInputArea passa onSend: (attachments?: File[]) => void
-    const mockSend = vi.fn<[File[]?], void>();
+    const mockSend = vi.fn<(attachments?: File[]) => void>();
     const _props = { ...BASE_PROPS, onSend: mockSend };
     mockSend([]);
     expect(mockSend).toHaveBeenCalledWith([]);
@@ -33,7 +33,7 @@ describe('ComposerCore — contrato de props (integração)', () => {
 
   it('onSend tem assinatura compatível com TeamChatInputArea caller', () => {
     // TeamChatInputArea passa onSend: (text: string) => void
-    const mockSend = vi.fn<[string], void>();
+    const mockSend = vi.fn<(text: string) => void>();
     mockSend('mensagem de teste');
     expect(mockSend).toHaveBeenCalledWith('mensagem de teste');
   });

@@ -152,7 +152,7 @@ export function SecondaryToolbar({
       <VoiceChangerPicker onSendAudio={onSendAudioMeme} />
       <CustomEmojiPicker onSendEmoji={onSendCustomEmoji} />
       <EmojiPicker
-        onSelect={(emoji) => {
+        onEmojiSelect={(emoji: string) => {
           const el = inputRef.current;
           if (!el) return;
           const start = el.selectionStart;

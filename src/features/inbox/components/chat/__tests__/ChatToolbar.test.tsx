@@ -61,6 +61,7 @@ const baseProps = {
   onFileSelect: vi.fn(),
   isWhisper: false,
   onToggleWhisper: vi.fn(),
+  onRewrite: vi.fn(),
 };
 
 describe('ChatToolbar', () => {

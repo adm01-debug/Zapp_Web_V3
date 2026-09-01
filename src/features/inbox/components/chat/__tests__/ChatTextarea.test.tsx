@@ -46,8 +46,15 @@ vi.mock('../MarkdownPreview', () => ({ MarkdownPreview: () => null }));
 import { ChatTextarea } from '../ChatTextarea';
 import type { Message } from '@/types/chat';
 
-const makeMsg = (id = 'm1'): Message =>
-  ({ id, content: 'oi', sender: 'agent', timestamp: '' }) as Message;
+const makeMsg = (id = 'm1'): Message => ({
+  id,
+  conversationId: 'conv-1',
+  content: 'oi',
+  type: 'text',
+  sender: 'agent',
+  timestamp: new Date('2026-01-01T12:00:00Z'),
+  status: 'sent',
+});
 
 /** Mock mínimo de useChatInputLogic ReturnType */
 const makeMockLogic = (overrides = {}) => ({

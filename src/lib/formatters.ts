@@ -227,7 +227,8 @@ export function formatWhatsAppText(text: string): string {
     '\\`': '\x00TICK\x00',
   };
   for (const [seq, placeholder] of Object.entries(ESCAPE_MAP)) {
-    result = result.replaceAll(seq, placeholder);
+    // split/join = replaceAll literal (ES2021) sem depender de lib ES2021
+    result = result.split(seq).join(placeholder);
   }
 
   // 3. Aplicar substituições (triple backtick antes do inline)
@@ -246,7 +247,8 @@ export function formatWhatsAppText(text: string): string {
     '\x00TICK\x00': '`',
   };
   for (const [placeholder, char] of Object.entries(RESTORE_MAP)) {
-    result = result.replaceAll(placeholder, char);
+    // split/join = replaceAll literal (ES2021) sem depender de lib ES2021
+    result = result.split(placeholder).join(char);
   }
 
   return result;

@@ -4,7 +4,7 @@
  * Encapsula: MentionAutocomplete, markdown preview, <textarea>, char counter.
  * P18 — drag-drop: onFileDrop + isDragOver ring visual.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from '@/components/ui/motion';
 import { MentionAutocomplete, useMentions } from './MentionAutocomplete';
@@ -53,7 +53,10 @@ export function ChatTextarea({
 }: ChatTextareaProps) {
   // B1b FIX: useMentions recebe inputRef (RefObject), não { inputValue }
   // B1e FIX: nomes corretos — useMentions retorna isOpen/cursorPos/handleSelect/close
-  const safeRef = inputRef ?? ({ current: null } as React.RefObject<HTMLTextAreaElement | null>);
+  // Fallback estável: sem useRef, um objeto novo a cada render faria o React
+  // desanexar/reanexar a ref do <textarea> em todo ciclo.
+  const fallbackRef = useRef<HTMLTextAreaElement | null>(null);
+  const safeRef = inputRef ?? fallbackRef;
   const {
     isOpen: mentionOpen,
     cursorPos: mentionCursorPos,
@@ -89,7 +92,7 @@ export function ChatTextarea({
       </AnimatePresence>
 
       <textarea
-        ref={asRef(inputRef)}
+        ref={asRef(safeRef)}
         id={inputId}
         value={inputValue}
         onChange={(e) => {

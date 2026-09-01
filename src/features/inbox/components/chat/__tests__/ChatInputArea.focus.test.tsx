@@ -52,11 +52,7 @@ vi.mock('../ChatToolbar', () => ({ ChatToolbar: () => null }));
 vi.mock('../ChatSendButtons', () => ({ ChatSendButtons: () => null }));
 /** Mock que materializa a textarea real e conecta o inputRef ao DOM element */
 vi.mock('../ChatTextarea', () => ({
-  ChatTextarea: ({
-    inputRef,
-  }: {
-    inputRef?: React.RefObject<HTMLTextAreaElement | null>;
-  }) => (
+  ChatTextarea: ({ inputRef }: { inputRef?: React.RefObject<HTMLTextAreaElement | null> }) => (
     <textarea
       ref={inputRef as React.RefObject<HTMLTextAreaElement>}
       data-testid="chat-textarea"
@@ -67,8 +63,15 @@ vi.mock('../ChatTextarea', () => ({
 
 import { ChatInputArea } from '../ChatInputArea';
 
-const makeMsg = (id: string): Message =>
-  ({ id, content: 'hello', sender: 'agent', timestamp: new Date().toISOString() } as Message);
+const makeMsg = (id: string): Message => ({
+  id,
+  conversationId: 'conv-1',
+  content: 'hello',
+  type: 'text',
+  sender: 'agent',
+  timestamp: new Date('2026-01-01T12:00:00Z'),
+  status: 'sent',
+});
 
 function makeInputRef() {
   return React.createRef<HTMLTextAreaElement>() as React.MutableRefObject<HTMLTextAreaElement | null>;
@@ -79,6 +82,7 @@ function makeBaseProps(inputRef: React.RefObject<HTMLTextAreaElement | null>) {
     conversationId: 'conv-1',
     messages: [makeMsg('m1')],
     isSending: false,
+    isRecordingAudio: false,
     inputValue: '',
     onInputChange: vi.fn(),
     onSend: vi.fn(),

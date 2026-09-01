@@ -16,6 +16,67 @@ let mockIsFetchingNextPage = false;
 const sonnerCalls: Array<[string, ...unknown[]]> = [];
 
 // ---------------------------------------------------------------------------
+// Factories de mock — refletem o tipo REAL de retorno dos hooks
+// ---------------------------------------------------------------------------
+
+/** Retorno real de `useTeamMessages` (inclui isError, error e lastReadRef). */
+type TeamMessagesResult = ReturnType<typeof useTeamMessages>;
+
+/** Retorno real de `useDeleteTeamMessage` (UseMutationResult completo do TanStack Query). */
+type DeleteTeamMessageResult = ReturnType<typeof useDeleteTeamMessage>;
+
+/** Campos que os testes sobrescrevem — o restante recebe defaults sensatos. */
+interface TeamMessagesOverrides {
+  messages?: TeamMessage[];
+  isLoading?: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  isError?: boolean;
+  error?: TeamMessagesResult['error'];
+}
+
+function mockTeamMessages(overrides: TeamMessagesOverrides = {}): TeamMessagesResult {
+  return {
+    messages: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+    fetchNextPage: vi.fn<TeamMessagesResult['fetchNextPage']>(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    lastReadRef: { current: null },
+    ...overrides,
+  };
+}
+
+/**
+ * Monta um `UseMutationResult` completo no estado idle.
+ * Só `mutate` varia entre os cenários testados.
+ */
+function mockDeleteTeamMessage(
+  mutate: DeleteTeamMessageResult['mutate'] = vi.fn<DeleteTeamMessageResult['mutate']>()
+): DeleteTeamMessageResult {
+  return {
+    mutate,
+    mutateAsync: vi.fn<DeleteTeamMessageResult['mutateAsync']>(),
+    reset: vi.fn<DeleteTeamMessageResult['reset']>(),
+    data: undefined,
+    error: null,
+    variables: undefined,
+    context: undefined,
+    failureCount: 0,
+    failureReason: null,
+    isError: false,
+    isIdle: true,
+    isPending: false,
+    isPaused: false,
+    isSuccess: false,
+    status: 'idle',
+    submittedAt: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Mocks de módulos
 // ---------------------------------------------------------------------------
 
@@ -149,18 +210,11 @@ beforeEach(() => {
   mockIsFetchingNextPage = false;
   sonnerCalls.length = 0;
 
-  vi.mocked(useTeamMessages).mockImplementation(() => ({
-    messages: mockMessages,
-    isLoading: false,
-    fetchNextPage: vi.fn(),
-    hasNextPage: false,
-    isFetchingNextPage: mockIsFetchingNextPage,
-  }));
+  vi.mocked(useTeamMessages).mockImplementation(() =>
+    mockTeamMessages({ messages: mockMessages, isFetchingNextPage: mockIsFetchingNextPage })
+  );
 
-  vi.mocked(useDeleteTeamMessage).mockImplementation(() => ({
-    mutate: vi.fn(),
-    isPending: false,
-  }));
+  vi.mocked(useDeleteTeamMessage).mockImplementation(() => mockDeleteTeamMessage());
 });
 
 // ---------------------------------------------------------------------------
@@ -215,13 +269,7 @@ describe('useTeamChatPanel — casos extras (P09)', () => {
     vi.mocked(useTeamMessages).mockImplementation((_convId, query) => {
       const q = String(query ?? '').toLowerCase();
       const filtered = q ? allMsgs.filter((m) => m.content.toLowerCase().includes(q)) : allMsgs;
-      return {
-        messages: filtered,
-        isLoading: false,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      };
+      return mockTeamMessages({ messages: filtered });
     });
 
     const { result } = renderHook(() => useTeamChatPanel(mockConversation), {
@@ -258,13 +306,9 @@ describe('useTeamChatPanel — casos extras (P09)', () => {
   });
 
   it('5. isFetchingNextPage false após resolução', () => {
-    vi.mocked(useTeamMessages).mockImplementation(() => ({
-      messages: [],
-      isLoading: false,
-      fetchNextPage: vi.fn(),
-      hasNextPage: false,
-      isFetchingNextPage: true,
-    }));
+    vi.mocked(useTeamMessages).mockImplementation(() =>
+      mockTeamMessages({ isFetchingNextPage: true })
+    );
 
     const { result, rerender } = renderHook(() => useTeamChatPanel(mockConversation), {
       wrapper: createWrapper(),
@@ -272,13 +316,9 @@ describe('useTeamChatPanel — casos extras (P09)', () => {
 
     expect(result.current.isFetchingNextPage).toBe(true);
 
-    vi.mocked(useTeamMessages).mockImplementation(() => ({
-      messages: [],
-      isLoading: false,
-      fetchNextPage: vi.fn(),
-      hasNextPage: false,
-      isFetchingNextPage: false,
-    }));
+    vi.mocked(useTeamMessages).mockImplementation(() =>
+      mockTeamMessages({ isFetchingNextPage: false })
+    );
 
     rerender();
 
@@ -287,12 +327,15 @@ describe('useTeamChatPanel — casos extras (P09)', () => {
 
   it('6. handleDelete emite toast de erro; sem toast extra em sucesso', () => {
     // Cenário de erro: mutate invoca onError → toast.error
-    vi.mocked(useDeleteTeamMessage).mockImplementationOnce(() => ({
-      mutate: vi.fn((_args: unknown, opts?: { onError?: (err: Error) => void }) => {
-        opts?.onError?.(new Error('falha de rede'));
-      }),
-      isPending: false,
-    }));
+    const failingMutate = vi.fn<DeleteTeamMessageResult['mutate']>((variables, options) => {
+      options?.onError?.(new Error('falha de rede'), variables, undefined, {
+        client: new QueryClient(),
+        meta: undefined,
+      });
+    });
+    vi.mocked(useDeleteTeamMessage).mockImplementationOnce(() =>
+      mockDeleteTeamMessage(failingMutate)
+    );
 
     const { result } = renderHook(() => useTeamChatPanel(mockConversation), {
       wrapper: createWrapper(),
@@ -307,10 +350,7 @@ describe('useTeamChatPanel — casos extras (P09)', () => {
     // Cenário de sucesso: mutate sem erro → nenhum toast.error adicional
     const errorCountBefore = sonnerCalls.filter((c) => c[0] === 'error').length;
 
-    vi.mocked(useDeleteTeamMessage).mockImplementationOnce(() => ({
-      mutate: vi.fn(),
-      isPending: false,
-    }));
+    vi.mocked(useDeleteTeamMessage).mockImplementationOnce(() => mockDeleteTeamMessage());
 
     const { result: result2 } = renderHook(() => useTeamChatPanel(mockConversation), {
       wrapper: createWrapper(),
