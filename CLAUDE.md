@@ -158,7 +158,7 @@ ou de ligar algo intencionalmente desligado.
 | Bucket | Público | Limite | Notas |
 |--------|---------|--------|---------|
 | `audio-memes` | **sim** | 5 MB | Público por decisão explícita do dono (migrations 20260806194000 e 20260806195000). Áudios de memes internos. |
-| `audio-messages` | **não** (revertido 2026-08-30) | — | **Ficou privado de novo** pela migration `plano100_e028_storage_buckets_privados` (aplicada no DB, **ainda sem arquivo espelho no repo** — ver pendência abaixo). Frontend já compatível: `useMediaUrl.ts` (ADR-004) gera signed URL (TTL 1h) em vez de usar `/object/public/`. Validado ao vivo em 2026-09-01. |
+| `audio-messages` | **não** | — | Privado (não confirmado quando exatamente, mas `updated_at` do bucket é anterior a 2026-08-06 — **não** relacionado à migration `plano100_e028_storage_buckets_privados`, que era contaminação de outro projeto, ver nota abaixo). Frontend já compatível: `useMediaUrl.ts` (ADR-004) gera signed URL (TTL 1h) em vez de usar `/object/public/`. Validado ao vivo em 2026-09-01. |
 | `avatars` | sim | 5 MB | |
 | `comprovantes-financeiro` | não | 20 MB | |
 | `custom-emojis` | sim | 512 KB | |
@@ -169,12 +169,39 @@ ou de ligar algo intencionalmente desligado.
 | `recibos-entrega` | sim | 10 MB | |
 | `stickers` | sim | 512 KB | |
 | `team-chat-files` | não | — | |
-| `whatsapp-media` | **não** (revertido 2026-08-30) | 50 MB | **Ficou privado de novo** pela migration `plano100_e028_storage_buckets_privados` — reverte o estado "público desde BUG-MEDIA-20260806" descrito anteriormente aqui. Frontend já compatível (mesma nota de `audio-messages`); signed URL testada ao vivo em 2026-09-01 (`HTTP 200`). **Não tratar a ausência de `/object/public/` como bug** — é o comportamento atual esperado. |
+| `whatsapp-media` | **não** | 50 MB | Privado — reverte o estado "público desde BUG-MEDIA-20260806" descrito anteriormente aqui. `updated_at` do bucket é **2026-07-26**, então **não** foi a migration `plano100_e028_storage_buckets_privados` (essa é de 30/08 e era contaminação de outro projeto — ver nota abaixo) que mudou isso; causa raiz não identificada nesta sessão. Frontend já compatível (mesma nota de `audio-messages`); signed URL testada ao vivo em 2026-09-01 (`HTTP 200`). **Não tratar a ausência de `/object/public/` como bug** — é o comportamento atual esperado. |
 | `whatsapp-status-media` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
 | `zapp-exports` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
 | `zapp-reports` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. Policy `reports_storage_admin_all` (service_role apenas). |
 
-> **Pendência aberta (2026-09-01):** 6 migrations aplicadas em produção entre 30–31/08 (`plano100_e028_storage_buckets_privados`, `plano100_e036_pii_access_logs`, `plano100_e012_secdef_permissions_helpers`, `e2e_fix_extend_app_role_enum`, `e2e_fix_finance_core_empresas_user_empresas`, `rollback_departamento_pessoal_contamination`) estão registradas em `supabase_migrations.schema_migrations` mas **sem arquivo espelho em `supabase/migrations/`** — violação do modelo "DB-as-source" descrito em `supabase/migrations/README.md` (item 3: arquivos devem ser o "registro histórico/espelho" do DB). Efeito em produção confirmado e seguro (buckets privados + signed URL funcionando, `zapp.pii_access_log` e `zapp.check_user_permission`/`user_has_permission` existem, enum `app_role` ganhou `financeiro/operacional/visualizador/contador/operator/viewer`). Faltam os arquivos `.sql` espelho — próxima sessão deve materializá-los (padrão `materializa_*` já usado no repo) antes de mexer nesses objetos de novo.
+> **Correção 2026-09-01 (sessão seguinte):** as 3 migrations acima
+> (`plano100_e028_storage_buckets_privados`, `plano100_e036_pii_access_logs`,
+> `plano100_e012_secdef_permissions_helpers`) eram **contaminação cross-tenant**
+> de outro projeto Supabase ("Departamento Pessoal V3") aplicada por engano no
+> banco do zapp em 2026-08-30 — **não são, e nunca foram, features do zapp**.
+> Confirmado ao vivo: criaram `public.pii_access_logs`/`pii_access_alerts`/
+> `v_pii_access_suspeitos`, 8 funções (`get_my_permissions`,
+> `user_belongs_to_empresa` etc.) e 10 storage policies `tenant_*` em 4 buckets
+> de RH (`comprovantes-despesas`, `contabilidade-anexos`, `relatorios-privados`,
+> `sst-programas`) — nada disso tem relação com `whatsapp-media`/`audio-messages`
+> (esses ficaram privados por outro motivo, anterior, não identificado). O
+> rollback já existe e já foi aplicado com sucesso:
+> `supabase/migrations/20260831124500_rollback_departamento_pessoal_contamination.sql`
+> (autorização explícita do dono registrada no próprio arquivo). Verificado
+> ao vivo 2026-09-01: zero objetos de contaminação restantes no banco. **Não
+> tentar "materializar" arquivo espelho para as 3 migrations estrangeiras** —
+> isso recriaria a contaminação na forma de código versionado do zapp.
+>
+> **Pendência real remanescente:** só 2 migrations aplicadas em 30/08 seguem
+> sem arquivo espelho no repo — `e2e_fix_extend_app_role_enum` (estende
+> `public.app_role` com `financeiro/operacional/visualizador/contador/
+> operator/viewer`, usado por `public.user_empresas.role`) e
+> `e2e_fix_finance_core_empresas_user_empresas` (tabelas `public.empresas`/
+> `public.user_empresas` do módulo multi-empresa, distinto de `zapp.empresas`
+> que é a base de 51.688 clientes/leads). Ambas são trabalho legítimo do zapp
+> (não contaminação) — materializadas em
+> `supabase/migrations/20260830180000_e2e_fix_extend_app_role_enum.sql` e
+> `supabase/migrations/20260830180300_e2e_fix_finance_core_empresas_user_empresas.sql`.
 
 > **Cron jobs ativos:** 239 jobs em `cron.job` (pg_cron — auditado ao vivo 2026-08-20; anteriores: 218 em 2026-08-15, 151 em 2026-08-06)
 > **Vault:** 37 secrets em `vault.secrets` (faxina concluída — zero `minio_*`/DEPRECATED; inventário canônico em `docs/SECRETS_INVENTORY.md`)
