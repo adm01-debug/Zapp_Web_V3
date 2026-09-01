@@ -1,5 +1,21 @@
 import { LucideIcon } from 'lucide-react';
-import { Info, Smartphone, Brain, Sparkles, Tag, User, ListTodo, Bell, FileText, Clock, BarChart3, Image, TrendingUp, ShoppingBag, GitBranch } from 'lucide-react';
+import {
+  Info,
+  Smartphone,
+  Brain,
+  Sparkles,
+  Tag,
+  User,
+  ListTodo,
+  Bell,
+  FileText,
+  Clock,
+  BarChart3,
+  Image,
+  TrendingUp,
+  ShoppingBag,
+  GitBranch,
+} from 'lucide-react';
 
 /** Accordion Section Config interface definition. */
 export interface AccordionSectionConfig {
@@ -31,23 +47,85 @@ export const CONTACT_DETAIL_SECTIONS: AccordionSectionConfig[] = [
   { value: 'media', label: 'Mídia Compartilhada', icon: Image, customIndex: 8 },
 ];
 
-/** D E F A U L T_ O P E N_ S E C T I O N S constant. */
-export const DEFAULT_OPEN_SECTIONS = ['info', 'crm-360', 'intelligence', 'tags', 'assignment', 'custom-fields', 'notes', 'history', 'stats'];
+/**
+ * Abre somente a secao essencial. Cada secao pesada monta hooks de dados;
+ * abrir todas em paralelo causava fan-out de dezenas de requests ao trocar de
+ * contato e saturava o semaforo local antes da primeira pagina de mensagens.
+ */
+export const DEFAULT_OPEN_SECTIONS = ['info'];
 
 const ACCORDION_STORAGE_KEY = 'contact-details-accordion-state';
+
+const LEGACY_EAGER_DEFAULTS = [
+  [
+    'info',
+    'crm-360',
+    'intelligence',
+    'tags',
+    'assignment',
+    'custom-fields',
+    'notes',
+    'history',
+    'stats',
+  ],
+  [
+    'info',
+    'crm-360',
+    'intelligence',
+    'tags',
+    'assignment',
+    'custom-fields',
+    'notes',
+    'history',
+    'sla-timeline',
+    'stats',
+  ],
+] as const;
+
+const KNOWN_SECTION_VALUES = new Set([
+  ...CONTACT_DETAIL_SECTIONS.map((section) => section.value),
+  'custom-fields',
+  'delivery-stats',
+  'sla-timeline',
+]);
+
+function isLegacyEagerDefault(value: string[]): boolean {
+  return LEGACY_EAGER_DEFAULTS.some(
+    (legacy) => legacy.length === value.length && legacy.every((section) => value.includes(section))
+  );
+}
 
 /** get Stored Accordion State function. */
 export function getStoredAccordionState(): string[] {
   try {
     const stored = localStorage.getItem(ACCORDION_STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch { /* storage unavailable */ }
-  return DEFAULT_OPEN_SECTIONS;
+    if (stored) {
+      const parsed: unknown = JSON.parse(stored);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every(
+          (section): section is string =>
+            typeof section === 'string' && KNOWN_SECTION_VALUES.has(section)
+        )
+      ) {
+        if (isLegacyEagerDefault(parsed)) {
+          saveAccordionState(DEFAULT_OPEN_SECTIONS);
+          return [...DEFAULT_OPEN_SECTIONS];
+        }
+        return parsed;
+      }
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return [...DEFAULT_OPEN_SECTIONS];
 }
 
 /** Persists the current accordion open-section list to localStorage. */
 export function saveAccordionState(value: string[]) {
   try {
     localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(value));
-  } catch { /* storage unavailable */ }
+  } catch {
+    /* storage unavailable */
+  }
 }

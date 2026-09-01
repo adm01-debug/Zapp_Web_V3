@@ -156,6 +156,25 @@ const checks = [
     dockerignore,
     "graphify-out não está excluído do contexto principal",
   ],
+  // G8-1 (2026-08-30, mutante M-B): continue-on-error no step de convergência
+  // silenciaria o gate fail-closed e passava por todos os guards. O uso
+  // legítimo na retenção de assets (linha ~229) fica fora do bloco deste
+  // step — a checagem é escopada entre o name do gate e o próximo step.
+  [
+    /- name: ✅ Convergência verificada \(Swarm × imagem do deploy\)\n(?:(?!\n {6}- name:)[\s\S])*?continue-on-error:/,
+    workflow,
+    "gate de convergência não pode ser silenciado com continue-on-error",
+    true,
+  ],
+  // G8-2 (2026-08-30, mutante M-F): remover o exit 1 do caso rollback_* do
+  // case $STATUS tirava o fail-fast do gate sem ser detectado. A regex ancora
+  // o case inteiro (até o esac) para não casar com outro "exit 1 ;;" de um
+  // case posterior do workflow.
+  [
+    /case "\$STATUS" in\s+rollback_completed\|rollback_paused\|paused\)\s+echo\s+"::error::CONVERGENCE_FAIL[^"]*"\s*;\s*exit 1\s*;;\s+esac/,
+    workflow,
+    "caminho de rollback da convergência deve permanecer fail-fast (exit 1)",
+  ],
 ];
 
 const failures = checks.filter(([pattern, source, , shouldBeAbsent]) =>

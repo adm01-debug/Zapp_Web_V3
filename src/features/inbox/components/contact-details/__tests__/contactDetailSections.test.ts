@@ -79,29 +79,8 @@ describe('CONTACT_DETAIL_SECTIONS', () => {
 // ── DEFAULT_OPEN_SECTIONS ─────────────────────────────────────────────────────
 
 describe('DEFAULT_OPEN_SECTIONS', () => {
-  it('is a non-empty array', () => {
-    expect(Array.isArray(DEFAULT_OPEN_SECTIONS)).toBe(true);
-    expect(DEFAULT_OPEN_SECTIONS.length).toBeGreaterThan(0);
-  });
-
-  it('contains "info"', () => {
-    expect(DEFAULT_OPEN_SECTIONS).toContain('info');
-  });
-
-  it('contains "crm-360"', () => {
-    expect(DEFAULT_OPEN_SECTIONS).toContain('crm-360');
-  });
-
-  it('contains "tags"', () => {
-    expect(DEFAULT_OPEN_SECTIONS).toContain('tags');
-  });
-
-  it('contains "history"', () => {
-    expect(DEFAULT_OPEN_SECTIONS).toContain('history');
-  });
-
-  it('contains "notes"', () => {
-    expect(DEFAULT_OPEN_SECTIONS).toContain('notes');
+  it('abre somente informacoes para nao montar hooks auxiliares em rajada', () => {
+    expect(DEFAULT_OPEN_SECTIONS).toEqual(['info']);
   });
 
   it('all entries are non-empty strings', () => {
@@ -123,6 +102,31 @@ describe('getStoredAccordionState', () => {
     const custom = ['info', 'tags'];
     saveAccordionState(custom);
     expect(getStoredAccordionState()).toEqual(custom);
+  });
+
+  it('migra o antigo default eager para apenas informacoes', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        'info',
+        'crm-360',
+        'intelligence',
+        'tags',
+        'assignment',
+        'custom-fields',
+        'notes',
+        'history',
+        'sla-timeline',
+        'stats',
+      ])
+    );
+
+    expect(getStoredAccordionState()).toEqual(['info']);
+  });
+
+  it('ignora estado persistido que nao seja array de secoes conhecidas', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ open: ['info'] }));
+    expect(getStoredAccordionState()).toEqual(DEFAULT_OPEN_SECTIONS);
   });
 
   it('returns empty array when empty array was stored', () => {

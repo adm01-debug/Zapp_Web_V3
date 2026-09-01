@@ -21,6 +21,7 @@ import { touchLastSeen } from '../services/touchLastSeen';
 import { logMessagesSubscribe, wrapMessagesHandler } from '@/lib/devRealtimeLogger';
 import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { isValidUUID } from '@/utils/uuid';
+import { isTransientMarkReadError, persistMessagesRead } from '../services/markMessagesRead';
 export type { MessageBatcherStatus } from './realtime/useMessageUpdateBatcher';
 
 /**
@@ -51,8 +52,7 @@ export function shouldInvalidateOnUpdate(
   candidateContactId: string
 ): boolean {
   return (
-    payload.new?.contact_id === candidateContactId ||
-    payload.old?.contact_id === candidateContactId
+    payload.new?.contact_id === candidateContactId || payload.old?.contact_id === candidateContactId
   );
 }
 
@@ -772,10 +772,13 @@ export function useRealtimeMessages() {
           // realmente carrega contact_id (não é ruído do cron de TTL).
           if (active) {
             const updContactId = (payload.new as { contact_id?: string | null } | null)?.contact_id;
-            if (updContactId && shouldInvalidateOnUpdate(
-              payload as Parameters<typeof shouldInvalidateOnUpdate>[0],
-              updContactId
-            )) {
+            if (
+              updContactId &&
+              shouldInvalidateOnUpdate(
+                payload as Parameters<typeof shouldInvalidateOnUpdate>[0],
+                updContactId
+              )
+            ) {
               scheduleConversationCacheInvalidation(updContactId);
             }
           }
@@ -814,9 +817,9 @@ export function useRealtimeMessages() {
       active = false;
       void dbRemoveChannel('messages', channel);
     };
-  // scheduleConversationCacheInvalidation é useCallback([queryClient]) — estável;
-  // não é adicionado para manter a semântica de re-subscribe somente em queryClient.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // scheduleConversationCacheInvalidation é useCallback([queryClient]) — estável;
+    // não é adicionado para manter a semântica de re-subscribe somente em queryClient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, queryClient]);
 
   const sendMessage = async (
@@ -865,36 +868,73 @@ export function useRealtimeMessages() {
   // só o PATCH é agrupado (flush após MARK_READ_FLUSH_MS de inatividade, ou
   // no unmount em fire-and-forget para não perder writes).
   const MARK_READ_FLUSH_MS = 250;
+  const MARK_READ_RETRY_BASE_MS = 1_000;
+  const MARK_READ_MAX_RETRIES = 3;
   const pendingMarkReadRef = useRef<Set<string>>(new Set());
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markReadRetryCountRef = useRef(0);
+  const markReadUnmountingRef = useRef(false);
+  const flushMarkAsReadRef = useRef<(allowRetry?: boolean) => Promise<void>>(async () => {});
 
-  const flushMarkAsRead = useCallback(async () => {
-    if (markReadTimerRef.current !== null) {
-      clearTimeout(markReadTimerRef.current);
-      markReadTimerRef.current = null;
-    }
-    const ids = Array.from(pendingMarkReadRef.current);
-    pendingMarkReadRef.current = new Set();
-    if (ids.length === 0) return;
-
-    const { error } = await dbFrom('messages')
-      .update({ is_read: true })
-      .in('contact_id', ids)
-      .eq('sender', 'contact')
-      .eq('is_read', false);
-    if (error) log.error('Error marking messages as read (batch):', error);
-
-    // Touch last_seen throttled global (máx. 1 PATCH a cada 2min, deduplicado entre instâncias)
-    touchLastSeen();
-  }, []);
-
-  const scheduleMarkAsReadFlush = useCallback(() => {
+  const scheduleMarkAsReadFlush = useCallback((delayMs = MARK_READ_FLUSH_MS) => {
     if (markReadTimerRef.current !== null) clearTimeout(markReadTimerRef.current);
     markReadTimerRef.current = setTimeout(() => {
       markReadTimerRef.current = null;
-      void flushMarkAsRead();
-    }, MARK_READ_FLUSH_MS);
-  }, [flushMarkAsRead]);
+      void flushMarkAsReadRef.current(true);
+    }, delayMs);
+  }, []);
+
+  const flushMarkAsRead = useCallback(
+    async (allowRetry = true) => {
+      if (markReadTimerRef.current !== null) {
+        clearTimeout(markReadTimerRef.current);
+        markReadTimerRef.current = null;
+      }
+      const ids = Array.from(pendingMarkReadRef.current);
+      pendingMarkReadRef.current = new Set();
+      if (ids.length === 0) return;
+
+      let error: unknown = null;
+      try {
+        ({ error } = await persistMessagesRead(ids));
+      } catch (err) {
+        error = err;
+      }
+      if (error) {
+        const shouldRetry = isTransientMarkReadError(error);
+        if (shouldRetry) {
+          for (const id of ids) pendingMarkReadRef.current.add(id);
+          markReadRetryCountRef.current += 1;
+        } else {
+          markReadRetryCountRef.current = 0;
+        }
+        log.error(
+          shouldRetry
+            ? 'Error marking messages as read (batch); ids mantidos para retry:'
+            : 'Error marking messages as read (batch) is permanent; retry descartado:',
+          error
+        );
+        if (
+          shouldRetry &&
+          allowRetry &&
+          !markReadUnmountingRef.current &&
+          markReadRetryCountRef.current <= MARK_READ_MAX_RETRIES
+        ) {
+          scheduleMarkAsReadFlush(
+            MARK_READ_RETRY_BASE_MS * 2 ** (markReadRetryCountRef.current - 1)
+          );
+        }
+        return;
+      }
+      markReadRetryCountRef.current = 0;
+
+      // Touch last_seen throttled global (máx. 1 PATCH a cada 2min, deduplicado entre instâncias)
+      touchLastSeen();
+    },
+    [scheduleMarkAsReadFlush]
+  );
+
+  flushMarkAsReadRef.current = flushMarkAsRead;
 
   const applyOptimisticRead = useCallback(
     (contactIds: string[]) => {
@@ -951,12 +991,14 @@ export function useRealtimeMessages() {
   // Flush pendente no unmount (fire-and-forget) — evita perder writes quando
   // o usuário navega antes do debounce disparar.
   useEffect(() => {
+    markReadUnmountingRef.current = false;
     return () => {
+      markReadUnmountingRef.current = true;
       if (markReadTimerRef.current !== null) {
         clearTimeout(markReadTimerRef.current);
         markReadTimerRef.current = null;
       }
-      void flushMarkAsRead();
+      void flushMarkAsRead(false);
     };
   }, [flushMarkAsRead]);
 

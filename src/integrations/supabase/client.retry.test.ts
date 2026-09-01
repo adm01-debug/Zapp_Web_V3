@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { retryFetch } from './client';
+import { getSupabaseSemaphoreState, retryFetch } from './client';
 
 /**
  * F9-04 — Política de retry do cliente supabase-js.
@@ -21,20 +21,25 @@ const networkError = (): TypeError => new TypeError('Failed to fetch');
 
 const REST_URL = 'https://supabase.test/rest/v1/contacts';
 const AUTH_URL = 'https://supabase.test/auth/v1/token?grant_type=refresh_token';
+const READ_RPC_URL = 'https://supabase.test/rest/v1/rpc/rpc_list_messages_lite';
+const MUTATING_RPC_URL = 'https://supabase.test/rest/v1/rpc/rpc_accept_transfer';
 
 describe('retryFetch — retry policy (F9-04)', () => {
   const calls: string[] = [];
+  const callTimes: number[] = [];
   let fetchImpl: ReturnType<
     typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
   >;
 
   beforeEach(() => {
     calls.length = 0;
-    fetchImpl = vi.fn<
-      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-    >(() => Promise.reject(networkError()));
+    callTimes.length = 0;
+    fetchImpl = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() =>
+      Promise.reject(networkError())
+    );
     const tracker = vi.fn((input: RequestInfo | URL) => {
       calls.push(String(input));
+      callTimes.push(Date.now());
       return fetchImpl(input);
     });
     vi.stubGlobal('fetch', tracker);
@@ -78,16 +83,81 @@ describe('retryFetch — retry policy (F9-04)', () => {
     expect(calls.filter((u) => u.includes('/rest/v1/contacts'))).toHaveLength(3);
   });
 
-  it('HTTP 429 é retentado (rate-limit é transitório)', async () => {
-    vi.useFakeTimers();
-    fetchImpl.mockResolvedValue(fakeResponse(429));
+  it('POST sem chave de idempotencia nao e retentado em HTTP 503', async () => {
+    fetchImpl.mockResolvedValue(fakeResponse(503));
 
-    const promise = retryFetch(REST_URL, { method: 'GET' });
-    const assertion = expect(promise).rejects.toMatchObject({ name: 'RetryableHttpError' });
+    await expect(
+      retryFetch('https://supabase.test/functions/v1/gmail-oauth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getAuthUrl' }),
+      })
+    ).rejects.toMatchObject({ name: 'RetryableHttpError', status: 503 });
+
+    expect(calls.filter((u) => u.includes('/functions/v1/gmail-oauth'))).toHaveLength(1);
+  });
+
+  it('RPC PostgREST auditada como leitura e retentada mesmo usando POST', async () => {
+    vi.useFakeTimers();
+    fetchImpl
+      .mockResolvedValueOnce(fakeResponse(503))
+      .mockResolvedValueOnce(fakeResponse(503))
+      .mockResolvedValueOnce(fakeResponse(200));
+
+    const promise = retryFetch(READ_RPC_URL, { method: 'POST', body: '{}' });
     await vi.advanceTimersByTimeAsync(10_000);
 
-    await assertion;
-    expect(calls.filter((u) => u.includes('/rest/v1/contacts'))).toHaveLength(3);
+    await expect(promise).resolves.toMatchObject({ status: 200 });
+    expect(calls.filter((u) => u === READ_RPC_URL)).toHaveLength(3);
+  });
+
+  it('RPC mutante via POST permanece sem retry quando nao tem Idempotency-Key', async () => {
+    fetchImpl.mockResolvedValue(fakeResponse(503));
+
+    await expect(
+      retryFetch(MUTATING_RPC_URL, { method: 'POST', body: '{}' })
+    ).rejects.toMatchObject({ name: 'RetryableHttpError', status: 503 });
+    expect(calls.filter((u) => u === MUTATING_RPC_URL)).toHaveLength(1);
+  });
+
+  it('cooldown libera callers de forma escalonada sem ocupar os 8 slots', async () => {
+    vi.useFakeTimers();
+    fetchImpl.mockResolvedValueOnce(fakeResponse(429));
+
+    await expect(
+      retryFetch('https://supabase.test/rest/v1/rpc/rpc_mutation', {
+        method: 'POST',
+        body: '{}',
+      })
+    ).rejects.toMatchObject({ name: 'RetryableHttpError', status: 429 });
+
+    fetchImpl.mockResolvedValue(fakeResponse(200));
+    const pending = [
+      retryFetch(`${REST_URL}?id=eq.1`, { method: 'GET' }),
+      retryFetch(`${REST_URL}?id=eq.2`, { method: 'GET' }),
+      retryFetch(`${REST_URL}?id=eq.3`, { method: 'GET' }),
+    ];
+    expect(getSupabaseSemaphoreState().inFlight).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(2_049);
+    expect(calls.filter((u) => u.startsWith(REST_URL))).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls.filter((u) => u.startsWith(REST_URL))).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(199);
+    expect(calls.filter((u) => u.startsWith(REST_URL))).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(201);
+
+    await expect(Promise.all(pending)).resolves.toHaveLength(3);
+    const drainTimes = callTimes.slice(1);
+    expect(drainTimes[1] - drainTimes[0]).toBeGreaterThanOrEqual(200);
+    expect(drainTimes[2] - drainTimes[1]).toBeGreaterThanOrEqual(200);
+
+    // Deixa o relógio ultrapassar a última reserva e prova que o modo de
+    // dreno termina após um período sem tráfego.
+    await vi.advanceTimersByTimeAsync(201);
+    await expect(retryFetch(`${REST_URL}?cleanup=true`, { method: 'GET' })).resolves.toMatchObject({
+      status: 200,
+    });
   });
 
   it('4xx de negócio (HTTP 400) NÃO é retentado — resposta retorna direto', async () => {
@@ -127,5 +197,19 @@ describe('retryFetch — retry policy (F9-04)', () => {
     // nem dispara request). Antes, o fetch disparava 1x e o AbortError era
     // filtrado no retry.
     expect(calls.filter((u) => u.includes('/rest/v1/contacts'))).toHaveLength(0);
+  });
+
+  // Mantido por último: termina deliberadamente com cooldown ativo após a
+  // última resposta 429; nenhum teste posterior deve herdar esse estado.
+  it('HTTP 429 é retentado (rate-limit é transitório)', async () => {
+    vi.useFakeTimers();
+    fetchImpl.mockResolvedValue(fakeResponse(429));
+
+    const promise = retryFetch(REST_URL, { method: 'GET' });
+    const assertion = expect(promise).rejects.toMatchObject({ name: 'RetryableHttpError' });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await assertion;
+    expect(calls.filter((u) => u.includes('/rest/v1/contacts'))).toHaveLength(3);
   });
 });
