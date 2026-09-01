@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Portado do harness de produção do zapp-web (v1) para o v3.
 
-FROM oven/bun:1.3-alpine AS deps
+FROM oven/bun:1.4-alpine AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
 # Removido --frozen-lockfile para compatibilidade com bun 1.3.x (floating tag)
