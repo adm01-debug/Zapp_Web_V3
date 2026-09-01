@@ -143,11 +143,11 @@ export function LinkPreview({
         )}
         <a href={url} target="_blank" rel="noopener noreferrer">
           <img
+            loading="lazy"
+            decoding="async"
             src={metadata.image}
             alt={metadata.title || 'Imagem do link'}
             onError={() => setImageError(true)}
-            loading="lazy"
-            decoding="async"
             className="max-h-64 max-w-full rounded-xl object-cover transition-transform hover:scale-[1.02]"
           />
         </a>
@@ -169,6 +169,8 @@ export function LinkPreview({
       >
         {metadata.favicon && !faviconError ? (
           <img
+            loading="lazy"
+            decoding="async"
             src={metadata.favicon}
             alt=""
             className="h-4 w-4 rounded"
@@ -199,11 +201,11 @@ export function LinkPreview({
       {metadata.image && !imageError && (
         <div className="relative aspect-video overflow-hidden bg-muted">
           <img
+            loading="lazy"
+            decoding="async"
             src={metadata.image}
             alt={metadata.title || metadata.siteName || getDomain(url)}
             onError={() => setImageError(true)}
-            loading="lazy"
-            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
           {metadata.type === 'video' && (
@@ -219,6 +221,8 @@ export function LinkPreview({
         <div className="flex items-center gap-2">
           {metadata.favicon && !faviconError ? (
             <img
+              loading="lazy"
+              decoding="async"
               src={metadata.favicon}
               alt=""
               className="h-4 w-4 rounded"

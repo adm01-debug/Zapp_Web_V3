@@ -198,4 +198,40 @@ describe('Emoji sets', () => {
       expect(EXTENDED_EMOJIS).toContain(e);
     }
   });
+
+  it('ReactionBadge — count alto → mostra contador numérico completo', () => {
+    render(
+      <ReactionBadge
+        reaction={{ emoji: '👍', count: 100, reactedByMe: false }}
+        onClick={vi.fn()}
+        messageId="m1"
+      />
+    );
+    expect(screen.getByText('100')).toBeInTheDocument();
+  });
+
+  it('QuickReactionStrip — todos reagidos → todos aria-pressed="true"', () => {
+    render(<QuickReactionStrip onReact={vi.fn()} hasReacted={() => true} />);
+    const buttons = screen.getAllByRole('button');
+    const emojiButtons = buttons.filter((b) => b.getAttribute('aria-pressed') !== null);
+    expect(emojiButtons.length).toBeGreaterThan(0);
+    emojiButtons.forEach((btn) => {
+      expect(btn).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+
+  it('MessageReactionBar — lista vazia → só botão "+"', () => {
+    render(<MessageReactionBar reactions={[]} messageId="m1" onReact={vi.fn()} />);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('ReactionBadge — sem messageId → sem data-testid', () => {
+    render(
+      <ReactionBadge
+        reaction={{ emoji: '👍', count: 1, reactedByMe: false }}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button')).not.toHaveAttribute('data-testid');
+  });
 });

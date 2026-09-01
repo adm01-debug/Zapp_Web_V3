@@ -9,6 +9,7 @@ import {
   formatTimeHMS,
   formatBytesCompact,
   getInitialsFromNameOrEmail,
+  formatWhatsAppText,
 } from '@/lib/formatters';
 
 describe('formatDateTimeCompact (paridade: FailedMessageTableRow/AdminAlertHistory/AdminWebhookEvents)', () => {
@@ -53,4 +54,38 @@ describe('getInitialsFromNameOrEmail (paridade Wave 1: componentes de e-mail)', 
   it('e-mail vazio não explode (fix do crash latente)', () =>
     expect(getInitialsFromNameOrEmail(null, '')).toBe('?'));
   it('tudo nulo', () => expect(getInitialsFromNameOrEmail(null, null)).toBe('?'));
+});
+
+describe('formatWhatsAppText (P15 — E65)', () => {
+  it('caso 1: texto sem marcação passa sem alterar', () =>
+    expect(formatWhatsAppText('texto simples')).toBe('texto simples'));
+
+  it('caso 2: *bold* → <strong>bold</strong>', () =>
+    expect(formatWhatsAppText('*bold*')).toBe('<strong>bold</strong>'));
+
+  it('caso 3: _italic_ → <em>italic</em>', () =>
+    expect(formatWhatsAppText('_italic_')).toBe('<em>italic</em>'));
+
+  it('caso 4: ~strike~ → <del>strike</del>', () =>
+    expect(formatWhatsAppText('~strike~')).toBe('<del>strike</del>'));
+
+  it('caso 5: `code` → <code>code</code>', () =>
+    expect(formatWhatsAppText('`code`')).toBe('<code>code</code>'));
+
+  it('caso 6: aninhado *_negrito itálico_* → strong+em', () =>
+    expect(formatWhatsAppText('*_negrito itálico_*')).toBe(
+      '<strong><em>negrito itálico</em></strong>'
+    ));
+
+  it('caso 7: múltiplas ocorrências no mesmo texto', () =>
+    expect(formatWhatsAppText('*a* e *b*')).toBe('<strong>a</strong> e <strong>b</strong>'));
+
+  it('caso 8: escape \\* preserva literal *', () =>
+    expect(formatWhatsAppText('\\*não formatado\\*')).toBe('*não formatado*'));
+  it('caso 9: HTML tags são escapadas antes de formatar (B2 XSS fix)', () =>
+    expect(formatWhatsAppText('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;'));
+  it('caso 10: payload onerror é escapado', () =>
+    expect(formatWhatsAppText('<img onerror=alert(1)>')).toBe('&lt;img onerror=alert(1)&gt;'));
+  it('caso 11: bold em texto seguro funciona após HTML-escape', () =>
+    expect(formatWhatsAppText('*oi <mundo>*')).toBe('<strong>oi &lt;mundo&gt;</strong>'));
 });

@@ -234,6 +234,8 @@ export function ContactHeaderSection({
             )}
             {crmCompany?.logo_url && (
               <img
+                loading="lazy"
+                decoding="async"
                 src={crmCompany.logo_url}
                 alt={crmCompany.nome_fantasia || ''}
                 className="absolute -left-1 -top-1 h-8 w-8 rounded-md border border-border/10 bg-background object-contain ring-2 ring-background"

@@ -29,6 +29,8 @@ export function StickerUploadPreview({ pending, onConfirm, onCancel }: UploadPre
       <div className="flex items-center gap-3">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/30 bg-muted/30">
           <img
+            loading="lazy"
+            decoding="async"
             src={pending.imageUrl}
             alt="Preview da figurinha"
             className="h-full w-full object-contain p-0.5"

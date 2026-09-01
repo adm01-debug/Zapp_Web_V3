@@ -18,6 +18,13 @@ export default defineConfig({
       VITE_SUPABASE_ANON_KEY: 'test-anon-key',
     },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // CONVENÇÃO DE DIRETÓRIOS (leia antes de criar novos test files):
+    //   src/features/inbox/components/chat/__tests__/  → coberto por `bun run test:chat`
+    //     Use para: componentes de chat E hooks de chat (useMention*, useChatInput*, etc.)
+    //   src/features/inbox/hooks/__tests__/            → coberto por `bun run test` (full)
+    //     Use para: hooks gerais de inbox (useRealtimeInbox, useMediaUrl, etc.)
+    //   REGRA: hook exclusivo de chat → coloque em chat/__tests__/ para ser validado rápido.
+    //   ATENÇÃO vi.mock(): é HOISTED — use vi.hoisted() para variáveis em factory functions.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

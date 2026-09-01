@@ -242,6 +242,8 @@ export function PersonalStickers({ onSend }: PersonalStickersProps) {
               {deleteTarget && (
                 <span className="mt-2 flex items-center gap-3">
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={deleteTarget.image_url}
                     alt=""
                     className="h-12 w-12 rounded-lg bg-muted object-cover"
