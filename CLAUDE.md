@@ -157,22 +157,27 @@ ou de ligar algo intencionalmente desligado.
 
 | Bucket | Público | Limite | Notas |
 |--------|---------|--------|---------|
-| `audio-memes` | **sim** | 5 MB | Público por decisão explícita do dono (migrations 20260806194000 e 20260806195000). Áudios de memes internos. |
-| `audio-messages` | **não** | — | Privado (não confirmado quando exatamente, mas `updated_at` do bucket é anterior a 2026-08-06 — **não** relacionado à migration `plano100_e028_storage_buckets_privados`, que era contaminação de outro projeto, ver nota abaixo). Frontend já compatível: `useMediaUrl.ts` (ADR-004) gera signed URL (TTL 1h) em vez de usar `/object/public/`. Validado ao vivo em 2026-09-01. |
+| `audio-memes` | **sim** | 10 MB | Público por decisão explícita do dono (migrations 20260806194000 e 20260806195000). Áudios de memes internos. |
+| `audio-messages` | **não** | 25 MB | Privado (não confirmado quando exatamente, mas `updated_at` do bucket é anterior a 2026-08-06 — **não** relacionado à migration `plano100_e028_storage_buckets_privados`, que era contaminação de outro projeto, ver nota abaixo). Frontend já compatível: `useMediaUrl.ts` (ADR-004) gera signed URL (TTL 1h) em vez de usar `/object/public/`. Validado ao vivo em 2026-09-01. |
 | `avatars` | sim | 5 MB | |
-| `comprovantes-financeiro` | não | 20 MB | |
-| `custom-emojis` | sim | 512 KB | |
-| `email-attachments` | não | — | |
+| `comprovantes-financeiro` | não | 25 MB | |
+| `custom-emojis` | sim | 2 MB | |
+| `email-attachments` | não | 25 MB | |
 | `etiquetas-remessa` | não | 10 MB | |
 | `fechamentos` | não | 20 MB | |
-| `quarantine` | não | — | |
+| `quarantine` | não | 100 MB | |
 | `recibos-entrega` | sim | 10 MB | |
-| `stickers` | sim | 512 KB | |
-| `team-chat-files` | não | — | |
+| `stickers` | sim | 5 MB | |
+| `team-chat-files` | não | 50 MB | |
 | `whatsapp-media` | **não** | 50 MB | Privado — reverte o estado "público desde BUG-MEDIA-20260806" descrito anteriormente aqui. `updated_at` do bucket é **2026-07-26**, então **não** foi a migration `plano100_e028_storage_buckets_privados` (essa é de 30/08 e era contaminação de outro projeto — ver nota abaixo) que mudou isso; causa raiz não identificada nesta sessão. Frontend já compatível (mesma nota de `audio-messages`); signed URL testada ao vivo em 2026-09-01 (`HTTP 200`). **Não tratar a ausência de `/object/public/` como bug** — é o comportamento atual esperado. |
-| `whatsapp-status-media` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
-| `zapp-exports` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
-| `zapp-reports` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. Policy `reports_storage_admin_all` (service_role apenas). |
+| `whatsapp-status-media` | não | 50 MB | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
+| `zapp-exports` | não | 50 MB | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
+| `zapp-reports` | não | 50 MB | Não documentado até 2026-08-20; presente no DB em 2026-09-01. Policy `reports_storage_admin_all` (service_role apenas). |
+
+> Coluna Limite revalidada ao vivo em 2026-09-01 (`file_size_limit` de
+> `storage.buckets`, todas as 16 linhas) — a versão anterior desta tabela
+> tinha 11/16 valores desatualizados (nunca conferidos contra o DB desde a
+> criação original da tabela).
 
 > **Correção 2026-09-01 (sessão seguinte):** as 3 migrations acima
 > (`plano100_e028_storage_buckets_privados`, `plano100_e036_pii_access_logs`,
@@ -201,7 +206,12 @@ ou de ligar algo intencionalmente desligado.
 > que é a base de 51.688 clientes/leads). Ambas são trabalho legítimo do zapp
 > (não contaminação) — materializadas em
 > `supabase/migrations/20260830180000_e2e_fix_extend_app_role_enum.sql` e
-> `supabase/migrations/20260830180300_e2e_fix_finance_core_empresas_user_empresas.sql`.
+> `supabase/migrations/20260830180300_e2e_fix_finance_core_empresas_user_empresas.sql`,
+> **ainda não mergeadas em `main`** no momento em que este parágrafo foi
+> escrito — ver PR #1478 (branch `fix/materializa-migrations-drift-30-31ago-v2`).
+> Se você está lendo isto em `main` e esses 2 arquivos não existem em
+> `supabase/migrations/`, o PR #1478 ainda não foi mergeado — confira o
+> estado dele antes de tentar recriar essas migrations do zero.
 
 > **Cron jobs ativos:** 239 jobs em `cron.job` (pg_cron — auditado ao vivo 2026-08-20; anteriores: 218 em 2026-08-15, 151 em 2026-08-06)
 > **Vault:** 37 secrets em `vault.secrets` (faxina concluída — zero `minio_*`/DEPRECATED; inventário canônico em `docs/SECRETS_INVENTORY.md`)
