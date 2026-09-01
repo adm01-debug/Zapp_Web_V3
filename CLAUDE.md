@@ -153,12 +153,12 @@ ou de ligar algo intencionalmente desligado.
 > Para **Realtime**, sempre use a raiz física em `evo` (regra 4 acima).
 > Revalidado ao vivo em 2026-08-20 (`pg_class`) — este bloco é a descrição correta; ignorar qualquer texto antigo que afirme "físicas em zapp".
 
-### Storage Buckets (13 buckets em produção)
+### Storage Buckets (16 buckets em produção — revalidado ao vivo 2026-09-01)
 
 | Bucket | Público | Limite | Notas |
 |--------|---------|--------|---------|
 | `audio-memes` | **sim** | 5 MB | Público por decisão explícita do dono (migrations 20260806194000 e 20260806195000). Áudios de memes internos. |
-| `audio-messages` | **sim** | — | **LEITURA pública** via `/storage/v1/object/public/` — UPLOAD requer autenticação. `allowed_mime_types: [ogg,webm,mpeg,mp3,aac,mp4]`. |
+| `audio-messages` | **não** (revertido 2026-08-30) | — | **Ficou privado de novo** pela migration `plano100_e028_storage_buckets_privados` (aplicada no DB, **ainda sem arquivo espelho no repo** — ver pendência abaixo). Frontend já compatível: `useMediaUrl.ts` (ADR-004) gera signed URL (TTL 1h) em vez de usar `/object/public/`. Validado ao vivo em 2026-09-01. |
 | `avatars` | sim | 5 MB | |
 | `comprovantes-financeiro` | não | 20 MB | |
 | `custom-emojis` | sim | 512 KB | |
@@ -169,7 +169,12 @@ ou de ligar algo intencionalmente desligado.
 | `recibos-entrega` | sim | 10 MB | |
 | `stickers` | sim | 512 KB | |
 | `team-chat-files` | não | — | |
-| `whatsapp-media` | **sim** | 50 MB | Público desde BUG-MEDIA-20260806. LEITURA pública via `/object/public/`. UPLOAD requer autenticação. 18.494 objetos. |
+| `whatsapp-media` | **não** (revertido 2026-08-30) | 50 MB | **Ficou privado de novo** pela migration `plano100_e028_storage_buckets_privados` — reverte o estado "público desde BUG-MEDIA-20260806" descrito anteriormente aqui. Frontend já compatível (mesma nota de `audio-messages`); signed URL testada ao vivo em 2026-09-01 (`HTTP 200`). **Não tratar a ausência de `/object/public/` como bug** — é o comportamento atual esperado. |
+| `whatsapp-status-media` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
+| `zapp-exports` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
+| `zapp-reports` | não | — | Não documentado até 2026-08-20; presente no DB em 2026-09-01. Policy `reports_storage_admin_all` (service_role apenas). |
+
+> **Pendência aberta (2026-09-01):** 6 migrations aplicadas em produção entre 30–31/08 (`plano100_e028_storage_buckets_privados`, `plano100_e036_pii_access_logs`, `plano100_e012_secdef_permissions_helpers`, `e2e_fix_extend_app_role_enum`, `e2e_fix_finance_core_empresas_user_empresas`, `rollback_departamento_pessoal_contamination`) estão registradas em `supabase_migrations.schema_migrations` mas **sem arquivo espelho em `supabase/migrations/`** — violação do modelo "DB-as-source" descrito em `supabase/migrations/README.md` (item 3: arquivos devem ser o "registro histórico/espelho" do DB). Efeito em produção confirmado e seguro (buckets privados + signed URL funcionando, `zapp.pii_access_log` e `zapp.check_user_permission`/`user_has_permission` existem, enum `app_role` ganhou `financeiro/operacional/visualizador/contador/operator/viewer`). Faltam os arquivos `.sql` espelho — próxima sessão deve materializá-los (padrão `materializa_*` já usado no repo) antes de mexer nesses objetos de novo.
 
 > **Cron jobs ativos:** 239 jobs em `cron.job` (pg_cron — auditado ao vivo 2026-08-20; anteriores: 218 em 2026-08-15, 151 em 2026-08-06)
 > **Vault:** 37 secrets em `vault.secrets` (faxina concluída — zero `minio_*`/DEPRECATED; inventário canônico em `docs/SECRETS_INVENTORY.md`)
