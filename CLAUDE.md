@@ -241,20 +241,25 @@ ou de ligar algo intencionalmente desligado.
 
 ## Stubs Ativos (RPCs sem implementação real)
 
-Estas funções existem como stubs em `supabase/migrations/20260717000002_create_missing_rpcs_stubs.sql`.
-Todas fazem `RAISE EXCEPTION P0001` exceto onde indicado. **Não implementar como tabelas** — requerem Edge Functions.
+Estas funções seguem catalogadas como stubs/parciais, mas a migration original
+`20260717000002_create_missing_rpcs_stubs.sql` não está mais no repo após o
+cleanup. Use `docs/RPC_STUBS_STATUS.md`, `src/integrations/supabase/types.ts`
+e o snapshot canônico para o contrato vivo. **Não implementar como tabelas** —
+requerem Edge Functions.
 
 | RPC | Comportamento do Stub | Implementação Real |
 |-----|-----------------------|--------------------|
 | `initiate_gmail_oauth` | RAISE P0001 | Edge Function OAuth Google |
 | `complete_gmail_oauth` | RAISE P0001 | Edge Function OAuth callback |
-| `sync_to_crm` | RAISE P0001 | Edge Function + API CRM |
+| `sync_to_crm` | Retorna `{synced:false,error:'CRM sync not yet implemented'}` | Edge Function + API CRM |
 | `export_user_data` | Retorna perfil básico (JSON) | Edge Function export completo |
 | `import_user_data` | RAISE P0001 | Edge Function com validação |
 | `enrich_contact` | Retorna `{enriched: false}` | Integração API enriquecimento |
-| `get_latest_analysis` | Retorna avg engagement_score | Analytics completo |
+| `get_latest_analysis` | Legado/parcial; UI nova usa `rpc_latest_contact_analysis` | Analytics completo |
 
-> `check_download_permission` — **NÃO é stub**: função intencionalmente ausente, frontend fail-open via SQLSTATE 42883.
+> `check_download_permission` — **NÃO é stub**: função intencionalmente ausente; o
+> design original era fail-open via SQLSTATE 42883, mas o hook atual do frontend
+> está fail-closed quando a RPC não existe.
 > Detalhes completos em `docs/RPC_STUBS_STATUS.md`.
 
 ---
@@ -300,16 +305,18 @@ O repositório possui um **grafo de conhecimento** em `graphify-out/` (Apache 2.
 - **Top god nodes (rebuild 2026-08-20):** `cn()` (982°), `Button` (504°), `supabase` (412°), `Badge` (366°), `Card` (329°), `CardContent` (316°), `CardHeader` (257°), `getLogger()` (257°), `CardTitle` (255°), `err()` (213°)
 - **Limitação conhecida do parser (NÃO é bug):** 31 arquivos `.tsx` saem como "partially extracted" — todos por **`&` literal em texto JSX** (ex.: `VoIP & Chamadas`, `Conexões & Integrações`, `Privacidade & LGPD`). O tree-sitter do graphify aborta no `&` cru; esbuild/tsc/React aceitam (build de prod passa). Consultas a esses componentes podem faltar nós/arestas a partir da 1ª linha com `&`. **Não** trocar por `&amp;` — é churn por falso positivo de ferramenta.
 - **MCP server:** 8 tools (`graphify_query`, `graphify_path`, `graphify_db_crossref`, etc.)
+- **Wiki do grafo:** `graphify export wiki` (≤1 s a partir do `graph.json` existente) gera `graphify-out/wiki/` — ~1,5 mil artigos (1 por comunidade) + `index.md` como ponto de entrada para navegação ampla de agentes. Regenerar junto com o rebuild. Não versionado (coberto pelo ignore `graphify-out/*`).
+- **Watch (`graphify watch .`) — NÃO usar como daemon neste repo (testado 2026-08-25):** requer `watchdog` no venv do tool; debounce 3 s; cada mudança dispara **re-extração AST completa** (~2,8 mil arquivos — o cache não é aproveitado entre builds). Pior: o rebuild escreve cache/saídas no próprio diretório vigiado e **re-dispara o watcher em loop** (observado: `4010 file(s) changed` logo após o 1º rebuild → 2º rebuild imediato). Fluxo canônico permanece `graphify update .` pós-commit (~40 s nesta máquina; ~2,5 min no container) + `graphify export wiki`.
 
 **Sempre consultar o grafo antes de `search_files`/grep.**
 
-Regenerar (via container claude-code, ~2,5 min, sem custo de API):
+Regenerar (via container claude-code, ~2,5 min, sem custo de API) + wiki:
 ```sh
-. /workspace/.local/env.sh && cd /workspace/repos/zapp-web-v3 && graphify update . --force
+. /workspace/.local/env.sh && cd /workspace/repos/zapp-web-v3 && graphify update . --force && graphify export wiki
 ```
 Consultar: `graphify explain "<no>"` · `graphify path "A" "B"`
 
-`graph.json` (35 MB) e `graph.html` **não** são versionados — só `GRAPH_REPORT.md` e `manifest.json`.
+`graph.json` (35 MB), `graph.html` e `wiki/` **não** são versionados — `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json` e `.graphify_labels.json.sig` são preservados.
 
 ---
 

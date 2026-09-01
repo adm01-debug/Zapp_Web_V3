@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,6 +8,7 @@ import { queryKeys } from '@/services/api/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
 import { eventBus } from '@/lib/eventBus';
 import { evolutionInstanceName } from '@/lib/evolutionInstance';
+import { isConclusiveEvolutionDisconnect } from './evolutionAutoReconnectState';
 
 const log = getLogger('useEvolutionAutoReconnect');
 
@@ -163,9 +163,12 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       try {
         await restartInstance(evoInstanceName);
         await new Promise<void>((r) => setTimeout(r, 5_000));
-        const { error: healthCheckError } = await supabase.functions.invoke('connection-health-check', {
-          body: { instanceName: evoInstanceName },
-        });
+        const { error: healthCheckError } = await supabase.functions.invoke(
+          'connection-health-check',
+          {
+            body: { instanceName: evoInstanceName },
+          }
+        );
         if (healthCheckError) {
           log.warn(`Health check returned error for ${connection.name}`, healthCheckError);
         }
@@ -277,7 +280,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       await connectInstance(instanceName);
       await new Promise<void>((r) => setTimeout(r, 5_000));
 
-      const currentStatus = (await getInstanceStatus(instanceName)) as { instance?: { state?: string }; state?: string } | null;
+      const currentStatus = (await getInstanceStatus(instanceName)) as {
+        instance?: { state?: string };
+        state?: string;
+      } | null;
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
 
@@ -353,14 +359,17 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     }
 
     try {
-      const currentStatus = (await getInstanceStatus(instanceName)) as { instance?: { state?: string }; state?: string } | null;
+      const currentStatus = (await getInstanceStatus(instanceName)) as {
+        instance?: { state?: string };
+        state?: string;
+      } | null;
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
 
       // Reset failure counter on any success
       consecutiveFailsRef.current = 0;
 
-      if (state !== 'open' && state !== 'connecting' && !isReconnectingRef.current) {
+      if (isConclusiveEvolutionDisconnect(state) && !isReconnectingRef.current) {
         void attemptSpecificReconnect();
       }
     } catch (err: unknown) {

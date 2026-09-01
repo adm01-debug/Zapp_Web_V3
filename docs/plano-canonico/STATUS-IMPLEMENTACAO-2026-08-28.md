@@ -32,6 +32,41 @@ declarado concluído: há overloads incompatíveis com as tabelas atuais e mutat
 `SECURITY DEFINER` expostos a `authenticated` sem autorização interna. Nenhum objeto foi
 alterado para produzir esse diagnóstico.
 
+## Delta auditado em 30/08/2026
+
+> Baseline revalidada: `origin/main@8d9ec472a7ea45d366355e48dd4dff5e911e44cb`.
+> A evidência reproduzível desta rodada está em
+> [`2026-08-30-revalidacao-integral-main-db-ci.md`](./evidencias/008/2026-08-30-revalidacao-integral-main-db-ci.md).
+
+Esta revalidação substituiu o SHA de 29/08 por uma `main` mais nova, que incorporou o
+catálogo de schema e o guard de ACL MCP. Ela não autoriza nem executa mudanças no banco,
+na VPS ou em objetos candidatos a limpeza.
+
+| Grupo de etapas | Resultado revalidado | Consequência de status |
+|---|---|---|
+| 001–010 | O registro de evidências e o catálogo avançaram, mas ownership, baseline operacional única e critérios de GO continuam incompletos. | Permanecem parciais. |
+| 011–020 | Catálogo vivo confirmou a topologia, RLS e jobs; ainda há relações RLS sem policy, views fora de `security_invoker` e inventário `evo.json` inválido. | Permanecem parciais. |
+| 021–030 | O novo checker FE↔BE passou; o registry `evo.json` falha no próprio teste, o overload de snapshot continua duplicado e o contrato de transferências continua sem escrita autenticada direta segura. | 024 avançou, mas 021–030 não fecham. |
+| 031–040 | TypeScript direto permanece verde, mas a prova do gate oficial no SHA da baseline não foi preservada nesta rodada; persistência completa de preferências, canais e superfícies visíveis sem efeito continuam sem prova fim a fim. | 031 retorna a parcial até reunir prova oficial reproduzível; demais não avançam. |
+| 041–050 | Transferência single tem contenções já integradas, mas bulk/handoff/timeline, atomicidade, ticket persistente, concorrência e delete-instance seguem abertos. | 041/042/044 permanecem parciais; os demais mantêm a classificação anterior. |
+| 051–070 | As RPCs `export_user_data`, `import_user_data`, `enrich_contact`, `sync_to_crm` e `get_latest_analysis` ainda declaram implementação ausente no catálogo vivo. | Itens de stubs e integrações não avançam. |
+| 071–080 | Os guards existem, porém evidência de isolamento efetivo, execução live e fechamento das exceções ainda é incompleta. | Permanecem parciais. |
+| 081–090 | A suíte local atual falha em um teste de convergência; o teste do schema registry falha; o E2E representativo contra a VPS falha (086), o cleanup E2E/Nightly falha ao operar uma view (087) e o drift de Edge Functions/`_shared` entre repo e volume permanece aberto (088); a proteção de branch e o alerta N8N falham em CI. | Permanecem parciais. |
+| 091–100 | Health pós-deploy não foi comprovado e segue falho na evidência atual (rastro reproduzível: [evidência 008](./evidencias/008/2026-08-30-revalidacao-integral-main-db-ci.md), seção de CI); staging representativo, rollout progressivo ensaiado e aceite produtivo nunca foram executados — não existem runs, comandos ou artefatos que os comprovem. O índice de evidências já registra entradas para 095–100 e para 096–100 ([`evidencias/README.md`](./evidencias/README.md), linhas 83–88 e 122–126 — apontando respectivamente para a validação de 29/08 e para a evidência 008), mas essas provas cobrem checks HTTP de produção e runs de CI — não demonstram staging representativo, rollout progressivo ensaiado nem aceite produtivo datado. A lacuna é de suficiência da evidência existente, não de ausência de entradas no índice. | Permanecem parciais; 100 continua aberto. |
+
+### Contagem atual, sob o critério rigoroso do plano
+
+| Estado | Quantidade | Observação |
+|---|---:|---|
+| Concluída com prova | 0 | Nenhuma etapa atende simultaneamente o critério documental e todos os gates aplicáveis nesta revalidação. |
+| Parcial | 80 | Existe implementação ou controle, mas falta ao menos um gate de integração, banco, produção ou recuperação. |
+| Aberta/não implementada | 19 | Inclui stubs/RPCs e fluxos visíveis sem backend ou contrato concluído. |
+| Decisão necessária | 1 | Etapa 070: limpeza não é autorizada por esta auditoria. |
+
+Nenhuma checkbox adicional deve ser marcada com base nesta rodada. Há documentação histórica
+que usa formulações como “plano executado”; ela deve ser tratada como relato histórico, não
+como aceite do plano canônico vigente (Etapa 022).
+
 ## Fotografia imutável da baseline de 28/08
 
 ### Veredito da baseline de 28/08

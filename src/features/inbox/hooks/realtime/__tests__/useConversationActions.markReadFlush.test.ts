@@ -25,26 +25,49 @@ import type { ConversationWithMessages } from '../types';
 
 // ===== Mocks =====
 type EqResult = { data: null; error: null };
-type EqResultWithError = { data: null; error: { message: string } | null };
-type EqFn = (column: string, value: unknown) => { eq: EqFn } | Promise<EqResult | EqResultWithError>;
+type EqResultWithError = {
+  data: null;
+  error: { message: string; status?: number; code?: string } | null;
+};
+type EqFn = (
+  column: string,
+  value: unknown
+) => { eq: EqFn } | Promise<EqResult | EqResultWithError>;
 type InFn = (column: string, values: string[]) => { eq: EqFn };
 type UpdateFn = (payload: Record<string, unknown>) => { in: InFn };
 type FromFn = (table: string) => { update: UpdateFn };
 
-const { mockDbFrom, mockUpdate, mockIn, mockEq, mockEqLast, mockLogError, mockTouchLastSeen, mockSend } =
-  vi.hoisted(() => {
-    // Chain real: .update(...).in(...).eq('sender','contact').eq('is_read',false)
-    // — DOIS .eq() encadeados; o segundo resolve a Promise.
-    const mockEqLast = vi.fn<EqFn>().mockResolvedValue({ data: null, error: null });
-    const mockEq = vi.fn<EqFn>(() => ({ eq: mockEqLast }));
-    const mockIn = vi.fn<InFn>(() => ({ eq: mockEq }));
-    const mockUpdate = vi.fn<UpdateFn>(() => ({ in: mockIn }));
-    const mockDbFrom = vi.fn<FromFn>(() => ({ update: mockUpdate }));
-    const mockLogError = vi.fn<(message: string, ...args: unknown[]) => void>();
-    const mockTouchLastSeen = vi.fn<() => void>();
-    const mockSend = vi.fn();
-    return { mockDbFrom, mockUpdate, mockIn, mockEq, mockEqLast, mockLogError, mockTouchLastSeen, mockSend };
-  });
+const {
+  mockDbFrom,
+  mockUpdate,
+  mockIn,
+  mockEq,
+  mockEqLast,
+  mockLogError,
+  mockTouchLastSeen,
+  mockSend,
+} = vi.hoisted(() => {
+  // Chain real: .update(...).in(...).eq('sender','contact').eq('is_read',false)
+  // — DOIS .eq() encadeados; o segundo resolve a Promise.
+  const mockEqLast = vi.fn<EqFn>().mockResolvedValue({ data: null, error: null });
+  const mockEq = vi.fn<EqFn>(() => ({ eq: mockEqLast }));
+  const mockIn = vi.fn<InFn>(() => ({ eq: mockEq }));
+  const mockUpdate = vi.fn<UpdateFn>(() => ({ in: mockIn }));
+  const mockDbFrom = vi.fn<FromFn>(() => ({ update: mockUpdate }));
+  const mockLogError = vi.fn<(message: string, ...args: unknown[]) => void>();
+  const mockTouchLastSeen = vi.fn<() => void>();
+  const mockSend = vi.fn();
+  return {
+    mockDbFrom,
+    mockUpdate,
+    mockIn,
+    mockEq,
+    mockEqLast,
+    mockLogError,
+    mockTouchLastSeen,
+    mockSend,
+  };
+});
 
 vi.mock('@/integrations/datasource/db', () => ({
   dbFrom: mockDbFrom,
@@ -87,8 +110,7 @@ function makeConversation(id: string, unread: number): ConversationWithMessages 
 // invisíveis) exatamente como no componente.
 type CommitFn = (
   updater:
-    | ConversationWithMessages[]
-    | ((prev: ConversationWithMessages[]) => ConversationWithMessages[])
+    ConversationWithMessages[] | ((prev: ConversationWithMessages[]) => ConversationWithMessages[])
 ) => void;
 
 let conversations: ConversationWithMessages[];
@@ -127,7 +149,13 @@ async function advance(ms: number): Promise<void> {
 describe('E37 — markAsRead batch flush (MARK_READ_FLUSH_MS=250)', () => {
   it('1. rajada de 5 markAsRead → zero PATCH antes do flush; 1 único PATCH .in() com os 5 ids após 250ms', async () => {
     const { result } = setup();
-    const ids = [UUID_A, UUID_B, UUID_C, '550e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440005'];
+    const ids = [
+      UUID_A,
+      UUID_B,
+      UUID_C,
+      '550e8400-e29b-41d4-a716-446655440004',
+      '550e8400-e29b-41d4-a716-446655440005',
+    ];
 
     act(() => {
       for (const id of ids) void result.current.markAsRead(id);
@@ -284,5 +312,42 @@ describe('E37 — markAsRead batch flush (MARK_READ_FLUSH_MS=250)', () => {
     expect(String(mockLogError.mock.calls[0][0])).toContain('Error marking messages as read');
     // Otimista não é revertido.
     expect(conversations.find((c) => c.contact.id === UUID_A)?.unreadCount).toBe(0);
+  });
+
+  it('11. erro transitorio preserva os ids e refaz o mesmo batch com backoff', async () => {
+    mockEqLast
+      .mockResolvedValueOnce({ data: null, error: { message: 'queue saturated' } })
+      .mockResolvedValueOnce({ data: null, error: null });
+    const { result } = setup();
+
+    act(() => void result.current.markAsRead(UUID_A));
+    await advance(250);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockIn.mock.calls[0][1]).toEqual([UUID_A]);
+    expect(mockTouchLastSeen).not.toHaveBeenCalled();
+
+    await advance(1_000);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
+    expect(mockIn.mock.calls[1][1]).toEqual([UUID_A]);
+    expect(mockTouchLastSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('12. erro permanente 403 nao e recolocado na fila nem retentado', async () => {
+    mockEqLast.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Forbidden', status: 403 },
+    });
+    const { result } = setup();
+
+    act(() => void result.current.markAsRead(UUID_A));
+    await advance(250);
+    await advance(10_000);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockLogError).toHaveBeenCalledTimes(1);
+    expect(String(mockLogError.mock.calls[0][0])).toContain('is permanent');
+    expect(mockTouchLastSeen).not.toHaveBeenCalled();
   });
 });

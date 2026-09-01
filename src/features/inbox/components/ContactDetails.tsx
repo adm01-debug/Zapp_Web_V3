@@ -14,37 +14,10 @@ import { toast } from 'sonner';
 import { KnowledgeBaseSearchPanel } from './KnowledgeBaseSearchPanel';
 import { AnalysisBadges } from './AnalysisBadges';
 import { useArchiveConversationActions } from '../hooks/useArchiveConversationActions';
-
-const ACCORDION_STORAGE_KEY = 'contact-details-accordion-state';
-
-function getStoredAccordionState(): string[] {
-  try {
-    const stored = localStorage.getItem(ACCORDION_STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {
-    /* storage unavailable */
-  }
-  return [
-    'info',
-    'crm-360',
-    'intelligence',
-    'tags',
-    'assignment',
-    'custom-fields',
-    'notes',
-    'history',
-    'sla-timeline',
-    'stats',
-  ];
-}
-
-function saveAccordionState(value: string[]) {
-  try {
-    localStorage.setItem(ACCORDION_STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    /* storage unavailable */
-  }
-}
+import {
+  getStoredAccordionState,
+  saveAccordionState,
+} from './contact-details/contactDetailSections';
 
 interface ContactDetailsProps {
   conversation: Conversation;

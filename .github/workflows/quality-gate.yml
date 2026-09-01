@@ -88,8 +88,12 @@ jobs:
           echo "$changed"
           CHANGED_FILES="$changed" node scripts/lint-migrations.mjs
 
-      - name: RLS coverage audit (E34 — blocking on missing RLS)
-        run: node scripts/audit-rls-coverage.mjs --check
+      - name: RLS coverage audit (E34 — blocking)
+        # 2026-08-31 (G9): catálogo RLS extraído do banco canônico + replay
+        # ordenado somente das migrations posteriores ao watermark. Bloqueia
+        # DROP POLICY, DISABLE RLS, bases desprotegidas e views críticas sem
+        # security_invoker. Evidência 009.
+        run: node scripts/audit-rls-coverage.mjs --check --require-canonical
 
       - name: Schema usage guardrail (zapp/evo)
         run: node scripts/check-schema-usage.mjs

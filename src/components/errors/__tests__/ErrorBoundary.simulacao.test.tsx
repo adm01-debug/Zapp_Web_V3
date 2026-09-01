@@ -297,8 +297,9 @@ describe('nginx.conf — verificação estática (sem renderizar)', () => {
     expect(NGINX_SOURCE).toMatch(/try_files\s+\$uri\s+\$uri\/\s+\/index\.html/);
   });
 
-  it('serve /assets/ com Cache-Control public, immutable', () => {
+  it('serve /assets/ com Cache-Control anual e immutable', () => {
     const assetsBlock = NGINX_SOURCE.match(/location\s+\/assets\/\s*\{[\s\S]*?\}/)?.[0] ?? '';
-    expect(assetsBlock).toContain('Cache-Control "public, immutable"');
+    expect(assetsBlock).toContain('Cache-Control "public, max-age=31536000, immutable";');
+    expect(assetsBlock).not.toContain('Cache-Control "public, max-age=31536000, immutable" always');
   });
 });

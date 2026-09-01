@@ -62,8 +62,23 @@ function resolveIdentifier(value?: string): ResolvedIdent | null {
  */
 function isTimeoutError(err: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted && isAbortLikeError(err)) return false;
-  if (!(err instanceof Error)) return false;
-  return err.name === 'TimeoutError' || /timeout|timed ?out|ETIMEDOUT|aborted?/i.test(err.message);
+  const name =
+    err instanceof Error
+      ? err.name
+      : typeof err === 'object' && err !== null && 'name' in err
+        ? String((err as { name?: unknown }).name ?? '')
+        : '';
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as { message?: unknown }).message ?? '')
+        : '';
+  if (!name && !message) return false;
+  return (
+    name === 'TimeoutError' ||
+    /timeout|timed ?out|ETIMEDOUT|aborted?|fetch/i.test(message)
+  );
 }
 
 /** Hook: Contact Briefing. */
@@ -176,8 +191,7 @@ const DISC_TEMPLATES: Record<'D' | 'I' | 'S' | 'C', DISCTips> = {
 
 function buildDisc(raw: RawIntel | null): DISCTips | null {
   const key = (raw?.disc_profile || '').toUpperCase();
-  if (key === 'D' || key === 'I' || key === 'S' || key === 'C')
-    return DISC_TEMPLATES[key as keyof typeof DISC_TEMPLATES];
+  if (key === 'D' || key === 'I' || key === 'S' || key === 'C') return DISC_TEMPLATES[key as keyof typeof DISC_TEMPLATES];
   return null;
 }
 
@@ -339,61 +353,61 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
         const phoneDigits = ident.kind === 'phone' ? ident.value : null;
         const isLid = phoneDigits != null && (phoneDigits.length > 13 || phoneDigits.length < 10);
         if (!isLid) {
-          try {
-            // `evolution_messages` nao tem coluna `phone`: por telefone o vinculo
-            // correto e `remote_jid`. Os dois sufixos que coexistem no banco sao
-            // cobertos com igualdade exata via `.in()`: `@s.whatsapp.net` e `@lid`.
-            // IMPORTANTE: NUNCA voltar para LIKE de prefixo aqui -- `remote_jid`
-            // tem collation nao-C, entao `LIKE '...%@'` nao usa indice e o Postgres
-            // varre TODAS as 25+ particoes (EXPLAIN confirmado: Index Scan em
-            // pidx_msgs_created_at em todas com Filter remote_jid LIKE), causando
-            // TimeoutError de 12s em producao. Igualdade exata e sargable e usa o
-            // indice btree (remote_jid, created_at DESC) que ja existe nas particoes.
-            // A contagem exata (count) do PostgREST tambem conta TODAS as linhas e
-            // anula o `limit(1)` -- o total decorativo ja vem de
-            // contact_intelligence.total_messages (coluna real; total_interactions
-            // nao existe no schema e era lido como 0).
-            let query = supabase
-              .from('evolution_messages' as never)
-              .select('created_at')
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .abortSignal(signal);
-            if (ident.kind === 'uuid') {
-              query = query.eq('contact_id', ident.value);
+        try {
+          // `evolution_messages` nao tem coluna `phone`: por telefone o vinculo
+          // correto e `remote_jid`. Os dois sufixos que coexistem no banco sao
+          // cobertos com igualdade exata via `.in()`: `@s.whatsapp.net` e `@lid`.
+          // IMPORTANTE: NUNCA voltar para LIKE de prefixo aqui -- `remote_jid`
+          // tem collation nao-C, entao `LIKE '...%@'` nao usa indice e o Postgres
+          // varre TODAS as 25+ particoes (EXPLAIN confirmado: Index Scan em
+          // pidx_msgs_created_at em todas com Filter remote_jid LIKE), causando
+          // TimeoutError de 12s em producao. Igualdade exata e sargable e usa o
+          // indice btree (remote_jid, created_at DESC) que ja existe nas particoes.
+          // A contagem exata (count) do PostgREST tambem conta TODAS as linhas e
+          // anula o `limit(1)` -- o total decorativo ja vem de
+          // contact_intelligence.total_messages (coluna real; total_interactions
+          // nao existe no schema e era lido como 0).
+          let query = supabase
+            .from('evolution_messages' as never)
+            .select('created_at')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .abortSignal(signal);
+          if (ident.kind === 'uuid') {
+            query = query.eq('contact_id', ident.value);
+          } else {
+            query = query.in('remote_jid', [
+              `${ident.value}@s.whatsapp.net`,
+              `${ident.value}@lid`,
+            ]);
+          }
+          const { data: msgs, error } = await query;
+          if (error) {
+            // postgrest-js NUNCA lanca TimeoutError: ele captura erros de fetch
+            // (incluindo AbortError/TimeoutError) e os devolve no campo `error`.
+            // Sem esta checagem o timeout de producao vira apenas um warn.
+            // RCA 2026-08-22: abort do PROPRIO signal desta query (troca de
+            // contato/unmount) e cancelamento deliberado nosso, nao timeout
+            // real — nao reclassifica como error mesmo casando com o regex.
+            const isOwnSignalAbort = signal?.aborted && isAbortLikeError(error);
+            if (isOwnSignalAbort) {
+              throw error;
+            } else if (isTimeoutError(error, signal)) {
+              log.error('messages stats lookup timed out (evolution_messages scan):', error);
             } else {
-              query = query.in('remote_jid', [
-                `${ident.value}@s.whatsapp.net`,
-                `${ident.value}@lid`,
-              ]);
-            }
-            const { data: msgs, error } = await query;
-            if (error) {
-              // postgrest-js NUNCA lanca TimeoutError: ele captura erros de fetch
-              // (incluindo AbortError/TimeoutError) e os devolve no campo `error`.
-              // Sem esta checagem o timeout de producao vira apenas um warn.
-              // RCA 2026-08-22: abort do PROPRIO signal desta query (troca de
-              // contato/unmount) e cancelamento deliberado nosso, nao timeout
-              // real — nao reclassifica como error mesmo casando com o regex.
-              const isOwnSignalAbort = signal?.aborted && isAbortLikeError(error);
-              if (isOwnSignalAbort) {
-                throw error;
-              } else if (/timeout|aborted|fetch/i.test(error.message ?? '')) {
-                log.error('messages stats lookup timed out (evolution_messages scan):', error);
-              } else {
-                log.warn('messages stats lookup failed:', error.message);
-              }
-            }
-            const rows = (msgs ?? []) as Array<{ created_at?: string }>;
-            if (!lastAt && rows[0]?.created_at) lastAt = new Date(rows[0].created_at);
-          } catch (err) {
-            if (signal.aborted && isAbortLikeError(err)) throw err;
-            if (isTimeoutError(err, signal)) {
-              log.error('messages stats lookup timed out (evolution_messages scan):', err);
-            } else {
-              log.warn('messages stats lookup skipped:', err);
+              log.warn('messages stats lookup failed:', error.message);
             }
           }
+          const rows = (msgs ?? []) as Array<{ created_at?: string }>;
+          if (!lastAt && rows[0]?.created_at) lastAt = new Date(rows[0].created_at);
+        } catch (err) {
+          if (signal.aborted && isAbortLikeError(err)) throw err;
+          if (isTimeoutError(err, signal)) {
+            log.error('messages stats lookup timed out (evolution_messages scan):', err);
+          } else {
+            log.warn('messages stats lookup skipped:', err);
+          }
+        }
         } // !isLid
       }
 

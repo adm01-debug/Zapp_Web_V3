@@ -64,3 +64,63 @@ describe('safeClient Masking', () => {
     expect(masked[0].email).toBe('te***@example.com');
   });
 });
+
+describe('safeClient formatError', () => {
+  it('preserva a identidade e os metadados de um Error de saturacao', () => {
+    const source = Object.assign(new Error('Supabase queue saturated — request dropped'), {
+      name: 'SupabaseQueueSaturatedError',
+      code: 'QUEUE_SATURATED',
+      status: 503,
+    });
+
+    const formatted = safeClient.formatError(source) as Error & {
+      code?: string;
+      status?: number;
+    };
+
+    expect(formatted).toBe(source);
+    expect(formatted.name).toBe('SupabaseQueueSaturatedError');
+    expect(formatted.code).toBe('QUEUE_SATURATED');
+    expect(formatted.status).toBe(503);
+  });
+
+  it('copia name, code e status de um erro PostgREST plain-object', () => {
+    const source = {
+      name: 'SupabaseQueueTimeoutError',
+      message: 'Supabase queue wait timed out',
+      code: 'QUEUE_TIMEOUT',
+      status: 503,
+      details: 'queueLength=80',
+    };
+
+    const formatted = safeClient.formatError(source) as Error & {
+      code?: string;
+      status?: number;
+      details?: string;
+      cause?: unknown;
+    };
+
+    expect(formatted).not.toBe(source);
+    expect(formatted.name).toBe('SupabaseQueueTimeoutError');
+    expect(formatted.code).toBe('QUEUE_TIMEOUT');
+    expect(formatted.status).toBe(503);
+    expect(formatted.details).toBe('queueLength=80');
+    expect(formatted.cause).toBe(source);
+  });
+
+  it('mantem a mensagem amigavel para recurso inexistente sem perder a causa', () => {
+    const source = Object.assign(new Error('relation contacts does not exist'), {
+      code: '42P01',
+    });
+
+    const formatted = safeClient.formatError(source) as Error & {
+      code?: string;
+      cause?: unknown;
+    };
+
+    expect(formatted).not.toBe(source);
+    expect(formatted.message).toBe('Recurso indisponível: relation contacts does not exist');
+    expect(formatted.code).toBe('42P01');
+    expect(formatted.cause).toBe(source);
+  });
+});
