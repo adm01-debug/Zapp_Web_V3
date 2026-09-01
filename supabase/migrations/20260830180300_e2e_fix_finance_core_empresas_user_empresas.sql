@@ -5,8 +5,9 @@
 -- Tema único: tabelas base do módulo financeiro multi-empresa (governança de acesso
 --   por empresa, distinto de zapp.empresas que é a base de 51.688 clientes/leads)
 -- Objetos afetados: public.empresas, public.user_empresas (tabelas), RLS + policies,
---   FKs, índices
--- Idempotência: CREATE TABLE/POLICY/INDEX IF NOT EXISTS
+--   FKs, índices, trigger de updated_at, grants
+-- Idempotência: CREATE TABLE/POLICY/INDEX IF NOT EXISTS, DROP TRIGGER IF EXISTS + CREATE,
+--   GRANT (idempotente por natureza)
 -- Rollback: DROP TABLE IF EXISTS public.user_empresas; DROP TABLE IF EXISTS public.empresas;
 --   (nenhuma outra tabela do repo depende destas duas — confirmado por ausência de
 --   referência em src/ e supabase/functions/ além de types.ts autogerado)
@@ -65,6 +66,13 @@ CREATE INDEX IF NOT EXISTS idx_user_empresas_empresa ON public.user_empresas (em
 CREATE INDEX IF NOT EXISTS idx_user_empresas_user ON public.user_empresas (user_id);
 CREATE INDEX IF NOT EXISTS idx_user_empresas_scim ON public.user_empresas (scim_external_id) WHERE scim_external_id IS NOT NULL;
 
+-- public.update_updated_at_column() é utilitário genérico pré-existente
+-- (compartilhado por storage/public/zapp) — não criado por esta migration.
+DROP TRIGGER IF EXISTS trg_user_empresas_updated ON public.user_empresas;
+CREATE TRIGGER trg_user_empresas_updated
+  BEFORE UPDATE ON public.user_empresas
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_empresas ENABLE ROW LEVEL SECURITY;
 
@@ -112,3 +120,11 @@ CREATE POLICY "Users view own empresa links" ON public.user_empresas
       WHERE user_roles.user_id = auth.uid() AND user_roles.role::text = 'admin'
     )
   );
+
+-- O default ACL do schema public para tabelas criadas por postgres só
+-- concede SELECT/INSERT/UPDATE a authenticated (sem DELETE). A policy
+-- "Admins manage X" (FOR ALL) depende de DELETE estar concedido no nível
+-- de role para funcionar — sem este GRANT, admin nunca conseguiria
+-- deletar linhas mesmo com a policy permitindo.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.empresas TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_empresas TO authenticated;

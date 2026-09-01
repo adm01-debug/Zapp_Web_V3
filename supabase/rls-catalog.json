@@ -1,9 +1,9 @@
 {
   "catalog_version": 1,
-  "generated_at": "2026-08-31T13:34:03-03:00",
+  "generated_at": "2026-09-01T09:00:00-03:00",
   "source": "canonical-self-hosted-pg-catalog",
   "migration_watermark": "20260831124500",
-  "baseline_migrations_sha256": "387b86b6a888f934057fe3fa8c200605b923a967773002873ec5192b08201739",
+  "baseline_migrations_sha256": "af17a860d9101f35a49f3c0d464c6700f7a80c7351708c54d31335612c387e80",
   "relations": [
     {
       "schema": "zapp",
