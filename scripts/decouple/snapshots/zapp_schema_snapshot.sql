@@ -45530,7 +45530,7 @@ CREATE TABLE IF NOT EXISTS zapp.webhook_audit_log (
     received_at timestamp with time zone DEFAULT now(),
     CONSTRAINT webhook_audit_log_status_check CHECK ((status = ANY (ARRAY['received'::text, 'processed'::text, 'duplicate'::text, 'failed'::text, 'rejected'::text])))
 )
-WITH (autovacuum_analyze_scale_factor='0', autovacuum_analyze_threshold='15000', autovacuum_vacuum_scale_factor='0.0001', autovacuum_vacuum_threshold='0', autovacuum_vacuum_cost_delay='2');
+WITH (autovacuum_analyze_scale_factor='0', autovacuum_analyze_threshold='15000', autovacuum_vacuum_scale_factor='0', autovacuum_vacuum_threshold='20000', autovacuum_vacuum_cost_delay='2');
 
 
 
