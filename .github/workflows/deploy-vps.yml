@@ -654,8 +654,16 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # 2026-08-30: cone mode (default) rejeita path de ARQUIVO —
+          # "fatal: 'infra/ghcr-protected-tags.txt' is not a directory"
+          # (git 2.50.1 no runner; reproduzido localmente em 2.43.0;
+          # 3 runs vermelhos na main: 33322985776, 33328187017, 33333135653).
+          # Non-cone mode aceita file-level patterns; a barra inicial
+          # âncora o arquivo na raiz (recomendação do próprio git,
+          # seção NON-CONE PROBLEMS do git-sparse-checkout).
           sparse-checkout: |
-            infra/ghcr-protected-tags.txt
+            /infra/ghcr-protected-tags.txt
+          sparse-checkout-cone-mode: false
 
       - name: "🛡️ Proteção de rollback da SHA deployada (etapa 73 — verifica + alerta)"
         env:
@@ -693,3 +701,19 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -d "$PAYLOAD" || true
           fi
+
+      # 2026-08-30 (incidente pós-#1462): o sparse-checkout da etapa 73 deixa
+      # core.sparseCheckout=true no clone do WORKSPACE PERSISTENTE do runner
+      # self-hosted (vps-zapp). Os próximos jobs daquele runner (quality e
+      # contract-gate do ci.yml) herdam o checkout parcial — sem package.json
+      # nem scripts/ — e falham com "Bun could not find a package.json" /
+      # MODULE_NOT_FOUND. Em runner efêmero (ubuntu-latest) o efeito não
+      # existe. Desfazer SEMPRE (inclusive em falha): é limpeza de infra do
+      # workspace, não gate de deploy — não altera o contrato "roda só em
+      # deploy verde" do gate acima.
+      - name: "🧹 Desfazer sparse-checkout do workspace (runner persistente)"
+        if: always()
+        run: |
+          git sparse-checkout disable || true
+          git config --local --unset core.sparseCheckout 2>/dev/null || true
+          git config --local --unset core.sparseCheckoutConeMode 2>/dev/null || true

@@ -1,0 +1,42 @@
+name: 🛠️ Ops — reparar workspace dos runners vps-zapp (sparse-checkout)
+
+# 2026-08-30 (incidente pós-#1462): o job "Health check pós-deploy" do
+# deploy-vps.yml usa sparse-checkout (gate etapa 73) e, em runner
+# SELF-HOSTED PERSISTENTE (vps-zapp), o core.sparseCheckout=true fica no
+# clone do workspace e vaza para os próximos jobs daquele runner —
+# checkouts parciais sem package.json/scripts (falhas "Bun could not find
+# a package.json" e MODULE_NOT_FOUND em scripts/audit-contract.mjs).
+# Este workflow one-shot desfaz o estado herdado e restaura a árvore
+# completa. O deploy-vps.yml ganhou step de limpeza equivalente
+# (if: always()) — este arquivo permanece como ferramenta de reparo
+# pontual (workflow_dispatch manual).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    name: Desativar sparse-checkout herdado no workspace
+    runs-on: [Linux, X64, vps-zapp]
+    steps:
+      - name: Checkout (usa o workspace afetado)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Desativar sparse-checkout e restaurar árvore completa
+        run: |
+          set -euo pipefail
+          git sparse-checkout disable || true
+          git config --local --unset core.sparseCheckout 2>/dev/null || true
+          git config --local --unset core.sparseCheckoutConeMode 2>/dev/null || true
+          git reset --hard -q HEAD
+          echo "✅ sparse-checkout desativado — $(git ls-files | wc -l) arquivos rastreáveis no workspace"
+
+      - name: Verificar arquivos críticos restaurados
+        run: |
+          test -f package.json && echo "✅ package.json presente"
+          test -f scripts/audit-contract.mjs && echo "✅ scripts/audit-contract.mjs presente"
+          test -f bun.lock && echo "✅ bun.lock presente"
