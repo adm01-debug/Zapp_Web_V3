@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { sanitizeText } from '@/lib/sanitize';
 import { validatePhoneDetailed } from '@/lib/phoneUtils';
+import { contactEmailSchema } from '@/shared/validation';
 import { useContactDuplicateDetector } from './useContactDuplicateDetector';
 import { useRetryOperation } from '@/hooks/useRetryAndErrorPrevention';
 import { ConsentData } from './ContactConsentManager';
@@ -134,6 +135,11 @@ export function useContactFormV3({
     [form.phone]
   );
 
+  const emailValidation = useMemo(
+    () => (form.email?.trim() ? contactEmailSchema.safeParse(form.email.trim()) : null),
+    [form.email]
+  );
+
   const doSave = useCallback(
     async (forceOverwrite = false) => {
       if (!form.name.trim() && !form.phone.trim() && !form.email.trim()) {
@@ -143,6 +149,12 @@ export function useContactFormV3({
 
       if (form.phone && phoneValidation && !phoneValidation.valid) {
         toast({ title: `Telefone inválido: ${phoneValidation.error}`, variant: 'destructive' });
+        return;
+      }
+
+      if (form.email && emailValidation && !emailValidation.success) {
+        const message = emailValidation.error.issues[0]?.message ?? 'formato incorreto';
+        toast({ title: `E-mail inválido: ${message}`, variant: 'destructive' });
         return;
       }
 
@@ -200,7 +212,7 @@ export function useContactFormV3({
         onSaved(form);
       }, 'Salvar contato');
     },
-    [form, mode, workspaceId, withRetry, toast, onSaved, phoneValidation]
+    [form, mode, workspaceId, withRetry, toast, onSaved, phoneValidation, emailValidation]
   );
 
   const handlePhoneBlur = useCallback(() => {
@@ -248,6 +260,7 @@ export function useContactFormV3({
     checking,
     isSaving: retrying,
     phoneValidation,
+    emailValidation,
     update,
     addTag,
     removeTag,
