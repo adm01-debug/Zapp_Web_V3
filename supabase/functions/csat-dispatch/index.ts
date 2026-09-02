@@ -104,7 +104,7 @@ Deno.serve(async (req: Request) => {
 
       try {
         if (dryRun) {
-          console.log(`[csat-dispatch][dry-run] survey=${survey.survey_id} instance=${survey.instance_name} phone=${redactJid(survey.phone)}`);
+          console.info(`[csat-dispatch][dry-run] survey=${survey.survey_id} instance=${survey.instance_name} phone=${redactJid(survey.phone)}`);
           // Devolve o survey ao estado 'scheduled' (não foi enviado)
           const { error: resetErr } = await supabase
             .from("csat_surveys")
