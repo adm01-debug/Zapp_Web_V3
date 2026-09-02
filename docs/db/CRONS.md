@@ -78,7 +78,7 @@
 | 113 | bloat_alert_4h | `0 */4 * * *` | zapp | `fn_alert_table_bloat(15)` |
 | 115 | redis_sentinel_refresh_5min | `*/5 * * * *` | ops | atualiza `ops.redis_sentinel` |
 | 116 | purge-webhook-rate-limits-2h | `0 * * * *` | zapp | purge `webhook_rate_limits` |
-| 117 | analyze_critical_tables | `30 3 * * *` | zapp | `fn_force_autovacuum` nas críticas |
+| 117 | analyze_critical_tables | `31 3 * * *` | zapp | `fn_force_autovacuum` nas críticas |
 | 120 | wpp2-session-expiry-watchdog | `*/15 * * * *` | zapp | alerta em `warroom_alerts` |
 | 122 | wal-slot-monitor | `*/15 * * * *` | ops | `fn_check_wal_slots` |
 | 123 | weekly-edge-fn-freshness | `0 12 * * 1` | ops | `fn_edge_fn_staleness_check` (🌐 edge) |
