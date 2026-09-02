@@ -330,6 +330,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         log.error(
           `Credential error (HTTP ${httpStatus}) for ${instanceName} — stopping retry cycle`
         );
+        credentialErrorRef.current = true;
         setIsReconnecting(false);
         eventBus.emit('connection:credential-error', {
           instanceName,
@@ -408,7 +409,9 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       }
 
       // Desconexao conclusiva: so tenta reconectar enquanto o latch nao estourou.
-      if (reconnectExhaustedRef.current || isReconnectingRef.current) return;
+      // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
+      // com backoff — nao interromper esse timer com uma chamada direta.
+      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
       void attemptSpecificReconnect();
     } catch (err: unknown) {
       log.error(`Error checking status for ${instanceName}:`, err);
