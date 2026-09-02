@@ -604,6 +604,23 @@ Auditoria em 2 fases: (1) 3 fixes de segurança/dados aplicados e commitados; (2
 | Drift-check desatualizado | — (processo, não migration) | Snapshot `zapp_schema_snapshot.sql` ficou 1 migration atrás (150000 commitada depois do último regen) — disparado `workflow_dispatch` de `zapp-schema-drift-gate.yml` com `regen=true` para corrigir | ✅ (regen disparado) |
 | Varredura ampla de RPCs, idempotência do lote completo, catálogo/tipos/CI | — | Sem novos achados de segurança além dos já listados; catálogo (`generate-schema-catalog.mjs --check`) e lint (`lint-migrations.mjs`) passam limpos; truth table função×role×ACL sem divergência entre banco vivo e última migration de cada função; 6 checks obrigatórios da PR #1483 verdes no HEAD | ✅ |
 
+### Rodada 3 (continuação) — varredura ampla de RPCs sem guarda, 6 vulnerabilidades críticas novas
+
+Agente dedicado ampliou a varredura além do padrão anterior (funções ligadas ao secret HMAC de webhook) para TODAS as `SECURITY DEFINER` de `zapp` com `EXECUTE` para `authenticated` que escrevem dado sensível (~313 funções reduzidas a ~40 sem guarda real, priorizadas por blast radius). **Incidente durante o teste**: uso de `supabase_db_transaction` (auto-commit) alterou de fato um negócio real (`8e1d896f-3b69-42d3-981c-ffac8a77f165`, R$8.500) — revertido e confirmado independentemente nesta sessão (stage/task/fila Bitrix, sem resíduo além do `updated_at` inevitável).
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| `bulk_update_lead_status` | `20260902170000` | Zero checagem, nem `fn_require_app_user()` — qualquer agente muda `lead_status` de qualquer contato em lote, sabotando pipeline alheio | ✅ (piso mínimo adicionado) |
+| `grant_lgpd_consent` / `revoke_lgpd_consent` | `20260902170000` | Zero checagem — qualquer agente forja concessão/revogação de consentimento LGPD sem relação com pedido real do titular | ✅ (piso mínimo adicionado) |
+| `rpc_complete_task` | `20260902170000` | Zero checagem — qualquer agente completa tarefa de outrem com `completed_by`/notas arbitrários | ✅ (piso mínimo adicionado) |
+| `manage_department_member` (overload 4 args) | `20260902170000` | Checagem de permissão usava `_admin_user_id`, parâmetro livre do chamador (mesma classe de bug de impersonação já corrigida 3x nesta sessão) — reproduzido ao vivo (agente comum + UUID de admin real no parâmetro passou pela checagem) | ✅ |
+| `manage_department_member` (overload 5 args) | `20260902170000` | Zero checagem nenhuma — reatribui `department_id` de qualquer perfil | ✅ |
+| `rpc_delete_message`, `rpc_change_deal_stage`/`rpc_move_deal`/`rpc_upsert_deal`, `rpc_purge_contact_intelligence` | — (não corrigido) | Já têm `fn_require_app_user()`, mas nenhuma checa posse/atribuição do registro-alvo — qualquer agente autenticado apaga mensagem de outro, move negócio não atribuído a si, ou purga inteligência de IA de qualquer contato | ⚠️ Pendência de modelo de autorização, decisão do dono (times colaboram em registros de outros agentes, ou deve ser restrito ao dono/admin?) |
+| `conversation_transfers` (5 funções), `rpc_associate_label`/`rpc_upsert_label`/`rpc_create_task`/`rpc_upsert_task`, RPCs de `email_app` | — (não corrigido) | Zero checagem, mas 0 linhas em produção hoje — risco latente, não explorado em tráfego real | ⚪ Documentado, não corrigido |
+| `anonymize_contacts_batch`, `delete_contact_completely` | — (não corrigido) | Zero checagem, mas já quebradas por bug de schema preexistente (não exploráveis no caminho normal hoje) — viram arma sem guarda se esse bug for corrigido sem adicionar checagem | ⚪ Documentado, não corrigido |
+
+Testado ao vivo: agente comum tentando a impersonação via `_admin_user_id` em `manage_department_member` agora recebe `Permissão insuficiente`; o mesmo admin real chamando por si mesmo passa a checagem (falha depois só por `zapp.departments` estar vazia); nenhuma mutação real aconteceu em nenhum teste pós-fix (confirmado sem resíduo em `zapp.profiles`).
+
 ### Metodologia das rodadas 2 e 3
 
 Por pedido explícito e repetido do dono ("SEJA EXAUSTIVO E MINUCIOSO"), cada rodada rodou 5 agentes especializados em paralelo, cada um focado num ângulo diferente (idempotência do lote completo, varredura ampla de RPCs sem guarda, teste E2E dos callers reais, matriz combinatória adversarial, consolidação de catálogo/CI). Cada achado real foi reproduzido ao vivo (erro real antes do fix) e reconfirmado corrigido depois, sem deixar dado de teste residual em produção. As rodadas 2 e 3 encontraram, cada uma, pelo menos 1 bug real que a rodada anterior não tinha pego — inclusive 2 regressões autoinfligidas pelos próprios fixes da rodada 1 (`fn_require_app_user` bloqueando `service_role`; `rpc_upsert_contact` quebrando automação real do frontend).
