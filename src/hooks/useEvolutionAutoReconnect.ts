@@ -306,11 +306,16 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     try {
       await connectInstance(instanceName);
       await new Promise<void>((r) => setTimeout(r, 5_000));
+      // HOOK-004: componente pode ter desmontado durante os 5s de espera
+      if (!mountedRef?.current) return;
 
       const currentStatus = (await getInstanceStatus(instanceName)) as {
         instance?: { state?: string };
         state?: string;
       } | null;
+      // HOOK-004: componente pode ter desmontado durante a chamada à API
+      if (!mountedRef?.current) return;
+
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
 
@@ -328,6 +333,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         scheduleNextAttemptRef.current?.();
       }
     } catch (err: unknown) {
+      // HOOK-004: não agendar timer nem atualizar estado em componente desmontado
+      if (!mountedRef?.current) return;
       const httpStatus = extractHttpStatus(err);
 
       if (httpStatus === 401 || httpStatus === 403) {
