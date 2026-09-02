@@ -84,8 +84,9 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
   it('para de tentar (e loga "Giving up" UMA vez) depois do limite de tentativas', async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
 
-    // ~15min: muito alem das 20 tentativas com backoff no teto de 60s.
-    await advance(15 * 60_000);
+    // ~20min: cobre 20 tentativas × (5s delay interno + backoff até 60s).
+    // Cálculo: 20×5s + (4+8+16+32+60×15)s = 1.060s ≈ 17,7 min; margem de segurança.
+    await advance(20 * 60_000);
 
     const givingUp = logError.mock.calls.filter((c) => String(c[0]).includes('Giving up on wpp2'));
     expect(givingUp).toHaveLength(1);
@@ -101,7 +102,7 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
 
   it('rearma o ciclo quando a instancia volta a um estado nao-desconectado', async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
-    await advance(15 * 60_000);
+    await advance(20 * 60_000);
     expect(
       logError.mock.calls.filter((c) => String(c[0]).includes('Giving up on wpp2'))
     ).toHaveLength(1);
