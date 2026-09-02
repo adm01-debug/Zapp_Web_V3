@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, Plus, Pencil, Trash2, Building2, ShieldAlert, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { isValidCnpj } from '@/lib/cnpjUtils';
 import {
   useCompanies, COMPANIES_RLS_HINT,
   type Company,
@@ -74,6 +75,10 @@ export function CompaniesManagerDialog({
       toast.error('Informe o nome da empresa.');
       return;
     }
+    if (draft.cnpj.trim() && !isValidCnpj(draft.cnpj)) {
+      toast.error('CNPJ inválido — confira os dígitos verificadores.');
+      return;
+    }
     setSaving(true);
     const result = await createCompany({ name: draft.name, cnpj: draft.cnpj, segment: draft.segment });
     setSaving(false);
@@ -92,6 +97,10 @@ export function CompaniesManagerDialog({
     if (!editingId) return;
     if (!editDraft.name.trim()) {
       toast.error('O nome da empresa não pode ficar vazio.');
+      return;
+    }
+    if (editDraft.cnpj.trim() && !isValidCnpj(editDraft.cnpj)) {
+      toast.error('CNPJ inválido — confira os dígitos verificadores.');
       return;
     }
     setSaving(true);
