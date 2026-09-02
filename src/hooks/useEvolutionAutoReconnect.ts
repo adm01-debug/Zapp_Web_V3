@@ -285,7 +285,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
     backoffRef.current = nextDelay;
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void attemptSpecificReconnectRef.current?.(), nextDelay);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      void attemptSpecificReconnectRef.current?.();
+    }, nextDelay);
   }, [setIsReconnecting, instanceName]);
 
   // Populate ref AFTER definition — breaks circular deps without stale closures
@@ -409,9 +412,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       }
 
       // Desconexao conclusiva: so tenta reconectar enquanto o latch nao estourou.
-      // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
-      // com backoff — nao interromper esse timer com uma chamada direta.
-      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
+      if (reconnectExhaustedRef.current || isReconnectingRef.current) return;
       void attemptSpecificReconnect();
     } catch (err: unknown) {
       log.error(`Error checking status for ${instanceName}:`, err);
