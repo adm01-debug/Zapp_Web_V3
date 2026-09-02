@@ -58,6 +58,7 @@ beforeEach(() => {
   // dos testes baterem exatamente com POLL_INTERVAL_MS.
   vi.spyOn(Math, 'random').mockReturnValue(0.5);
   sessionStorage.clear();
+  __TEST__.setRemoteEntryCss(undefined); // garante estado limpo (sem vazamento de entryCss entre testes)
 
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(
@@ -85,6 +86,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  __TEST__.setRemoteEntryCss(undefined); // evita vazamento de entryCss entre testes
 });
 
 // O módulo chama getLogger('buildVersion') uma única vez, no import.
