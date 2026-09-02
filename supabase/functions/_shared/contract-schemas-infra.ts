@@ -44,9 +44,6 @@ export const CleanupRateLimitLogsV1Schema = EmptyStrictV1Schema;
 /** cleanup-storage-orphans@v1 — cron; não consome body. */
 export const CleanupStorageOrphansV1Schema = EmptyStrictV1Schema;
 
-/** elevenlabs-agent-token@v1 — GET; não consome body. */
-export const ElevenlabsAgentTokenV1Schema = EmptyStrictV1Schema;
-
 /** elevenlabs-scribe-token@v1 — GET; não consome body. */
 export const ElevenlabsScribeTokenV1Schema = EmptyStrictV1Schema;
 
