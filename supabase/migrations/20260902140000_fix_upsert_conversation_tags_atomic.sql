@@ -60,5 +60,20 @@ $function$;
 
 REVOKE EXECUTE ON FUNCTION zapp.upsert_conversation_tags_atomic(uuid, jsonb, jsonb) FROM authenticated;
 
-ALTER TABLE zapp.ai_conversation_tags
-  ADD CONSTRAINT ai_conversation_tags_contact_tag_unique UNIQUE (contact_id, tag_name);
+-- Achado da rodada 3 de auditoria (agente "teste de idempotencia do conjunto
+-- completo", reproduzido ao vivo via replay em BEGIN;...;ROLLBACK;): Postgres
+-- nao tem `ADD CONSTRAINT IF NOT EXISTS`, entao um rebuild-from-scratch que
+-- reexecute esta migration numa base onde ela ja rodou falha com
+-- "42P07 constraint already exists". Guardado com checagem em pg_constraint,
+-- mesmo padrao usado em ops.safe_create_policy (migration 20260902040000).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'ai_conversation_tags_contact_tag_unique'
+      AND conrelid = 'zapp.ai_conversation_tags'::regclass
+  ) THEN
+    ALTER TABLE zapp.ai_conversation_tags
+      ADD CONSTRAINT ai_conversation_tags_contact_tag_unique UNIQUE (contact_id, tag_name);
+  END IF;
+END $$;
