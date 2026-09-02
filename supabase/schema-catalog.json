@@ -39777,89 +39777,6 @@
             }
           ]
         },
-        "empresas": {
-          "definition_sha1": "44f4623e494ce1a3e03b801ffc022780cbad1ef6",
-          "insert_columns": [
-            {
-              "name": "bitrix_empresa_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "Json | null"
-            },
-            {
-              "name": "id",
-              "type": "number | null"
-            },
-            {
-              "name": "nome",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "bitrix_empresa_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "Json | null"
-            },
-            {
-              "name": "id",
-              "type": "number | null"
-            },
-            {
-              "name": "nome",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "bitrix_empresa_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "Json | null"
-            },
-            {
-              "name": "id",
-              "type": "number | null"
-            },
-            {
-              "name": "nome",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            }
-          ]
-        },
         "entity_versions": {
           "definition_sha1": "762b5cc5814cf0d07e84654a98fc9d963398b23e",
           "insert_columns": [
@@ -93771,6 +93688,73 @@
           "definition_sha1": "9f628baa26c4768ceba97651e77ece2f2320bf15",
           "overload_count": 0,
           "overloads": []
+        },
+        "fn_sicoob_bridge_ingest_message": {
+          "definition_sha1": "6f1aa0d9aa271bb2024c7ca79b0b9b44a5b7e942",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [
+                {
+                  "name": "p_content",
+                  "type": "string"
+                },
+                {
+                  "name": "p_created_at",
+                  "type": "string"
+                },
+                {
+                  "name": "p_message_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_email",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_name",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_phone",
+                  "type": "string"
+                },
+                {
+                  "name": "p_singular_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_singular_name",
+                  "type": "string"
+                },
+                {
+                  "name": "p_vendedor_user_id",
+                  "type": "string"
+                }
+              ],
+              "returns": {
+                "fields": [
+                  {
+                    "name": "contact_id",
+                    "type": "string"
+                  },
+                  {
+                    "name": "idempotent",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "message_id",
+                    "type": "string"
+                  }
+                ],
+                "kind": "object[]"
+              }
+            }
+          ]
         },
         "fn_snapshot_constraints_reference": {
           "definition_sha1": "7c7857a1e75b0cce14b51ff9d992b6561ae025a2",
@@ -189216,14 +189200,14 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "1b8df069b5d516ae8dbc8f4697c18f504f0b8d07"
+    "types_sha1": "39a49d1b271925ef8be63ccd7262dfdc95b85f44"
   },
   "summary": {
-    "composite_types": 0,
-    "enums": 22,
-    "functions": 914,
     "schemas": 3,
     "tables": 467,
-    "views": 738
+    "views": 737,
+    "functions": 915,
+    "enums": 22,
+    "composite_types": 0
   }
 }
