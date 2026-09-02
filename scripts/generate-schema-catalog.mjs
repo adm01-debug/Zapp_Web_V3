@@ -73,14 +73,30 @@ function sha1(input) {
 // fresh" (db-guard.yml) trava porque compare-schema-catalog.mjs espera esses
 // objetos ausentes do lado esquerdo (o catálogo commitado) e presentes só no
 // lado direito (o catálogo ao vivo, que continua sem filtro nenhum aqui).
+// Falha alto (em vez de degradar para []) quando o arquivo foi explicitamente
+// apontado (o default já é sempre setado) mas está ausente ou malformado —
+// achado do cubic (review do PR #1484): um catálogo que "passa" silenciosamente
+// sem aplicar o filtro reintroduziria os objetos externos e travaria o gate
+// de novo, só que sem nenhum sinal de que a causa é a allowlist quebrada, não
+// o catálogo em si. Passar explicitamente string vazia continua sendo a forma
+// de desligar o filtro de propósito.
 function loadExternalObjectsAllowlist(file) {
-  if (!file || !existsSync(file)) return [];
-  try {
-    const config = JSON.parse(readFileSync(file, 'utf8'));
-    return Array.isArray(config?.objects) ? config.objects : [];
-  } catch {
-    return [];
+  if (!file) return [];
+  if (!existsSync(file)) {
+    throw new Error(`Allowlist de objetos externos ausente: ${file}`);
   }
+  let config;
+  try {
+    config = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(
+      `Allowlist de objetos externos inválida em ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!Array.isArray(config?.objects)) {
+    throw new Error(`Allowlist de objetos externos inválida em ${file}: campo "objects" ausente ou não é array.`);
+  }
+  return config.objects;
 }
 
 function stripRightOnlyExternalObjects(catalog, entries) {
