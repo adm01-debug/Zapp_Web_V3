@@ -30,7 +30,7 @@
 |---|---|---|---|
 | 1 | Arquitetura | **6/10** | Migração feature-based incompleta (~40 categorias soltas em `src/components`, 405 hooks fora de `features/`); hook duplicado com implementação divergente (`useContactIntelligence`) |
 | 2 | Autenticação | **8/10** | Geo/IP-block só no pré-flight do frontend — bypass possível chamando GoTrue direto; RPC `user_has_permission` não auditável (fail-open/closed em erro?) |
-| 3 | Autorização | **6/10** | **`zapp.role_permissions` sem RLS localizável no repo apesar de escrita direta pelo frontend** — risco de auto-concessão de permissão |
+| 3 | Autorização | **7/10** | RLS de `role_permissions` confirmada correta ao vivo (ver achado abaixo), mas a migration que a criou não está versionada no repo — drift documentação/produção |
 | 4 | Banco de Dados | **7,5/10** | Sem doc/drill de backup-restore para o Postgres `zapp` (só existe para `evolution`, que nem é mais deste repo); 242/323 tabelas vazias sem decisão de arquivamento |
 | 5 | CI/CD | **8/10** | Approval gate humano pré-deploy foi removido por bug de plataforma e nunca substituído; branch protection real não verificável (sentinel roda sem PAT) |
 | 6 | Data Integrity | **8/10** | `markEventProcessed` fail-open em erro não-23505 (risco de duplicação sob falha de DB); `sicoob-bridge` sem transação atômica |
@@ -48,32 +48,42 @@
 | 18 | Tipagem / Type Safety | **7/10** | 391 `as unknown as` no código (parte anotada, parte não auditada); schemas Zod bem escritos mas desconectados do formulário real de contato |
 | 19 | Validação | **4/10** | **Zero validação de CPF/CNPJ** em app B2B com 51k+ empresas; e-mail só validado no login, não em contatos/CRM; react-hook-form+zodResolver instalados e nunca usados |
 | 20 | Operações (Processos) | **7/10** | Hotfix não tem fast-track diferenciado do fluxo normal; post-mortems formais existem só em 1 entrada (dentro do CLAUDE.md, não em diretório dedicado) |
-| | **NOTA GERAL PONDERADA** | **≈ 6,8/10** | Pesos: Segurança/Autenticação/Autorização/Data Integrity ×3; Banco/Tipagem/Validação/Testes/Arquitetura ×2; demais ×1 |
+| | **NOTA GERAL PONDERADA** | **≈ 6,9/10** | Pesos: Segurança/Autenticação/Autorização/Data Integrity ×3; Banco/Tipagem/Validação/Testes/Arquitetura ×2; demais ×1 |
 
 ---
 
-## Achado crítico (prioridade imediata)
+## Achado crítico — investigado ao vivo, DESCARTADO como risco de segurança
 
-**`zapp.role_permissions` pode estar sem RLS em produção.** O comentário em
-`20260804000000_canonical_schema_squash_133_migrations.sql:7579` afirma que a tabela
-tem RLS ativa, mas nenhuma migration no repo contém `ENABLE ROW LEVEL SECURITY` ou
-`CREATE POLICY` para ela (só existe para `zapp.permissions`). Ao mesmo tempo,
-`AuthProvider.tsx:330-347` e `usePermissions.ts:137-165` fazem
-`INSERT`/`DELETE` diretos nela **sem nenhuma checagem de papel no client** — dependem
-100% de RLS no servidor. Uma migration antiga (`f008_comments_full_coverage.sql:523`)
-chega a documentá-la como "módulo inativo", o que é inconsistente com o uso ativo real.
-Se a RLS de fato não estiver habilitada em produção, qualquer usuário autenticado
-consegue `POST .../role_permissions` e se autoconceder permissão — **privilege
-escalation direto via REST**.
+**`zapp.role_permissions` está protegida em produção.** A hipótese levantada na
+varredura estática (RLS possivelmente ausente, já que nenhuma migration no repo
+contém `ENABLE ROW LEVEL SECURITY`/`CREATE POLICY` para essa tabela) foi verificada
+ao vivo via MCP `SUPABASE_SELF_HOSTED_-_MCP` em 2026-09-02:
 
-Isso **não foi confirmado nem descartado nesta auditoria** por falta de acesso ao
-Postgres de produção. É o primeiro item do plano de ação abaixo.
+- `pg_class.relrowsecurity = true` para `zapp.role_permissions`.
+- 3 policies reais existem: `auth_admin_write_role_permissions` (`FOR ALL`,
+  `authenticated`, `USING`/`WITH CHECK = is_admin_or_supervisor()`),
+  `auth_read_role_permissions` (leitura restrita a admin/supervisor ou ao próprio
+  role do usuário) e `service_full_access` (`service_role`).
+- `zapp.is_admin_or_supervisor()` é `SECURITY DEFINER`, `SET search_path TO 'zapp'`
+  (sem risco de search_path hijacking), e retorna `FALSE` explicitamente quando
+  `_user_id IS NULL` — fail-closed correto.
+
+Ou seja: `INSERT`/`UPDATE`/`DELETE` em `role_permissions` por um usuário comum
+(`agent`) é rejeitado pelo Postgres antes mesmo de qualquer checagem de aplicação.
+As chamadas client-side em `AuthProvider.tsx:330-347`/`usePermissions.ts:137-165`
+sem gate local não são um risco real — o servidor já barra.
+
+**O gap real não é segurança, é drift de documentação**: essa policy não existe em
+nenhuma migration versionada em `supabase/migrations/` (confirmado por grep) —
+alguém aplicou via SQL direto ou uma migration antiga foi arquivada/perdida no
+squash histórico. É o único item do plano de ação abaixo que muda de prioridade
+(de "crítico de segurança" para "materializar migration ausente").
 
 ---
 
 ## Top 10 Ações por ROI (Impacto ÷ Esforço)
 
-1. **[CRÍTICO] Verificar RLS de `zapp.role_permissions` em produção e corrigir se ausente** — Segurança/Autorização · Impacto Altíssimo · Esforço Baixo · `db_list_policies`/`pg_class.relrowsecurity` via MCP Supabase + migration de policy espelhando `zapp.permissions` se faltar.
+1. **Materializar em migration a policy real de `zapp.role_permissions`** — Documentação/Banco · Impacto Médio (rastreabilidade, não segurança — RLS já confirmada correta em produção) · Esforço Baixo · replicar `auth_admin_write_role_permissions`/`auth_read_role_permissions`/`service_full_access` (já verificadas ao vivo) como nova migration em `supabase/migrations/`, sem alterar comportamento.
 2. **Redigir PII nos 3 pontos de log em texto puro** — Logging · Impacto Alto (LGPD) · Esforço Baixo · `supabase/functions/csat-dispatch/index.ts:106`, `_shared/evolution-webhook-handlers.ts:687`, `_shared/evolution-webhook-messages.ts:328`.
 3. **Gate de papel para editar/apagar mensagem** — Lógica de Negócio/Autorização · Impacto Alto · Esforço Médio · `MessageHoverToolbar.tsx:107-155,328-335` (client) + policy RLS de UPDATE/DELETE em `evolution_messages` restrita a admin/supervisor ou dono+janela.
 4. **`secure-upload` fail-closed sem VirusTotal + magic bytes** — Segurança · Impacto Alto · Esforço Baixo-Médio · `supabase/functions/secure-upload/index.ts:114-191`.
@@ -89,7 +99,7 @@ Postgres de produção. É o primeiro item do plano de ação abaixo.
 ## Roadmap em 3 Ondas
 
 ### 🔴 Quick Wins (1-3 dias)
-- Ação 1 (RLS `role_permissions`) — verificar e corrigir se necessário
+- Ação 1 (materializar migration da policy de `role_permissions`, sem mudança de comportamento)
 - Ação 2 (redação de PII em 3 logs)
 - Ação 4 (`secure-upload` fail-closed)
 - Ação 6 (conectar schema Zod de e-mail/contato)
@@ -137,3 +147,12 @@ da dimensão, deixando lacunas concentradas em código mais antigo ou em integra
 geral para baixo e onde um usuário mal-intencionado ou um dado malformado (CPF
 inválido, permissão auto-concedida) tem o caminho mais curto até causar dano real —
 por isso lideram o roadmap.
+
+**Nota de verificação (2026-09-02, pós-publicação):** o achado originalmente marcado
+como crítico (RLS de `zapp.role_permissions`) foi checado ao vivo contra o Postgres de
+produção via MCP `SUPABASE_SELF_HOSTED_-_MCP` e **descartado como risco real** — a
+tabela está corretamente protegida (ver seção "Achado crítico" acima). Isso reforça o
+padrão geral encontrado: os agentes de varredura estática marcaram corretamente como
+"NÃO AUDITÁVEL" tudo que dependia de acesso a produção, e neste caso específico a
+verificação ao vivo confirmou que o código de aplicação está mais permissivo que o
+banco — não o contrário, que seria o cenário perigoso.
