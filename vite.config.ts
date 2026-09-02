@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { compression } from 'vite-plugin-compression2';
 import { visualizer } from 'rollup-plugin-visualizer';
+import type { OutputChunk } from 'rollup';
 
 // Self-hosted Supabase (cutover 2026-06-30). These are FALLBACKS only, used
 // when the matching VITE_* env var is absent (e.g. local dev without .env).
@@ -76,14 +77,18 @@ const emitVersionJsonPlugin = () => ({
         (bundle[name] as { type?: string })?.type === 'chunk'
     );
     // CSS do entry: o Vite anota os arquivos emitidos em viteMetadata.importedCss.
-    // Fallback: primeiro asset .css do bundle (build single-entry).
+    // Fallback: usado apenas quando há EXATAMENTE um .css no bundle (build single-entry
+    // sem code split). Com múltiplos .css (cssCodeSplit: true + manualChunks), o fallback
+    // é recusado para evitar selecionar o CSS de um chunk vendor no lugar do entry.
+    type ViteChunk = OutputChunk & { viteMetadata?: { importedCss?: Set<string> } };
     const importedCss = entry
-      ? (bundle[entry] as { viteMetadata?: { importedCss?: Set<string> } })?.viteMetadata
-          ?.importedCss
+      ? (bundle[entry] as ViteChunk)?.viteMetadata?.importedCss
       : undefined;
+    const allCssFiles = Object.keys(bundle).filter((name) => name.endsWith('.css'));
+    const unambiguousFallback = allCssFiles.length === 1 ? allCssFiles[0] : undefined;
     const entryCss =
       (importedCss && Array.from(importedCss)[0]) ??
-      Object.keys(bundle).find((name) => name.endsWith('.css')) ??
+      unambiguousFallback ??
       null;
     // @ts-expect-error — `this.emitFile` is provided by Rollup at build time
     this.emitFile({
