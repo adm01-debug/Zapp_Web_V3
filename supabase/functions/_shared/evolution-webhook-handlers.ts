@@ -5,7 +5,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   isRecord, normalizePhone, toEventRecords, instanceOrFilter,
   getConnectionByInstance, getContactByPhone, persistProfilePicture, generatePhoneVariants,
-  resolveLidToPhone,
+  resolveLidToPhone, redactJid,
 } from "./evolution-helpers.ts";
 
 /** evolution-webhook-handlers utilities and exports. */
@@ -684,7 +684,7 @@ export async function handleContactsSet(supabase: SupabaseClient<any, any>, inst
 
     const { error: insertErr } = await supabase.from('contacts').insert({ phone, name: pushName, whatsapp_connection_id: connection.id, instance_name: instance, remote_jid: jid });
     if (insertErr && insertErr.code === '23505') { skipped++; continue; }
-    if (insertErr) { console.warn(`[contacts.set] insert error for ${phone}:`, insertErr.message); skipped++; continue; }
+    if (insertErr) { console.warn(`[contacts.set] insert error for ${redactJid(phone)}:`, insertErr.message); skipped++; continue; }
     synced++;
   }
   console.log(`contacts.set: synced ${synced}, skipped ${skipped} for ${instance}`);

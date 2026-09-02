@@ -64,6 +64,7 @@ export const ContactFormV3: React.FC<ContactFormV3Props> = ({
     checking,
     isSaving,
     phoneValidation,
+    emailValidation,
     update,
     addTag,
     removeTag,
@@ -185,6 +186,11 @@ export const ContactFormV3: React.FC<ContactFormV3Props> = ({
           }
           autoComplete="email"
         />
+        {emailValidation && !emailValidation.success && (
+          <p className="text-xs text-muted-foreground">
+            {emailValidation.error.issues[0]?.message ?? 'E-mail inválido'}
+          </p>
+        )}
       </div>
 
       {/* Company — CONTATOS-14: sugestões do cadastro local zapp.companies

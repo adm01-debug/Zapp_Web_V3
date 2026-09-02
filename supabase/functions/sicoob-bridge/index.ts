@@ -34,65 +34,39 @@ Deno.serve(async (req) => {
     if (action === 'new_message') {
       const { message_id, sender_name, sender_email, sender_phone, singular_name, singular_id, content, vendedor_user_id, created_at } = body;
 
-      // Check existing mapping
-      const { data: existingMapping } = await supabase
-        .from('sicoob_contact_mapping')
-        .select('contact_id, zappweb_agent_id')
-        .eq('sicoob_user_id', body.sender_id || message_id)
-        .eq('sicoob_singular_id', singular_id)
-        .maybeSingle();
+      // F-DATA-01 (auditoria 2026-09-02): contato + mapeamento + mensagem numa
+      // unica transacao via RPC, em vez de 4 escritas sequenciais separadas —
+      // elimina o risco de contato orfao sem vinculo Sicoob em caso de falha
+      // parcial (ver supabase/migrations/20260902020000_fn_sicoob_bridge_ingest_message.sql).
+      const { data: ingestRows, error: ingestError } = await supabase.rpc('fn_sicoob_bridge_ingest_message', {
+        p_message_id: message_id,
+        p_sender_id: body.sender_id || null,
+        p_sender_name: sender_name,
+        p_sender_email: sender_email || null,
+        p_sender_phone: sender_phone || null,
+        p_singular_name: singular_name,
+        p_singular_id: singular_id,
+        p_content: content,
+        p_vendedor_user_id: vendedor_user_id,
+        p_created_at: created_at || null,
+      });
 
-      let contactId: string;
-      let agentId: string | null = null;
+      if (ingestError) throw new Error(`Failed to ingest sicoob message: ${ingestError.message}`);
+      const result = Array.isArray(ingestRows) ? ingestRows[0] : ingestRows;
+      const contactId = result?.contact_id;
+      const messageId = result?.message_id;
+      const idempotent = result?.idempotent === true;
 
-      if (existingMapping) {
-        contactId = existingMapping.contact_id;
-        agentId = existingMapping.zappweb_agent_id;
-        await supabase.from('contacts').update({ name: sender_name, company: singular_name, updated_at: new Date().toISOString() }).eq('id', contactId);
-      } else {
-        const { data: vendedorProfile } = await supabase.from('profiles').select('id').limit(1).maybeSingle();
-        agentId = vendedorProfile?.id || null;
-
-        const phone = sender_phone || `sicoob-${singular_id}-${Date.now()}`;
-        const { data: newContact, error: contactError } = await supabase.from('contacts').insert({
-          name: sender_name, phone, email: sender_email || null, company: singular_name,
-          contact_type: 'sicoob_gifts', channel_type: 'internal_chat', assigned_to: agentId,
-          tags: ['sicoob-gifts'], notes: `Cooperado da singular: ${singular_name} (${singular_id})`,
-        }).select('id').single();
-
-        if (contactError) throw new Error(`Failed to create contact: ${contactError.message}`);
-        contactId = newContact.id;
-
-        await supabase.from('sicoob_contact_mapping').insert({
-          contact_id: contactId, sicoob_user_id: body.sender_id || `sender-${message_id}`,
-          sicoob_vendedor_id: vendedor_user_id, sicoob_singular_id: singular_id, zappweb_agent_id: agentId,
-        });
+      if (idempotent) {
+        log.info("Duplicate message_id — returning idempotent success", { message_id });
+        // Etapa 54 (PLANO-100-CONTRATOS-EDGE): respostas de sucesso migram pra
+        // respondWithContract — parsed.headers (x-contract-version/deprecated/
+        // sunset) anexados pelo kit, sem propagação manual.
+        return respondWithContract(parsed, { success: true, message: 'Message already exists', idempotent: true }, { status: 200, headers: getCorsHeaders(req) });
       }
 
-      const { data: newMessage, error: msgError } = await supabase.from('messages').insert({
-        contact_id: contactId, content, sender: 'contact', message_type: 'text',
-        external_id: message_id, channel_type: 'internal_chat', is_read: false,
-        status: 'delivered', created_at: created_at || new Date().toISOString(),
-      }).select('id').single();
-
-      // 23505 = unique_violation: concurrent request already inserted this message_id.
-      // Treat as success (idempotent). The partial unique index on (external_id) WHERE
-      // whatsapp_connection_id IS NULL guarantees this constraint fires atomically.
-      if (msgError) {
-        if ((msgError as { code?: string }).code === '23505') {
-          log.info("Duplicate message_id — returning idempotent success", { message_id });
-          // Etapa 54 (PLANO-100-CONTRATOS-EDGE): respostas de sucesso migram pra
-          // respondWithContract — parsed.headers (x-contract-version/deprecated/
-          // sunset) anexados pelo kit, sem propagação manual.
-          return respondWithContract(parsed, { success: true, message: 'Message already exists', idempotent: true }, { status: 200, headers: getCorsHeaders(req) });
-        }
-        throw new Error(`Failed to create message: ${msgError.message}`);
-      }
-
-      await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', contactId);
-
-      log.done(200, { contactId, messageId: newMessage.id });
-      return respondWithContract(parsed, { success: true, contact_id: contactId, message_id: newMessage.id }, { status: 200, headers: getCorsHeaders(req) });
+      log.done(200, { contactId, messageId });
+      return respondWithContract(parsed, { success: true, contact_id: contactId, message_id: messageId }, { status: 200, headers: getCorsHeaders(req) });
 
     } else if (action === 'mark_read') {
       const { external_ids } = body;
