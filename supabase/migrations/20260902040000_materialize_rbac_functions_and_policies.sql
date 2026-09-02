@@ -46,6 +46,15 @@ BEGIN
 END;
 $function$;
 
+-- SECURITY DEFINER + PUBLIC executável por padrão no Postgres a menos que
+-- revogado explicitamente (achado do Copilot, review do PR #1483): sem isso,
+-- qualquer role com USAGE em ops poderia chamar a função pra criar/alterar
+-- policies arbitrárias. Producao ja tem isso revogado (confirmado ao vivo via
+-- has_function_privilege('public', ..., 'EXECUTE') = false) — só nao estava
+-- na migration, que so materializava o corpo da funcao via pg_get_functiondef
+-- (que nao inclui GRANT/REVOKE).
+REVOKE EXECUTE ON FUNCTION ops.safe_create_policy(text, text, text, text) FROM PUBLIC;
+
 -- ─── Funções RBAC ───────────────────────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION zapp.get_user_department(_user_id uuid)
@@ -186,11 +195,19 @@ $function$;
 -- ─── Policies RLS órfãs em tabelas críticas ────────────────────────────────
 -- (contatos, empresas, profiles, user_roles, workspace_members, webhook_events_processed)
 
+-- is_admin_or_supervisor() qualificado com o schema (achado do Copilot,
+-- review do PR #1483): ops.safe_create_policy roda com search_path fixo em
+-- 'pg_catalog','public' (SECURITY DEFINER), então o EXECUTE dinâmico do
+-- CREATE POLICY resolveria o nome sem schema contra esse search_path — a
+-- função só existe em zapp, não em public. Sem qualificar, a policy só
+-- funciona hoje porque já existe em produção (safe_create_policy no-opa
+-- antes de tentar criar); num rebuild do zero, o CREATE falharia com
+-- "function is_admin_or_supervisor() does not exist".
 SELECT ops.safe_create_policy('zapp', 'workspace_members', 'auth_secure_128',
-  $$FOR ALL TO authenticated USING ((user_id = (select auth.uid())) OR is_admin_or_supervisor()) WITH CHECK ((user_id = (select auth.uid())) OR is_admin_or_supervisor())$$);
+  $$FOR ALL TO authenticated USING ((user_id = (select auth.uid())) OR zapp.is_admin_or_supervisor()) WITH CHECK ((user_id = (select auth.uid())) OR zapp.is_admin_or_supervisor())$$);
 
 SELECT ops.safe_create_policy('zapp', 'contatos', 'auth_secure_51',
-  $$FOR SELECT TO authenticated USING (is_admin_or_supervisor())$$);
+  $$FOR SELECT TO authenticated USING (zapp.is_admin_or_supervisor())$$);
 
 SELECT ops.safe_create_policy('zapp', 'contatos', 'contatos_delete',
   $$FOR DELETE TO authenticated USING (EXISTS (SELECT 1 FROM zapp.profiles p WHERE p.user_id = (select auth.uid()) AND p.role = ANY (ARRAY['admin'::text, 'supervisor'::text])))$$);
