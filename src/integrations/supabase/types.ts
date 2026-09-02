@@ -5681,6 +5681,134 @@ export type Database = {
         }
         Relationships: []
       }
+      empresas: {
+        Row: {
+          aliquota_rat: number | null
+          aliquota_terceiros: number | null
+          ativo: boolean
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          cnae_principal: string | null
+          cnpj: string | null
+          codigo_fpas: string | null
+          cor_hex: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: string
+          inscricao_estadual: string | null
+          is_padrao: boolean
+          logo_url: string | null
+          nome_fantasia: string | null
+          razao_social: string
+          regime_tributario: string | null
+          sigla: string | null
+          telefone: string | null
+          user_id: string
+        }
+        Insert: {
+          aliquota_rat?: number | null
+          aliquota_terceiros?: number | null
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnae_principal?: string | null
+          cnpj?: string | null
+          codigo_fpas?: string | null
+          cor_hex?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          is_padrao?: boolean
+          logo_url?: string | null
+          nome_fantasia?: string | null
+          razao_social: string
+          regime_tributario?: string | null
+          sigla?: string | null
+          telefone?: string | null
+          user_id?: string
+        }
+        Update: {
+          aliquota_rat?: number | null
+          aliquota_terceiros?: number | null
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnae_principal?: string | null
+          cnpj?: string | null
+          codigo_fpas?: string | null
+          cor_hex?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          is_padrao?: boolean
+          logo_url?: string | null
+          nome_fantasia?: string | null
+          razao_social?: string
+          regime_tributario?: string | null
+          sigla?: string | null
+          telefone?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_empresas: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          empresa_id: string
+          id: string
+          is_default: boolean
+          provisioned_via: string
+          role: Database["public"]["Enums"]["app_role"]
+          scim_external_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id: string
+          id?: string
+          is_default?: boolean
+          provisioned_via?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          scim_external_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          is_default?: boolean
+          provisioned_via?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          scim_external_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_empresas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       agent_achievements: {
@@ -12416,7 +12544,7 @@ export type Database = {
         }
         Relationships: []
       }
-      empresas: {
+      empresas_zapp_legacy: {
         Row: {
           bitrix_empresa_id: string | null
           created_at: string | null
@@ -27660,6 +27788,21 @@ export type Database = {
         Args: { p_phone: string }
         Returns: Json
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role_in_empresa: {
+        Args: {
+          _empresa: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _user: string
+        }
+        Returns: boolean
+      }
       increment_webhook_rate_limit: {
         Args: {
           p_event_type: string
@@ -27785,6 +27928,12 @@ export type Database = {
         | "agent"
         | "special_agent"
         | "dev"
+        | "financeiro"
+        | "operacional"
+        | "visualizador"
+        | "contador"
+        | "operator"
+        | "viewer"
       channel_type:
         | "whatsapp"
         | "instagram"
@@ -59227,6 +59376,25 @@ export type Database = {
       fn_should_apply_kill_switch: {
         Args: { p_bucket_key: string; p_switch_name: string }
         Returns: boolean
+      }
+      fn_sicoob_bridge_ingest_message: {
+        Args: {
+          p_content: string
+          p_created_at: string
+          p_message_id: string
+          p_sender_email: string
+          p_sender_id: string
+          p_sender_name: string
+          p_sender_phone: string
+          p_singular_id: string
+          p_singular_name: string
+          p_vendedor_user_id: string
+        }
+        Returns: {
+          contact_id: string
+          idempotent: boolean
+          message_id: string
+        }[]
       }
       fn_snapshot_constraints_reference: {
         Args: { p_generated_by?: string; p_version?: string }

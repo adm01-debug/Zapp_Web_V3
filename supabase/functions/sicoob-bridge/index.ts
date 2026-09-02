@@ -54,6 +54,11 @@ Deno.serve(async (req) => {
       if (ingestError) throw new Error(`Failed to ingest sicoob message: ${ingestError.message}`);
       const result = Array.isArray(ingestRows) ? ingestRows[0] : ingestRows;
       const contactId = result?.contact_id;
+      // Contrato gerado (types.ts) declara message_id como string não-nula —
+      // limitação do postgres-meta, que não expressa nullability de colunas em
+      // RETURNS TABLE. Na prática a RPC retorna NULL aqui quando idempotent=true
+      // (ver supabase/migrations/20260902020000_fn_sicoob_bridge_ingest_message.sql
+      // linha 72); não desreferenciar messageId no ramo idempotente abaixo.
       const messageId = result?.message_id;
       const idempotent = result?.idempotent === true;
 
