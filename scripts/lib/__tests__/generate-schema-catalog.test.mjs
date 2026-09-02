@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -8,6 +8,10 @@ import { join, resolve } from 'node:path';
 const repoRoot = resolve(new URL('../../../', import.meta.url).pathname);
 const scriptPath = resolve(repoRoot, 'scripts/generate-schema-catalog.mjs');
 const fixturePath = resolve(repoRoot, 'scripts/lib/__fixtures__/schema-catalog-fixture.types.ts');
+const externalObjectsFixturePath = resolve(
+  repoRoot,
+  'scripts/lib/__fixtures__/schema-catalog-external-objects-fixture.types.ts',
+);
 
 test('generate-schema-catalog preserva colunas críticas e normaliza Returns inline', () => {
   const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-test-'));
@@ -68,4 +72,199 @@ test('generate-schema-catalog compara catálogos ignorando source quando solicit
       encoding: 'utf8',
     },
   );
+});
+
+test('generate-schema-catalog remove objetos right-only fora de --from-meta', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-external-objects-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+  const externalObjectsFile = join(outDir, 'external-objects.json');
+  writeFileSync(
+    externalObjectsFile,
+    JSON.stringify(
+      {
+        version: 1,
+        objects: [
+          {
+            path: 'schemas.public.Functions.has_role',
+            owner: 'external-finance-system',
+            reason: 'Função de outro sistema que compartilha o schema public.',
+            expected_presence: 'right-only',
+          },
+        ],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+
+  execFileSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      externalObjectsFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+
+  const catalog = JSON.parse(readFileSync(outFile, 'utf8'));
+
+  // O objeto declarado right-only nunca deve entrar no catálogo canônico —
+  // regressão do bug real: um regen --from-meta completo do types.ts incluía
+  // has_role (função do sistema financeiro externo que compartilha o schema
+  // public) no catálogo commitado, quebrando o gate "Catalog fresh" porque
+  // compare-schema-catalog.mjs esperava esse objeto ausente do lado commitado.
+  assert.equal('has_role' in catalog.schemas.public.Functions, false);
+  // Objetos que não estão na allowlist continuam preservados normalmente.
+  assert.equal('own_public_helper' in catalog.schemas.public.Functions, true);
+  assert.equal('current_user_role' in catalog.schemas.zapp.Functions, true);
+  assert.equal(catalog.summary.functions, 2);
+});
+
+test('generate-schema-catalog so filtra objetos right-only fora de --from-meta (guard de codigo)', () => {
+  // Verificação estática do invariante em vez de um servidor HTTP real: um
+  // teste de integração com --from-meta via loopback HTTP entre processos
+  // (execFileSync spawnando um child que faz fetch() de volta pro processo
+  // de teste) trava de forma consistente neste ambiente sandboxado — child
+  // processes não enxergam o servidor loopback do processo pai. Como o efeito
+  // que realmente importa proteger é "objetos right-only nunca vazam para o
+  // catálogo COMMITADO" (coberto pelo teste anterior), aqui só travamos a
+  // condição de guarda no código-fonte para não perder a proteção caso
+  // alguém troca `if (!FROM_META)` por algo que sempre filtra.
+  const source = readFileSync(scriptPath, 'utf8');
+  assert.match(
+    source,
+    /if\s*\(\s*!FROM_META\s*\)\s*\{\s*\n\s*const externalObjects = loadExternalObjectsAllowlist/,
+    'o filtro de objetos externos deve rodar apenas fora do modo --from-meta — a geração ao vivo usada por compare-schema-catalog.mjs precisa continuar trazendo os objetos externos intactos',
+  );
+});
+
+test('generate-schema-catalog falha alto se a allowlist de objetos externos estiver ausente ou malformada', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-external-objects-missing-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+  const missingFile = join(outDir, 'does-not-exist.json');
+
+  // Achado do cubic (review do PR #1484): antes, um arquivo de allowlist
+  // ausente ou malformado fazia o gerador degradar silenciosamente para "sem
+  // filtro nenhum" (retornava []) — reintroduzindo os objetos externos no
+  // catálogo commitado sem nenhum sinal de erro. Agora deve falhar alto.
+  const missing = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      missingFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr + missing.stdout, /Allowlist de objetos externos ausente/);
+
+  const invalidFile = join(outDir, 'invalid.json');
+  writeFileSync(invalidFile, '{ not valid json');
+  const invalid = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      invalidFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr + invalid.stdout, /Allowlist de objetos externos inválida/);
+});
+
+test('generate-schema-catalog falha alto se uma entrada da allowlist tiver campo invalido/faltando', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-external-objects-badentry-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+
+  // Achado do cubic (P1, confidence 10): uma entrada com expected_presence
+  // com typo/ausente antes passava batido (stripRightOnlyExternalObjects só
+  // filtra expected_presence === 'right-only', então qualquer outro valor —
+  // inclusive undefined — era silenciosamente ignorado, reintroduzindo o
+  // objeto externo no catálogo sem erro nenhum).
+  const badPresenceFile = join(outDir, 'bad-presence.json');
+  writeFileSync(
+    badPresenceFile,
+    JSON.stringify({
+      version: 1,
+      objects: [
+        {
+          path: 'schemas.public.Functions.has_role',
+          owner: 'external-finance-system',
+          reason: 'Função de outro sistema que compartilha o schema public.',
+          expected_presence: 'rigth-only', // typo proposital
+        },
+      ],
+    }) + '\n',
+  );
+  const badPresence = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      badPresenceFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(badPresence.status, 0);
+  assert.match(badPresence.stderr + badPresence.stdout, /exige expected_presence igual a left-only ou right-only/);
+
+  const badPathFile = join(outDir, 'bad-path.json');
+  writeFileSync(
+    badPathFile,
+    JSON.stringify({
+      version: 1,
+      objects: [
+        {
+          path: 'schemas.zapp.Functions.current_user_role',
+          owner: 'external-finance-system',
+          reason: 'Fora de schemas.public de propósito.',
+          expected_presence: 'right-only',
+        },
+      ],
+    }) + '\n',
+  );
+  const badPath = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      badPathFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(badPath.status, 0);
+  assert.match(badPath.stderr + badPath.stdout, /Escopo externo inválido/);
 });
