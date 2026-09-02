@@ -389,14 +389,19 @@ export function useFileUploadLogic(opts: {
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const validation = validateFile(file);
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
       if (!showDialog) {
-        onFileSelect?.(file, validation.category || 'document');
+        // Sem diálogo interno: o input aceita `multiple`, então delega para
+        // handleExternalFiles (MAX_FILES + onFileSelect por arquivo) em vez
+        // de olhar só files[0] — antes disso, selecionar mais de um arquivo
+        // pelo clipe de papel descartava todos menos o primeiro em silêncio.
+        handleExternalFiles(Array.from(files));
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
+      const file = files[0];
+      const validation = validateFile(file);
       let preview: string | undefined;
       if (validation.valid && (validation.category === 'image' || file.type === 'application/pdf'))
         preview = URL.createObjectURL(file);
@@ -405,7 +410,7 @@ export function useFileUploadLogic(opts: {
       setIsDialogOpen(showDialog);
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [showDialog, onFileSelect]
+    [showDialog, handleExternalFiles]
   );
 
   const removeFromQueue = useCallback((id: string) => {

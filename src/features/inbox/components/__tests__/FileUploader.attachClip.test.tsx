@@ -26,6 +26,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createRef, type ReactElement } from 'react';
 import { FileUploader, type FileUploaderRef } from '../FileUploader';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
+import { MAX_FILES } from '../useFileUploadLogicTypes';
 
 function renderWithProviders(ui: ReactElement) {
   return render(<TooltipProvider>{ui}</TooltipProvider>);
@@ -67,6 +69,15 @@ async function selectViaPaperclip(container: HTMLElement, file: File) {
   const input = container.querySelector('input[type="file"]') as HTMLInputElement;
   expect(input).toBeTruthy();
   Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  fireEvent.change(input);
+}
+
+async function selectMultipleViaPaperclip(container: HTMLElement, files: File[]) {
+  const button = screen.getByRole('button', { name: 'Anexar arquivo' });
+  fireEvent.click(button);
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  expect(input).toBeTruthy();
+  Object.defineProperty(input, 'files', { value: files, configurable: true });
   fireEvent.change(input);
 }
 
@@ -143,6 +154,40 @@ describe('FileUploader — clipe de papel (produção: showDialog=false)', () =>
       expect(onFileSelect).toHaveBeenCalledTimes(2);
     });
     expect(onFileSelect.mock.calls.map((c) => c[0])).toEqual([fileA, fileB]);
+  });
+
+  it('seleção múltipla pelo clipe de papel (input multiple) entrega cada arquivo via onFileSelect, na ordem', async () => {
+    const onFileSelect = vi.fn();
+    const { container } = renderWithProviders(
+      <FileUploader onFileSelect={onFileSelect} showDialog={false} />
+    );
+
+    const fileA = makeFile('a.png', 'image/png');
+    const fileB = makeFile('b.pdf', 'application/pdf');
+    await selectMultipleViaPaperclip(container, [fileA, fileB]);
+
+    await waitFor(() => {
+      expect(onFileSelect).toHaveBeenCalledTimes(2);
+    });
+    expect(onFileSelect.mock.calls.map((c) => c[0])).toEqual([fileA, fileB]);
+  });
+
+  it('seleção pelo clipe acima de MAX_FILES: avisa e processa só os primeiros MAX_FILES', async () => {
+    const onFileSelect = vi.fn();
+    const { container } = renderWithProviders(
+      <FileUploader onFileSelect={onFileSelect} showDialog={false} />
+    );
+
+    const files = Array.from({ length: MAX_FILES + 1 }, (_, i) =>
+      makeFile(`arquivo-${i}.png`, 'image/png')
+    );
+    await selectMultipleViaPaperclip(container, files);
+
+    await waitFor(() => {
+      expect(onFileSelect).toHaveBeenCalledTimes(MAX_FILES);
+    });
+    expect(toast.warning).toHaveBeenCalledWith(`Limite de ${MAX_FILES} arquivos por vez.`);
+    expect(onFileSelect.mock.calls.map((c) => c[0])).toEqual(files.slice(0, MAX_FILES));
   });
 });
 
