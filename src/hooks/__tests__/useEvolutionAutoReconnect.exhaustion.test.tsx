@@ -51,9 +51,14 @@ vi.mock('@/integrations/supabase/safeClient', () => ({
   safeClient: { rpc: vi.fn(async () => ({ data: null, error: null })) },
 }));
 
-vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-}));
+// Objeto capturado em closure: garante referência estável entre renders.
+// Sem isso, useQueryClient() retorna um novo objeto a cada chamada, tornando
+// queryClient instável na dep-list de attemptSpecificReconnect → useCallback
+// recria a função → useEffect re-executa → cleanup cancela o timer de backoff.
+vi.mock('@tanstack/react-query', () => {
+  const queryClient = { invalidateQueries: vi.fn() };
+  return { useQueryClient: () => queryClient };
+});
 
 vi.mock('@/lib/eventBus', () => ({ eventBus: { emit } }));
 
