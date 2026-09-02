@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -143,4 +143,52 @@ test('generate-schema-catalog so filtra objetos right-only fora de --from-meta (
     /if\s*\(\s*!FROM_META\s*\)\s*\{\s*\n\s*const externalObjects = loadExternalObjectsAllowlist/,
     'o filtro de objetos externos deve rodar apenas fora do modo --from-meta — a geração ao vivo usada por compare-schema-catalog.mjs precisa continuar trazendo os objetos externos intactos',
   );
+});
+
+test('generate-schema-catalog falha alto se a allowlist de objetos externos estiver ausente ou malformada', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-external-objects-missing-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+  const missingFile = join(outDir, 'does-not-exist.json');
+
+  // Achado do cubic (review do PR #1484): antes, um arquivo de allowlist
+  // ausente ou malformado fazia o gerador degradar silenciosamente para "sem
+  // filtro nenhum" (retornava []) — reintroduzindo os objetos externos no
+  // catálogo commitado sem nenhum sinal de erro. Agora deve falhar alto.
+  const missing = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      missingFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr + missing.stdout, /Allowlist de objetos externos ausente/);
+
+  const invalidFile = join(outDir, 'invalid.json');
+  writeFileSync(invalidFile, '{ not valid json');
+  const invalid = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      invalidFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr + invalid.stdout, /Allowlist de objetos externos inválida/);
 });
