@@ -66,14 +66,39 @@ REVOKE EXECUTE ON FUNCTION zapp.upsert_conversation_tags_atomic(uuid, jsonb, jso
 -- reexecute esta migration numa base onde ela ja rodou falha com
 -- "42P07 constraint already exists". Guardado com checagem em pg_constraint,
 -- mesmo padrao usado em ops.safe_create_policy (migration 20260902040000).
+--
+-- Hardening (review cubic, confianca 8): a checagem original so validava o
+-- NOME da constraint -- se existisse uma constraint diferente com esse mesmo
+-- nome (contype errado ou colunas diferentes), o guard pulava silenciosamente
+-- o ALTER TABLE e o `ON CONFLICT (contact_id, tag_name)` da funcao ficaria sem
+-- alvo compativel, falhando em TODA chamada. Agora valida `contype='u'` e
+-- `conkey` batendo exatamente com (contact_id, tag_name), e falha alto e claro
+-- (RAISE EXCEPTION) em vez de mascarar o drift. Testado ao vivo contra a
+-- constraint real ja existente em producao: reconhece como valida (no-op),
+-- sem falso positivo.
 DO $$
+DECLARE
+  v_conid oid;
+  v_contype "char";
+  v_conkey smallint[];
+  v_expected_conkey smallint[];
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'ai_conversation_tags_contact_tag_unique'
-      AND conrelid = 'zapp.ai_conversation_tags'::regclass
-  ) THEN
+  SELECT c.oid, c.contype, c.conkey INTO v_conid, v_contype, v_conkey
+  FROM pg_constraint c
+  WHERE c.conname = 'ai_conversation_tags_contact_tag_unique'
+    AND c.conrelid = 'zapp.ai_conversation_tags'::regclass;
+
+  IF v_conid IS NULL THEN
     ALTER TABLE zapp.ai_conversation_tags
       ADD CONSTRAINT ai_conversation_tags_contact_tag_unique UNIQUE (contact_id, tag_name);
+  ELSE
+    SELECT ARRAY[
+      (SELECT a.attnum FROM pg_attribute a WHERE a.attrelid = 'zapp.ai_conversation_tags'::regclass AND a.attname = 'contact_id'),
+      (SELECT a.attnum FROM pg_attribute a WHERE a.attrelid = 'zapp.ai_conversation_tags'::regclass AND a.attname = 'tag_name')
+    ]::smallint[] INTO v_expected_conkey;
+
+    IF v_contype <> 'u' OR v_conkey IS DISTINCT FROM v_expected_conkey THEN
+      RAISE EXCEPTION 'ai_conversation_tags_contact_tag_unique existe mas nao e a UNIQUE(contact_id, tag_name) esperada (contype=%, conkey=%) -- drift de schema, corrija manualmente antes de reaplicar esta migration', v_contype, v_conkey;
+    END IF;
   END IF;
 END $$;
