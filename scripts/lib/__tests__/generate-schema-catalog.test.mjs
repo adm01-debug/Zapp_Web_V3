@@ -8,6 +8,10 @@ import { join, resolve } from 'node:path';
 const repoRoot = resolve(new URL('../../../', import.meta.url).pathname);
 const scriptPath = resolve(repoRoot, 'scripts/generate-schema-catalog.mjs');
 const fixturePath = resolve(repoRoot, 'scripts/lib/__fixtures__/schema-catalog-fixture.types.ts');
+const externalObjectsFixturePath = resolve(
+  repoRoot,
+  'scripts/lib/__fixtures__/schema-catalog-external-objects-fixture.types.ts',
+);
 
 test('generate-schema-catalog preserva colunas críticas e normaliza Returns inline', () => {
   const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-test-'));
@@ -67,5 +71,76 @@ test('generate-schema-catalog compara catálogos ignorando source quando solicit
       cwd: repoRoot,
       encoding: 'utf8',
     },
+  );
+});
+
+test('generate-schema-catalog remove objetos right-only fora de --from-meta', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-external-objects-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+  const externalObjectsFile = join(outDir, 'external-objects.json');
+  writeFileSync(
+    externalObjectsFile,
+    JSON.stringify(
+      {
+        version: 1,
+        objects: [
+          {
+            path: 'schemas.public.Functions.has_role',
+            owner: 'external-finance-system',
+            reason: 'Função de outro sistema que compartilha o schema public.',
+            expected_presence: 'right-only',
+          },
+        ],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+
+  execFileSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      externalObjectsFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+
+  const catalog = JSON.parse(readFileSync(outFile, 'utf8'));
+
+  // O objeto declarado right-only nunca deve entrar no catálogo canônico —
+  // regressão do bug real: um regen --from-meta completo do types.ts incluía
+  // has_role (função do sistema financeiro externo que compartilha o schema
+  // public) no catálogo commitado, quebrando o gate "Catalog fresh" porque
+  // compare-schema-catalog.mjs esperava esse objeto ausente do lado commitado.
+  assert.equal('has_role' in catalog.schemas.public.Functions, false);
+  // Objetos que não estão na allowlist continuam preservados normalmente.
+  assert.equal('own_public_helper' in catalog.schemas.public.Functions, true);
+  assert.equal('current_user_role' in catalog.schemas.zapp.Functions, true);
+  assert.equal(catalog.summary.functions, 2);
+});
+
+test('generate-schema-catalog so filtra objetos right-only fora de --from-meta (guard de codigo)', () => {
+  // Verificação estática do invariante em vez de um servidor HTTP real: um
+  // teste de integração com --from-meta via loopback HTTP entre processos
+  // (execFileSync spawnando um child que faz fetch() de volta pro processo
+  // de teste) trava de forma consistente neste ambiente sandboxado — child
+  // processes não enxergam o servidor loopback do processo pai. Como o efeito
+  // que realmente importa proteger é "objetos right-only nunca vazam para o
+  // catálogo COMMITADO" (coberto pelo teste anterior), aqui só travamos a
+  // condição de guarda no código-fonte para não perder a proteção caso
+  // alguém troca `if (!FROM_META)` por algo que sempre filtra.
+  const source = readFileSync(scriptPath, 'utf8');
+  assert.match(
+    source,
+    /if\s*\(\s*!FROM_META\s*\)\s*\{\s*\n\s*const externalObjects = loadExternalObjectsAllowlist/,
+    'o filtro de objetos externos deve rodar apenas fora do modo --from-meta — a geração ao vivo usada por compare-schema-catalog.mjs precisa continuar trazendo os objetos externos intactos',
   );
 });
