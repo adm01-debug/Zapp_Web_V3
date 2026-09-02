@@ -93690,7 +93690,7 @@
           "overloads": []
         },
         "fn_sicoob_bridge_ingest_message": {
-          "definition_sha1": "6f1aa0d9aa271bb2024c7ca79b0b9b44a5b7e942",
+          "definition_sha1": "49830e3c57166d8fcfe69094420ac2999358439e",
           "overload_count": 1,
           "overloads": [
             {
@@ -93748,7 +93748,7 @@
                   },
                   {
                     "name": "message_id",
-                    "type": "string"
+                    "type": "string | null"
                   }
                 ],
                 "kind": "object[]"
@@ -189200,7 +189200,7 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "39a49d1b271925ef8be63ccd7262dfdc95b85f44"
+    "types_sha1": "e1bede87d70f31c3bb4da8fd897d36c53a6e63fc"
   },
   "summary": {
     "schemas": 3,
