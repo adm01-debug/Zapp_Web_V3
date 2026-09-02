@@ -1,7 +1,13 @@
 import { queryKeys } from '@/services/api/queryKeys';
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchStickers, updateStickerFavorite, deleteStickerById, updateStickerCategory, incrementStickerUseCount } from '../../hooks/useStickerMutations';
+import {
+  fetchStickers,
+  updateStickerFavorite,
+  deleteStickerById,
+  updateStickerCategory,
+  incrementStickerUseCount,
+} from '../../hooks/useStickerMutations';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('StickerManager');
@@ -22,12 +28,8 @@ import {
   sortStickersByRecent,
   RECENT_STICKERS_LIMIT,
 } from './StickerTypes';
-import {
-  uploadStickerFile,
-  insertStickerRow,
-  removeStickerObject,
-} from './stickerUpload';
-import { AnimatePresence } from 'framer-motion';
+import { uploadStickerFile, insertStickerRow, removeStickerObject } from './stickerUpload';
+import { AnimatePresence } from '@/components/ui/motion';
 
 interface StickerManagerProps {
   onSend?: (stickerUrl: string) => void;
@@ -275,7 +277,8 @@ export function StickerManager({ onSend, mode: _mode = 'manager' }: StickerManag
               />
             </div>
             <div className="flex items-center rounded-lg border border-border/50 p-0.5">
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => setGridSize('sm')}
                 className={cn(
                   'rounded-md p-1.5 transition-colors',
@@ -286,7 +289,8 @@ export function StickerManager({ onSend, mode: _mode = 'manager' }: StickerManag
               >
                 <Grid3X3 className="h-4 w-4" />
               </button>
-              <button type="button"
+              <button
+                type="button"
                 onClick={() => setGridSize('md')}
                 className={cn(
                   'rounded-md p-1.5 transition-colors',

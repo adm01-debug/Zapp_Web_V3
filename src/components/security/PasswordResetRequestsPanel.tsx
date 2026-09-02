@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('PasswordResetRequestsPanel');
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { safeClient } from '@/integrations/supabase/safeClient';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { toast } from 'sonner';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -78,47 +79,51 @@ export function PasswordResetRequestsPanel() {
 
   const handleApprove = async (request: ResetRequest) => {
     setProcessing(true);
-    try {
-      const { error, data } = await supabase.functions.invoke('approve-password-reset', {
-        body: { requestId: request.id, action: 'approve' },
-      });
-      if (error) throw error;
+    // Bloco 7 (etapa 78): invokeEdge expõe o 422 canônico do gate de contrato
+    // (VALIDATION_ERROR + details[]) — antes, `throw error` + catch genérico
+    // descartava o corpo e o admin via só "Erro ao aprovar" mesmo com o
+    // servidor explicando o problema (ex.: requestId inválido).
+    const result = await invokeEdge<{ emailSent?: boolean }>('approve-password-reset', {
+      body: { requestId: request.id, action: 'approve' },
+    });
+    if (result.ok) {
       // A EF agora envia o email com o link real e reporta o estado via
       // emailSent — só afirmar envio quando o email realmente foi enviado.
-      const emailSent = (data as { emailSent?: boolean } | null)?.emailSent !== false;
+      const emailSent = result.data?.emailSent !== false;
       if (emailSent) {
         toast.success('Solicitação aprovada! Email de reset enviado.');
       } else {
-        toast.warning('Solicitação aprovada, mas o envio do email falhou. Reenvie ou contate o usuário.');
+        toast.warning(
+          'Solicitação aprovada, mas o envio do email falhou. Reenvie ou contate o usuário.'
+        );
       }
       void fetchRequests();
-    } catch (error) {
-      log.error('Error approving:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao aprovar');
-    } finally {
-      setProcessing(false);
-      setSelectedRequest(null);
+    } else {
+      log.error('Error approving:', { code: result.code, message: result.message });
+      const firstField = Object.values(result.fieldErrors)[0];
+      toast.error(firstField || result.message || 'Erro ao aprovar');
     }
+    setProcessing(false);
+    setSelectedRequest(null);
   };
 
   const handleReject = async (reason: string) => {
     if (!selectedRequest) return;
     setProcessing(true);
-    try {
-      const { error } = await supabase.functions.invoke('approve-password-reset', {
-        body: { requestId: selectedRequest.id, action: 'reject', rejectionReason: reason },
-      });
-      if (error) throw error;
+    const result = await invokeEdge('approve-password-reset', {
+      body: { requestId: selectedRequest.id, action: 'reject', rejectionReason: reason },
+    });
+    if (result.ok) {
       toast.success('Solicitação rejeitada');
       setRejectDialogOpen(false);
       setSelectedRequest(null);
       void fetchRequests();
-    } catch (error) {
-      log.error('Error rejecting:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao rejeitar');
-    } finally {
-      setProcessing(false);
+    } else {
+      log.error('Error rejecting:', { code: result.code, message: result.message });
+      const firstField = Object.values(result.fieldErrors)[0];
+      toast.error(firstField || result.message || 'Erro ao rejeitar');
     }
+    setProcessing(false);
   };
 
   const filteredRequests = requests.filter(

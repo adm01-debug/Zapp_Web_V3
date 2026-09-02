@@ -21,7 +21,40 @@ import { touchLastSeen } from '../services/touchLastSeen';
 import { logMessagesSubscribe, wrapMessagesHandler } from '@/lib/devRealtimeLogger';
 import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { isValidUUID } from '@/utils/uuid';
+import { isTransientMarkReadError, persistMessagesRead } from '../services/markMessagesRead';
 export type { MessageBatcherStatus } from './realtime/useMessageUpdateBatcher';
+
+/**
+ * Determina se um evento UPDATE do realtime deve invalidar o cache de uma
+ * conversa específica.
+ *
+ * @param payload    - Payload do evento Postgres realtime (new/old rows)
+ * @param candidateContactId - contact_id que você quer testar. No handler de
+ *   UPDATE do inbox este parâmetro é SEMPRE payload.new.contact_id (o que torna
+ *   a chamada uma tautologia de null-guard). A utility existe para que componentes
+ *   com um "active contact" externo consigam filtrar eventos com precisão.
+ *
+ * @example
+ *   // Uso correto (filtro real por contact ativo):
+ *   if (shouldInvalidateOnUpdate(payload, activeContactId)) {
+ *     scheduleConversationCacheInvalidation(payload.new?.contact_id);
+ *   }
+ *
+ *   // Uso atual no handler (equivale a null-guard: if (updContactId)):
+ *   const updContactId = payload.new?.contact_id;
+ *   if (updContactId && shouldInvalidateOnUpdate(payload, updContactId)) { ... }
+ */
+export function shouldInvalidateOnUpdate(
+  payload: {
+    new?: { contact_id?: string | null } | null;
+    old?: { contact_id?: string | null } | null;
+  },
+  candidateContactId: string
+): boolean {
+  return (
+    payload.new?.contact_id === candidateContactId || payload.old?.contact_id === candidateContactId
+  );
+}
 
 const log = getLogger('RealtimeMessages');
 // F4-01: paginação por cursor — os limites fixos SEEDED_CONTACT_LIMIT=500 /
@@ -573,10 +606,7 @@ export function useRealtimeMessages() {
       }
 
       commitConversations(
-        buildConversations(
-          [...contactsPage, ...messageContacts],
-          normalizedMessages
-        )
+        buildConversations([...contactsPage, ...messageContacts], normalizedMessages)
       );
     } catch (err) {
       log.error('Error fetching conversations:', err);
@@ -601,16 +631,17 @@ export function useRealtimeMessages() {
     setLoadingMoreConversations(true);
     try {
       const [contactsPage, messagesPage] = await Promise.all([
-        hasMoreContactsRef.current ? fetchContactsPage(contactsCursorRef.current) : Promise.resolve([] as ConversationContact[]),
-        hasMoreMessagesRef.current ? fetchMessagesPage(messagesCursorRef.current) : Promise.resolve([] as RealtimeMessage[]),
+        hasMoreContactsRef.current
+          ? fetchContactsPage(contactsCursorRef.current)
+          : Promise.resolve([] as ConversationContact[]),
+        hasMoreMessagesRef.current
+          ? fetchMessagesPage(messagesCursorRef.current)
+          : Promise.resolve([] as RealtimeMessage[]),
       ]);
       if (!isMountedRef.current) return;
 
       if (contactsPage.length > 0) {
-        loadedContactsRef.current = dedupeContacts([
-          ...loadedContactsRef.current,
-          ...contactsPage,
-        ]);
+        loadedContactsRef.current = dedupeContacts([...loadedContactsRef.current, ...contactsPage]);
         contactsCursorRef.current =
           contactsPage.length === CONTACTS_PAGE_SIZE
             ? cursorFromContact(contactsPage[contactsPage.length - 1])
@@ -621,10 +652,7 @@ export function useRealtimeMessages() {
       hasMoreContactsRef.current = contactsCursorRef.current !== null;
 
       if (messagesPage.length > 0) {
-        loadedMessagesRef.current = dedupeMessages([
-          ...loadedMessagesRef.current,
-          ...messagesPage,
-        ]);
+        loadedMessagesRef.current = dedupeMessages([...loadedMessagesRef.current, ...messagesPage]);
         messagesCursorRef.current =
           messagesPage.length === MESSAGES_PAGE_SIZE
             ? cursorFromMessage(messagesPage[messagesPage.length - 1])
@@ -647,9 +675,7 @@ export function useRealtimeMessages() {
         ]);
       }
 
-      commitConversations(
-        buildConversations(loadedContactsRef.current, loadedMessagesRef.current)
-      );
+      commitConversations(buildConversations(loadedContactsRef.current, loadedMessagesRef.current));
     } catch (err) {
       log.error('Error loading more conversations:', err);
       if (isMountedRef.current) {
@@ -742,10 +768,19 @@ export function useRealtimeMessages() {
                 handleMessageUpdateRef.current(p)
             )(adaptEvoPayload(payload as RealtimePostgresChangesPayload<Record<string, unknown>>));
           // QA12-GAP1 + RCA 2026-08-20: direcionada + coalescida (ver INSERT).
+          // shouldInvalidateOnUpdate: garante que só invalidamos se o payload
+          // realmente carrega contact_id (não é ruído do cron de TTL).
           if (active) {
-            scheduleConversationCacheInvalidation(
-              (payload.new as { contact_id?: string | null } | null)?.contact_id
-            );
+            const updContactId = (payload.new as { contact_id?: string | null } | null)?.contact_id;
+            if (
+              updContactId &&
+              shouldInvalidateOnUpdate(
+                payload as Parameters<typeof shouldInvalidateOnUpdate>[0],
+                updContactId
+              )
+            ) {
+              scheduleConversationCacheInvalidation(updContactId);
+            }
           }
         }
       )
@@ -766,7 +801,12 @@ export function useRealtimeMessages() {
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // E31: classifica CHANNEL_ERROR/TIMED_OUT (transiente vs real) com o
           // mesmo padrão dos hooks irmãos (useMessagesCursor/useIncomingCallBroadcast).
-          void logChannelError(log, '[useRealtimeMessages] subscription status:', lastConnectedAtMs, status);
+          void logChannelError(
+            log,
+            '[useRealtimeMessages] subscription status:',
+            lastConnectedAtMs,
+            status
+          );
           log.debug('Subscription status', { status });
         } else {
           log.debug('Subscription status', { status });
@@ -777,10 +817,10 @@ export function useRealtimeMessages() {
       active = false;
       void dbRemoveChannel('messages', channel);
     };
+    // scheduleConversationCacheInvalidation é useCallback([queryClient]) — estável;
+    // não é adicionado para manter a semântica de re-subscribe somente em queryClient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations, queryClient]);
-  // ^^ Only depend on fetchConversations (stable) + queryClient (estável); handlers
-  // are accessed via refs above to prevent re-subscriptions when notification
-  // settings load/change.
 
   const sendMessage = async (
     contactId: string,
@@ -828,36 +868,73 @@ export function useRealtimeMessages() {
   // só o PATCH é agrupado (flush após MARK_READ_FLUSH_MS de inatividade, ou
   // no unmount em fire-and-forget para não perder writes).
   const MARK_READ_FLUSH_MS = 250;
+  const MARK_READ_RETRY_BASE_MS = 1_000;
+  const MARK_READ_MAX_RETRIES = 3;
   const pendingMarkReadRef = useRef<Set<string>>(new Set());
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markReadRetryCountRef = useRef(0);
+  const markReadUnmountingRef = useRef(false);
+  const flushMarkAsReadRef = useRef<(allowRetry?: boolean) => Promise<void>>(async () => {});
 
-  const flushMarkAsRead = useCallback(async () => {
-    if (markReadTimerRef.current !== null) {
-      clearTimeout(markReadTimerRef.current);
-      markReadTimerRef.current = null;
-    }
-    const ids = Array.from(pendingMarkReadRef.current);
-    pendingMarkReadRef.current = new Set();
-    if (ids.length === 0) return;
-
-    const { error } = await dbFrom('messages')
-      .update({ is_read: true })
-      .in('contact_id', ids)
-      .eq('sender', 'contact')
-      .eq('is_read', false);
-    if (error) log.error('Error marking messages as read (batch):', error);
-
-    // Touch last_seen throttled global (máx. 1 PATCH a cada 2min, deduplicado entre instâncias)
-    touchLastSeen();
-  }, []);
-
-  const scheduleMarkAsReadFlush = useCallback(() => {
+  const scheduleMarkAsReadFlush = useCallback((delayMs = MARK_READ_FLUSH_MS) => {
     if (markReadTimerRef.current !== null) clearTimeout(markReadTimerRef.current);
     markReadTimerRef.current = setTimeout(() => {
       markReadTimerRef.current = null;
-      void flushMarkAsRead();
-    }, MARK_READ_FLUSH_MS);
-  }, [flushMarkAsRead]);
+      void flushMarkAsReadRef.current(true);
+    }, delayMs);
+  }, []);
+
+  const flushMarkAsRead = useCallback(
+    async (allowRetry = true) => {
+      if (markReadTimerRef.current !== null) {
+        clearTimeout(markReadTimerRef.current);
+        markReadTimerRef.current = null;
+      }
+      const ids = Array.from(pendingMarkReadRef.current);
+      pendingMarkReadRef.current = new Set();
+      if (ids.length === 0) return;
+
+      let error: unknown = null;
+      try {
+        ({ error } = await persistMessagesRead(ids));
+      } catch (err) {
+        error = err;
+      }
+      if (error) {
+        const shouldRetry = isTransientMarkReadError(error);
+        if (shouldRetry) {
+          for (const id of ids) pendingMarkReadRef.current.add(id);
+          markReadRetryCountRef.current += 1;
+        } else {
+          markReadRetryCountRef.current = 0;
+        }
+        log.error(
+          shouldRetry
+            ? 'Error marking messages as read (batch); ids mantidos para retry:'
+            : 'Error marking messages as read (batch) is permanent; retry descartado:',
+          error
+        );
+        if (
+          shouldRetry &&
+          allowRetry &&
+          !markReadUnmountingRef.current &&
+          markReadRetryCountRef.current <= MARK_READ_MAX_RETRIES
+        ) {
+          scheduleMarkAsReadFlush(
+            MARK_READ_RETRY_BASE_MS * 2 ** (markReadRetryCountRef.current - 1)
+          );
+        }
+        return;
+      }
+      markReadRetryCountRef.current = 0;
+
+      // Touch last_seen throttled global (máx. 1 PATCH a cada 2min, deduplicado entre instâncias)
+      touchLastSeen();
+    },
+    [scheduleMarkAsReadFlush]
+  );
+
+  flushMarkAsReadRef.current = flushMarkAsRead;
 
   const applyOptimisticRead = useCallback(
     (contactIds: string[]) => {
@@ -914,12 +991,14 @@ export function useRealtimeMessages() {
   // Flush pendente no unmount (fire-and-forget) — evita perder writes quando
   // o usuário navega antes do debounce disparar.
   useEffect(() => {
+    markReadUnmountingRef.current = false;
     return () => {
+      markReadUnmountingRef.current = true;
       if (markReadTimerRef.current !== null) {
         clearTimeout(markReadTimerRef.current);
         markReadTimerRef.current = null;
       }
-      void flushMarkAsRead();
+      void flushMarkAsRead(false);
     };
   }, [flushMarkAsRead]);
 

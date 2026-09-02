@@ -5,6 +5,7 @@ import { log } from '@/lib/logger';
 import { sanitizePostgrestFilter } from '@/lib/sanitize';
 import { dbFrom } from '@/integrations/datasource/db';
 import { isValidUUID } from '@/utils/uuid';
+import { isAbortLikeError } from '@/lib/abortError';
 
 /** Enriched Contact Data interface definition. */
 export interface EnrichedContactData {
@@ -53,7 +54,10 @@ function jidToPhone(value: string): string | null {
  *
  * DRY FIX: uses isValidUUID from @/utils/uuid instead of an inline UUID_REGEX.
  */
-async function resolveLocalContactId(identifier: string): Promise<string | null> {
+async function resolveLocalContactId(
+  identifier: string,
+  signal?: AbortSignal
+): Promise<string | null> {
   if (!identifier) return null;
   // DRY: delegate UUID check to the canonical helper
   if (isValidUUID(identifier)) return identifier;
@@ -67,6 +71,7 @@ async function resolveLocalContactId(identifier: string): Promise<string | null>
     .select('id')
     .or(`phone.eq.${safePhone},phone.eq.+${safePhone},phone.ilike.%${safePhone.slice(-8)}`)
     .limit(1)
+    .abortSignal(signal)
     .maybeSingle();
 
   if (error) {
@@ -82,7 +87,7 @@ export function useContactEnrichedData(contactId: string) {
   // Without this, JIDs were being passed straight into UUID columns, triggering 22P02 errors.
   const { data: localId } = useQuery({
     queryKey: queryKeys.contactDetails.localId(contactId),
-    queryFn: () => resolveLocalContactId(contactId),
+    queryFn: ({ signal }) => resolveLocalContactId(contactId, signal),
     enabled: !!contactId,
     staleTime: 5 * 60 * 1000, // 5min — phone→uuid mapping is essentially immutable
   });
@@ -90,15 +95,16 @@ export function useContactEnrichedData(contactId: string) {
   // Fetch enriched contact fields from DB
   const enrichedQuery = useQuery({
     queryKey: queryKeys.contactDetails.enriched(localId ?? undefined),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!localId) return null;
       const { data, error } = await dbFrom('contacts')
         .select('company, job_title, nickname, surname, contact_type, ai_sentiment, ai_priority, channel_type')
         .eq('id', localId)
+        .abortSignal(signal)
         .maybeSingle(); // ✅ fix: maybeSingle evita PGRST116;
 
       if (error) {
-        log.error('Error fetching enriched contact data:', error);
+        if (!isAbortLikeError(error)) log.error('Error fetching enriched contact data:', error);
         throw error;
       }
       if (!data) return null;
@@ -121,16 +127,17 @@ export function useContactEnrichedData(contactId: string) {
   // Fetch AI conversation tags
   const aiTagsQuery = useQuery({
     queryKey: queryKeys.contactDetails.aiTags(localId ?? undefined),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!localId) return [] as AIConversationTag[];
       const { data, error } = await supabase
         .from('ai_conversation_tags')
         .select('id, tag_name, confidence, source')
         .eq('contact_id', localId)
-        .order('confidence', { ascending: false });
+        .order('confidence', { ascending: false })
+        .abortSignal(signal);
 
       if (error) {
-        log.error('Error fetching AI tags:', error);
+        if (!isAbortLikeError(error)) log.error('Error fetching AI tags:', error);
         throw error;
       }
       // Normaliza cada tag — nenhum campo pode chegar como `undefined` aos consumidores.
@@ -151,7 +158,7 @@ export function useContactEnrichedData(contactId: string) {
   // Fetch SLA info
   const slaQuery = useQuery({
     queryKey: queryKeys.sla.contact(localId ?? undefined),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!localId) return null;
       const { data, error } = await supabase
         .from('conversation_sla')
@@ -159,10 +166,11 @@ export function useContactEnrichedData(contactId: string) {
         .eq('contact_id', localId)
         .order('created_at', { ascending: false })
         .limit(1)
+        .abortSignal(signal)
         .maybeSingle();
 
       if (error) {
-        log.error('Error fetching SLA info:', error);
+        if (!isAbortLikeError(error)) log.error('Error fetching SLA info:', error);
         throw error;
       }
       if (!data) return null;

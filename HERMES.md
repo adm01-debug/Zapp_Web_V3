@@ -30,13 +30,13 @@ Hermes é o framework de agentes de IA que opera sobre o ZAPP Web. Ele tem três
 
 ### Padrões obrigatórios
 
-**Commits:** sempre via `git commit --no-verify -m 'tipo(escopo): mensagem'` no container VPS. Não usar Lovable ou commit direto pelo chat.
+**Commits:** toda sessão de chat commita o próprio trabalho — **nunca deixar correção sem commit** (bug de processo). Formato: `tipo(escopo): mensagem`. O container VPS (stack 122) permanece como executor de infra e multi-agente (ondas E1–E10); quando commitar de lá: `git commit --no-verify` e o mesmo fluxo de PR. Não usar Lovable.
 
-**Branch:** mudanças de produção vão para `main`. Mudanças de documentação vão para branches `docs/` ou `fix/` e são mergeadas com push direto (o token do runner tem bypass de branch protection).
+**Branch + PR:** qualquer mudança (código, docs, config) segue o fluxo do Claude Code online: branch `fix/`|`feat/`|`docs/`|`chore/`|`ci/`|`hotfix/` criado de `origin/main` atualizada (`git fetch origin && git switch -c <nome> origin/main`) → push → **PR para `main`**. **Nunca** push direto na `main` — por nenhuma sessão ou agente (rebases competitivos); o bypass do runner fica restrito a pipelines automatizados. Merge só via PR com CI verde — **merge é ato humano (Joaquim); sessões abrem PR e nunca mergeiam**. Sessões concorrentes na mesma máquina trabalham em worktree própria (`git worktree add`), nunca no working tree compartilhado. Pós-merge: deletar o branch e ressincronizar o working tree. O merge que toca `supabase/functions/**` dispara `edge-deploy.yml`.
 
 **Edge functions:** toda função nova declara o chamador no mesmo commit. Sem chamador, não entra. Referencia à regra no `ESTADO.md`.
 
-**Deploy de edge functions:** push na `main` que toque `supabase/functions/**` dispara `edge-deploy.yml` automaticamente. Não copiar arquivos manualmente para o volume.
+**Deploy de edge functions:** merge via PR na `main` que toque `supabase/functions/**` dispara `edge-deploy.yml` automaticamente. Não copiar arquivos manualmente para o volume.
 
 **Banco — schema correto:**
 - Tabelas da aplicação → schema `zapp`
@@ -82,7 +82,7 @@ Não feche uma onda sem atualizar o tracking board. Não inicie uma onda sem ler
 
 - Tomar decisões de arquitetura que afetam mais de um sistema (ex.: trocar de provider WhatsApp)
 - Apagar arquivos de storage sem cruzar com 4 fontes de referencia primeiro
-- Mergear na `main` mudanças que não passaram pelo `edge-deploy.yml`
+- Mergear PR com CI vermelho, ou deployar edge function fora do `edge-deploy.yml` (cópia manual para o volume)
 - Criar nova dependência externa sem registrar em `ESTADO.md`
 
 Essas decisões requerem aprovação explícita do responsável: **Joaquim (adm01@promobrindes.com.br)**.

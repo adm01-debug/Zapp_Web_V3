@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { StaggeredList, StaggeredItem } from '@/components/ui/motion';
 import { FloatingParticles } from '@/components/dashboard/FloatingParticles';
 import { AuroraBorealis } from '@/components/effects/AuroraBorealis';
@@ -8,12 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -52,6 +47,7 @@ import type { WhatsAppConnection } from '@/features/connections/hooks/useConnect
 import { useEvolutionAutoSync } from '@/hooks/useEvolutionAutoSync';
 import { useEvolutionAutoReconnect } from '@/hooks/useEvolutionAutoReconnect';
 import { evolutionSync } from '@/lib/adapters/evolutionOps';
+import { eventBus } from '@/lib/eventBus';
 
 /** F6-01: formata o pairing code em grupos de 4 (ex.: ABCD-EFGH-IJKL). */
 function formatPairingCode(code: string): string {
@@ -170,6 +166,17 @@ export function ConnectionsView() {
       .catch(() => toast({ title: 'Não foi possível copiar', variant: 'destructive' }));
   };
 
+  // Notifica operador quando auto-reconnect esgota tentativas para uma instância.
+  useEffect(() => {
+    return eventBus.on('connection:reconnect-exhausted', ({ instanceName, attempts }) => {
+      toast({
+        title: `WhatsApp "${instanceName}" desconectado`,
+        description: `${attempts} tentativas automáticas falharam. Use "Reconectar" no painel de conexões.`,
+        variant: 'destructive',
+      });
+    });
+  }, []);
+
   // Deep-link: ?qr=<instance_id> auto-opens the QR dialog for that instance.
   const deepLinkHandledRef = useRef(false);
   useEffect(() => {
@@ -194,7 +201,9 @@ export function ConnectionsView() {
     setSyncingHistory(connection.id);
     toast({ title: 'Sincronizando histórico...', description: 'Isso pode levar alguns minutos.' });
     try {
-      const { data, error } = await evolutionSync<{ totalSynced?: number; totalContacts?: number }>({ action: 'sync-all-messages', instanceName: connection.instance_id });
+      const { data, error } = await evolutionSync<{ totalSynced?: number; totalContacts?: number }>(
+        { action: 'sync-all-messages', instanceName: connection.instance_id }
+      );
       if (error) throw error;
       toast({
         title: 'Sincronização concluída!',
@@ -454,7 +463,13 @@ export function ConnectionsView() {
                         Payload Evolution API (Mascarado)
                       </p>
                       <pre className="max-h-40 overflow-x-auto rounded bg-foreground/5 p-2 font-mono text-[9px]">
-                        {JSON.stringify(maskSensitiveData(qrCodeDialog.rawPayload as Record<string, unknown> | null | undefined), null, 2)}
+                        {JSON.stringify(
+                          maskSensitiveData(
+                            qrCodeDialog.rawPayload as Record<string, unknown> | null | undefined
+                          ),
+                          null,
+                          2
+                        )}
                       </pre>
                       <p className="text-[8px] italic text-muted-foreground">
                         * Dados sensíveis como chaves de API e strings Base64 foram ocultados por
@@ -556,9 +571,7 @@ export function ConnectionsView() {
 
       <DegradedQuickActions
         connections={connections}
-        onShowQrCode={(connection) =>
-          handleShowQrCode(connection as WhatsAppConnection)
-        }
+        onShowQrCode={(connection) => handleShowQrCode(connection as WhatsAppConnection)}
       />
 
       {/* Connections List */}

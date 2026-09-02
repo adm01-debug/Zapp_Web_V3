@@ -27,7 +27,12 @@ interface ChatHeaderMenuProps {
   onToggleFailuresOnly?: () => void;
   failuresOnly?: boolean;
   failuresCount?: number;
+  /** Indica que há mensagens mais antigas não carregadas — sufixo "+" no contador. */
+  hasMoreOlder?: boolean;
   onCloseConversation?: () => void;
+  onAddTag?: () => void;
+  onResolve?: () => void;
+  onArchive?: () => void | Promise<void>;
 }
 
 /** Chat Header Menu component for the chat section. */
@@ -38,7 +43,11 @@ export function ChatHeaderMenu({
   onToggleFailuresOnly,
   failuresOnly,
   failuresCount,
+  hasMoreOlder = false,
   onCloseConversation,
+  onAddTag,
+  onResolve,
+  onArchive,
 }: ChatHeaderMenuProps) {
   return (
     <DropdownMenu>
@@ -55,7 +64,7 @@ export function ChatHeaderMenu({
         </motion.div>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48 border-border/30 bg-card">
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onClick={onAddTag} disabled={!onAddTag}>
           <Tag className="mr-2 h-4 w-4" />
           Adicionar tag
         </DropdownMenuItem>
@@ -77,14 +86,16 @@ export function ChatHeaderMenu({
           className={cn(failuresOnly && 'font-medium text-destructive')}
         >
           <XCircle className="mr-2 h-4 w-4" />
-          {failuresOnly ? 'Ocultar Falhas' : `Ver Falhas (${failuresCount || 0})`}
+          {failuresOnly
+            ? 'Ocultar Falhas'
+            : `Ver Falhas (${failuresCount || 0}${hasMoreOlder ? '+' : ''})`}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onClick={onResolve} disabled={!onResolve}>
           <CheckCircle className="mr-2 h-4 w-4" />
           Marcar como resolvido
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onClick={onArchive} disabled={!onArchive}>
           <Archive className="mr-2 h-4 w-4" />
           Arquivar
         </DropdownMenuItem>

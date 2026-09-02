@@ -52,12 +52,12 @@ Estas funções são chamadas diretamente pelo app via PostgREST `/rest/v1/rpc/*
 | `add_contacts_to_campaign` | campanhas | corrigido GAP-1 |
 | `initiate_gmail_oauth` | integrações | stub GAP-2 |
 | `complete_gmail_oauth` | integrações | stub GAP-2 |
-| `sync_to_crm` | CRM | stub GAP-3 |
-| `export_user_data` | LGPD | stub GAP-4 |
+| `sync_to_crm` | CRM | stub/parcial GAP-3 |
+| `export_user_data` | LGPD | parcial GAP-4 |
 | `import_user_data` | LGPD | stub GAP-4 |
-| `enrich_contact` | CRM | stub GAP-5 |
-| `get_latest_analysis` | analytics | stub GAP-6 |
-| `check_download_permission` | storage | fail-open BUG-9 |
+| `enrich_contact` | CRM | parcial GAP-5 |
+| `get_latest_analysis` | analytics | legado/parcial GAP-6 — UI nova usa `rpc_latest_contact_analysis` |
+| `check_download_permission` | storage | função ausente por design; hook atual fail-closed |
 
 > Total estimado de funções `public` ativas: **~80–90**. O restante (~55–65) são candidatas à remoção ou migração para `zapp`.
 

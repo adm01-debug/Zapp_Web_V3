@@ -10,7 +10,7 @@
 
 | Secret | Type | Location | Status |
 |--------|------|----------|--------|
-| `s-a50174164e4b03ef181a29db65d2db80` | Supabase Service Role | `.mcp.json` (removed) | **COMPROMISED** |
+| `s-REDACTED-rotacionado-20260824` | Supabase Service Role | `.mcp.json` (removed) | **COMPROMISED** |
 
 **Note:** This token appears in documentation files that reference the incident. These references should be sanitized.
 

@@ -6,6 +6,7 @@ import { resolvePublicStorageUrl } from '@/lib/mediaUrl';
 import { toast } from 'sonner';
 import { unwrapRows } from '@/lib/supabase-helpers';
 import { queryKeys } from '@/services/api/queryKeys';
+import { invokeEdge } from '@/lib/invokeEdge';
 import type { AppRole } from '@/features/auth';
 
 interface ProfileRow {
@@ -104,32 +105,18 @@ export interface InviteUserPayload {
   message?: string;
 }
 
-/**
- * Extrai a mensagem de erro honesta do servidor em erros de
- * `supabase.functions.invoke` (supabase-js v2: FunctionsHttpError carrega a
- * Response em `context`). Retorna null quando não há corpo parseável → o
- * chamador usa a mensagem genérica local.
- */
-async function extractInvokeErrorMessage(error: unknown): Promise<string | null> {
-  if (typeof error !== 'object' || error === null || !('context' in error)) return null;
-  const ctx = (error as { context?: unknown }).context as
-    | { json?: () => Promise<{ error?: string }> }
-    | undefined;
-  if (!ctx || typeof ctx.json !== 'function') return null;
-  try {
-    const body = await ctx.json();
-    return typeof body?.error === 'string' && body.error.length > 0 ? body.error : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Hook: use Admin Data. */
 export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
   const queryClient = useQueryClient();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  // Bloco 7 (etapas 75/76/81): erro por campo do 422 canônico de create-user/
+  // invite-user, no mesmo shape Record<path,message> que useAuthForm.ts usa
+  // pra erros de validação local — os dois caminhos alimentam o mesmo estado
+  // de formulário sem tradução.
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
+  const [inviteFieldErrors, setInviteFieldErrors] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -288,7 +275,6 @@ export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
     email: string;
     password: string;
     role: AppRole;
-    email_email?: string;
     google_services?: string[];
     dropbox_email?: string;
   }
@@ -318,45 +304,39 @@ export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
         avatarUrl = resolvePublicStorageUrl('avatars', filePath) ?? undefined;
       }
 
-      try {
-        // B30 (Etapa 57.2): criação via invoke — headers automáticos, retry,
-        // 401 com refresh. NUNCA fetch raw.
-        const { data: invokeResult, error: invokeError } = await supabase.functions.invoke(
-          'create-user',
-          {
-            body: {
-              name: payload.name,
-              nickname: payload.nickname || undefined,
-              signature: payload.signature || undefined,
-              job_title: payload.job_title || undefined,
-              avatar_url: avatarUrl,
-              email: payload.email,
-              password: payload.password,
-              role: payload.role,
-              email_email: payload.email_email || undefined,
-              google_services: payload.google_services,
-              dropbox_email: payload.dropbox_email || undefined,
-            },
-          }
-        );
+      setCreateFieldErrors({});
+      // B30 (Etapa 57.2): criação via invoke — headers automáticos, retry,
+      // 401 com refresh. NUNCA fetch raw. Bloco 7 (etapa 76): invokeEdge
+      // substitui o extrator manual — mesma mensagem honesta do servidor,
+      // agora também com fieldErrors quando o 422 é uma violação por campo.
+      const result = await invokeEdge<{ success?: boolean }>('create-user', {
+        body: {
+          name: payload.name,
+          nickname: payload.nickname || undefined,
+          signature: payload.signature || undefined,
+          job_title: payload.job_title || undefined,
+          avatar_url: avatarUrl,
+          email: payload.email,
+          password: payload.password,
+          role: payload.role,
+          google_services: payload.google_services,
+          dropbox_email: payload.dropbox_email || undefined,
+        },
+      });
 
-        if (invokeError) {
-          const serverMsg = await extractInvokeErrorMessage(invokeError);
-          toast.error(serverMsg || 'Erro ao criar usuário');
-          return false;
-        }
-        if (!invokeResult?.success) {
-          toast.error('Erro ao criar usuário');
-          return false;
-        }
-        toast.success('Usuário criado com sucesso!');
-        fetchData();
-        void queryClient.invalidateQueries({ queryKey: queryKeys.teamProfiles.all() });
-        return true;
-      } catch {
+      if (!result.ok) {
+        setCreateFieldErrors(result.fieldErrors);
+        toast.error(result.message || 'Erro ao criar usuário');
+        return false;
+      }
+      if (!result.data?.success) {
         toast.error('Erro ao criar usuário');
         return false;
       }
+      toast.success('Usuário criado com sucesso!');
+      fetchData();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.teamProfiles.all() });
+      return true;
     },
     [fetchData, queryClient]
   );
@@ -368,35 +348,33 @@ export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
         return false;
       }
 
-      try {
-        const { data, error } = await supabase.functions.invoke('invite-user', {
-          body: {
-            email: payload.email.trim(),
-            role: payload.role,
-            message: payload.message?.trim() || undefined,
-          },
-        });
+      setInviteFieldErrors({});
+      // Bloco 7 (etapas 75/76/81): erro honesto do servidor (409 duplicado /
+      // 403 não-admin / 429…) exibido verbatim via invokeEdge; fieldErrors
+      // alimenta o destaque inline no InviteUserDialog quando o 422 aponta
+      // um campo específico.
+      const result = await invokeEdge<{ success?: boolean }>('invite-user', {
+        body: {
+          email: payload.email.trim(),
+          role: payload.role,
+          message: payload.message?.trim() || undefined,
+        },
+      });
 
-        if (error) {
-          // Erro honesto do servidor (409 duplicado / 403 não-admin / 429…)
-          // exibido verbatim; sem contexto → mensagem genérica.
-          const serverMsg = await extractInvokeErrorMessage(error);
-          toast.error(serverMsg || 'Erro ao enviar convite');
-          return false;
-        }
-        if (!data?.success) {
-          toast.error('Erro ao enviar convite');
-          return false;
-        }
-
-        toast.success(`Convite enviado para ${payload.email.trim()}!`);
-        fetchData();
-        void queryClient.invalidateQueries({ queryKey: queryKeys.teamProfiles.all() });
-        return true;
-      } catch {
+      if (!result.ok) {
+        setInviteFieldErrors(result.fieldErrors);
+        toast.error(result.message || 'Erro ao enviar convite');
+        return false;
+      }
+      if (!result.data?.success) {
         toast.error('Erro ao enviar convite');
         return false;
       }
+
+      toast.success(`Convite enviado para ${payload.email.trim()}!`);
+      fetchData();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.teamProfiles.all() });
+      return true;
     },
     [fetchData, queryClient]
   );
@@ -411,5 +389,7 @@ export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
     handleSaveUser,
     handleCreateUser,
     handleInviteUser,
+    createFieldErrors,
+    inviteFieldErrors,
   };
 }

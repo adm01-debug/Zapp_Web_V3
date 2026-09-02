@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { getLogger } from '@/lib/logger';
 import { markTimeToMainScreen, recordAuthzFailure } from '@/lib/appMetrics';
 import { getAppEnv, isDevBypassAllowed } from '@/lib/auth/devBypass';
@@ -71,6 +71,10 @@ export function ProtectedRoute({
   } = useAuth();
   const { roles, loading: rolesLoading, hasRole } = useUserRole();
   const location = useLocation();
+  // Navigate tracks `state` by identity. Keep the redirect payload stable while
+  // this protected location is unchanged so unrelated auth/role re-renders do
+  // not repeat the same history replacement.
+  const redirectState = useMemo(() => ({ from: location }), [location]);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [permissionChecking, setPermissionChecking] = useState(false);
   const [loadingElapsed, setLoadingElapsed] = useState(0);
@@ -140,47 +144,13 @@ export function ProtectedRoute({
     };
   }, [authLoading, user, requiredPermission]);
 
-  // Stale-session guard: verify JWT is still valid after auth state settles.
-  // Must run inside useEffect — calling getSession() in the render body fires
-  // twice under React StrictMode and can trigger a spurious logout when the
-  // first call transiently returns null before GoTrue cache is warm.
-  useEffect(() => {
-    if (authLoading || !user) return;
-    let cancelled = false;
-    void supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data.session) {
-          log.warn('[ProtectedRoute] Stale session detected — forcing redirect to /auth');
-          void supabase.auth
-            .signOut()
-            .catch(() => {
-              // Fallback: rede fora / GoTrue com erro — limpa a sessão local
-              // mesmo assim para o usuário não ficar preso numa sessão inválida.
-              try {
-                Object.keys(localStorage).forEach((k) => {
-                  if (k.startsWith('sb-') || k.startsWith('zapp')) localStorage.removeItem(k);
-                });
-                sessionStorage.clear();
-              } catch {
-                /* noop */
-              }
-            })
-            .finally(() => {
-              window.location.replace('/auth');
-            });
-        }
-      })
-      .then(undefined, (err: unknown) => {
-        // getSession pode rejeitar por rede/timeout — sem este handler,
-        // vira unhandled promise rejection no bootstrap de toda rota protegida.
-        log.warn('[ProtectedRoute] getSession falhou na checagem de sessão:', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user]);
+  // AuthProvider é a fonte ÚNICA de verdade para sessão expirada/corrompida.
+  // Duplicar um getSession()+signOut aqui criava duas autoridades concorrentes:
+  //  1) forceUnauthenticated/SIGNED_OUT no AuthProvider
+  //  2) signOut()+window.location.replace('/auth') neste guard
+  // Isso gerava navegações duplicadas e perdia o destino original (`from`)
+  // durante page.goto('/rota-protegida') com sessão inválida. O guard deve
+  // apenas reagir ao estado derivado (`user`, `authLoading`) já reconciliado.
 
   // Tela de erro quando o backend nao respondeu no boot.
   // Precede o "loading" para evitar spinner infinito ou redirect que so vai
@@ -266,7 +236,7 @@ export function ProtectedRoute({
     // E51 51.6 (anti-loop): se já estamos em /auth, redirecionar para
     // /auth?reason=timeout recairia na mesma tela → loop. Renderiza saída.
     if (location.pathname !== '/auth') {
-      return <Navigate to="/auth?reason=timeout" state={{ from: location }} replace />;
+      return <Navigate to="/auth?reason=timeout" state={redirectState} replace />;
     }
     return (
       <div
@@ -337,7 +307,7 @@ export function ProtectedRoute({
 
   if (!user || timedOut) {
     recordAuthzFailure({ route: location.pathname, reason: 'unauthenticated' });
-    return <Navigate to="/auth" state={{ from: location }} replace />;
+    return <Navigate to="/auth" state={redirectState} replace />;
   }
 
   // Resolve effective required roles: DB override wins when present
@@ -353,17 +323,20 @@ export function ProtectedRoute({
   const devBypassAllowed = isDevBypassAllowed();
   if (isDevUser && devBypassAllowed) {
     // F3-02: registra bypass no log de auditoria com throttle por sessão
-    void supabase.rpc('log_security_event', {
-      p_event_type: 'dev_bypass_used',
-      p_resource: location.pathname,
-      p_action: 'route_access',
-      p_status: 'bypassed',
-      p_details: { roles },
-    }).then(({ error }) => {
-      if (error) log.warn('Failed to log dev bypass', { error: error.message });
-    }).then(undefined, (err: unknown) => {
-      log.warn('[ProtectedRoute] Falha ao registrar dev bypass (audit log):', err);
-    });
+    void supabase
+      .rpc('log_security_event', {
+        p_event_type: 'dev_bypass_used',
+        p_resource: location.pathname,
+        p_action: 'route_access',
+        p_status: 'bypassed',
+        p_details: { roles },
+      })
+      .then(({ error }) => {
+        if (error) log.warn('Failed to log dev bypass', { error: error.message });
+      })
+      .then(undefined, (err: unknown) => {
+        log.warn('[ProtectedRoute] Falha ao registrar dev bypass (audit log):', err);
+      });
     markTimeToMainScreen(location.pathname);
     return <>{children}</>;
   }
@@ -402,7 +375,7 @@ export function ProtectedRoute({
       }
 
       if (fallback) return <>{fallback}</>;
-      return <Navigate to="/access-denied" state={{ from: location }} replace />;
+      return <Navigate to="/access-denied" state={redirectState} replace />;
     }
   }
 
@@ -439,7 +412,7 @@ export function ProtectedRoute({
     }
 
     if (fallback) return <>{fallback}</>;
-    return <Navigate to="/access-denied" state={{ from: location }} replace />;
+    return <Navigate to="/access-denied" state={redirectState} replace />;
   }
 
   // F3-11: guard useRef — evita chamadas repetidas em re-renders

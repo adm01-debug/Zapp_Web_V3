@@ -1,0 +1,268 @@
+{
+  "catalog_version": 1,
+  "generated_at": "2026-09-01T09:45:00-03:00",
+  "source": "canonical-self-hosted-pg-catalog",
+  "migration_watermark": "20260831124500",
+  "baseline_migrations_sha256": "0f8944562d721d5b65786396264ef0174c07c239c456768e3987f7cd85f2ffb9",
+  "relations": [
+    {
+      "schema": "zapp",
+      "name": "agent_stats",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_own_or_admin", "auth_secure_24", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "app_notifications",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["notif_select", "notif_service", "notif_update"]
+    },
+    {
+      "schema": "zapp",
+      "name": "audit_logs",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["audit_logs_admin_select", "audit_logs_insert", "audit_logs_self_select", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "calls",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_38", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "departments",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_60", "departments_admin_write", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "dispatch_error_logs",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_62", "svc_rls"]
+    },
+    {
+      "schema": "zapp",
+      "name": "evolution_sentiment_analysis",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_read_evolution_sentiment_analysis", "service_role_full_evolution_sentiment_analysis"]
+    },
+    {
+      "schema": "zapp",
+      "name": "failed_messages",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_63", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "instance_registry",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_74", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "profiles",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_135", "service_role_all_profiles", "user_insert_own_profile", "user_update_own_profile"]
+    },
+    {
+      "schema": "zapp",
+      "name": "queue_members",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_91", "qm_service", "queue_members_admin_write"]
+    },
+    {
+      "schema": "zapp",
+      "name": "queues",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["authenticated_read_queues", "q_service", "queues_admin_write"]
+    },
+    {
+      "schema": "zapp",
+      "name": "sales_deals",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_97", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "sentiment_alerts",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_102", "service_role_full_sentiment_alerts"]
+    },
+    {
+      "schema": "zapp",
+      "name": "sts_telemetry",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["deny_anon_sts_telemetry", "service_role_full_sts_telemetry"]
+    },
+    {
+      "schema": "zapp",
+      "name": "talkx_campaigns",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["service_full_access", "talkx_campaigns_delete", "talkx_campaigns_insert", "talkx_campaigns_select", "talkx_campaigns_update"]
+    },
+    {
+      "schema": "zapp",
+      "name": "talkx_recipients",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["service_full_access", "talkx_recipients_delete", "talkx_recipients_insert", "talkx_recipients_select", "talkx_recipients_update"]
+    },
+    {
+      "schema": "zapp",
+      "name": "team_messages",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["service_full_access", "team_messages_delete", "team_messages_insert", "team_messages_select", "team_messages_update"]
+    },
+    {
+      "schema": "zapp",
+      "name": "user_roles",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["service_full_access", "user_roles_admin_delete", "user_roles_admin_manage", "user_roles_admin_write", "user_roles_select"]
+    },
+    {
+      "schema": "zapp",
+      "name": "voice_conversion_queue",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["voice_conversion_queue_insert", "voice_conversion_queue_select", "voice_conversion_queue_update"]
+    },
+    {
+      "schema": "zapp",
+      "name": "warroom_alerts",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_120", "service_full_access", "warroom_alerts_admin_delete", "warroom_alerts_admin_write", "warroom_alerts_insert_policy", "warroom_alerts_select_insert"]
+    },
+    {
+      "schema": "zapp",
+      "name": "webhook_audit_log",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_180", "service role manages webhook_audit_log", "svc_rw"]
+    },
+    {
+      "schema": "zapp",
+      "name": "whatsapp_connections",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_123", "wconn_insert_auth", "wconn_service_all", "whatsapp_connections_admin_write"]
+    },
+    {
+      "schema": "zapp",
+      "name": "workspace_members",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_128", "service_full_access"]
+    },
+    {
+      "schema": "zapp",
+      "name": "workspaces",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_secure_130"]
+    },
+    {
+      "schema": "zapp",
+      "name": "contacts",
+      "exists": true,
+      "security_invoker": true,
+      "base_relation": "evo.evolution_contacts"
+    },
+    {
+      "schema": "zapp",
+      "name": "conversations",
+      "exists": true,
+      "security_invoker": true,
+      "base_relation": "evo.evolution_conversations"
+    },
+    {
+      "schema": "zapp",
+      "name": "messages",
+      "exists": true,
+      "security_invoker": true,
+      "base_relation": "evo.evolution_messages"
+    },
+    {
+      "schema": "zapp",
+      "name": "email_accounts",
+      "exists": true,
+      "security_invoker": true,
+      "base_relation": "email_app.email_accounts"
+    },
+    {
+      "schema": "zapp",
+      "name": "email_threads",
+      "exists": true,
+      "security_invoker": true,
+      "base_relation": "email_app.email_threads"
+    },
+    {
+      "schema": "zapp",
+      "name": "payment_links",
+      "exists": true,
+      "security_invoker": true,
+      "base_relation": "financeiro.payment_links"
+    },
+    {
+      "schema": "evo",
+      "name": "evolution_contacts",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["contacts_delete", "contacts_insert", "contacts_select", "contacts_update"]
+    },
+    {
+      "schema": "evo",
+      "name": "evolution_conversations",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["conversations_select", "conversations_update", "service_role_all"]
+    },
+    {
+      "schema": "evo",
+      "name": "evolution_messages",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["messages_delete", "messages_insert_scoped", "messages_select_scoped", "messages_update", "service_role_all"]
+    },
+    {
+      "schema": "email_app",
+      "name": "email_accounts",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["email_acc_admin", "email_acc_own", "email_accounts_admin", "email_accounts_own"]
+    },
+    {
+      "schema": "email_app",
+      "name": "email_threads",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["email_threads_manage_own", "email_threads_select_own_or_assigned", "service_full_access"]
+    },
+    {
+      "schema": "financeiro",
+      "name": "payment_links",
+      "exists": true,
+      "rls_enabled": true,
+      "policies": ["auth_full_access", "service_full_access"]
+    }
+  ]
+}

@@ -1,8 +1,10 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, memo } from 'react';
 import { Conversation, Message, InteractiveMessage, LocationMessage } from '@/types/chat';
 import { ExternalProduct } from '@/hooks/useExternalApiManagement';
 import { ExternalProductCatalog } from '@/components/catalog/ExternalProductCatalog';
 import type { SearchResult } from '../useGlobalSearchData';
+import type { DialogKey, DialogState } from './hooks/useChatDialogs';
+import type { TransferConversationResult } from '../../hooks/useTransferConversation';
 
 const TransferDialog = lazy(() =>
   import('../TransferDialog').then((m) => ({ default: m.TransferDialog }))
@@ -32,26 +34,6 @@ const RealtimeTranscription = lazy(() =>
   import('../RealtimeTranscription').then((m) => ({ default: m.RealtimeTranscription }))
 );
 
-type DialogKey =
-  | 'quickReplies'
-  | 'slashCommands'
-  | 'transferDialog'
-  | 'scheduleDialog'
-  | 'callDialog'
-  | 'globalSearch'
-  | 'chatSearch'
-  | 'interactiveBuilder'
-  | 'forwardDialog'
-  | 'locationPicker'
-  | 'aiAssistant'
-  | 'catalogDirect'
-  | 'whisper'
-  | 'templatesWithVars'
-  | 'realtimeTranscription'
-  | 'closeDialog';
-
-type DialogState = Record<DialogKey, boolean>;
-
 interface ChatDialogsProps {
   dialogs: DialogState;
   openDialog: (key: DialogKey) => void;
@@ -60,8 +42,12 @@ interface ChatDialogsProps {
   forwardMessage: Message | null;
   callDirection: 'inbound' | 'outbound';
   contactId: string;
-  onTransfer: (type: 'agent' | 'queue', targetId: string, message?: string) => void;
-  onScheduleMessage: (message: string, scheduledAt: Date, attachment?: File) => Promise<void>;
+  onTransfer: (
+    type: 'agent' | 'queue',
+    targetId: string,
+    message?: string
+  ) => Promise<TransferConversationResult>;
+  onScheduleMessage: (message: string, scheduledAt: Date, attachment?: File) => Promise<boolean>;
   onSendInteractiveMessage: (interactive: InteractiveMessage) => void;
   onForwardToTargets: (targetIds: string[], targetType: 'contact' | 'group') => void;
   onSendLocation: (location: LocationMessage) => void;
@@ -70,8 +56,14 @@ interface ChatDialogsProps {
   onSelectSearchResult?: (result: SearchResult) => void;
 }
 
+/* TODO(etapa-54): templatesWithVars — chave presente no DialogKey/estado inicial mas sem
+   bloco de render e sem opener; implementar quando o componente de templates-com-variáveis
+   for criado. */
+
 /** Chat Dialogs component for the chat section. */
-export function ChatDialogs({
+// memo (etapa 63): todos os dialogs montam condicionalmente (barato fechado);
+// o memo evita re-render do wrapper a cada mensagem nova do painel.
+export const ChatDialogs = memo(function ChatDialogs({
   dialogs,
   openDialog,
   closeDialog,
@@ -95,13 +87,7 @@ export function ChatDialogs({
           <TransferDialog
             open={dialogs.transferDialog}
             onOpenChange={(v) => (v ? openDialog('transferDialog') : closeDialog('transferDialog'))}
-            onTransfer={
-              onTransfer as (
-                type: 'agent' | 'connection' | 'queue',
-                targetId: string,
-                message?: string
-              ) => void
-            }
+            onTransfer={onTransfer}
           />
         )}
         {dialogs.scheduleDialog && (
@@ -175,6 +161,8 @@ export function ChatDialogs({
         />
       )}
 
+      {/* TODO(etapa-54): realtimeTranscription — bloco de render presente mas sem opener wired;
+           adicionar botão speech-to-text em InputExtraTools quando feature for habilitada. */}
       {dialogs.realtimeTranscription && (
         <Suspense fallback={null}>
           <div className="mb-2 px-3">
@@ -190,4 +178,4 @@ export function ChatDialogs({
       )}
     </>
   );
-}
+});

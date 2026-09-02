@@ -5,6 +5,7 @@ import type { RealtimeMessage } from '../hooks/useRealtimeMessages';
 import { isValidUUID } from '@/utils/uuid';
 
 import { getLogger } from '@/lib/logger';
+import { isAbortLikeError } from '@/lib/abortError';
 
 const log = getLogger('messageService');
 
@@ -34,7 +35,7 @@ export const messageService = {
     } as Message;
   },
 
-  async getAllMessagesForContact(contactId: string): Promise<Message[]> {
+  async getAllMessagesForContact(contactId: string, signal?: AbortSignal): Promise<Message[]> {
     if (!contactId) return [];
 
     try {
@@ -44,11 +45,17 @@ export const messageService = {
       const PAGE_SIZE = 1000;
       let hasMore = true;
 
+      // RCA 2026-08-21: contato abandonado (troca rápida) continuava paginando
+      // em loop bem depois de o usuário já ter saído dele — cada página era
+      // outra request competindo pelo semáforo. `signal` interrompe o loop
+      // entre páginas e cancela o fetch em voo.
       while (hasMore) {
+        if (signal?.aborted) break;
         const { data: page, error } = await messageRepository.fetchMessagesByContact(
           contactId,
           from,
-          PAGE_SIZE
+          PAGE_SIZE,
+          signal
         );
         if (error) throw new Error(`Falha ao carregar mensagens: ${error.message}`);
         if (page && page.length > 0) {
@@ -65,14 +72,17 @@ export const messageService = {
       // (phone number, e.g. "551146375517") causes PostgREST to return 400
       // "invalid input syntax for type uuid". Skip silently when called with
       // a JID or any non-UUID identifier.
-      if (isValidUUID(contactId)) {
-        const { data: whispers, error: whisperErr } = await supabase
-          .from('whisper_messages')
-          .select('*')
-          .eq('contact_id', contactId);
+      if (isValidUUID(contactId) && !signal?.aborted) {
+        let whisperQuery = supabase.from('whisper_messages').select('*').eq('contact_id', contactId);
+        if (signal) whisperQuery = whisperQuery.abortSignal(signal);
+        const { data: whispers, error: whisperErr } = await whisperQuery;
 
         if (whisperErr) {
-          log.error('Error fetching whispers:', whisperErr);
+          if (isAbortLikeError(whisperErr)) {
+            log.debug('[getAllMessagesForContact] whisper fetch aborted (contact switch)', { contactId });
+          } else {
+            log.error('Error fetching whispers:', whisperErr);
+          }
         } else if (whispers) {
           const mappedWhispers = (whispers as unknown as Record<string, unknown>[]).map((w) =>
             this.mapMessage({
@@ -112,7 +122,14 @@ export const messageService = {
 
       return allData.map((m) => this.mapMessage(m));
     } catch (err) {
-      log.error(`Critical error in getAllMessagesForContact for ${contactId}:`, err);
+      // RCA 2026-08-22 (auditoria pos-fix): abortar por troca rapida de contato
+      // agora passa por este catch com frequencia — nao e falha real do backend,
+      // nao deve virar Sentry.captureException a cada navegacao normal.
+      if (isAbortLikeError(err) || signal?.aborted) {
+        log.debug(`[getAllMessagesForContact] fetch aborted (contact switch) for ${contactId}`);
+      } else {
+        log.error(`Critical error in getAllMessagesForContact for ${contactId}:`, err);
+      }
       throw err;
     }
   },

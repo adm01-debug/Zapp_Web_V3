@@ -27,11 +27,46 @@ import { log } from '@/lib/logger';
 import { tanstackRetry } from '@/lib/errors/queryErrors';
 import { queryKeys } from '@/services/api/queryKeys';
 import { ACTIVE_WHATSAPP_INSTANCE } from '@/lib/constants/whatsappInstances';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 
 /** Strips all non-numeric characters from a phone string so it can be used as a consistent lookup key. */
 function cleanPhone(phone: string): string {
   return phone.replace(/[^0-9]/g, '');
+}
+
+/** Indexes a phone-keyed value under its normalized lookup variants. */
+function indexPhoneValue<T>(map: Map<string, T>, phone: string, info: T): void {
+  map.set(phone, info);
+  const clean = cleanPhone(phone);
+  if (clean !== phone) map.set(clean, info);
+  if (!phone.startsWith('55') && clean.length <= 11) {
+    map.set('55' + clean, info);
+  }
+}
+
+/** Looks up a phone-keyed value regardless of raw/clean/55-prefixed format. */
+function getIndexedPhoneValue<T>(map: Map<string, T>, phone: string): T | undefined {
+  const clean = cleanPhone(phone);
+  return map.get(clean) || map.get('55' + clean) || map.get(phone);
+}
+
+/**
+ * Reuses only rows that still belong to the next batch.
+ *
+ * This preserves visual stability for overlapping phones while preventing the
+ * previous batch from leaking stale CRM/company info into an unrelated batch.
+ */
+function filterPlaceholderBatchMap<T>(
+  prev: Map<string, T> | undefined,
+  phones: string[]
+): Map<string, T> | undefined {
+  if (!prev) return prev;
+  const subset = new Map<string, T>();
+  for (const phone of phones) {
+    const match = getIndexedPhoneValue(prev, phone);
+    if (match) indexPhoneValue(subset, phone, match);
+  }
+  return subset;
 }
 
 /**
@@ -43,14 +78,7 @@ function cleanPhone(phone: string): string {
  *      number fits a mobile/landline length (<= 11 digits).
  */
 function indexPhone(map: Map<string, CRMBatchResult>, phone: string, info: CRMBatchResult): void {
-  map.set(phone, info);
-  // Also index by cleaned version (without country code)
-  const clean = cleanPhone(phone);
-  if (clean !== phone) map.set(clean, info);
-  // Also index with country code
-  if (!phone.startsWith('55') && clean.length <= 11) {
-    map.set('55' + clean, info);
-  }
+  indexPhoneValue(map, phone, info);
 }
 
 /** C R M Batch Result interface definition. */
@@ -88,7 +116,15 @@ export function useExternalContact360(phone: string | undefined) {
       );
 
       if (error) {
-        log.error('Error fetching external 360:', error);
+        // O postgrest-js transforma o AbortError do fetch em `{ error }`.
+        // Repassar o cancelamento ao TanStack evita registrar um falso erro e
+        // cachear `null` para uma consulta apenas cancelada na troca de tela.
+        if (signal.aborted && isAbortLikeError(error)) throw error;
+        log.error('Error fetching external 360:', {
+          message: (error as { message?: string })?.message ?? String(error),
+          code: (error as { code?: string })?.code,
+          detail: (error as { detail?: string })?.detail,
+        });
         return null;
       }
 
@@ -127,7 +163,13 @@ export function useExternalContact360Batch(phones: string[]) {
       );
 
       if (error) {
-        log.error('Batch CRM lookup error:', error);
+        // Cancelamento do conjunto anterior não é resposta vazia do CRM.
+        if (signal.aborted && isAbortLikeError(error)) throw error;
+        log.error('Batch CRM lookup error:', {
+          message: (error as { message?: string })?.message ?? String(error),
+          code: (error as { code?: string })?.code,
+          detail: (error as { detail?: string })?.detail,
+        });
         return new Map();
       }
 
@@ -182,14 +224,13 @@ export function useExternalContact360Batch(phones: string[]) {
     // Mantém o Map anterior enquanto o batch do novo conjunto carrega —
     // evita flicker de company_name na lista durante o scroll e não reseta
     // o lookup para undefined entre conjuntos visíveis.
-    placeholderData: (prev) => prev,
+    placeholderData: (prev) => filterPlaceholderBatchMap(prev, cleanedPhones),
   });
 
   // Helper to lookup a single phone from the batch result
   const lookup = (phone: string): CRMBatchResult | undefined => {
     if (!query.data) return undefined;
-    const clean = cleanPhone(phone);
-    return query.data.get(clean) || query.data.get('55' + clean) || query.data.get(phone);
+    return getIndexedPhoneValue(query.data, phone);
   };
 
   return {
@@ -213,35 +254,46 @@ export function useExternalContact360BatchRef(phones: string[]) {
 
   return useQuery<Map<string, Contact360Data>>({
     queryKey: queryKeys.external.contact360BatchRef(batchPhoneKey),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (cleanedPhones.length === 0) return new Map();
 
-      const { data, error } = await dbRpc(RPC.getContacts360Batch, {
-        p_phones: cleanedPhones,
-      });
+      const { data, error } = await dbRpc(
+        RPC.getContacts360Batch,
+        {
+          p_phones: cleanedPhones,
+        },
+        { signal }
+      );
 
       if (error) {
-        log.error('Error fetching external 360 batch:', error);
+        // Lote anterior cancelado não pode virar mapa vazio cacheável.
+        if (signal.aborted && isAbortLikeError(error)) throw error;
+        log.error('Error fetching external 360 batch:', {
+          message: (error as { message?: string })?.message ?? String(error),
+          code: (error as { code?: string })?.code,
+          detail: (error as { detail?: string })?.detail,
+        });
         return new Map();
       }
 
       // Convert batch response to Map for O(1) lookups.
       // RPC returns: { results: [{phone, contact, found, conversation_id}, ...], count: N }
       const map = new Map<string, Contact360Data>();
-      const batchData = data as { results?: Array<{ phone: string; contact: unknown; found: boolean; conversation_id?: string | null }>; count?: number } | null;
+      const batchData = data as {
+        results?: Array<{
+          phone: string;
+          contact: unknown;
+          found: boolean;
+          conversation_id?: string | null;
+        }>;
+        count?: number;
+      } | null;
       if (batchData?.results && Array.isArray(batchData.results)) {
         for (const entry of batchData.results) {
           if (!entry.found || !entry.contact) continue;
           const phone = entry.phone;
           const info = entry.contact as Contact360Data;
-          map.set(phone, info);
-          // Also index by cleaned version (without country code)
-          const clean = cleanPhone(phone);
-          if (clean !== phone) map.set(clean, info);
-          // Also index with country code
-          if (!phone.startsWith('55') && clean.length <= 11) {
-            map.set('55' + clean, info);
-          }
+          indexPhoneValue(map, phone, info);
         }
       }
 
@@ -250,6 +302,7 @@ export function useExternalContact360BatchRef(phones: string[]) {
     enabled: cleanedPhones.length > 0,
     staleTime: 1000 * 60 * 10, // 10 min cache
     gcTime: 1000 * 60 * 30, // 30 min gc
+    placeholderData: (prev) => filterPlaceholderBatchMap(prev, cleanedPhones),
     retry: tanstackRetry, // fix: era retry:1 numerico que sobrescrevia o QueryClient global
   });
 }
@@ -496,7 +549,10 @@ export function useExternalConversations(enabled = true) {
     const dur = _lastQueryDurationRef.current;
     if (dur > SLOW_POLL_THRESHOLD_MS) {
       // Backoff exponencial suave: 2× até 60s
-      const backed = Math.min(POLL_INTERVAL * Math.ceil(dur / SLOW_POLL_THRESHOLD_MS) * 2, MAX_POLL_INTERVAL_MS);
+      const backed = Math.min(
+        POLL_INTERVAL * Math.ceil(dur / SLOW_POLL_THRESHOLD_MS) * 2,
+        MAX_POLL_INTERVAL_MS
+      );
       return backed;
     }
     return POLL_INTERVAL;
@@ -1410,7 +1466,10 @@ export function useExternalMutation() {
       validateEntityAccess(params.table, 'external');
       const dc = getDynamicClient();
       if (params.action === 'insert') {
-        const { data, error } = await dc.from(params.table).insert(params.data as never).select();
+        const { data, error } = await dc
+          .from(params.table)
+          .insert(params.data as never)
+          .select();
         if (error) throw new Error(error.message);
         return data;
       }

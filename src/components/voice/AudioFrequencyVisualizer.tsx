@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from '@/components/ui/motion';
 import type { VoiceAgentPhase } from '@/features/inbox';
 import { usePhaseColors } from './usePhaseColors';
 
@@ -28,8 +28,12 @@ export function AudioFrequencyVisualizer({ phase }: AudioFrequencyVisualizerProp
   const colorsRef = useRef(colors);
 
   // Keep refs in sync
-  useEffect(() => { phaseRef.current = phase; }, [phase]);
-  useEffect(() => { colorsRef.current = colors; }, [colors]);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  useEffect(() => {
+    colorsRef.current = colors;
+  }, [colors]);
 
   const isActive = phase === 'listening' || phase === 'speaking' || phase === 'processing';
 
@@ -110,7 +114,10 @@ export function AudioFrequencyVisualizer({ phase }: AudioFrequencyVisualizerProp
       }
 
       // Smooth interpolation toward targets
-      const active = phaseRef.current === 'listening' || phaseRef.current === 'speaking' || phaseRef.current === 'processing';
+      const active =
+        phaseRef.current === 'listening' ||
+        phaseRef.current === 'speaking' ||
+        phaseRef.current === 'processing';
       const lerpSpeed = active ? 0.15 : 0.08;
 
       for (let i = 0; i < BAR_COUNT; i++) {
@@ -157,7 +164,7 @@ export function AudioFrequencyVisualizer({ phase }: AudioFrequencyVisualizerProp
   const totalWidth = BAR_COUNT * (BAR_WIDTH + BAR_GAP) - BAR_GAP;
 
   return (
-    <div className="flex items-center justify-center h-10">
+    <div className="flex h-10 items-center justify-center">
       <canvas
         ref={canvasRef}
         style={{ width: totalWidth, height: MAX_HEIGHT + 4 }}

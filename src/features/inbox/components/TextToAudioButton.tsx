@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 // Tooltip removido aqui para evitar composição instável (Tooltip + Popover em mesmo trigger).
@@ -91,7 +91,11 @@ export function TextToAudioButton({ inputValue, onAudioReady, disabled }: TextTo
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-        throw new Error(err.error || `Erro ${response.status}`);
+        throw new Error(
+          (typeof err.error === 'string' ? err.error : null) ||
+            err.message ||
+            `Erro ${response.status}`
+        );
       }
 
       const blob = await response.blob();

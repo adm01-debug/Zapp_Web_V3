@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -128,7 +128,7 @@ export function WhatsAppFlowsBuilder(): JSX.Element {
         : undefined,
     };
     const footerIdx = screens[editingScreen].layout.findIndex(
-      (c) => (c as FlowComponent).type === 'Footer',
+      (c) => (c as FlowComponent).type === 'Footer'
     );
     if (footerIdx >= 0) screens[editingScreen].layout.splice(footerIdx, 0, newComp);
     else screens[editingScreen].layout.push(newComp);
@@ -289,7 +289,7 @@ export function WhatsAppFlowsBuilder(): JSX.Element {
                 'w-full rounded-lg border p-3 text-left text-sm transition-all',
                 idx === editingScreen
                   ? 'border-secondary bg-secondary/10 text-secondary'
-                  : 'border-border/30 bg-card/30 text-muted-foreground hover:border-border',
+                  : 'border-border/30 bg-card/30 text-muted-foreground hover:border-border'
               )}
             >
               <div className="font-medium">{screen.title}</div>

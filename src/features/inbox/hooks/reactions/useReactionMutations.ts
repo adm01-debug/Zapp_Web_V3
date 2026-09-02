@@ -15,13 +15,14 @@ interface ReactionMutationOptions {
   contactJid?: string;
   externalId?: string;
   senderType?: 'contact' | 'agent';
+  reactionSource?: 'bar' | 'quick';
 }
 
 /**
  * Analytics helper
  */
 const trackReactionEvent = (
-  action: 'add' | 'remove' | 'open_picker',
+  action: 'add' | 'quick_add' | 'remove' | 'open_picker',
   data: { messageId: string; emoji?: string; status?: string; code?: number | string }
 ) => {
   if (!data.messageId) return;
@@ -58,6 +59,7 @@ export function useReactionMutations(
 ) {
   const queryClient = useQueryClient();
   const { sendReaction } = useEvolutionApi();
+  const addAnalyticsAction = options?.reactionSource === 'quick' ? 'quick_add' : 'add';
 
   const resolveMessageContactId = async () => {
     const { data, error } = await dbFrom('messages')
@@ -134,7 +136,7 @@ export function useReactionMutations(
     onSuccess: (data, emoji) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messageReactions.message(messageId) });
       toast.dismiss(`reaction-error-${messageId}`);
-      trackReactionEvent('add', { messageId, emoji, status: 'success' });
+      trackReactionEvent(addAnalyticsAction, { messageId, emoji, status: 'success' });
     },
     onError: (error: ApiError, emoji, context) => {
       if (context?.previous) {
@@ -158,7 +160,7 @@ export function useReactionMutations(
         duration: 4000,
       });
 
-      trackReactionEvent('add', { messageId, emoji, status: 'error', code: status });
+      trackReactionEvent(addAnalyticsAction, { messageId, emoji, status: 'error', code: status });
     },
   });
 

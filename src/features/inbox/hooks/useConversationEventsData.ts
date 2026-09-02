@@ -59,9 +59,8 @@ export const conversationEventsQueryOptions = (
             // 200 (era 50): a timeline renderiza o que recebe, e o stats de
             // "Conversas" conta os `close` deste mesmo cache — 50 subestimaria
             // contatos com muitas transferências/atribuições.
-            .limit(200)
-            .abortSignal(signal),
-        { signal }
+            .limit(200),
+        signal
       );
       if (error) throw error;
       return Array.isArray(data) ? (data as ConversationEventLite[]) : [];

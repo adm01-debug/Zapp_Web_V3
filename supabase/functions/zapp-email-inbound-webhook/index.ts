@@ -27,6 +27,7 @@
  */
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 import { timingSafeStringEqual } from '../_shared/auth.ts';
+import { verifySvixWebhookSignature } from '../_shared/hmac-validation.ts';
 import { checkRateLimit } from '../_shared/validation.ts';
 import { createZappAdminClient } from '../_shared/db-client.ts';
 import { parseOrReject } from '../_shared/contract-kit.ts';
@@ -72,81 +73,6 @@ function parseFrom(from: string): { email: string; name: string | null } {
   return { email: from.trim().toLowerCase(), name: null };
 }
 
-/**
- * Validação mínima de payload (zapp-email-inbound-webhook@v1) — campos
- * obrigatórios do provider: id (message_id), from, to, subject e pelo menos
- * um de text/html. Falha → 400 com detalhe por campo. O contrato permissivo
- * (parseOrReject/CONTRACT_SCHEMAS) segue valendo para tipos/tamanhos dos
- * demais campos — campo novo do provider nunca derruba a ingestão.
- */
-function validateMinimalPayload(body: unknown): string[] {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    return ['body: esperado objeto JSON com os campos do email'];
-  }
-  const b = body as Record<string, unknown>;
-  const errors: string[] = [];
-  if (typeof b.id !== 'string' || b.id.trim().length === 0) {
-    errors.push('id: obrigatório (message_id do provider, string não vazia)');
-  }
-  if (typeof b.from !== 'string' || b.from.trim().length === 0) {
-    errors.push('from: obrigatório (remetente, string não vazia)');
-  }
-  if (
-    !Array.isArray(b.to) ||
-    b.to.length === 0 ||
-    !b.to.every((t) => typeof t === 'string' && t.trim().length > 0)
-  ) {
-    errors.push('to: obrigatório (array de destinatários, não vazio)');
-  }
-  if (typeof b.subject !== 'string' || b.subject.trim().length === 0) {
-    errors.push('subject: obrigatório (assunto, string não vazia)');
-  }
-  const text = typeof b.text === 'string' ? b.text.trim() : '';
-  const html = typeof b.html === 'string' ? b.html.trim() : '';
-  if (text.length === 0 && html.length === 0) {
-    errors.push('text/html: pelo menos um dos dois é obrigatório (corpo do email)');
-  }
-  return errors;
-}
-
-/** Verifica assinatura Svix (formato Resend: svix-id/svix-timestamp/svix-signature). */
-async function verifySvixSignature(
-  req: Request,
-  rawBody: string,
-  secret: string
-): Promise<boolean> {
-  const id = req.headers.get('svix-id');
-  const timestamp = req.headers.get('svix-timestamp');
-  const signatureHeader = req.headers.get('svix-signature');
-  if (!id || !timestamp || !signatureHeader) return false;
-
-  const ts = Number(timestamp);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > SVIX_TOLERANCE_SEC) {
-    return false; // replay/stale
-  }
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const mac = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`${id}.${timestamp}.${rawBody}`)
-  );
-  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
-
-  // Formato: "v1,<sig> v1,<sig2> ..." — aceita qualquer entrada v1.
-  for (const part of signatureHeader.split(' ')) {
-    const [version, sig] = part.split(',');
-    if (version === 'v1' && sig && timingSafeStringEqual(sig, expected)) return true;
-  }
-  return false;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return handleCorsPreflight(req);
 
@@ -162,7 +88,7 @@ Deno.serve(async (req) => {
 
     const rawText = await req.text().catch(() => '');
     if (signingSecret) {
-      const ok = await verifySvixSignature(req, rawText, signingSecret);
+      const ok = await verifySvixWebhookSignature(req, rawText, signingSecret, SVIX_TOLERANCE_SEC);
       if (!ok) return json({ error: 'Invalid Svix signature' }, 401, req);
     }
     if (webhookSecret) {
@@ -187,12 +113,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Validação mínima de payload (400 com detalhe por campo) ─────────────
-    const payloadErrors = validateMinimalPayload(rawBody);
-    if (payloadErrors.length > 0) {
-      return json({ error: 'invalid_payload', details: payloadErrors }, 400, req);
-    }
-
+    // Bloco 2 (etapa 23, 2026-08-21 — fecha D2): validação de to/subject/
+    // text-ou-html agora vive no schema (ZappEmailInboundWebhookV1Schema,
+    // superRefine) — o gate abaixo é a ÚNICA fonte de validação, envelope
+    // 422 canônico sempre atingível (antes caía num 400 artesanal antes do gate).
     const parsed = parseOrReject(
       'zapp-email-inbound-webhook',
       CONTRACT_SCHEMAS['zapp-email-inbound-webhook'],
@@ -204,6 +128,10 @@ Deno.serve(async (req) => {
     );
     if (parsed.ok === false) return parsed.response;
 
+    // to/subject/text-ou-html são garantidos pelo superRefine acima — não
+    // opcionais na prática, mas o tipo aqui reflete o schema Zod (passthrough
+    // com campos .optional() estruturalmente; a obrigatoriedade é imposta
+    // via superRefine, que o TS não consegue refletir no tipo inferido).
     const body = parsed.data as {
       id: string;
       from: string;

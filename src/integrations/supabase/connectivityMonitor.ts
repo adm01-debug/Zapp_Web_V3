@@ -8,7 +8,7 @@
  *
  * O caso 2 NÃO é coberto por `navigator.onLine` e era o buraco do F19: o app
  * ficava mudo quando o Supabase caía. O monitor faz um heartbeat periódico em
- * `${SUPABASE_RESOLVED_URL}/auth/v1/health` com timeout curto e considera
+ * `${SUPABASE_RESOLVED_URL}/functions/v1/health-check` com timeout curto e considera
  * "alcançável" QUALQUER resolução do fetch. O probe usa `mode: 'no-cors'` SEM
  * headers custom (GET simples, sem preflight CORS): a resposta é opaca (status
  * 0, invisível para o JS), mas se o fetch resolveu, a rede/back-end respondeu,
@@ -126,7 +126,9 @@ export async function pingSupabaseBackend(force = false): Promise<boolean> {
     // reiniciando rotas) = alcançável. TypeError só ocorre em falha real de
     // rede/DNS/timeout. Isso elimina o falso backend-down de produção causado
     // pelo preflight do header apikey durante o restart do Kong.
-    await fetch(`${url}/auth/v1/health`, {
+    // Usa uma rota pública: o JS ignora o status em no-cors, mas /auth/v1/health
+    // ainda adicionava um 401 visível ao console e confundia a triagem.
+    await fetch(`${url}/functions/v1/health-check`, {
       method: 'GET',
       mode: 'no-cors',
       cache: 'no-store',
@@ -248,9 +250,7 @@ function stopHeartbeat(): void {
  * Assina mudanças de conectividade. Inicia o heartbeat no 1º subscriber e
  * para no último. Retorna unsubscribe.
  */
-export function subscribeSupabaseConnectivity(
-  listener: SupabaseConnectivityListener
-): () => void {
+export function subscribeSupabaseConnectivity(listener: SupabaseConnectivityListener): () => void {
   listeners.add(listener);
   listenerCount += 1;
   if (listenerCount === 1) startHeartbeat();

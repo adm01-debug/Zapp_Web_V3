@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { compression } from 'vite-plugin-compression2';
 import { visualizer } from 'rollup-plugin-visualizer';
+import type { OutputChunk } from 'rollup';
 
 // Self-hosted Supabase (cutover 2026-06-30). These are FALLBACKS only, used
 // when the matching VITE_* env var is absent (e.g. local dev without .env).
@@ -32,6 +33,34 @@ const resolvePublicEnv = (mode: string) => {
 // serves and force a hard refresh.
 const BUILD_ID = `${Date.now()}`;
 
+// Immutable source identity for the artifact. CI injects the full GitHub SHA
+// through Docker's VITE_GIT_SHA build argument. Local/dev builds deliberately
+// fall back to a non-ambiguous sentinel instead of inventing a commit id.
+export const resolveGitSha = (value: string | undefined): string => value?.trim() || 'dev';
+
+const GIT_SHA = resolveGitSha(process.env.VITE_GIT_SHA);
+
+export const createVersionPayload = (
+  entry: string | null,
+  options: { buildId?: string; gitSha?: string; builtAt?: string; entryCss?: string | null } = {},
+) => {
+  const gitSha = resolveGitSha(options.gitSha ?? process.env.VITE_GIT_SHA);
+  return {
+    buildId: options.buildId ?? BUILD_ID,
+    // releaseId is intentionally the immutable source revision. buildId stays
+    // unique per build invocation for the existing browser/SW refresh logic.
+    gitSha,
+    releaseId: gitSha,
+    builtAt: options.builtAt ?? new Date().toISOString(),
+    entry,
+    // BUG FIX (2026-09-02): o CSS do entry tem hash PROPRIO (index-y1dDjU6P.css
+    // para o entry index-CJ5bStv8.js). O prefetch derivava o nome trocando
+    // .js -> .css e batia 404 em todo deploy. Emitir o nome real aqui e a
+    // unica forma de o cliente saber qual arquivo pre-carregar.
+    entryCss: options.entryCss ?? null,
+  };
+};
+
 // Vite plugin: writes dist/version.json at the end of each production build.
 // Inclui o nome REAL do entry JS (index-<hash>.js) — o buildVersion usa para o
 // HEAD check de propagação de CDN (isBundleReachable) e para o prefetch:
@@ -47,15 +76,31 @@ const emitVersionJsonPlugin = () => ({
         (bundle[name] as { isEntry?: boolean; type?: string })?.isEntry === true &&
         (bundle[name] as { type?: string })?.type === 'chunk'
     );
+    // CSS do entry: o Vite anota os arquivos emitidos em viteMetadata.importedCss.
+    // Fallback: usado apenas quando há EXATAMENTE um .css no bundle (build single-entry
+    // sem code split). Com múltiplos .css (cssCodeSplit: true + manualChunks), o fallback
+    // é recusado para evitar selecionar o CSS de um chunk vendor no lugar do entry.
+    type ViteChunk = OutputChunk & { viteMetadata?: { importedCss?: Set<string> } };
+    const importedCss = entry
+      ? (bundle[entry] as ViteChunk)?.viteMetadata?.importedCss
+      : undefined;
+    const allCssFiles = Object.keys(bundle).filter((name) => name.endsWith('.css'));
+    const unambiguousFallback = allCssFiles.length === 1 ? allCssFiles[0] : undefined;
+    const entryCss =
+      (importedCss && Array.from(importedCss)[0]) ??
+      unambiguousFallback ??
+      null;
     // @ts-expect-error — `this.emitFile` is provided by Rollup at build time
     this.emitFile({
       type: 'asset',
       fileName: 'version.json',
-      source: JSON.stringify({
-        buildId: BUILD_ID,
-        builtAt: new Date().toISOString(),
-        entry: entry ?? null,
-      }),
+      source: JSON.stringify(
+        createVersionPayload(entry ?? null, {
+          buildId: BUILD_ID,
+          gitSha: GIT_SHA,
+          entryCss,
+        }),
+      ),
     });
   },
 });

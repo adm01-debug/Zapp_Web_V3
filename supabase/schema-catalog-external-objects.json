@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "description": "Objetos do sistema financeiro externo que compartilha o PostgreSQL, mas não pertencem ao contrato do Zapp Web V3.",
+  "objects": [
+    {
+      "path": "schemas.public.Functions.has_role",
+      "owner": "external-finance-system",
+      "reason": "Função criada e mantida pelo sistema financeiro no schema public compartilhado.",
+      "expected_presence": "right-only"
+    },
+    {
+      "path": "schemas.public.Functions.has_role_in_empresa",
+      "owner": "external-finance-system",
+      "reason": "Função criada e mantida pelo sistema financeiro no schema public compartilhado.",
+      "expected_presence": "right-only"
+    },
+    {
+      "path": "schemas.public.Tables.empresas",
+      "owner": "external-finance-system",
+      "reason": "Tabela física criada e mantida pelo sistema financeiro no schema public compartilhado.",
+      "expected_presence": "right-only"
+    },
+    {
+      "path": "schemas.public.Tables.user_empresas",
+      "owner": "external-finance-system",
+      "reason": "Tabela física criada e mantida pelo sistema financeiro no schema public compartilhado.",
+      "expected_presence": "right-only"
+    },
+    {
+      "path": "schemas.public.Views.empresas_zapp_legacy",
+      "owner": "external-finance-system",
+      "reason": "View de compatibilidade mantida pelo sistema financeiro após assumir o nome public.empresas.",
+      "expected_presence": "right-only"
+    }
+  ]
+}

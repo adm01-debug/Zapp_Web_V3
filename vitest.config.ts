@@ -18,6 +18,13 @@ export default defineConfig({
       VITE_SUPABASE_ANON_KEY: 'test-anon-key',
     },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // CONVENÇÃO DE DIRETÓRIOS (leia antes de criar novos test files):
+    //   src/features/inbox/components/chat/__tests__/  → coberto por `bun run test:chat`
+    //     Use para: componentes de chat E hooks de chat (useMention*, useChatInput*, etc.)
+    //   src/features/inbox/hooks/__tests__/            → coberto por `bun run test` (full)
+    //     Use para: hooks gerais de inbox (useRealtimeInbox, useMediaUrl, etc.)
+    //   REGRA: hook exclusivo de chat → coloque em chat/__tests__/ para ser validado rápido.
+    //   ATENÇÃO vi.mock(): é HOISTED — use vi.hoisted() para variáveis em factory functions.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
@@ -48,16 +55,13 @@ export default defineConfig({
       'src/hooks/__tests__/useSwipeGesture.test.ts',
       'src/hooks/__tests__/useSwipeNavigation.test.ts',
       'src/hooks/useEmailActions.test.ts',
-      // FAILING — hook existe, teste usa API refatorada
+      // FAILING — hook existe, API refatorada. WIP: wrapper QueryClient adicionado, falhas residuais de mock.
+      // Parcialmente verdes: useQueueAnalytics (7/9), useContactCustomFields (4/5).
       'src/hooks/__tests__/useGlobalSearchShortcut.test.ts',
       'src/hooks/__tests__/useContactCustomFields.test.tsx',
-      'src/hooks/__tests__/useDownloadPermission.test.ts',
       'src/hooks/__tests__/useExportData.test.tsx',
-      'src/hooks/__tests__/useOnboardingChecklist.test.tsx',
       'src/hooks/__tests__/useQueueAnalytics.test.tsx',
       'src/hooks/__tests__/useQueueGoals.test.tsx',
-      'src/hooks/__tests__/useQueues.test.tsx',
-      'src/hooks/__tests__/useQueuesComparison.test.tsx',
       'src/hooks/__tests__/useRealtimeMessages.test.tsx',
       'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',
       'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',

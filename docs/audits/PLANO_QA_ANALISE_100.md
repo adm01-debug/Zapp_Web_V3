@@ -163,5 +163,5 @@
 
 ## Referências cruzadas
 
-- Documentos existentes que este plano substitui/consolida: `audit-summary.md`, `RLS_AUDIT_REPORT.md`, `VALIDATION_REPORT_PHD.md`, `REGRESSION_SIMULATION_REPORT.md`, `evolution-api-audit-report.md`, `auditoria_tabelas_zapp.md`, `auditoria-edge-functions.md`, `health-check-banco-2026-07-30.md`, `zero-success-rate-workflows.md`, `data-loss-simulation-report.md`, `QUALITY_METRICS_REPORT.md`, `PLANO_CORRECOES_CI_CD.md`, `CI_COST_ANALYSIS_REPORT.md`, `FLUXO_CLIQUE_CHATPANEL.md`.
+- Documentos existentes que este plano substitui/consolida: `audit-summary.md`, [`docs/audits/RLS_AUDIT_REPORT.md`](RLS_AUDIT_REPORT.md), [`docs/audits/VALIDATION_REPORT_PHD.md`](VALIDATION_REPORT_PHD.md), [`docs/audits/REGRESSION_SIMULATION_REPORT.md`](REGRESSION_SIMULATION_REPORT.md), `evolution-api-audit-report.md`, `auditoria_tabelas_zapp.md`, `auditoria-edge-functions.md`, `health-check-banco-2026-07-30.md`, `zero-success-rate-workflows.md`, `data-loss-simulation-report.md`, `QUALITY_METRICS_REPORT.md`, `PLANO_CORRECOES_CI_CD.md`, `CI_COST_ANALYSIS_REPORT.md`, `FLUXO_CLIQUE_CHATPANEL.md`.
 - **Ver plano de implementação**: `docs/audits/PLANO_IMPLEMENTACAO_100.md`.

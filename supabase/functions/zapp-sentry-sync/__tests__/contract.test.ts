@@ -16,7 +16,8 @@
 // O front (SentryIntegrationView.tsx) hoje mostra `mockErrors` inventados —
 // este contrato é o que permite o estado honesto "Sem eventos reais".
 //
-// REQUEST (GET, sem body — edge espelho do irmão zapp-google-calendar-sync):
+// REQUEST (GET, sem body — edge espelho do ex-irmão zapp-google-calendar-sync,
+// arquivado 2026-08-25 sem chamador — ver docs/_archive/zapp-google-calendar-sync-ADR-2026-08-25.md):
 //   GET /functions/v1/zapp-sentry-sync
 //   Authorization: Bearer <jwt do admin>
 // (Se o integrador escolher POST, mudar só o verbo no helper `sync()` do

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getLogger } from '@/lib/logger';
 import { isValidUUID } from '@/utils/uuid';
+import { isAbortLikeError } from '@/lib/abortError';
 
 const log = getLogger('useContactCustomFields');
 
@@ -24,15 +25,16 @@ export function useContactCustomFields(contactId: string | undefined) {
 
   const { data: fields = [], isLoading } = useQuery({
     queryKey,
-    queryFn: async (): Promise<CustomField[]> => {
+    queryFn: async ({ signal }): Promise<CustomField[]> => {
       if (!contactId) return [];
       const { data, error } = await supabase
         .from('contact_custom_fields')
         .select('*')
         .eq('contact_id', contactId)
-        .order('field_name');
+        .order('field_name')
+        .abortSignal(signal);
       if (error) {
-        log.error('Error fetching custom fields:', error);
+        if (!isAbortLikeError(error)) log.error('Error fetching custom fields:', error);
         throw error;
       }
       return (data || []) as CustomField[];

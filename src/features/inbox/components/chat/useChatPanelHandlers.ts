@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('useChatPanelHandlers');
@@ -17,6 +17,8 @@ import { useAudioVoiceChange } from './useAudioVoiceChange';
 import { useMessageReactionHandlers } from './useMessageReactionHandlers';
 import { ticketStore } from '@/lib/inbox/ticketStore';
 import { isValidUUID } from '@/utils/uuid';
+
+const EDIT_WINDOW_MINUTES = 15;
 
 interface UseChatPanelHandlersOptions {
   conversationId: string;
@@ -45,6 +47,7 @@ interface UseChatPanelHandlersOptions {
 /** use Chat Panel Handlers component for the chat section. */
 export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
   const {
+    conversationId,
     contactId,
     contactPhone,
     instanceName,
@@ -67,10 +70,15 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
   // Guarda content + attachments juntos: um envio só-mídia falho tem
   // messageContent === '' (falsy), então checar `!payload` sozinho fazia
   // retryLastSend virar no-op silencioso para esse caso.
-  const lastFailedSendRef = useRef<{ content: string; attachments?: File[] } | null>(null);
+  const lastFailedSendRef = useRef<{
+    content: string;
+    attachments?: File[];
+    conversationId: string;
+  } | null>(null);
   const lastFailedAudioRef = useRef<{
     blob: Blob;
     onSendAudio: (blob: Blob) => Promise<void>;
+    conversationId: string;
   } | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [sendProgress, setSendProgress] = useState(0);
@@ -89,7 +97,22 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
   const isWhisperRef = useRef(isWhisper);
   isWhisperRef.current = isWhisper;
 
-  const EDIT_WINDOW_MINUTES = 15;
+  // Etapas 39-43: limpar todo estado local ao trocar de conversa para evitar
+  // vazamento de rascunho, estado de edição, erro residual e referências antigas.
+  useEffect(() => {
+    setInputValue('');
+    setIsWhisper(false);
+    setIsSending(false);
+    setIsRecordingAudio(false);
+    setReplyToMessage(null);
+    setEditingMessage(null);
+    setForwardMessage(null);
+    setLastSendError(null);
+    setLastSendErrorDetail(null);
+    setSendProgress(0);
+    lastFailedSendRef.current = null;
+    lastFailedAudioRef.current = null;
+  }, [conversationId]);
 
   const handleEditStart = useCallback((message: Message) => {
     const minutesAgo = (Date.now() - new Date(message.timestamp).getTime()) / 60000;
@@ -169,6 +192,18 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
           });
 
           // 2. Espelhar no banco, verificando rowcount de verdade.
+          if (!isValidUUID(currentEditing.id)) {
+            log.warn('[editMessage] id de mensagem não é UUID válido', { id: currentEditing.id });
+            toast({
+              title: 'Erro ao editar',
+              description: 'ID de mensagem inválido — edição cancelada.',
+              variant: 'destructive',
+            });
+            setEditingMessage(null);
+            setInputValue('');
+            setIsSending(false);
+            return;
+          }
           const { data: updated, error: dbError } = await dbFrom('evolution_messages')
             .update({ content: newText, updated_at: new Date().toISOString() })
             .eq('id', currentEditing.id)
@@ -176,7 +211,12 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
 
           if (dbError) throw dbError;
           if (!updated || updated.length === 0) {
-            log.warn('[editMessage] UPDATE casou 0 linhas', { id: currentEditing.id });
+            log.warn('[editMessage] UPDATE casou 0 linhas', {
+              id: currentEditing.id,
+              instanceName,
+              contactId,
+              contactPhone,
+            });
             toast({
               title: 'Editada no WhatsApp',
               description: 'A alteração foi enviada, mas o histórico local não foi atualizado.',
@@ -199,6 +239,40 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         }
         setEditingMessage(null);
         setInputValue('');
+        return;
+      }
+
+      // Guards de whisper ANTES de alterar qualquer estado — preserva o texto do usuário.
+      if (isWhisperRef.current) {
+        if (attachments && attachments.length > 0) {
+          toast({
+            title: 'Aviso',
+            description: 'Arquivos nao sao suportados em modo sussurro no momento.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        // Guard: whisper_messages.contact_id is uuid. If opts.contactId is a
+        // WhatsApp JID (external mode), passing it causes PostgREST 400.
+        if (!isUuidRef(resolveContactRef(contactId))) {
+          toast({
+            title: 'Sussurro indisponivel',
+            description:
+              'Esta conversa usa ID externo (JID WhatsApp). Sussurros requerem contato interno com UUID.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+
+      // Guard: autenticação antes de alterar qualquer estado (preserva texto do usuário).
+      const profileId = profile?.id;
+      if (isWhisperRef.current && !profileId) {
+        toast({
+          title: 'Erro ao enviar sussurro',
+          description: 'Usuário não autenticado. Faça login e tente novamente.',
+          variant: 'destructive',
+        });
         return;
       }
 
@@ -227,35 +301,15 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         }
 
         if (isWhisperRef.current) {
-          if (attachments && attachments.length > 0) {
-            toast({
-              title: 'Aviso',
-              description: 'Arquivos nao sao suportados em modo sussurro no momento.',
-              variant: 'destructive',
-            });
-            setIsSending(false);
-            return;
-          }
-          if (!profile?.id) throw new Error('Usuario nao autenticado');
-
-          // Guard: whisper_messages.contact_id is uuid. If opts.contactId is a
-          // WhatsApp JID (external mode), passing it causes PostgREST 400.
-          if (!isUuidRef(resolveContactRef(contactId))) {
-            toast({
-              title: 'Sussurro indisponivel',
-              description:
-                'Esta conversa usa ID externo (JID WhatsApp). Sussurros requerem contato interno com UUID.',
-              variant: 'destructive',
-            });
-            setIsSending(false);
-            return;
-          }
-
+          // O modo pode mudar enquanto o gate DEV aguarda a simulação acima.
+          // Falha fechada e deixa o catch restaurar o texto em vez de acessar
+          // um profile nulo ou enviar um sussurro sem autoria.
+          if (!profileId) throw new Error('Usuário não autenticado. Faça login e tente novamente.');
           const { error } = await insertWhisperMessage({
             contact_id: contactId,
-            sender_id: profile.id,
+            sender_id: profileId,
             content: messageContent,
-            target_agent_id: profile.id,
+            target_agent_id: profileId,
           });
           if (error) throw error;
           toast({ title: 'Sussurro enviado', description: 'Nota interna registrada com sucesso.' });
@@ -268,6 +322,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
           message: 'Mensagem enviada',
           icon: 'ok',
           delay: 3000,
+          actionLabel: 'Restaurar texto',
           onUndo: () => {
             setInputValue(rawInput);
             if (wasReply) setReplyToMessage(wasReply);
@@ -297,7 +352,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
           if (wasReply) setReplyToMessage(wasReply);
           toast({ title: 'Erro ao enviar sussurro', description: msg, variant: 'destructive' });
         } else {
-          lastFailedSendRef.current = { content: messageContent, attachments };
+          lastFailedSendRef.current = { content: messageContent, attachments, conversationId };
           setLastSendError(msg);
           setLastSendErrorDetail(detail);
           // Envio falhou de forma síncrona: zera a barra de progresso.
@@ -312,6 +367,8 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
     },
     [
       contactId,
+      contactPhone,
+      conversationId,
       instanceName,
       editMessageApi,
       applySignature,
@@ -325,6 +382,16 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
     if (isSendingRef.current) return;
     const audioPending = lastFailedAudioRef.current;
     if (audioPending) {
+      // Etapa 44: trava por conversa — evita reenviar áudio de A para B
+      if (audioPending.conversationId !== conversationId) {
+        toast({
+          title: 'Reenvio cancelado',
+          description: 'O áudio pendente pertence a outra conversa.',
+          variant: 'destructive',
+        });
+        lastFailedAudioRef.current = null;
+        return;
+      }
       setIsSending(true);
       setLastSendError(null);
       setLastSendErrorDetail(null);
@@ -350,6 +417,16 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
     }
     const failedSend = lastFailedSendRef.current;
     if (!failedSend) return;
+    // Etapa 44: trava por conversa — evita reenviar mensagem de A para B
+    if (failedSend.conversationId !== conversationId) {
+      toast({
+        title: 'Reenvio cancelado',
+        description: 'A mensagem pendente pertence a outra conversa.',
+        variant: 'destructive',
+      });
+      lastFailedSendRef.current = null;
+      return;
+    }
     setIsSending(true);
     setLastSendError(null);
     setLastSendErrorDetail(null);
@@ -371,7 +448,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
     } finally {
       setIsSending(false);
     }
-  }, [onSendMessage]);
+  }, [conversationId, onSendMessage]);
 
   const dismissSendError = useCallback(() => {
     setLastSendError(null);
@@ -382,6 +459,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
 
   const handleAudioSend = useCallback(
     async (audioBlob: Blob, onSendAudio?: (blob: Blob) => Promise<void>) => {
+      if (isSendingRef.current) return;
       if (!onSendAudio) {
         toast({
           title: 'Erro',
@@ -402,7 +480,7 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
           typeof (err as { detail?: string }).detail === 'string'
             ? (err as { detail: string }).detail
             : null;
-        lastFailedAudioRef.current = { blob: audioBlob, onSendAudio };
+        lastFailedAudioRef.current = { blob: audioBlob, onSendAudio, conversationId };
         lastFailedSendRef.current = null;
         setLastSendError(msg);
         setLastSendErrorDetail(detail);
@@ -415,7 +493,9 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         setIsRecordingAudio(false);
       }
     },
-    []
+    // Etapa 45: conversationId deve estar nas deps para que o conversationId
+    // capturado em lastFailedAudioRef seja sempre o da conversa ativa.
+    [conversationId]
   );
 
   const { handleReplyToMessage, handleCopyMessage, handleForwardMessage, handleForwardToTargets } =
@@ -519,11 +599,20 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
         throw new Error('Nao foi possivel adicionar tag: contato ou usuario invalido.');
       }
       // Procura a tag pelo nome (ILIKE) e vincula via contact_tags.
-      const { data: tag, error: selectError } = await dbFrom('tags')
+      // Exact match prioritário; fallback com partial e wildcards escapados.
+      const escapedName = name.replace(/%/g, '\\%').replace(/_/g, '\\_');
+      const { data: exactTag, error: exactErr } = await dbFrom('tags')
         .select('id')
-        .ilike('name', `%${name}%`)
-        .limit(1)
+        .ilike('name', name)
         .maybeSingle();
+      if (exactErr) throw exactErr;
+      const { data: tag, error: selectError } = exactTag
+        ? { data: exactTag, error: null }
+        : await dbFrom('tags')
+            .select('id')
+            .ilike('name', `%${escapedName}%`)
+            .limit(1)
+            .maybeSingle();
       if (selectError) throw selectError;
       if (!tag) {
         toast({ title: 'Tag nao encontrada', description: `Nenhuma tag com nome "${name}".` });
@@ -555,7 +644,8 @@ export function useChatPanelHandlers(opts: UseChatPanelHandlersOptions) {
       throw new Error('Nao foi possivel arquivar: acao nao configurada.');
     }
     await opts.onArchive();
-  }, [contactId, opts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- opts.onArchive é a única propriedade usada; opts inteiro não é necessário
+  }, [contactId, opts.onArchive]);
 
   const { handleInputChange, handleKeyDown, handleSlashCommand } = useInputHandlers({
     setInputValue,

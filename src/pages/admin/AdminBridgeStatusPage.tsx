@@ -13,7 +13,7 @@ import {
   Play,
   Pause,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { useBridgeStatus } from '@/hooks/useBridgeStatus';
 import { BridgeDiagnosticsDialog } from './bridge-status/BridgeDiagnosticsDialog';
@@ -109,7 +109,9 @@ export default function BridgeStatusPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card className="flex flex-col items-center justify-center space-y-2 p-4 text-center">
           <Activity className="h-5 w-5 text-primary" />
-          <p className="text-[10px] font-bold uppercase text-muted-foreground">Instâncias Evolution</p>
+          <p className="text-[10px] font-bold uppercase text-muted-foreground">
+            Instâncias Evolution
+          </p>
           <p className="text-2xl font-black">{instanceCount !== null ? instanceCount : '—'}</p>
           {instanceCount === null && (
             <p className="text-[10px] text-muted-foreground">dados indisponíveis</p>

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useMemo, useState, useEffect, type RefObject } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDensity } from '@/hooks/useDensity';
 import { useDebouncedValue } from '@/hooks/useDebounce';
@@ -181,6 +181,8 @@ export function ConversationListSidebar({
     onArchive: () => onArchive(),
     onTransfer,
     onRefresh,
+    // Quando o ChatPanel está montado (conversa selecionada), cede o Mod+E a ele.
+    archiveEnabled: !inbox.selectedContactId,
   });
 
   return (
@@ -193,7 +195,6 @@ export function ConversationListSidebar({
       <BulkActionsToolbar
         selectedCount={bulkActions.selectedIds.size}
         onMarkAsRead={bulkActions.bulkMarkAsRead}
-        onTransfer={bulkActions.bulkTransfer}
         onArchive={bulkActions.bulkArchive}
         onClearSelection={bulkActions.clearSelection}
         isLoading={bulkActions.bulkLoading}
@@ -346,9 +347,7 @@ export function ConversationListSidebar({
       <div className="shrink-0 border-b border-border/20 px-4 pb-2 pt-1">
         <Tabs
           value={filter}
-          onValueChange={(v) =>
-            setFilter(v as 'all' | 'open' | 'pending' | 'waiting' | 'archived')
-          }
+          onValueChange={(v) => setFilter(v as 'all' | 'open' | 'pending' | 'waiting' | 'archived')}
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-2 rounded-xl border-none bg-muted/30 p-1">

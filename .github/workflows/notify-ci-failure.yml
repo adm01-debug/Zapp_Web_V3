@@ -10,18 +10,25 @@ on:
       - "E2E Nightly Full (VPS)"
       - "Quality Gate"
       - "🚀 Build & Deploy — ZAPP web v3"
+      # Bloco 1 (2026-08-21, PLANO-100-CONTRATOS-EDGE): o gate de contratos
+      # ficou vermelho/travado por dias (label de runner errado + concurrency
+      # cancelando runs de main) sem que ninguém percebesse — o cron diário
+      # falhou 18/19-08 em silêncio. Alerta em toda falha real (não só
+      # a cada 2 consecutivas) via o mesmo canal dos outros gates críticos.
+      - "🦕 Deno Contract Tests — Edge Functions"
     types: [completed]
     branches: [main, production]
 
 jobs:
   notify-failure:
     name: "Email Abner via N8N"
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): curl de saída p/ webhook público, sem DB/VPS.
+    runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
       - name: "POST warroom → Email + Bitrix24"
         run: |
-          curl -sf -X POST https://webhook.atomicabr.com.br/webhook/warroom-alert \
+          curl -sf -X POST https://n8n.atomicabr.com.br/webhook/warroom-alert \
             -H "Content-Type: application/json" \
             -d "{\"severity\":\"critical\",\"alert_type\":\"ci_failure\",\"title\":\"CI FAILED: ${{ github.event.workflow_run.name }}\",\"message\":\"Repo: ${{ github.repository }}\nBranch: ${{ github.event.workflow_run.head_branch }}\nActor: ${{ github.event.workflow_run.triggering_actor.login }}\nSHA: ${{ github.event.workflow_run.head_sha }}\nURL: ${{ github.event.workflow_run.html_url }}\",\"source\":\"github-actions\",\"run_id\":\"${{ github.event.workflow_run.id }}\"}" \
           && echo "Alerta enviado (Email Abner + Bitrix24)"

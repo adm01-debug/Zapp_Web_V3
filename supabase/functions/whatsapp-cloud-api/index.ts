@@ -5,7 +5,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { createZappAdminClient } from '../_shared/db-client.ts';
-import { authorizeRoles, errorResponse, jsonResponse, checkRateLimit } from "../_shared/validation.ts";
+import { authorizeRoles, errorResponse, errorEnvelope, jsonResponse, checkRateLimit } from "../_shared/validation.ts";
 import { parseOrReject, buildContractErrorBody } from '../_shared/contract-kit.ts';
 import { CONTRACT_SCHEMAS } from '../_shared/contract-schemas.ts';
 
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       url_present: !!supabaseUrl,
       key_present: !!supabaseAnonKey,
     });
-    return errorResponse('Supabase configuration missing. Contact administrator.', 500, req);
+    return errorEnvelope('supabase_config_missing', 'Supabase configuration missing. Contact administrator.', 500, req);
   }
 
   try {
@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     const { user: authUser } = await authorizeRoles(req, supabaseUrl, supabaseAnonKey, ['agent', 'supervisor', 'manager', 'admin', 'dev']);
 
     const rl = checkRateLimit(`whatsapp-cloud-api:${authUser.id}`, 60, 60_000);
-    if (!rl.allowed) return errorResponse('Rate limit exceeded. Tente novamente em instantes.', 429, req);
+    if (!rl.allowed) return errorEnvelope('rate_limit_exceeded', 'Rate limit exceeded. Tente novamente em instantes.', 429, req);
 
     let body: Record<string, unknown> = {};
     try { body = await req.json(); } catch { body = {}; }
@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
   if (action === 'ping' || action === 'status' || action === 'instance-info') {
     const url = `https://graph.facebook.com/${creds.graph_api_version}/${creds.phone_number_id}?fields=display_phone_number,verified_name,quality_rating`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${creds.access_token}` }, signal: AbortSignal.timeout(10_000) });
+    // Resposta OUTBOUND do Graph API — {} é fallback inofensivo (só degrada o eco do payload); não é o antipadrão de body de request (D1/etapa 27).
     const data = await res.json().catch(() => ({}));
     return jsonResponse({ ok: res.ok, status: res.status, data }, 200, req);
   }
@@ -263,6 +264,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: wamid }),
         signal: AbortSignal.timeout(10_000),
       });
+      // Idem ao ping/status acima: resposta OUTBOUND do Graph API, {} é fallback inofensivo.
       const data = await res.json().catch(() => ({}));
       return jsonResponse({ ok: res.ok, status: res.status, data }, 200, req);
     }
@@ -323,6 +325,6 @@ Deno.serve(async (req) => {
     if (error instanceof Error && 'status' in error && typeof (error as Record<string, unknown>).status === 'number') {
       return errorResponse(errorMsg, (error as Record<string, unknown>).status as number, req);
     }
-    return errorResponse('Internal server error', 500, req);
+    return errorEnvelope('internal_error', 'Internal server error', 500, req);
   }
 });

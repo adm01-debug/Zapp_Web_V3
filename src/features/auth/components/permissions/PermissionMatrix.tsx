@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Shield, Loader2, Search } from 'lucide-react';
 import { usePermissions } from '@/features/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -120,7 +120,14 @@ export function PermissionMatrix() {
 
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as 'admin' | 'supervisor' | 'agent' /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */)}
+          onValueChange={(v) =>
+            setActiveTab(
+              v as
+                | 'admin'
+                | 'supervisor'
+                | 'agent' /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */
+            )
+          }
         >
           <TabsList className="w-full">
             {Object.entries(ROLE_LABELS).map(([role, { label }]) => (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -61,9 +61,9 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
     return (
       <div className="space-y-3" aria-busy="true" aria-live="polite">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <StickyNote className="w-4 h-4" />
+          <StickyNote className="h-4 w-4" />
           <span>Notas Privadas</span>
-          <Loader2 className="w-3 h-3 animate-spin ml-1" aria-hidden="true" />
+          <Loader2 className="ml-1 h-3 w-3 animate-spin" aria-hidden="true" />
         </div>
         <div className="space-y-2">
           <Skeleton className="h-16 w-full" />
@@ -77,17 +77,17 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <StickyNote className="w-4 h-4" />
+          <StickyNote className="h-4 w-4" />
           <span>Notas Privadas</span>
         </div>
         <div
           role="alert"
-          className="flex items-start gap-2 p-3 rounded-lg border border-destructive/40 bg-destructive/5 text-xs text-destructive"
+          className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive"
         >
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <div className="flex-1">
             <p className="font-medium">Erro ao carregar notas</p>
-            <p className="text-destructive/80 mt-0.5">
+            <p className="mt-0.5 text-destructive/80">
               {loadError instanceof Error ? loadError.message : 'Tente novamente.'}
             </p>
           </div>
@@ -103,7 +103,7 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <StickyNote className="w-4 h-4" />
+          <StickyNote className="h-4 w-4" />
           <span>Notas Privadas</span>
         </div>
         {!isAddingNote && (
@@ -114,7 +114,7 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
               className="h-7 text-xs"
               onClick={() => setIsAddingNote(true)}
             >
-              <Plus className="w-3 h-3 mr-1" />
+              <Plus className="mr-1 h-3 w-3" />
               Nova nota
             </Button>
           </motion.div>
@@ -134,7 +134,7 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
               rows={3}
-              className="text-sm resize-none"
+              className="resize-none text-sm"
               autoFocus
               disabled={isSaving}
               aria-invalid={!!addError}
@@ -144,9 +144,9 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
               <div
                 id="private-notes-add-error"
                 role="alert"
-                className="flex items-start gap-2 p-2 rounded-md border border-destructive/40 bg-destructive/5 text-xs text-destructive"
+                className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
               >
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span className="flex-1">{addError}</span>
                 <button
                   type="button"
@@ -154,7 +154,7 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
                   className="hover:opacity-70"
                   aria-label="Fechar mensagem de erro"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             )}
@@ -180,18 +180,17 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
               >
                 {isSaving ? (
                   <>
-                    <Loader2 className="w-3 h-3 mr-1 animate-spin" aria-hidden="true" />
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" />
                     Salvando...
                   </>
                 ) : (
                   <>
-                    <Send className="w-3 h-3 mr-1" aria-hidden="true" />
+                    <Send className="mr-1 h-3 w-3" aria-hidden="true" />
                     Salvar
                   </>
                 )}
               </Button>
             </div>
-
           </motion.div>
         )}
       </AnimatePresence>
@@ -199,9 +198,9 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
       {deleteError && (
         <div
           role="alert"
-          className="flex items-start gap-2 p-2 rounded-md border border-destructive/40 bg-destructive/5 text-xs text-destructive"
+          className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
         >
-          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="flex-1">{deleteError}</span>
           <button
             type="button"
@@ -209,12 +208,12 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
             className="hover:opacity-70"
             aria-label="Fechar mensagem de erro"
           >
-            <X className="w-3 h-3" />
+            <X className="h-3 w-3" />
           </button>
         </div>
       )}
 
-      <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin" aria-live="polite">
+      <div className="scrollbar-thin max-h-48 space-y-2 overflow-y-auto" aria-live="polite">
         <AnimatePresence>
           {notes.map((note, index) => {
             const isRowDeleting = isDeleting && deletingId === note.id;
@@ -225,11 +224,11 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
                 animate={{ opacity: isRowDeleting ? 0.6 : 1, y: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ delay: index * 0.05 }}
-                className="group p-3 bg-muted/50 rounded-lg border border-border/50 hover:border-border transition-colors"
+                className="group rounded-lg border border-border/50 bg-muted/50 p-3 transition-colors hover:border-border"
                 aria-busy={isRowDeleting}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm text-foreground flex-1">{note.content}</p>
+                  <p className="flex-1 text-sm text-foreground">{note.content}</p>
                   {note.author_id === currentProfileId && (
                     <motion.button
                       whileHover={{ scale: 1.1 }}
@@ -237,25 +236,32 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
                       onClick={() => handleDeleteNote(note.id)}
                       disabled={isDeleting}
                       aria-label={isRowDeleting ? 'Removendo nota...' : 'Remover nota'}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded p-1 opacity-0 transition-opacity hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50 group-hover:opacity-100"
                     >
                       {isRowDeleting ? (
-                        <Loader2 className="w-3 h-3 text-destructive animate-spin" aria-hidden="true" />
+                        <Loader2
+                          className="h-3 w-3 animate-spin text-destructive"
+                          aria-hidden="true"
+                        />
                       ) : (
-                        <Trash2 className="w-3 h-3 text-destructive" aria-hidden="true" />
+                        <Trash2 className="h-3 w-3 text-destructive" aria-hidden="true" />
                       )}
                     </motion.button>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <Avatar className="w-4 h-4">
-                    <AvatarImage src={note.author?.avatar_url || undefined} alt={note.author?.name || ""} />
+                <div className="mt-2 flex items-center gap-2">
+                  <Avatar className="h-4 w-4">
+                    <AvatarImage
+                      src={note.author?.avatar_url || undefined}
+                      alt={note.author?.name || ''}
+                    />
                     <AvatarFallback className="text-[8px]">
                       {note.author?.name?.[0] || '?'}
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-[10px] text-muted-foreground">
-                    {note.author?.name || 'Desconhecido'} • {format(new Date(note.created_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                    {note.author?.name || 'Desconhecido'} •{' '}
+                    {format(new Date(note.created_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
                   </span>
                 </div>
               </motion.div>
@@ -264,12 +270,9 @@ export function PrivateNotes({ contactId }: PrivateNotesProps) {
         </AnimatePresence>
 
         {notes.length === 0 && !isAddingNote && (
-          <p className="text-xs text-muted-foreground text-center py-4">
-            Nenhuma nota adicionada
-          </p>
+          <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma nota adicionada</p>
         )}
       </div>
     </div>
   );
-
 }

@@ -51,18 +51,19 @@ git commit -m "feat: Fix Bug"          # case errado
 git commit -m "feat: x"               # muito curto
 ```
 
-## Branch Strategy
+## Branch Strategy (política de commits v2 — 2026-08-24)
 
-- `main` — produção (protegida)
-- Feature branches: `feat/nome-da-feature`
-- Fix branches: `fix/nome-do-bug`
+- `main` — produção; merge **somente via PR com CI verde**; merge é ato humano (Joaquim); nunca push direto (nenhum agente/sessão)
+- Branches `fix/`, `feat/`, `docs/`, `chore/`, `ci/`, `hotfix/` — sempre criados de `origin/main` atualizada
+- Sessões/agentes concorrentes na mesma máquina: worktree própria (`git worktree add`)
+- Política canônica: `HERMES.md` (seção "Padrões obrigatórios")
 
 ## Pull Requests
 
-1. Fork ou branch a partir de `main`
-2. Commits seguindo Conventional Commits
-3. PR contra `main`
-4. CI deve passar (TypeScript, ESLint, build, security)
+1. Branch a partir de `origin/main` atualizada
+2. Commits seguindo Conventional Commits (`tipo(escopo): mensagem`, pt-BR)
+3. PR contra `main` (usar o template `.github/PULL_REQUEST_TEMPLATE.md`)
+4. CI deve passar (TypeScript, ESLint, build, security) — merge só com CI verde, pelo dono
 
 ## Code Style
 
@@ -70,7 +71,7 @@ git commit -m "feat: x"               # muito curto
 - ESLint + Prettier
 - Sem `// @ts-nocheck` em arquivos novos
 - `.single()` → `.maybeSingle()` para queries que podem retornar 0 linhas
-- Realtime subscriptions: `schema: 'public'` (mesmo apontando para zapp)
+- Realtime subscriptions: sempre pela relation **física** presente na `supabase_realtime` (`schema: 'evo'` para `evolution_*`, `schema: 'zapp'` para `profiles`/`app_notifications`) — views e partições não emitem CDC (regra 4 do `CLAUDE.md`)
 
 ## Database
 
@@ -91,3 +92,14 @@ O schema `evo` tem dono único: **evolution-stack** (ADR-015). Mudanças que toc
 4. **PRs cross-repo:** todo PR que toca a fronteira cita o issue-link e menciona o ADR-015 na descrição; merge na ordem expand→contract.
 5. **Gates:** migrations novas com `evo.*` no zapp-web-v3 falham o CI (E42); DDL `zapp.*` no evolution-stack falha (E43). Exceções só via allowlist com justificativa.
 6. **Teste:** mudança de contrato exige teste que falhe sem a mudança (RED→GREEN).
+
+## Instalando componentes shadcn/ui
+
+Sempre use o wrapper pinado para Tailwind v3:
+
+```bash
+bash scripts/shadcn-v3.sh add <componente>
+```
+
+O `npx shadcn@latest` instala componentes Tailwind v4 incompatíveis com o
+build atual. O wrapper acima aponta para `shadcn@2.3.0` (última versão v3).

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMountedRef } from '@/hooks/useMountedRef';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { AlertTriangle, Shield, Ban, Clock, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';

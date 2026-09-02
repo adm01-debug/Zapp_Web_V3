@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, QrCode, Stethoscope, RefreshCw, Loader2, Activity } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { evolutionInstanceName } from '@/lib/evolutionInstance';
 
@@ -135,7 +135,9 @@ export function DegradedQuickActions({ connections, onShowQrCode }: Props) {
                             <Badge
                               variant="outline"
                               className={cn('h-4 gap-1 px-1.5 font-mono text-[10px]', latency.tone)}
-                            > {/* @technical */}
+                            >
+                              {' '}
+                              {/* @technical */}
                               <Activity className="h-2.5 w-2.5" />
                               {latency.label}
                             </Badge>

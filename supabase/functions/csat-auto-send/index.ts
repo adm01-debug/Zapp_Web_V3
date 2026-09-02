@@ -21,6 +21,7 @@ import {
   jsonResponse,
   errorResponse,
 } from "../_shared/cors.ts";
+import { errorEnvelope, checkRateLimit, getClientIP } from "../_shared/validation.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CsatAutoSendV1Schema } from "../_shared/contract-schemas.ts";
 
@@ -84,7 +85,16 @@ Deno.serve(async (req: Request) => {
   // Require authenticated user (service_role is also accepted via sub=service_role)
   const userId = getAuthUserId(req);
   if (!userId) {
-    return errorResponse(req, "Unauthorized: user session required", 401);
+    return errorEnvelope("unauthorized", "Unauthorized: user session required", 401, req, undefined, getCorsHeaders(req));
+  }
+
+  // Rate limit por-isolate, chaveado por IP: getAuthUserId lê o payload SEM
+  // verificar assinatura (sub é spoofável) — IP é a chave honesta. Agendar
+  // envios é write + custo; 60/min fica entre as irmãs (sla-alert-forward
+  // 30/min/user, zapp-email-inbound-webhook 120/min global). PLANO-100 etapa 28.
+  const rl = checkRateLimit(`csat-auto-send:${getClientIP(req)}`, 60, 60_000);
+  if (!rl.allowed) {
+    return errorEnvelope("rate_limit_exceeded", "Rate limit exceeded", 429, req, undefined, getCorsHeaders(req));
   }
 
   if (req.method !== "POST") {
@@ -253,6 +263,6 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[csat-auto-send] unhandled error:", msg);
-    return errorResponse(req, "Internal server error", 500);
+    return errorEnvelope("internal_error", "Internal server error", 500, req, undefined, getCorsHeaders(req));
   }
 });

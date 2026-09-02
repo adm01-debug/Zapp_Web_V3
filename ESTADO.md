@@ -1,5 +1,9 @@
 # ESTADO.md — Registro do que esta LIGADO
 
+**Última verificação:** 2026-08-25 (pós-sprint feat/chat-ui-100 P01–P50)
+→ Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
+
+
 > **Nota pós-desacoplamento (2026-08-12):** A infraestrutura da Evolution API (servidor, consumer, stacks Swarm)
 > foi extraída para o repo separado [adm01-debug/evolution-stack](https://github.com/adm01-debug/evolution-stack).
 > O inventário abaixo reflete o estado do app zapp-web-v3 (edge functions, frontend, banco).
@@ -10,8 +14,27 @@
 > Uma pergunta por componente: **esta ligado? quem chama?**
 > Nao adicione secao de arquitetura, plano ou roadmap aqui. Isso morre em `docs/`.
 
-Ultima verificacao: **2026-08-08** | COMPLETO: P1/P2/P4/P6/P7 | 3 funcoes arquivadas | Storage 28->16 GB (-43%)
-Baseline desacoplamento T0: **2026-08-15** | Score 3/9 (33%) — Nota D | ver seção Desacoplamento abaixo
+Ultima verificacao: **2026-08-20** (pos-auditoria RELATORIO-AUDITORIA-ZAPP-20260820 + plano de correcao 100 etapas) | F-001..F-012 fechados | ver secao "Plano de correcao 100 etapas" abaixo
+Verificacao anterior: 2026-08-08 | COMPLETO: P1/P2/P4/P6/P7 | 3 funcoes arquivadas | Storage 28->16 GB (-43%)
+Baseline desacoplamento T0: **2026-08-15** | Score 3/9 (33%) — Nota D | Medicao 2026-08-20: **I2 = 0** (ultima funcao fora do padrao, evo.fn_filter_canary_messages, movida para zapp) | ver seção Desacoplamento abaixo
+
+## Plano de correcao 100 etapas — EXECUTADO (2026-08-20/21)
+
+Fechamento dos 12 findings da auditoria de 2026-08-20 (relatorio em `/workspace/notes/audit-zapp/RELATORIO-20260820.md`).
+Relatorio completo de execucao: `docs/audits/EXECUCAO-PLANO-20260820.md`.
+
+- **F-001** watchdog de midia (job 524): ressuscitado como `zapp.fn_media_queue_stalled_alert()` — succeeded em todos os ticks, alertas reais emitidos.
+- **F-002** outage 14/08: recuperado pelo reconcile (delta FDW janela 13-17/08: PG14 23.696 vs evo 23.703 — perda real 0). Sentinela preventiva horaria criada (cron 556 `fdw-delta-sentinel-30min`).
+- **F-003/F-004** migrations: colisao 20260818140000 resolvida (repo + banco), sentinels versionados retroativamente, snapshot canonico `scripts/decouple/snapshots/zapp_schema_snapshot.sql` regenerado (pipeline E41 do drift-gate).
+- **F-005** grants: DML de `authenticated` em `evo.*` = 0 (revoke `ml004` 2026-08-19; validado).
+- **F-006/F-007** FKs/indices: FKs de `media_download_queue` = clones internos PG15 (falso positivo, reconstruidos); 0 grupos de indices duplicados; 0 FKs sem indice (zapp+evo).
+- **F-008** docs IA: comments tabelas zapp 100% (386/386), evo 100% (74/74), colunas zapp 22,7% -> **47,7%**, rpc_* evo 100%; `docs/DICIONARIO-BANCO.md` gerado.
+- **F-009** sprawl: 24 tabelas tmp removidas/movidas p/ `_backups` (GATE-B); 242 tabelas vazias mapeadas em `docs/MODULOS-INATIVOS.md` (nada dropado).
+- **F-010** retencao: webhook_events_processed 7d (cron 546) + traefik_401_stats 7d (cron 551) — 600k -> 194k rows.
+- **F-011** este arquivo + dicionario atualizados; boundary surface: 26 `evo.rpc_boundary_*` + 10 `zapp.rpc_boundary_*`; edge functions no repo: **123**.
+- **F-012** containers orfaos: 4 removidos (GATE-C). RECORRENCIA detectada: edge-runtime vazado por CI gate6 (`gallant_lederberg`) — pendente GATE-C2 + fix no workflow do evolution-stack.
+- **Achados novos corrigidos**: cron 213 `fn_run_media_health_alert` quebrado (coluna `body` -> `message` + cast enum); 2 grupos novos de indices duplicados; 4 FKs sem indice.
+- **Achado novo em aberto (P1 operacional)**: consumidor de downloads de midia parado desde 10/08 (0 done em 24h; 2.096 pending de backfill enfileirado em 20/08) — watchdogs alertando corretamente; decisao de religar o worker e do dono do pipeline.
 
 ## Como foi medido
 
@@ -63,14 +86,17 @@ Proxima medicao planejada: T1 (apos E24 — Phase 1 completa)
 
 | Grupo | Qtd | Acao |
 |---|---|---|
-| A — chamada pelo front | 72 | manter |
+| A — chamada pelo front | 73 | manter |
 | B — chamada por outra edge fn | 3 | manter |
 | C — chamada por cron ativo | 0 | manter |
 | D — infra/chamador externo por design | 10 | manter |
 | E — VERIFICAR antes de decidir | 4 | investigar |
-| F — SEM CHAMADOR identificado | 18 | candidata a arquivar |
+| F — SEM CHAMADOR identificado | 17 | candidata a arquivar |
 
-**22 de 107 funcoes sem chamador confirmado.**
+**21 de 107 funcoes sem chamador confirmado.**
+> 2026-08-20 (plano-100 etapa 91): `client-observability` movida de F para A — chamador
+> declarado: `src/lib/webVitals.ts` (web-vitals), ligado em prod via build-arg
+> `VITE_ENABLE_CLIENT_OBSERVABILITY=true` no `deploy-vps.yml`.
 
 ---
 
@@ -79,15 +105,27 @@ Proxima medicao planejada: T1 (apos E24 — Phase 1 completa)
 Nenhum chamador em: front, outra edge function, cron ativo, N8N.
 Decisao de arquivar e do responsavel — esta lista e diagnostico, nao sentenca.
 
+> `email-health` arquivada em 2026-08-22 (PLANO-100-CONTRATOS-EDGE, Bloco 9,
+> etapa 96) — evidencia de contorno deliberado (frontend ja documentava "a
+> edge nao existe, dado real vem do RPC"), nao so ausencia de chamador. ADR
+> completo em `docs/_archive/email-health-ADR-2026-08-22.md`.
+
+> `zapp-google-calendar-sync` arquivada em 2026-08-25 (PLANO-100 fechamento,
+> sessao multi-frente) — ZERO chamadores (front/edge/cron/N8N/externo) e
+> contrato descrevendo API de sync que nunca existiu: endpoint sempre
+> respondia `synced:false` (sem credenciais Google Calendar no ambiente; o
+> ADR de 2026-08-18, que a mantinha como "status honesto", e preservado no
+> proprio `_archive`). Nao constava da tabela F acima por ter sido mantida
+> "por design" naquele ADR. ADR completo em
+> `docs/_archive/zapp-google-calendar-sync-ADR-2026-08-25.md`.
+
 | Funcao | Mencoes em teste | Mencoes em doc |
 |---|---|---|
 | `ai-auto-tag` | 0 | 0 |
 | `auto-close-conversations` | 0 | 0 |
 | `cleanup-rate-limit-logs` | 0 | 0 |
-| `client-observability` | 0 | 0 |
 | `contact-media` | 0 | 0 |
 | `db-health-monitor` | 0 | 0 |
-| `email-health` | 0 | 1 |
 | `evolution-retry-metrics` | 0 | 0 |
 | `fetch-whatsapp-avatar` | 0 | 0 |
 | `file-security-scanner` | 0 | 0 |
@@ -136,7 +174,7 @@ Verificar se ha trigger SQL, chamada externa ou se o agendamento foi perdido.
 
 ## A — Chamada pelo front
 
-<details><summary>72 funcoes</summary>
+<details><summary>73 funcoes</summary>
 
 - `ai-churn-analysis`
 - `ai-classify-tickets`
@@ -154,6 +192,7 @@ Verificar se ha trigger SQL, chamada externa ou se o agendamento foi perdido.
 - `chatbot-l1`
 - `classify-audio-meme`
 - `classify-sticker`
+- `client-observability`
 - `connection-health-check`
 - `connection-test`
 - `contacts-import`
@@ -530,6 +569,42 @@ Se for ligada no futuro, a logica de deteccao deve ser revisada para:
 
 ---
 
+## Módulo ChatPanel — plano de 100 etapas EXECUTADO (2026-08-21)
+
+Execução do plano de correções da auditoria 2026-08-20 (16 arquivos, leitura
+linha a linha). Plano executado em 10 blocos via branches paralelas.
+TSC baseline ao final: **0 erros**.
+
+| Bloco | Etapas | Escopo | Branch/PR |
+|-------|--------|--------|-----------|
+| 1 | 1–10 | Inicialização, guards e duplo Mod+E | PR #1355 |
+| 2 | 11–18 | Envio: inserts fantasma e handleSend | PR #1355 |
+| 3 | 19–30 | Typing / TTS / settings | PR #1355 |
+| 4 | 31–38 | Estado residual na troca de conversa | PR #1355 / #1358 |
+| 5 | 39–54 | Busca, filtros de falhas, paginação | PR #1358 |
+| 6 | 55–66 | Perf: isolar re-renders de keystroke (React.memo) | PR #1358 |
+| 7 | 67–76 | useChatPanelHandlers — UUID guard, stale closure, duplo-envio | PR #1358 |
+| 8 | 77–84 | ChatMessagesArea — filtro realtime UPDATE + timer cleanup | PR #1358 |
+| 9 | 85–90 | Tipos e lint — verificação (sem problemas reais) | PR #1358 |
+| 10 | 91–100 | Testes, ESTADO.md, push e PR | PR #1358 / PR #1359 |
+
+Correções de comportamento em produção:
+- Retry de envio preso à conversa (payload falho de A nunca reenvia para B).
+- Estado residual (reply/edição/sussurro/gravação/erro) zerado na troca de conversa.
+- Sussurro não perde mais o texto digitado nos caminhos anexo/JID/perfil.
+- Mídia encaminhada chega como mídia (antes só o aviso textual).
+- Keystroke isolado: digitar re-renderiza apenas a área do input.
+- Realtime do chat: UPDATE do fanout filtrado por `remote_jid`.
+- Playwright e2e das etapas 94–97 adicionados em PR #1359.
+- graphify atualizado: 29.272 nós, 54.808 arestas, 2.019 comunidades (commit `a07c785ff`).
+
+Achados ABERTOS (decisão fora do módulo — não corrigidos de propósito):
+- RLS `messages_update` restringe UPDATE a admin/supervisor → edição silenciosa para agentes comuns.
+- Dead keys `templatesWithVars` e `realtimeTranscription`: componentes prontos, sem abridor no código.
+- `ticketStore` segue overlay localStorage até as RPCs de status existirem.
+
+---
+
 ## Guard de bundle — LIGADO (2026-08-20)
 
 `bundle-secret-guard.yml` (GitHub Actions). Dispara pós-deploy (`workflow_run` do *Build & Deploy — ZAPP web v3*) + diário (cron `17 8 * * *`) + manual. Fail-closed.
@@ -538,4 +613,4 @@ Se for ligada no futuro, a logica de deteccao deve ser revisada para:
 - **Reforçado 2026-08-20 (commit 3fcc3223):** também valida que a anon key embutida é **ACEITA pelo Kong** — falha em 401 (`ANON_KEY_REJECTED`).
 - **Motivo:** incidente 2026-08-20 — bundle embutia anon key de outro ambiente; `role` era `anon`, então o check antigo (só role) passou cego. Ver `CLAUDE.md › Incidentes fechados`.
 
-Estado dos 3 hosts após o fix: **200**, servidos pela VPS (Traefik stack 157), key `== Kong`. `www.zappweb.app.br` **fora da Vercel** (DNS `209.142.67.51`). Guard verificado verde no run 32422659816.
+Estado dos 3 hosts após o fix: **200**, servidos pela VPS (Traefik stack 157), key `== Kong`. `www.zappweb.app.br` **fora da Vercel** (DNS `<IP-VPS>`). Guard verificado verde no run 32422659816.

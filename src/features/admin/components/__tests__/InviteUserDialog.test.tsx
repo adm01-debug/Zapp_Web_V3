@@ -14,7 +14,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { InviteUserDialog } from '../InviteUserDialog';
 
-function setup(onInvite: (payload: { email: string; role: 'admin' | 'supervisor' | 'agent'; message?: string }) => Promise<boolean>) {
+function setup(
+  onInvite: (payload: {
+    email: string;
+    role: 'admin' | 'supervisor' | 'agent';
+    message?: string;
+  }) => Promise<boolean>
+) {
   const onOpenChange = vi.fn();
   render(<InviteUserDialog open onOpenChange={onOpenChange} onInvite={onInvite} />);
   return { onOpenChange };
@@ -30,7 +36,9 @@ describe('InviteUserDialog (E57)', () => {
     const { onOpenChange } = setup(onInvite);
 
     fireEvent.change(screen.getByLabelText('Email *'), { target: { value: 'novo@atomica.br' } });
-    fireEvent.change(screen.getByLabelText('Mensagem (opcional)'), { target: { value: 'Bem-vindo!' } });
+    fireEvent.change(screen.getByLabelText('Mensagem (opcional)'), {
+      target: { value: 'Bem-vindo!' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Convite' }));
 
     await waitFor(() => expect(onInvite).toHaveBeenCalledTimes(1));
@@ -46,7 +54,9 @@ describe('InviteUserDialog (E57)', () => {
     const onInvite = vi.fn().mockResolvedValue(false);
     const { onOpenChange } = setup(onInvite);
 
-    fireEvent.change(screen.getByLabelText('Email *'), { target: { value: 'duplicado@atomica.br' } });
+    fireEvent.change(screen.getByLabelText('Email *'), {
+      target: { value: 'duplicado@atomica.br' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Convite' }));
 
     await waitFor(() => expect(onInvite).toHaveBeenCalledTimes(1));
@@ -73,5 +83,24 @@ describe('InviteUserDialog (E57)', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Email inválido');
     expect(onInvite).not.toHaveBeenCalled();
+  });
+
+  it('Bloco 7 (etapa 76/81): fieldErrors.email do 422 canônico substitui o erro genérico', async () => {
+    const onInvite = vi.fn().mockResolvedValue(false);
+    const onOpenChange = vi.fn();
+    render(
+      <InviteUserDialog
+        open
+        onOpenChange={onOpenChange}
+        onInvite={onInvite}
+        fieldErrors={{ email: 'e-mail já convidado nas últimas 24h' }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Email *'), { target: { value: 'ja@atomica.br' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar Convite' }));
+
+    await waitFor(() => expect(onInvite).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('alert')).toHaveTextContent('e-mail já convidado nas últimas 24h');
   });
 });

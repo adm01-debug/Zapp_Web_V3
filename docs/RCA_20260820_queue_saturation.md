@@ -155,13 +155,13 @@ CREATE INDEX IF NOT EXISTS idx_rt_fanout_mirrored ON zapp.realtime_message_fanou
 
 ### 7. `safeClient.ts` — AbortSignal em `from()` e `rpc()` (sessions 2026-08-20 a 2026-09-02)
 
-- **Adicionado:** `opts?: { signal?: AbortSignal | null }` em `safeClient.from()` e `safeClient.rpc()`
-- **Adicionado:** early-exit em ambos: se `opts?.signal?.aborted` antes de entrar na fila do semáforo, retorna imediatamente sem consumir slot
+- **Adicionado:** `signal?: AbortSignal` como 3º arg em `safeClient.from()` e 4º em `safeClient.rpc()`
+- **Adicionado:** early-exit em ambos: se `signal?.aborted` antes de entrar na fila do semáforo, retorna imediatamente sem consumir slot
 - **Corrigido:** catch de AbortError rebaixado para WARN (não ERROR) em `from()`, alinhado com `rpc()`
 
 ### 8. Propagação de AbortSignal em queries adicionais (sessão 2026-09-02)
 
-- **`useConversationEventsData.ts`:** `queryFn({ signal })` + `.abortSignal(signal)` + `{ signal }` no 3º arg de `safeClient.from()`
+- **`useConversationEventsData.ts`:** `queryFn({ signal })` + `signal` como 3º arg de `safeClient.from()`
 - **`useInboxDataQueries.ts`:** `queryFn({ signal })` em ambas as queries; loop de chunks com `if (signal?.aborted) break`; `.abortSignal(signal)` em cada request
 
 ### 9. Regressão fanout `contact_id` (migration `20260821000000`)
@@ -169,6 +169,7 @@ CREATE INDEX IF NOT EXISTS idx_rt_fanout_mirrored ON zapp.realtime_message_fanou
 Ao reescrever `fn_rt_fanout_insert` na migration `20260820230000`, `contact_id` e `id` foram omitidos. Resultado: todos os eventos Realtime chegavam com `contact_id = null` → `scheduleConversationCacheInvalidation(null)` era no-op → debounce nunca disparava.
 
 **Fix:** `20260821000000_fix_fanout_insert_contact_id.sql` restaura `id = NEW.id` e `contact_id = COALESCE(NEW.contact_id, evo.rpc_boundary_lookup_contact_id(...))`.
+
 
 ---
 
@@ -204,10 +205,10 @@ src/features/inbox/hooks/useInboxDataQueries.ts
 | `MAX_CONCURRENT` alinhado (6→8) | `f9f4c90` | ✅ Em produção |
 | `isAbortLikeError()` unificada | `82e52b7` + `b47280b` | ✅ Em produção |
 | Regressão `contact_id` no fanout | `82e52b7` | ✅ Em produção |
-| `safeClient.from()` com AbortSignal + early-exit | `031738e` | ✅ PR #1356 (draft) |
-| `safeClient.rpc()` com AbortSignal + early-exit | `031738e` | ✅ PR #1356 (draft) |
-| `useConversationEventsData` AbortSignal | `031738e` | ✅ PR #1356 (draft) |
-| `useInboxDataQueries` AbortSignal | `031738e` | ✅ PR #1356 (draft) |
+| `safeClient.from()` com AbortSignal + early-exit | `031738e` | ✅ PR #1494 (draft) |
+| `safeClient.rpc()` com AbortSignal + early-exit | `031738e` | ✅ PR #1494 (draft) |
+| `useConversationEventsData` AbortSignal | `031738e` | ✅ PR #1494 (draft) |
+| `useInboxDataQueries` AbortSignal | `031738e` | ✅ PR #1494 (draft) |
 
 ---
 

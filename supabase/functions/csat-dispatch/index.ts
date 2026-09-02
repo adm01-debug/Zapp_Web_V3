@@ -23,6 +23,8 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { evolutionClient } from "../_shared/providers/evolution/index.ts";
+import { readJsonBodyOrEmpty } from "../_shared/validation.ts";
+import { redactJid } from "../_shared/evolution-helpers.ts";
 
 const DEFAULT_LIMIT = 50;
 
@@ -54,7 +56,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // Cron chama sem body; {} é aceito. Contrato csat-dispatch@v1.
-  const parsed = parseOrReject("csat-dispatch", CONTRACT_SCHEMAS["csat-dispatch"], req, await req.json().catch(() => ({})), {
+  const parsed = parseOrReject("csat-dispatch", CONTRACT_SCHEMAS["csat-dispatch"], req, await readJsonBodyOrEmpty(req), {
     extraHeaders: getCorsHeaders(req),
   });
   if (parsed.ok === false) return parsed.response;
@@ -102,7 +104,7 @@ Deno.serve(async (req: Request) => {
 
       try {
         if (dryRun) {
-          console.log(`[csat-dispatch][dry-run] survey=${survey.survey_id} instance=${survey.instance_name} phone=${survey.phone}`);
+          console.info(`[csat-dispatch][dry-run] survey=${survey.survey_id} instance=${survey.instance_name} phone=${redactJid(survey.phone)}`);
           // Devolve o survey ao estado 'scheduled' (não foi enviado)
           const { error: resetErr } = await supabase
             .from("csat_surveys")

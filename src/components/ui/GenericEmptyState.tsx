@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -33,7 +33,7 @@ export function GenericEmptyState({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-      className={cn('flex flex-col items-center justify-center py-16 px-6 text-center', className)}
+      className={cn('flex flex-col items-center justify-center px-6 py-16 text-center', className)}
     >
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
@@ -41,21 +41,21 @@ export function GenericEmptyState({
         transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 15 }}
         className="relative mb-8"
       >
-        <div className="w-20 h-20 rounded-3xl bg-primary flex items-center justify-center shadow-glow-primary">
-          <Icon className="w-10 h-10 text-primary-foreground" />
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary shadow-glow-primary">
+          <Icon className="h-10 w-10 text-primary-foreground" />
         </div>
-        <motion.div 
+        <motion.div
           animate={{ scale: [1, 1.2, 1] }}
           transition={{ duration: 2, repeat: Infinity }}
-          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent border-4 border-background" 
+          className="absolute -right-2 -top-2 h-6 w-6 rounded-full border-4 border-background bg-accent"
         />
       </motion.div>
 
-      <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">{description}</p>
+      <h3 className="mb-2 text-lg font-semibold text-foreground">{title}</h3>
+      <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">{description}</p>
 
       {(actionLabel || secondaryActionLabel) && (
-        <div className="flex items-center gap-3 mt-6">
+        <div className="mt-6 flex items-center gap-3">
           {actionLabel && onAction && (
             <Button onClick={onAction} size="sm" className="gap-2">
               {actionLabel}

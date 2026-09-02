@@ -22,7 +22,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { createZappAdminClient } from '../_shared/db-client.ts';
 import { verifyHmacSignature } from "../_shared/hmac-validation.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { markEventProcessed, shouldUpdateStatus } from "../_shared/evolution-helpers.ts";
 import {
@@ -33,6 +33,7 @@ import {
 
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 import { timingSafeStringEqual } from '../_shared/auth.ts';
+import { errorEnvelope } from '../_shared/validation.ts';
 interface MetaWAMessage {
   from: string;
   id: string;
@@ -49,7 +50,11 @@ interface MetaWAContact {
   profile?: { name?: string };
 }
 
-/** Shape do body Meta validado pelo contrato (object + entry[].changes[]). */
+/**
+ * Shape do body Meta validado pelo contrato (object + entry[].changes[]).
+ * entry pode ser `null` (etapa 24, 2026-08-21) — notificação benigna
+ * estruturalmente vazia, aceita pelo schema (ver webhook-schemas.ts).
+ */
 interface MetaWebhookBody {
   object: string;
   entry: Array<{
@@ -63,7 +68,7 @@ interface MetaWebhookBody {
         statuses?: Array<Record<string, unknown>>;
       };
     }>;
-  }>;
+  }> | null;
 }
 
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN") ?? "";
@@ -88,7 +93,7 @@ function reqId(): string {
 
 // Registra atividade do webhook (best-effort, nunca bloqueia o fluxo)
 async function recordPing(
-  kind: "handshake" | "event" | "invalid_signature" | "invalid_token",
+  kind: "handshake" | "event" | "invalid_signature" | "invalid_token" | "webhook_misconfigured",
   meta: Record<string, unknown> = {},
 ): Promise<void> {
   try {
@@ -185,20 +190,6 @@ async function persistStatus(status: NormalizedStatus): Promise<"updated" | "ski
   }
 }
 
-/**
- * [W5] Notificação vazia/benigna da Meta (entry null ou []) → ack 200 sem crash.
- * Payload JSON válido com object=whatsapp_business_account e entry nulo/vazio
- * não é violação de contrato digna de 422 (que provocaria retry-storm da Meta
- * por até 24h) — é ack silencioso. Entry AUSENTE continua caindo no contrato 422.
- */
-function isBenignEmptyNotification(body: unknown): boolean {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-  const b = body as Record<string, unknown>;
-  if (b.object !== "whatsapp_business_account") return false;
-  const entry = b.entry;
-  return entry === null || (Array.isArray(entry) && entry.length === 0);
-}
-
 Deno.serve(async (req) => {
   const rid = reqId();
 
@@ -229,10 +220,16 @@ Deno.serve(async (req) => {
   const rawBody = await req.text();
   const signature = req.headers.get("x-hub-signature-256") ?? "";
 
-  // [W5] HMAC obrigatório quando o secret ESTÁ configurado: assinatura ausente ou
-  // incorreta → 401. Secret NÃO configurado → warning + segue (dev mode) — o
-  // antigo fail-closed 503 (WHATSAPP_CLOUD_WEBHOOK_STRICT) foi removido em favor
-  // deste comportamento explícito (requisito W5.1).
+  // [W5] HMAC obrigatório quando o secret ESTÁ configurado: assinatura ausente
+  // ou incorreta → 401.
+  // SEC-5 (2026-08-21): secret NÃO configurado agora falha-fechado (503), como
+  // evolution-webhook e zapp-email-inbound-webhook. O comportamento anterior
+  // (warning + segue, "dev mode") aceitava qualquer POST sem autenticação
+  // enquanto o secret não fosse provisionado — mesma classe de risco que o
+  // fail-closed de evolution-webhook (A-1 FIX 2026-07-12) já existe para
+  // prevenir. Este endpoint serve o modo Meta OFICIAL, hoje inativo em
+  // produção (o modo ativo é evolution-webhook) — sem risco de regressão
+  // funcional, só remove uma janela de exposição pré-existente.
   if (APP_SECRET) {
     const ok = signature
       ? await verifyHmacSignature(rawBody, signature, APP_SECRET)
@@ -242,45 +239,43 @@ Deno.serve(async (req) => {
         `[whatsapp-cloud-webhook][${rid}] invalid signature (hasSig=${!!signature})`,
       );
       void recordPing("invalid_signature", { rid, hasSig: !!signature });
-      return new Response(
-        JSON.stringify({ error: "invalid_signature", requestId: rid }),
-        { status: 401, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-      );
+      return errorEnvelope("invalid_signature", "Assinatura HMAC inválida.", 401, req, { requestId: rid });
     }
   } else {
-    console.warn(
-      `[whatsapp-cloud-webhook][${rid}] WHATSAPP_CLOUD_APP_SECRET not configured — signature validation skipped (dev mode)`,
+    console.error(
+      `[whatsapp-cloud-webhook][${rid}] WHATSAPP_CLOUD_APP_SECRET not configured — refusing (fail-closed)`,
+    );
+    void recordPing("webhook_misconfigured", { rid });
+    return errorEnvelope(
+      "webhook_misconfigured",
+      "WHATSAPP_CLOUD_APP_SECRET não configurado.",
+      503,
+      req,
+      { reason: "no_secret_configured", requestId: rid },
+      { "Retry-After": "120" },
     );
   }
 
+  // Bloco 2 (etapa 24, 2026-08-21 — fecha D3): JSON malformado agora vira
+  // null e deixa o gate abaixo emitir o 422 invalid_json canônico, em vez de
+  // um 400 artesanal fora do envelope único (o mesmo padrão de
+  // readJsonBodyOrEmpty, adaptado aqui porque o body já foi lido como texto
+  // pra verificação de assinatura HMAC — não dá pra reler o stream).
   let body: unknown;
   try {
     body = JSON.parse(rawBody);
   } catch {
-    return new Response(
-      JSON.stringify({ error: "invalid_json", requestId: rid }),
-      { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-    );
-  }
-
-  // [W5] Notificação vazia da Meta → 200 benigno ANTES do contrato (evita 422 →
-  // retry-storm da Meta para payload estruturalmente inofensivo).
-  if (isBenignEmptyNotification(body)) {
-    console.log(`[whatsapp-cloud-webhook][${rid}] benign empty notification (entry null/empty) — acked`);
-    void recordPing("event", { rid, processed: 0, duplicates: 0, ignoredFields: 0, benign: true });
-    return new Response(
-      JSON.stringify({
-        ok: true, processed: 0, duplicates: 0, ignoredFields: 0,
-        statusesUpdated: 0, statusesSkipped: 0, statusesOrphan: 0,
-        duplicate: false, benign: true, requestId: rid,
-      }),
-      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-    );
+    body = null;
   }
 
   // Contrato whatsapp-cloud-webhook@v1/v2: parseOrReject com o schema Meta
-  // (object=whatsapp_business_account + entry[]). Permissivo — campo novo do
-  // provedor nunca derruba a ingestão; falha real → envelope 422 único.
+  // (object=whatsapp_business_account + entry[]|null). Permissivo — campo
+  // novo do provedor nunca derruba a ingestão; falha real → envelope 422
+  // único. `entry` null/[] (notificação benigna da Meta) é aceito pelo
+  // próprio schema (etapa 24) — não precisa mais de bypass manual antes do
+  // gate pra evitar 422/retry-storm; o caminho de sucesso abaixo já trata
+  // entries vazio corretamente (loop não roda, processed/duplicates/etc
+  // ficam 0).
   const parsed = parseOrReject('whatsapp-cloud-webhook', CONTRACT_SCHEMAS['whatsapp-cloud-webhook'], req, body, {
     requestId: rid,
     extraHeaders: { ...getCorsHeaders(req), "Content-Type": "application/json" },
@@ -358,22 +353,33 @@ Deno.serve(async (req) => {
       else statusesSkipped++;
     }
 
-    void recordPing("event", { rid, processed, duplicates, ignoredFields, statusesUpdated, statusesSkipped, statusesOrphan });
-    return new Response(
-      JSON.stringify({
+    // benign: entry null/[] (notificação estruturalmente vazia da Meta) —
+    // mesmo sinal que o bypass manual pré-gate emitia antes da etapa 24,
+    // agora computado no caminho único (não muda o significado, só onde é
+    // calculado: o gate já validou e aceitou o payload normalmente).
+    const benign = entries.length === 0;
+    void recordPing("event", { rid, processed, duplicates, ignoredFields, statusesUpdated, statusesSkipped, statusesOrphan, benign });
+    // Bloco 5 (2026-08-21): propaga parsed.headers (x-contract-version/
+    // deprecated/sunset) — antes nunca chegava ao cliente.
+    // Etapa 54 (PLANO-100-CONTRATOS-EDGE): propagação agora via
+    // respondWithContract (contract-kit), sem spread manual.
+    return respondWithContract(
+      parsed,
+      {
         ok: true, processed, duplicates, ignoredFields,
         statusesUpdated, statusesSkipped, statusesOrphan,
-        duplicate: duplicates > 0, requestId: rid,
-      }),
-      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        duplicate: duplicates > 0, ...(benign ? { benign: true } : {}), requestId: rid,
+      },
+      { status: 200, headers: getCorsHeaders(req) },
     );
   } catch (e) {
     console.error(`[whatsapp-cloud-webhook][${rid}] error`, e);
-    return new Response(
-      JSON.stringify({ ok: false, requestId: rid }),
+    return respondWithContract(
+      parsed,
+      { ok: false, requestId: rid },
       {
         status: 200, // ack para evitar retry-storm da Meta
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        headers: getCorsHeaders(req),
       },
     );
   }

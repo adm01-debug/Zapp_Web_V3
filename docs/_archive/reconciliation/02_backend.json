@@ -3,7 +3,7 @@
   "project": "zapp-web-v3",
   "collected_at": "2026-08-04",
   "method": "SQL read-only via MCP supabase_db_query",
-  "endpoint": "https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp",
+  "endpoint": "https://supabase-mcp.atomicabr.com.br/s-REDACTED-rotacionado-20260824/mcp",
   "highlights": {
     "zapp_census_confirmed": {
       "tables": 321,

@@ -148,6 +148,13 @@
     --chat-bubble-sent-foreground: 0 0% 100%;
     --chat-bubble-received: 221 15% 95%;
     --chat-bubble-received-foreground: 221 20% 15%;
+    /* E23: chat-sent/received design tokens */
+    --chat-sent:            var(--primary);
+    --chat-sent-fg:         var(--primary-foreground);
+    --chat-received:        var(--muted);
+    --chat-received-fg:     var(--muted-foreground);
+    --chat-sent-border:     color-mix(in srgb, hsl(var(--primary)) 30%, transparent);
+    --chat-received-border: hsl(var(--border));
     --chat-header: 0 0% 100%;
     --chat-input-bg: 0 0% 100%;
 
@@ -284,6 +291,13 @@
     --chat-bubble-sent-foreground: 0 0% 100%;
     --chat-bubble-received: 0 0% 8%; /* Levemente mais escuro para OLED */
     --chat-bubble-received-foreground: 0 0% 98%;
+    /* E23: chat-sent/received design tokens (dark) */
+    --chat-sent:            var(--primary);
+    --chat-sent-fg:         var(--primary-foreground);
+    --chat-received:        var(--muted);
+    --chat-received-fg:     var(--muted-foreground);
+    --chat-sent-border:     color-mix(in srgb, hsl(var(--primary)) 30%, transparent);
+    --chat-received-border: hsl(var(--border));
     --chat-header: 0 0% 0%;
     --chat-input-bg: 0 0% 0%;
     --status-open: 221 95% 55%;

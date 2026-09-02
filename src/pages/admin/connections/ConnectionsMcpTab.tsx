@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Cpu, ShieldCheck, ExternalLink } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { MCP_SERVER_URL } from '../useConnections';
 
 /** Connections Mcp Tab. */
@@ -45,7 +45,8 @@ export function ConnectionsMcpTab() {
                 readOnly
                 value={MCP_SERVER_URL}
                 className="font-mono text-[10px]"
-              /> {/* @technical */}
+              />{' '}
+              {/* @technical */}
               <Button aria-label="Abrir URL do servidor MCP" size="icon" variant="ghost">
                 <ExternalLink className="h-4 w-4" />
               </Button>
@@ -71,7 +72,9 @@ export function ConnectionsMcpTab() {
             </div>
           </div>
 
-          <div className="overflow-x-auto whitespace-pre rounded border border-secondary/20 bg-muted p-3 font-mono text-[10px]"> {/* @technical */}
+          <div className="overflow-x-auto whitespace-pre rounded border border-secondary/20 bg-muted p-3 font-mono text-[10px]">
+            {' '}
+            {/* @technical */}
             {`"mcpServers": {
   "zapp-web": {
     "command": "npx",

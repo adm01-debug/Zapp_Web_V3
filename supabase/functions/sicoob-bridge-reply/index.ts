@@ -1,8 +1,8 @@
-import { handleCors, errorResponse, jsonResponse, Logger } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, Logger } from "../_shared/validation.ts";
 import { requireUser, requireServiceRoleOnly, getBearer, timingSafeStringEqual } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { fetchWithRetry } from "../_shared/retry-with-backoff.ts";
 
@@ -11,6 +11,11 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   const log = new Logger("sicoob-bridge-reply");
+
+  // Hotfix (auditoria 2026-08-21, Bloco 5.1): mutável içada pra fora — precisa
+  // estar acessível também no catch-all (parsed é const, escopo do try), pra
+  // errorResponse() pós-gate não descartar x-contract-version/deprecated/sunset.
+  let contractResponseHeaders: Record<string, string> = {};
 
   try {
     const serviceRoleKey = Deno.env.get("SELFHOSTED_SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -44,14 +49,17 @@ Deno.serve(async (req) => {
       extraHeaders: getCorsHeaders(req),
     });
     if (parsed.ok === false) return parsed.response;
+    contractResponseHeaders = parsed.headers;
+    // Bloco 2/3 (2026-08-21): schema agora exige contact_id/content de
+    // verdade — o 422 canônico já reprova payload inválido; o bloco 400
+    // manual que existia foi removido.
     const body = parsed.data as Record<string, any>;
-
-    // Guarda de compatibilidade: schema registrado é permissivo (placeholder);
-    // preserva o 400 do antigo parseBody(SicoobBridgeReplySchema).
-    const { contact_id, content, message_id, created_at } = body;
-    if (typeof contact_id !== 'string' || contact_id.length === 0 || typeof content !== 'string' || content.length === 0) {
-      return errorResponse('contact_id: Required, content: Required', 400, req);
-    }
+    const { contact_id, content, message_id, created_at } = body as {
+      contact_id: string;
+      content: string;
+      message_id?: string;
+      created_at?: string;
+    };
     // For service-role callers the body may carry agent_id; for user callers use JWT identity.
     if (!agent_id) agent_id = (body.agent_id as string | undefined) ?? null;
 
@@ -65,7 +73,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (!contact || contact.contact_type !== 'sicoob_gifts') {
-      return errorResponse('Contact is not a Sicoob Gifts contact', 400, req);
+      return errorResponse('Contact is not a Sicoob Gifts contact', 400, req, undefined, contractResponseHeaders);
     }
 
     // Get the mapping to find Sicoob IDs
@@ -76,7 +84,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (!mapping) {
-      return errorResponse('No Sicoob mapping found for this contact', 404, req);
+      return errorResponse('No Sicoob mapping found for this contact', 404, req, undefined, contractResponseHeaders);
     }
 
     // Get agent name when agent_id is known
@@ -118,19 +126,23 @@ Deno.serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
       log.error("Sicoob Gifts bridge error", { status: response.status, error: errorText.substring(0, 300) });
-      return errorResponse("Failed to forward reply to Sicoob Gifts", 502, req);
+      return errorResponse("Failed to forward reply to Sicoob Gifts", 502, req, undefined, contractResponseHeaders);
     }
 
     const result = await response.json();
     log.done(200);
-    return jsonResponse({ success: true, sicoob_response: result }, 200, req);
+    // Bloco 5 (2026-08-21): propaga x-contract-version/deprecated/sunset
+    // (parsed.headers) — antes desses headers nunca chegavam ao cliente.
+    // Etapa 54 (PLANO-100-CONTRATOS-EDGE): propagação agora via
+    // respondWithContract (contract-kit), sem spread manual.
+    return respondWithContract(parsed, { success: true, sicoob_response: result }, { status: 200, headers: getCorsHeaders(req) });
 
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       log.error("Sicoob Gifts bridge timed out");
-      return errorResponse('Gateway timeout forwarding to Sicoob Gifts', 504, req);
+      return errorResponse('Gateway timeout forwarding to Sicoob Gifts', 504, req, undefined, contractResponseHeaders);
     }
     log.error("Error", { error: error instanceof Error ? error.message : String(error) });
-    return errorResponse('Internal server error', 500, req);
+    return errorEnvelope('internal_error', 'Internal server error', 500, req, undefined, contractResponseHeaders);
   }
 });

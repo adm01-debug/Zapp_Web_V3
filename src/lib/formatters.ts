@@ -189,3 +189,67 @@ export function formatDuration(seconds: number): string {
 export function formatPercentage(value: number, decimals = 1): string {
   return `${(value * 100).toFixed(decimals)}%`;
 }
+
+// ─── WhatsApp Text Formatting ────────────────────────────────────────
+
+/**
+/**
+ * Converte marcações de formatação do WhatsApp em HTML.
+ *
+ * Regras suportadas:
+ *   *bold*       → <strong>bold</strong>
+ *   _italic_     → <em>italic</em>
+ *   ~strike~     → <del>strike</del>
+ *   `code`       → <code>code</code>
+ *   ```block```  → <code>block</code>
+ *   \n           → <br />
+ *
+ * Segurança: escapa HTML antes de processar (< > & " ').
+ *   A saída DEVE ser sanitizada com DOMPurify antes de dangerouslySetInnerHTML.
+ *   Use MarkdownPreview.tsx que já faz o ciclo completo com DOMPurify.
+ *
+ * Escape de marcadores: \* \_ \~ \` preservam o literal.
+ */
+export function formatWhatsAppText(text: string): string {
+  // 1. Escapar HTML para neutralizar injeção (B2 FIX — antes ausente)
+  let result = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  // 2. Preservar marcadores literais escapados via placeholder
+  const ESCAPE_MAP: Record<string, string> = {
+    '\\*': '\x00STAR\x00',
+    '\\_': '\x00UNDER\x00',
+    '\\~': '\x00TILDE\x00',
+    '\\`': '\x00TICK\x00',
+  };
+  for (const [seq, placeholder] of Object.entries(ESCAPE_MAP)) {
+    // split/join = replaceAll literal (ES2021) sem depender de lib ES2021
+    result = result.split(seq).join(placeholder);
+  }
+
+  // 3. Aplicar substituições (triple backtick antes do inline)
+  result = result.replace(/```([\s\S]*?)```/g, '<code>$1</code>');
+  result = result.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
+  result = result.replace(/_((?!_)[^_]+)_/g, '<em>$1</em>');
+  result = result.replace(/~([^~]+)~/g, '<del>$1</del>');
+  result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+  result = result.replace(/\n/g, '<br />');
+
+  // 4. Restaurar literais
+  const RESTORE_MAP: Record<string, string> = {
+    '\x00STAR\x00': '*',
+    '\x00UNDER\x00': '_',
+    '\x00TILDE\x00': '~',
+    '\x00TICK\x00': '`',
+  };
+  for (const [placeholder, char] of Object.entries(RESTORE_MAP)) {
+    // split/join = replaceAll literal (ES2021) sem depender de lib ES2021
+    result = result.split(placeholder).join(char);
+  }
+
+  return result;
+}

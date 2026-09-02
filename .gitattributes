@@ -61,3 +61,4 @@ bun.lock merge=ours
 *.sh      text eol=lf
 Dockerfile text eol=lf
 .env*     text eol=lf
+graphify-out/graph.json merge=graphify

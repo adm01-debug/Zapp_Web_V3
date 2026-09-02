@@ -26,8 +26,16 @@ import {
  *  2. Pure-validation codes migrated from 400 → 422 (HTTP + internal
  *     `status`), keeping the exact pt-BR message:
  *     INVALID_NUMBER, INVALID_PRESENCE, MISSING_INSTANCE, MISSING_NUMBER,
- *     INVALID_MESSAGE_KEY, INSTANCE_NAME_IS_UUID, and the raw
- *     `{ error: 'Invalid instance name' }` site (~line 98).
+ *     INVALID_MESSAGE_KEY, INSTANCE_NAME_IS_UUID. The raw
+ *     `{ error: 'Invalid instance name' }` site (~line 97) was migrated to
+ *     the canonical envelope (code INVALID_INSTANCE_NAME) in Bloco 2 /
+ *     etapa 22, 2026-08-21 — at the time believed to be the last surviving
+ *     non-envelope shape in this file, but 6 more (rate limit / not
+ *     configured x2 / unauthorized / unknown action / internal error) were
+ *     found in etapa 26 (2026-08-21) and migrated to `errorEnvelope()`
+ *     (`_shared/validation.ts`) — a lighter envelope than the domain one
+ *     above (no contract/details, just {error:true,code,message}), since
+ *     these are pre-flight/auth/500 errors, not payload validation failures.
  *  3. Non-validation codes are NOT migrated: MEDIA_EXPIRED stays 410,
  *     INSTANCE_PAUSED stays 503, INSTANCE_RATE_LIMIT stays 429, and the
  *     proxy re-emits upstream statuses (401/500/502/504…) unchanged.
@@ -68,6 +76,53 @@ Deno.test(
       block.includes("details: [{ path: 'number', message: 'number é obrigatório (E.164, dígitos 10-15)' }]"),
       "details deve apontar path 'number' com a message pt-BR exata",
     );
+  },
+);
+
+Deno.test(
+  "instance name inválido: envelope 422 canônico (Bloco 2, etapa 22 — era { error: 'Invalid instance name' } avulso)",
+  async () => {
+    const source = await readSource();
+    assert(
+      source.includes("code: 'INVALID_INSTANCE_NAME'"),
+      "code INVALID_INSTANCE_NAME presente",
+    );
+    assert(
+      source.includes("status: 422, code: 'INVALID_INSTANCE_NAME'"),
+      "status interno deve ser 422",
+    );
+    assert(
+      source.includes("contract: 'evolution-api@v1'") &&
+        /INVALID_INSTANCE_NAME[^}]*details: \[\{ path: 'instance'/.test(source),
+      "envelope deve carregar contract + details com path 'instance'",
+    );
+    assert(
+      !source.includes("JSON.stringify({ error: 'Invalid instance name' })"),
+      "shape avulso antigo não deve mais existir",
+    );
+  },
+);
+
+Deno.test(
+  "etapa 26 (Bloco 2): pre-flight/auth/500 migrados pra errorEnvelope, shape {error:true,code,message}",
+  async () => {
+    const source = await readSource();
+    assert(!/JSON\.stringify\(\{\s*error:\s*'[^']*'\s*\}/.test(source), "não deve sobrar {error:'string'} avulso no arquivo");
+    for (const [code, status] of [
+      ["rate_limit_exceeded", "429"],
+      ["evolution_api_not_configured", "503"],
+      ["unauthorized", "401"],
+      ["unknown_action", "404"],
+      ["internal_error", "500"],
+    ]) {
+      assert(
+        source.includes(`errorEnvelope('${code}',`) && source.includes(`, ${status}, req`),
+        `code '${code}' deve estar presente via errorEnvelope(...) com status ${status}`,
+      );
+    }
+    // evolution_api_not_configured aparece 2x (getBaseUrl falhou / key placeholder).
+    const occurrences = source.split(`errorEnvelope('evolution_api_not_configured',`).length - 1;
+    assertEquals(occurrences, 2, "evolution_api_not_configured deve cobrir os 2 pontos de config ausente");
   },
 );
 

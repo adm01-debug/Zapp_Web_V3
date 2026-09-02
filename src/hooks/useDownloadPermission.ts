@@ -19,7 +19,8 @@ export function useDownloadPermission() {
       return data.can_download === true;
     },
     enabled: !!user,
-    initialData: false,
+    // placeholderData mostra false enquanto carrega, mas não bloqueia o fetch como initialData faria.
+    placeholderData: false,
     // Perfil do usuário logado é quase-estático — staleTime longo evita
     // refetch do profiles?select=can_download&user_id=... a cada mount.
     staleTime: 5 * 60_000,

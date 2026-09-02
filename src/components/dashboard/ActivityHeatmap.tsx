@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -182,7 +182,14 @@ export const ActivityHeatmap = ({
           </div>
           <Select
             value={selectedPeriod}
-            onValueChange={(v) => setSelectedPeriod(v as '3m' | '6m' | '1y' /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */)}
+            onValueChange={(v) =>
+              setSelectedPeriod(
+                v as
+                  | '3m'
+                  | '6m'
+                  | '1y' /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */
+              )
+            }
           >
             <SelectTrigger className="w-[100px]">
               <SelectValue />

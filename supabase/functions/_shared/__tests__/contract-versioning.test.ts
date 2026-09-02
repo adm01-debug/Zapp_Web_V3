@@ -128,11 +128,14 @@ const WEBHOOK_FIXTURES = [
   },
   {
     name: "gmail-webhook",
+    // SEC-1 (2026-08-21): `action` restrito a enum(['registerWatch']) — o
+    // fixture original usava "process" (nunca existiu em produção; único
+    // action real é 'registerWatch', autenticado via requireUser no handler).
+    // Sem `action`, o payload é o envelope Pub/Sub push (caminho real testado
+    // por este fixture: negociação de versão, não a rota interna).
     v2: {
       version: "2.0",
       timestamp: Date.now(),
-      action: "process",
-      accountId: "acc_1",
       message: {
         data: "eyJmb28iOiJiYXIifQ==",
         messageId: "m_1",
@@ -140,15 +143,46 @@ const WEBHOOK_FIXTURES = [
       },
     },
     v1: {
-      action: "process",
-      accountId: "acc_1",
       message: {
         data: "eyJmb28iOiJiYXIifQ==",
         messageId: "m_1",
         publishTime: "2026-08-04T00:00:00.000Z",
       },
     },
-  },];
+  },
+  {
+    // Bloco 5 (2026-08-21), etapa 56: sicoob-bridge/sicoob-bridge-reply
+    // entram na cobertura genérica de retrocompat (mesmo mecanismo dos 3
+    // webhooks externos acima — current=v2, v1 em janela de sunset).
+    name: "sicoob-bridge",
+    v2: {
+      action: "new_message",
+      message_id: "m1",
+      content: "Olá, tudo bem?",
+      version: "2.0",
+      timestamp: Date.now(),
+    },
+    v1: {
+      action: "new_message",
+      message_id: "m1",
+      content: "Olá, tudo bem?",
+    },
+  },
+  {
+    // contact_id é .uuid() desde a auditoria de re-verificação (Bloco 4/etapa 44).
+    name: "sicoob-bridge-reply",
+    v2: {
+      contact_id: "3f0c8a4e-1b2d-4c5e-9f6a-7b8c9d0e1f2a",
+      content: "Resposta registrada",
+      version: "2.0",
+      timestamp: Date.now(),
+    },
+    v1: {
+      contact_id: "3f0c8a4e-1b2d-4c5e-9f6a-7b8c9d0e1f2a",
+      content: "Resposta registrada",
+    },
+  },
+];
 
 for (const { name, v2, v1 } of WEBHOOK_FIXTURES) {
   const sunsetV1 = CONTRACTS[name].sunset?.["v1"];

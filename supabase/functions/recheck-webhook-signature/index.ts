@@ -7,6 +7,7 @@ import { createZappAdminClient } from '../_shared/db-client.ts';
 
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
 import { requireAdminOrSupervisor } from '../_shared/auth.ts';
+import { readWebhookSecretsFromEnv, verifyHmacSignature } from '../_shared/hmac-validation.ts';
 import { checkRateLimit } from '../_shared/validation.ts';
 import { parseRequestOrReject } from '../_shared/contract-kit.ts';
 import { CONTRACT_SCHEMAS } from '../_shared/contract-schemas.ts';
@@ -28,6 +29,10 @@ interface RecheckResult {
   reason: string;
 }
 
+// Fica local (não migrou pro módulo): a resposta diagnóstica expõe o digest
+// recomputado (`computed_signature`) e a API de _shared/hmac-validation.ts só
+// retorna boolean. A COMPARAÇÃO em si usa o módulo (verifyHmacSignature),
+// mesmo primitivo do validador de produção (evolution-webhook).
 async function computeHmac(payload: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -41,13 +46,6 @@ async function computeHmac(payload: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let r = 0;
-  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return r === 0;
 }
 
 Deno.serve(async (req) => {
@@ -74,8 +72,17 @@ Deno.serve(async (req) => {
     const body = parsed.data as RecheckRequest;
 
     // 3. Secret + client admin (service role, schema zapp)
-    const secret =
-      Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || Deno.env.get('WEBHOOK_SECRET') || '';
+    // Mesma cadeia de resolução do validador de produção (evolution-webhook):
+    // EVOLUTION_WEBHOOK_SECRETS (lista de rotação) → EVOLUTION_WEBHOOK_SECRET
+    // → WEBHOOK_SECRET legacy. Antes lia só o segundo/terceiro e ignorava a
+    // lista de rotação — diagnóstico divergia do que o webhook aceitava de fato.
+    const secrets = (() => {
+      const evo = readWebhookSecretsFromEnv('EVOLUTION_WEBHOOK');
+      if (evo.length > 0) return evo;
+      const legacy = Deno.env.get('WEBHOOK_SECRET');
+      return legacy ? [legacy] : [];
+    })();
+    const secret = secrets[0] ?? '';
     const ext = createZappAdminClient();
 
     // 4. Buscar evento
@@ -143,8 +150,16 @@ Deno.serve(async (req) => {
         'Evento não tem assinatura observada armazenada — não é possível comparar. ' +
         'A assinatura recomputada está disponível no campo `computed_signature` para inspeção manual.';
     } else {
-      const norm = observed.toLowerCase().replace(/^sha256=/, '');
-      const ok = timingSafeEqual(norm, computed);
+      // Comparação via módulo canônico (normaliza prefixo sha256=, timing-safe),
+      // tentando cada secret da rotação — mesma semântica de aceite do validador
+      // de produção (evolution-webhook/WebhookSecurityService).
+      let ok = false;
+      for (const s of secrets) {
+        if (await verifyHmacSignature(raw, observed, s)) {
+          ok = true;
+          break;
+        }
+      }
       result.signature_valid = ok;
       result.reason = ok
         ? 'Assinatura confere com o WEBHOOK_SECRET atual.'

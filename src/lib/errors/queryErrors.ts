@@ -48,6 +48,20 @@ export function isPermanentQueryError(error: unknown): boolean {
   if (msg.includes('jwt expired')) return true;
   if (msg.includes('jwt invalid')) return true;
 
+  // Erros do semáforo de concorrência: não são "permanentes" no sentido
+  // clássico, mas retentativa imediata piora a saturação. TanStack marcará
+  // a query como erro; refetchOnWindowFocus/refetchOnMount (defaults true)
+  // reexecutam automaticamente assim que o usuário interagir.
+  // NÃO são retentados por withRetry (shouldRetryFetchError já retorna false
+  // para AbortError), e NÃO acusam o monitor de conectividade.
+  const errName = (e['name'] as string | undefined) ?? '';
+  if (errName === 'SupabaseQueueSaturatedError') return true;
+  if (errName === 'SupabaseQueueTimeoutError') return true;
+  if (msg.includes('supabasequeuesaturatederror')) return true;
+  if (msg.includes('supabasequeuetimeouterror')) return true;
+  if (msg.includes('supabase queue saturated')) return true;
+  if (msg.includes('supabase queue wait timed out')) return true;
+
   return false;
 }
 
@@ -59,11 +73,7 @@ export function isPermanentQueryError(error: unknown): boolean {
  *   useQuery({ ..., retry: tanstackRetry })
  *   useQuery({ ..., retry: (count, err) => tanstackRetry(count, err, 3) })
  */
-export function tanstackRetry(
-  failureCount: number,
-  error: unknown,
-  maxAttempts = 2
-): boolean {
+export function tanstackRetry(failureCount: number, error: unknown, maxAttempts = 2): boolean {
   if (isPermanentQueryError(error)) return false;
   return failureCount < maxAttempts;
 }

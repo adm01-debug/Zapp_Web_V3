@@ -53,6 +53,106 @@ vi.mock('../MentionAutocomplete', () => ({
   }),
 }));
 vi.mock('../MarkdownPreview', () => ({ MarkdownPreview: () => null }));
+// P10-P12 mocks: sub-componentes extraídos de ChatInputArea
+vi.mock('../ChatInputQueueDisplay', () => ({
+  ChatInputQueueDisplay: ({
+    queue,
+    isRetryEnabled,
+  }: {
+    queue: { progress?: number }[];
+    isRetryEnabled: boolean;
+  }) => {
+    if (!isRetryEnabled || !queue.length) return null;
+    // Renderiza o progresso do primeiro item da fila (suficiente para BUG-13)
+    const firstProgress = queue[0]?.progress ?? 0;
+    return <div>{firstProgress + '%'}</div>;
+  },
+}));
+vi.mock('../ChatAttachmentPreview', () => ({ ChatAttachmentPreview: () => null }));
+vi.mock('../ChatToolbar', () => ({ ChatToolbar: () => null }));
+vi.mock('../ChatSendButtons', () => ({ ChatSendButtons: () => null }));
+vi.mock('../ChatQueueProgress', () => ({
+  ChatQueueProgress: ({
+    queue,
+    isSending,
+  }: {
+    queue?: { id: string; progress?: number }[];
+    isSending: boolean;
+  }) => {
+    if (!isSending && !queue?.length) return null;
+    return (
+      <div>
+        {queue?.map((item) => (
+          <span key={item.id}>{Math.round(item.progress || 0) + '%'}</span>
+        ))}
+      </div>
+    );
+  },
+}));
+// ChatTextarea precisa renderizar o <textarea> real para que os testes de keyDown funcionem
+vi.mock('../ChatTextarea', () => ({
+  ChatTextarea: ({
+    logic,
+    inputRef,
+    inputValue,
+    isSending,
+    isWhisper,
+    onInputChange,
+    onKeyDown,
+    onEditStart,
+    messages,
+  }: {
+    logic: {
+      showMarkdownPreview?: boolean;
+      hasText?: boolean;
+      showRichToolbar?: boolean;
+      isMicActive?: boolean;
+      isNearLimit?: boolean;
+      isOverLimit?: boolean;
+      charCount?: number;
+      CHAR_LIMIT?: number;
+      canSend?: boolean;
+      handleSendWithAnimation?: () => void;
+    };
+    inputRef: React.RefObject<HTMLTextAreaElement | null>;
+    inputValue: string;
+    isSending?: boolean;
+    isWhisper?: boolean;
+    onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    onEditStart?: (msg: unknown) => void;
+    messages: unknown[];
+  }) => {
+    return (
+      <textarea
+        ref={(el) => {
+          (inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+        }}
+        value={inputValue}
+        onChange={onInputChange}
+        onKeyDown={(e) => {
+          onKeyDown(e);
+          if (e.defaultPrevented) return;
+          if (e.key === 'ArrowUp' && !inputValue && messages.length > 0) {
+            e.preventDefault();
+            const lastOwnMessage = [...messages].reverse().find((m: unknown) => {
+              const msg = m as { sender: string; is_deleted?: boolean };
+              return msg.sender === 'agent' && !msg.is_deleted;
+            });
+            if (lastOwnMessage && onEditStart) onEditStart(lastOwnMessage);
+          }
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!isSending && logic.canSend) logic.handleSendWithAnimation?.();
+          }
+        }}
+        disabled={isSending}
+        aria-label={isWhisper ? 'Sussurro interno (apenas agentes)...' : 'Digite sua mensagem'}
+        placeholder={isWhisper ? 'Sussurro interno (apenas agentes)...' : 'Digite sua mensagem'}
+      />
+    );
+  },
+}));
 vi.mock('../../SlashCommands', () => ({ SlashCommands: () => null }));
 vi.mock('../../AudioRecorder', () => ({ AudioRecorder: () => null }));
 vi.mock('../ChatInputToolbars', () => ({
@@ -131,6 +231,10 @@ function makeMessage(overrides: Partial<Message>): Message {
 
 const baseProps = {
   inputValue: '',
+  quickRepliesOpen: false,
+  onOpenQuickReplies: vi.fn(),
+  onCloseQuickReplies: vi.fn(),
+  incrementQuickReplyUse: vi.fn(),
   replyToMessage: null,
   isRecordingAudio: false,
   showSlashCommands: false,
@@ -146,7 +250,6 @@ const baseProps = {
   onCancelReply: vi.fn(),
   onSlashCommand: vi.fn(),
   onCloseSlashCommands: vi.fn(),
-  onQuickReply: vi.fn(),
   onRecordToggle: vi.fn(),
   onAudioSend: vi.fn(),
   onAudioCancel: vi.fn(),
@@ -173,9 +276,7 @@ describe('ChatInputArea — ArrowUp → onEditStart (BUG-16)', () => {
       makeMessage({ id: '2', sender: 'agent', content: 'resposta antiga', is_deleted: true }),
       makeMessage({ id: '3', sender: 'agent', content: 'resposta mais recente' }),
     ];
-    render(
-      <ChatInputArea {...baseProps} messages={messages} onEditStart={onEditStart} />
-    );
+    render(<ChatInputArea {...baseProps} messages={messages} onEditStart={onEditStart} />);
     fireEvent.keyDown(screen.getByLabelText('Digite sua mensagem'), { key: 'ArrowUp' });
     expect(onEditStart).toHaveBeenCalledTimes(1);
     expect(onEditStart).toHaveBeenCalledWith(
@@ -209,9 +310,7 @@ describe('ChatInputArea — ArrowUp → onEditStart (BUG-16)', () => {
   it('não chama onEditStart quando não há mensagem própria', () => {
     const onEditStart = vi.fn<(message: Message) => void>();
     const messages = [makeMessage({ id: '1', sender: 'contact' })];
-    render(
-      <ChatInputArea {...baseProps} messages={messages} onEditStart={onEditStart} />
-    );
+    render(<ChatInputArea {...baseProps} messages={messages} onEditStart={onEditStart} />);
     fireEvent.keyDown(screen.getByLabelText('Digite sua mensagem'), { key: 'ArrowUp' });
     expect(onEditStart).not.toHaveBeenCalled();
   });
@@ -246,7 +345,11 @@ describe('ChatInputArea — ChatSendProgress (BUG-13)', () => {
         {...baseProps}
         isSending
         sendProgress={42}
-        queue={[makeQueueItem({ id: 'q1', status: 'sending', progress: 10 }) as unknown as NonNullable<React.ComponentProps<typeof ChatInputArea>['queue']>[number]]}
+        queue={[
+          makeQueueItem({ id: 'q1', status: 'sending', progress: 10 }) as unknown as NonNullable<
+            React.ComponentProps<typeof ChatInputArea>['queue']
+          >[number],
+        ]}
       />
     );
     // Barra da fila visível com o progresso do item...

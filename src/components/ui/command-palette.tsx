@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Search, Command, ArrowRight, Clock, Star, X, Loader2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent } from './dialog';

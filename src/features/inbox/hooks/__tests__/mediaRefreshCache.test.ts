@@ -111,3 +111,34 @@ describe('mediaRefreshCache', () => {
     expect(mediaCacheStats().entries).toBe(200);
   });
 });
+
+// E21/A13 — MEDIA_REFRESH_SKIP_TYPES exportado do cache e usado em useMediaUrl
+import { MEDIA_REFRESH_SKIP_TYPES } from '../mediaRefreshCache';
+
+describe('MEDIA_REFRESH_SKIP_TYPES', () => {
+  it('inclui todos os tipos que nunca produzem base64 válido', () => {
+    const required = [
+      'sticker',
+      'ephemeral',
+      'ptv',
+      'viewOnce',
+      'vcard',
+      'contact',
+      'location',
+      'liveLocation',
+      'reaction',
+      'poll',
+      'pollUpdate',
+    ];
+    for (const t of required) {
+      expect(MEDIA_REFRESH_SKIP_TYPES.has(t)).toBe(true);
+    }
+  });
+
+  it('não inclui tipos que produzem mídia válida', () => {
+    const validMediaTypes = ['image', 'video', 'audio', 'document'];
+    for (const t of validMediaTypes) {
+      expect(MEDIA_REFRESH_SKIP_TYPES.has(t)).toBe(false);
+    }
+  });
+});

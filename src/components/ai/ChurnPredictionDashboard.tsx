@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import {
   TrendingDown,
   Users,
@@ -54,57 +54,66 @@ export function ChurnPredictionDashboard() {
       if (error) throw error;
 
       const now = new Date();
-      const churnRisks: ChurnRisk[] = (contacts || []).map((contact: { id: string; name: string | null; phone: string | null; ai_sentiment: string | null; updated_at: string; created_at: string }) => {
-        const daysSinceUpdate = differenceInDays(now, new Date(contact.updated_at));
-        const daysSinceCreation = differenceInDays(now, new Date(contact.created_at));
+      const churnRisks: ChurnRisk[] = (contacts || []).map(
+        (contact: {
+          id: string;
+          name: string | null;
+          phone: string | null;
+          ai_sentiment: string | null;
+          updated_at: string;
+          created_at: string;
+        }) => {
+          const daysSinceUpdate = differenceInDays(now, new Date(contact.updated_at));
+          const daysSinceCreation = differenceInDays(now, new Date(contact.created_at));
 
-        // Calculate risk score based on multiple factors
-        let score = 0;
-        const reasons: string[] = [];
+          // Calculate risk score based on multiple factors
+          let score = 0;
+          const reasons: string[] = [];
 
-        // Inactivity factor (max 40 points)
-        if (daysSinceUpdate > 30) {
-          score += Math.min(40, (daysSinceUpdate - 30) * 2);
-          reasons.push(`${daysSinceUpdate} dias sem interação`);
+          // Inactivity factor (max 40 points)
+          if (daysSinceUpdate > 30) {
+            score += Math.min(40, (daysSinceUpdate - 30) * 2);
+            reasons.push(`${daysSinceUpdate} dias sem interação`);
+          }
+
+          // Sentiment factor (max 30 points)
+          if (contact.ai_sentiment === 'negative') {
+            score += 30;
+            reasons.push('Sentimento negativo detectado');
+          } else if (contact.ai_sentiment === 'neutral') {
+            score += 10;
+          }
+
+          // New contact with no follow-up (max 20 points)
+          if (daysSinceCreation < 7 && daysSinceUpdate > 3) {
+            score += 20;
+            reasons.push('Novo contato sem follow-up');
+          }
+
+          // Long-term inactive (max 10 points)
+          if (daysSinceUpdate > 60) {
+            score += 10;
+            reasons.push('Inativo por mais de 60 dias');
+          }
+
+          score = Math.min(100, score);
+          const riskLevel: ChurnRisk['riskLevel'] = classifyChurnRisk(score);
+
+          if (reasons.length === 0) reasons.push('Engajamento regular');
+
+          return {
+            contactId: contact.id,
+            contactName: contact.name,
+            phone: contact.phone,
+            riskScore: score,
+            riskLevel,
+            daysSinceLastMessage: daysSinceUpdate,
+            totalMessages: 0,
+            sentiment: contact.ai_sentiment,
+            reasons,
+          };
         }
-
-        // Sentiment factor (max 30 points)
-        if (contact.ai_sentiment === 'negative') {
-          score += 30;
-          reasons.push('Sentimento negativo detectado');
-        } else if (contact.ai_sentiment === 'neutral') {
-          score += 10;
-        }
-
-        // New contact with no follow-up (max 20 points)
-        if (daysSinceCreation < 7 && daysSinceUpdate > 3) {
-          score += 20;
-          reasons.push('Novo contato sem follow-up');
-        }
-
-        // Long-term inactive (max 10 points)
-        if (daysSinceUpdate > 60) {
-          score += 10;
-          reasons.push('Inativo por mais de 60 dias');
-        }
-
-        score = Math.min(100, score);
-        const riskLevel: ChurnRisk['riskLevel'] = classifyChurnRisk(score);
-
-        if (reasons.length === 0) reasons.push('Engajamento regular');
-
-        return {
-          contactId: contact.id,
-          contactName: contact.name,
-          phone: contact.phone,
-          riskScore: score,
-          riskLevel,
-          daysSinceLastMessage: daysSinceUpdate,
-          totalMessages: 0,
-          sentiment: contact.ai_sentiment,
-          reasons,
-        };
-      });
+      );
 
       // Sort by risk score descending
       churnRisks.sort((a, b) => b.riskScore - a.riskScore);

@@ -18,6 +18,17 @@ const dateRange = {
   to: new Date('2024-01-31'),
 };
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+
+function createWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: qc }, children);
+}
+
 describe('useQueuesComparison', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -81,7 +92,9 @@ describe('useQueuesComparison', () => {
   });
 
   it('fetches and compares queues', async () => {
-    const { result } = renderHook(() => useQueuesComparison(dateRange));
+    const { result } = renderHook(() => useQueuesComparison(dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
@@ -97,7 +110,9 @@ describe('useQueuesComparison', () => {
       return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
     });
 
-    const { result } = renderHook(() => useQueuesComparison(dateRange));
+    const { result } = renderHook(() => useQueuesComparison(dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.queuesPerformance).toEqual([]);
   });
@@ -109,12 +124,16 @@ describe('useQueuesComparison', () => {
       }),
     });
 
-    const { result } = renderHook(() => useQueuesComparison(dateRange));
+    const { result } = renderHook(() => useQueuesComparison(dateRange), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   it('initializes with loading true', () => {
-    const { result } = renderHook(() => useQueuesComparison(dateRange));
+    const { result } = renderHook(() => useQueuesComparison(dateRange), {
+      wrapper: createWrapper(),
+    });
     expect(result.current.loading).toBe(true);
   });
 });

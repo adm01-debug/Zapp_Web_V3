@@ -205,7 +205,7 @@ Continuação da auditoria da Evolution API iniciada na sessão anterior (PR #88
 
 | Arquivo | Ação | Motivo |
 |---------|------|--------|
-| `VALIDATION_PLAN_50_STEPS.md` | Corrigido: 50/50 → 41/50 (82%) | Tabela de progresso estava inflada incorretamente |
+| [`docs/audits/VALIDATION_PLAN_50_STEPS.md`](audits/VALIDATION_PLAN_50_STEPS.md) | Corrigido: 50/50 → 41/50 (82%) | Tabela de progresso estava inflada incorretamente |
 | `docs/AUDIT_REPORT_2026-08-06.md` | Criado | Relatório síntese dos 5 agentes (78 testes) |
 | `FEATURE_REGISTRY.md` | Criado (sessão anterior) | Inventário de 175 recursos em 15 domínios |
 | `feature_registry.json` | Criado (sessão anterior) | Registro estruturado com FIX-01 documentado |
@@ -522,3 +522,29 @@ O Joaquim adicionou `src/lib/__tests__/featureFlags.test.ts` (commit `4d56f2d`) 
 |---|---|---|
 | BUG-C: n8n FK `workflow_history` | 🟠 Alto | ⏳ Bloqueado — requer investigação DB n8n |
 | DADO-03: evolution-db-purge OOM/exit 127 | 🟠 Alto | ⏳ Bloqueado — requer Portainer da equipe de infra |
+
+## Sessão 2026-08-24 — Política de commits v2: sessão de chat commita + PR
+
+### PRs Mergeados Nesta Sessão
+
+| PR | Branch | Descrição | Status |
+|---|---|---|---|
+| #1402 | `docs/regra-commits-pr-2026-08-24` | Política v1: sessão de chat commita e abre PR (CLAUDE.md topo + HERMES.md) | ✅ Merged (squash `8eb144f3e`) |
+| — | `docs/regra-commits-v2-2026-08-24` | Política v2: correções da auditoria adversarial de 5 agentes | ⏳ aberto nesta sessão |
+
+### Mudanças
+
+| Item | Ação | Status |
+|---|---|---|
+| Regra de commits (CLAUDE.md + HERMES.md) | v1 (sessão commita + PR) e v2 — auditoria de 5 agentes corrigiu: papel do container VPS (stack 122), merge como ato humano, prefixos `chore/ci/hotfix`, base `origin/main` atualizada, worktree própria para sessões concorrentes, protocolo pós-merge, universalização da proibição de push direto | ✅ |
+| Docs defasados alinhados | `HANDOFF_PLANO_100_EXECUCAO_2026-08-24.md` (fila commitada via #1401), `PLANO-100-CONTRATOS-EDGE-20260821.md` (removida delegação de commits ao container), `CONTRIBUTING.md` (branch strategy + Realtime por relation física) | ✅ |
+| Memória persistente local | `commits-e-prs-pela-sessao.md` com cláusula de precedência do repo | ✅ |
+
+### Pendências (decisão do dono)
+
+| Item | Prioridade | Ação |
+|---|---|---|
+| Branch protection real | 🔴 Crítico | Ativar required reviews + `enforce_admins` — PUT já documentado em `infra/github/branch-protection-main.md` (hoje: sem reviews, admin faz bypass) |
+| Required check `Contract Tests (Deno)` nunca reporta em PR só-.md | 🟠 Alto | Ajustar paths/always-report do workflow ou remover da protection — hoje PRs de docs só mergeiam via bypass admin |
+| Merge do #1402 com CI vermelho | 🟡 Info | Bypass consciente do dono (Quality diagnostics falhou em Install dependencies — falha ambiental); registrado como incidente de processo |
+| Working tree local em branch já-squashado (`fix/plano-100-execucao-2026-08-24`, 4 commits redundantes pós-#1401) | 🟠 Alto | Ressincronizar com `origin/main` após a sessão concorrente (backup/restore) concluir |

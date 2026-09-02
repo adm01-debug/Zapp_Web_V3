@@ -1,7 +1,14 @@
+// STATUS OPERACIONAL (PLANO-100 e86/e87, 2026-08-20):
+// - O REGISTRO de webhook direto Evolution→esta função está DESABILITADO por decisão formal
+//   (A13) e deve permanecer assim; o runbook "Ativação de emergência do webhook nativo
+//   Evolution (A13)" em evo.ops_runbooks tem o payload exato do evo_set_webhook para religar.
+// - A função continua ATIVA como processadora do pipeline: o fluxo vigente é
+//   Evolution → RabbitMQ → evolution-rabbit-consumer → POST nas rotas internas desta função
+//   (/messages-upsert, /contacts-update, …) → schema evo. Não remover do deploy.
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import { getCorsHeaders, handleCors, redactSecrets } from "../_shared/validation.ts";
 import { initSentry, captureException } from "../_shared/sentry.ts";
-import { parseOrReject, buildContractErrorBody } from "../_shared/contract-kit.ts";
+import { parseOrReject, buildContractErrorBody, respondWithContract, type ParseOk } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import {
   isRecord, normalizeEventName, toEventRecords,
@@ -178,6 +185,18 @@ Deno.serve(async (req) => {
   }
 
   let payload: WebhookPayload;
+  // Bloco 5 (2026-08-21): parsed.headers (x-contract-version/deprecated/
+  // sunset) içado pra fora do try — parsed é let-scoped ao bloco, mas as
+  // respostas de sucesso (200) mais abaixo ficam fora dele. Antes desse
+  // fix, nenhum cliente jamais via esses headers nesta função.
+  let contractResponseHeaders: Record<string, string> = {};
+  // Etapa 54 (PLANO-100-CONTRATOS-EDGE, 2026-08-25): ParseOk içada junto —
+  // as respostas de sucesso migram pra respondWithContract() (contract-kit),
+  // que anexa parsed.headers sem propagação manual. Sentinela vazia no mesmo
+  // idiom do contractResponseHeaders (nunca é lida pré-gate: todo caminho
+  // até os sites de uso passa pelo gate que a atribui). contractResponseHeaders
+  // permanece para os caminhos de ERRO pós-gate (503/429 com Retry-After).
+  let contractParsed: ParseOk = { ok: true, data: null, version: '', deprecated: false, headers: {} };
   try {
     const json = JSON.parse(rawBody);
     // Contrato evolution-webhook@v1/v2: parseOrReject negocia versão
@@ -202,6 +221,8 @@ Deno.serve(async (req) => {
       return parsed.response;
     }
     payload = parsed.data as WebhookPayload;
+    contractResponseHeaders = parsed.headers;
+    contractParsed = parsed;
   } catch {
     await auditWebhookEvent(supabase, {
       request_id: requestId, status: 'rejected', status_code: 422, error_message: 'invalid_json',
@@ -244,8 +265,9 @@ Deno.serve(async (req) => {
       rejectReason: 'event_type_not_in_whitelist',
       latencyMs: Date.now() - startedAt,
     });
-    return new Response(
-      JSON.stringify({ success: true, ignored: true, reason: 'event_type_not_in_whitelist', requestId }),
+    return respondWithContract(
+      contractParsed,
+      { success: true, ignored: true, reason: 'event_type_not_in_whitelist', requestId },
       { status: 200, headers: corsHeaders },
     );
   }
@@ -265,9 +287,11 @@ Deno.serve(async (req) => {
       latencyMs: Date.now() - startedAt,
     });
     console.warn(`[webhook][${requestId}] instance=${instance} is paused — skipping event ${event}`);
+    // Hotfix (auditoria 2026-08-21, Bloco 5.1): faltava ...contractResponseHeaders
+    // — único branch pós-gate do arquivo que montava headers sem ele.
     return new Response(
       JSON.stringify({ error: 'instance_paused', instance, requestId }),
-      { status: 503, headers: { ...corsHeaders, 'Retry-After': '60' } },
+      { status: 503, headers: { ...corsHeaders, ...contractResponseHeaders, 'Retry-After': '60' } },
     );
   }
 
@@ -287,8 +311,9 @@ Deno.serve(async (req) => {
       latencyMs: Date.now() - startedAt,
     });
     console.warn(`[webhook][${requestId}] SECURITY unknown_instance='${instance}' event=${event} - ignored`);
-    return new Response(
-      JSON.stringify({ success: true, ignored: true, reason: 'unknown_instance', requestId }),
+    return respondWithContract(
+      contractParsed,
+      { success: true, ignored: true, reason: 'unknown_instance', requestId },
       { status: 200, headers: corsHeaders },
     );
   }
@@ -314,7 +339,7 @@ Deno.serve(async (req) => {
       duration_ms: Date.now() - startedAt,
     });
     console.log(`[webhook][${requestId}] duplicate event_id=${eventId.slice(0, 48)}… skipped`);
-    return new Response(JSON.stringify({ success: true, duplicate: true, requestId }), { status: 200, headers: corsHeaders });
+    return respondWithContract(contractParsed, { success: true, duplicate: true, requestId }, { status: 200, headers: corsHeaders });
   }
 
   // Rate Limit guard: conta apenas eventos UNICOS (idempotency ja filtrou retries)
@@ -366,9 +391,11 @@ Deno.serve(async (req) => {
     } else {
       console.warn(`[webhook][${requestId}] rate limit exceeded for ${instance}:${event} (${rateLimit.currentCount}/${rateLimit.limit}) — idempotency rolled back, retry after ${retryAfterSeconds}s`);
     }
+    // Hotfix (auditoria 2026-08-21, Bloco 5.1): faltava ...contractResponseHeaders
+    // — mesma omissao do branch instance_paused acima.
     return new Response(
       JSON.stringify({ error: 'rate_limit_exceeded', instance, requestId }),
-      { status: 429, headers: { ...corsHeaders, 'Retry-After': String(retryAfterSeconds) } }
+      { status: 429, headers: { ...corsHeaders, ...contractResponseHeaders, 'Retry-After': String(retryAfterSeconds) } }
     );
   }
 
@@ -587,7 +614,7 @@ Deno.serve(async (req) => {
       console.warn(`[webhook][${requestId}] payload persist failed: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    return new Response(JSON.stringify({ success: true, requestId }), { status: 200, headers: corsHeaders });
+    return respondWithContract(contractParsed, { success: true, requestId }, { status: 200, headers: corsHeaders });
   } catch (error: unknown) {
     // Logical/handler errors: log the detail internally, return 200 to evo so it does not
     // retry-storm the same event. The idempotency guard above marks the event processed
@@ -621,8 +648,9 @@ Deno.serve(async (req) => {
       request_id: requestId, instance, event_type: event, status: 'error', status_code: 200,
       duration_ms: Date.now() - startedAt, error_message: detail.slice(0, 500),
     });
-    return new Response(
-      JSON.stringify({ success: false, error: 'internal_error', requestId }),
+    return respondWithContract(
+      contractParsed,
+      { success: false, error: 'internal_error', requestId },
       { status: 200, headers: corsHeaders },
     );
   }

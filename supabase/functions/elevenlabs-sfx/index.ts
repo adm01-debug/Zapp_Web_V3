@@ -1,4 +1,4 @@
-import { handleCors, errorResponse, jsonResponse, requireEnv, Logger, checkRateLimit } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, jsonResponse, requireEnv, Logger, checkRateLimit } from "../_shared/validation.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
     if (authed instanceof Response) return authed;
 
     const rl = checkRateLimit(`elevenlabs-sfx:${authed.user.id}`, 15, 60_000);
-    if (!rl.allowed) return errorResponse('Rate limit exceeded. Tente novamente em instantes.', 429, req);
+    if (!rl.allowed) return errorEnvelope('rate_limit_exceeded', 'Rate limit exceeded. Tente novamente em instantes.', 429, req);
 
     // Contrato elevenlabs-sfx@v1 — validação unificada 422 (parseOrReject).
     const raw = await req.json().catch(() => null);
@@ -25,14 +25,14 @@ Deno.serve(async (req) => {
       extraHeaders: getCorsHeaders(req),
     });
     if (parsed.ok === false) return parsed.response;
-    const body = parsed.data as Record<string, any>;
-
-    // Guarda de compatibilidade: schema registrado é permissivo (placeholder);
-    // preserva o 400 do antigo parseBody(ElevenLabsSFXSchema).
-    const { prompt, duration, mode } = body;
-    if (typeof prompt !== 'string' || prompt.length === 0 || prompt.length > 2000) {
-      return errorResponse('prompt: Required (1..2000)', 400, req);
-    }
+    // Bloco 2/3 (2026-08-21): schema agora valida prompt/duration/mode de
+    // verdade — o 422 canônico já reprova payload inválido; o bloco 400
+    // manual que existia foi removido.
+    const { prompt, duration, mode } = parsed.data as {
+      prompt: string;
+      duration?: number;
+      mode?: 'sfx' | 'music';
+    };
     const ELEVENLABS_API_KEY = requireEnv("ELEVENLABS_API_KEY");
 
     const isMusic = mode === "music";
@@ -71,6 +71,6 @@ Deno.serve(async (req) => {
     return jsonResponse({ audioContent: audioBase64 }, 200, req);
   } catch (err: unknown) {
     log.error("Unhandled error", { error: err instanceof Error ? err.message : String(err) });
-    return errorResponse("Internal server error", 500, req);
+    return errorEnvelope("internal_error", "Internal server error", 500, req);
   }
 });

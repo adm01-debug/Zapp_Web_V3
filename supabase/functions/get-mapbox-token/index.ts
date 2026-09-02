@@ -1,4 +1,4 @@
-import { handleCors, errorResponse, jsonResponse, requireEnv, Logger } from "../_shared/validation.ts";
+import { handleCors, errorEnvelope, jsonResponse, requireEnv, Logger, readJsonBodyOrEmpty } from "../_shared/validation.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     if (authed instanceof Response) return authed;
 
     // Contrato get-mapbox-token@v1 (G4): GET sem body → {} aceito.
-    const parsed = parseOrReject('get-mapbox-token', CONTRACT_SCHEMAS['get-mapbox-token'], req, await req.json().catch(() => ({})), {
+    const parsed = parseOrReject('get-mapbox-token', CONTRACT_SCHEMAS['get-mapbox-token'], req, await readJsonBodyOrEmpty(req), {
       extraHeaders: getCorsHeaders(req),
     });
     if (parsed.ok === false) return parsed.response;
@@ -26,6 +26,6 @@ Deno.serve(async (req) => {
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Internal server error';
     log.error("Unhandled error", { error: msg });
-    return errorResponse('Internal server error', 500, req);
+    return errorEnvelope('internal_error', 'Internal server error', 500, req);
   }
 });

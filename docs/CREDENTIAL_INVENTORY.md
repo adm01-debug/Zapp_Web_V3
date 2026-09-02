@@ -1,7 +1,7 @@
 # CREDENTIAL INVENTORY — blast radius assessment
 
 **Last Updated:** 2026-07-26
-**Trigger:** Token exposure incident (s-a50174164e4b03ef181a29db65d2db80)
+**Trigger:** Token exposure incident (s-REDACTED-rotacionado-20260824)
 
 ---
 
@@ -10,7 +10,7 @@
 ### 1. Supabase Service Role Key (COMPROMETIDO)
 | Field | Value |
 |-------|-------|
-| **Token** | `s-a50174164e4b03ef181a29db65d2db80` |
+| **Token** | `s-REDACTED-rotacionado-20260824` |
 | **Location** | Was in `.mcp.json` (now removed) |
 | **Exposure Date** | 2026-07-14 18:39 |
 | **Action** | **ROTATE IMMEDIATELY** |
@@ -19,7 +19,7 @@
 ### 2. Cloudflare Workers — SUPABASE_SERVICE_ROLE_KEY
 | Field | Value |
 |-------|-------|
-| **Current Token** | `s-a50174164e4b03ef181a29db65d2db80` (same as above) |
+| **Current Token** | `s-REDACTED-rotacionado-20260824` (same as above) |
 | **Worker** | `supabase-mcp.atomicabr.com.br` |
 | **Action** | Update after Supabase rotation |
 

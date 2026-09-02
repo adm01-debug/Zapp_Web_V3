@@ -3,10 +3,11 @@ import { getSecret } from '../_shared/mod.ts';
 import { requireUser } from '../_shared/auth.ts';
 import { timingSafeEqual } from '../_shared/hmac-validation.ts';
 import { initSentry, captureException, captureMessage } from '../_shared/sentry.ts';
-import { parseOrReject } from '../_shared/contract-kit.ts';
+import { parseOrReject, respondWithContract } from '../_shared/contract-kit.ts';
 import { CONTRACT_SCHEMAS } from '../_shared/contract-schemas.ts';
 
 import { getCorsHeaders, handleCorsPreflight } from '../_shared/cors.ts';
+import { readJsonBodyOrEmpty } from '../_shared/validation.ts';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const PUBSUB_TOPIC = (() => {
   const v = Deno.env.get('GMAIL_PUBSUB_TOPIC');
@@ -25,8 +26,13 @@ Deno.serve(async (req) => {
 
   const supabase = createZappAdminClient();
 
+  // Bloco 5 (2026-08-21): contractResponseHeaders içado pra fora do gate —
+  // json() é definida antes de `parsed` existir (só é resolvido dentro do
+  // branch POST). Mutável e mesclado em toda resposta; antes desse fix
+  // nenhum cliente via x-contract-version/deprecated/sunset nesta função.
+  let contractResponseHeaders: Record<string, string> = {};
   const json = (data: unknown, status = 200) =>
-    new Response(JSON.stringify(data), { status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
+    new Response(JSON.stringify(data), { status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json', ...contractResponseHeaders } });
 
   try {
     // ── Push notification do Google Pub/Sub (POST sem body action) ────
@@ -34,18 +40,30 @@ Deno.serve(async (req) => {
       // Contrato gmail-webhook@v1: action/accountId (rotas internas) OU
       // message (push Pub/Sub). Tudo nullish + passthrough — envelope novo do
       // Google nunca derruba a ingestão; falha real → 422 único.
-      const rawBody: Record<string, unknown> = await req.json().catch(() => ({}));
+      // Auditoria pós-Bloco 6 (2026-08-21): cast pra Record<string,unknown>
+      // removido — readJsonBodyOrEmpty pode devolver null (JSON malformado
+      // não-vazio), array, string ou número, não só objeto. O cast mentia
+      // pro compilador (sem ganho: parseOrReject já aceita unknown) e
+      // mascararia null-safety pra qualquer leitura futura de rawBody
+      // inserida antes do gate.
+      const rawBody = await readJsonBodyOrEmpty(req);
       const parsed = parseOrReject('gmail-webhook', CONTRACT_SCHEMAS['gmail-webhook'], req, rawBody, {
         extraHeaders: getCorsHeaders(req),
       });
       if (parsed.ok === false) return parsed.response;
+      contractResponseHeaders = parsed.headers;
       const body = parsed.data as Record<string, unknown>;
       const { action } = body;
 
-      // F2 security fix: fail-closed auth for Pub/Sub push notifications.
-      // The 'registerWatch' action uses its own token auth via getValidToken().
-      // All other POST requests (Pub/Sub pushes) MUST present a valid token.
-      if (!action) {
+      // F2 security fix (hardened 2026-08-21 — SEC-1): fail-closed auth for
+      // Pub/Sub push notifications. ONLY 'registerWatch' has its own auth
+      // (requireUser, below). The previous guard was `if (!action)`, which
+      // let ANY truthy action other than 'registerWatch' (e.g. action:'x')
+      // skip BOTH the push token check and requireUser, falling through to
+      // process an attacker-supplied `message.data` as a trusted Pub/Sub
+      // push — ingesting arbitrary emailAddress/historyId with zero auth.
+      // Whitelisting the one authenticated action closes that bypass.
+      if (action !== 'registerWatch') {
         // F2+vault: read token from vault first (gmail_pubsub_token), env fallback for legacy
         const expectedToken = await getSecret('gmail_pubsub_token') ?? Deno.env.get('GMAIL_PUBSUB_TOKEN');
         if (!expectedToken) {
@@ -60,7 +78,14 @@ Deno.serve(async (req) => {
       // ── registerWatch — registra Pub/Sub watch para uma conta ─────
       if (action === 'registerWatch') {
         const authed = await requireUser(req);
-        if (authed instanceof Response) return authed;
+        if (authed instanceof Response) {
+          // Hotfix (auditoria 2026-08-21, Bloco 5.1): requireUser() devolve um
+          // Response cru (errorResponse), que não carrega contractResponseHeaders
+          // — reconstrói via json() pra não perder x-contract-version/deprecated/
+          // sunset justo no erro de auth, onde o cliente mais precisaria vê-los.
+          const errBody = await authed.json().catch(() => ({ error: 'Unauthorized' }));
+          return json(errBody, authed.status);
+        }
 
         const { accountId } = body;
         const accountIdStr = typeof accountId === 'string' ? accountId : '';
@@ -88,6 +113,7 @@ Deno.serve(async (req) => {
           signal: AbortSignal.timeout(15_000),
         });
         if (!watchRes.ok) {
+          // Resposta OUTBOUND do Google — {} é fallback inofensivo (só degrada o detail do erro); não é o antipadrão de body de request (D1/etapa 27).
           const watchErr = await watchRes.json().catch(() => ({}));
           return json({ error: 'Watch failed', detail: watchErr }, 500);
         }
@@ -104,12 +130,16 @@ Deno.serve(async (req) => {
           status: 'active',
         }, { onConflict: 'account_id' });
 
-        return json({ ok: true, historyId: watchData.historyId, expiresAt: expires });
+        // Etapa 54 (PLANO-100-CONTRATOS-EDGE): respostas de SUCESSO migram pra
+        // respondWithContract — parsed.headers (x-contract-version/deprecated/
+        // sunset) anexados pelo kit. json() permanece para erros/GET (sem
+        // contrato negociado nesses caminhos).
+        return respondWithContract(parsed, { ok: true, historyId: watchData.historyId, expiresAt: expires }, { status: 200, headers: getCorsHeaders(req) });
       }
 
       // ── Pub/Sub push: process email notification ────────────────────
       const message = body.message as { data?: string; messageId?: string; publishTime?: string } | undefined;
-      if (!message?.data) return json({ ok: true, skipped: 'no_message' });
+      if (!message?.data) return respondWithContract(parsed, { ok: true, skipped: 'no_message' }, { status: 200, headers: getCorsHeaders(req) });
 
       let decoded: { emailAddress?: string; historyId?: string };
       try {
@@ -119,13 +149,13 @@ Deno.serve(async (req) => {
       }
 
       const { emailAddress, historyId } = decoded;
-      if (!emailAddress || !historyId) return json({ ok: true, skipped: 'missing_fields' });
+      if (!emailAddress || !historyId) return respondWithContract(parsed, { ok: true, skipped: 'missing_fields' }, { status: 200, headers: getCorsHeaders(req) });
 
       const { data: account } = await supabase.from('email_accounts').select('id, access_token, refresh_token, token_expires_at').eq('email', emailAddress).maybeSingle();
-      if (!account) return json({ ok: true, skipped: 'account_not_found' });
+      if (!account) return respondWithContract(parsed, { ok: true, skipped: 'account_not_found' }, { status: 200, headers: getCorsHeaders(req) });
 
       const token = await getValidToken(supabase, account.id);
-      if (!token) return json({ ok: true, skipped: 'invalid_token' });
+      if (!token) return respondWithContract(parsed, { ok: true, skipped: 'invalid_token' }, { status: 200, headers: getCorsHeaders(req) });
 
       const { data: watch } = await supabase.from('email_watch_history').select('history_id').eq('account_id', account.id).maybeSingle();
       const startHistoryId = watch?.history_id ?? historyId;
@@ -137,7 +167,7 @@ Deno.serve(async (req) => {
         status: 'active',
       }, { onConflict: 'account_id' });
 
-      return json({ ok: true });
+      return respondWithContract(parsed, { ok: true }, { status: 200, headers: getCorsHeaders(req) });
     }
 
     // ── GET: status endpoint ────────────────────────────────────────

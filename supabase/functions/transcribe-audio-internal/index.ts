@@ -1,8 +1,13 @@
 /**
- * transcribe-audio-internal v6
+ * transcribe-audio-internal v7
  * v6: auto-deteccao de formato por magic bytes (MP3/OGG/WAV/FLAC)
  * corrige casos em que audio MP3 foi salvo com extensao .ogg
+ * v7 (SEC-2, 2026-08-21): parseOrReject ligado — audioUrl agora passa por
+ * isSafeHttpsUrl (bloqueia SSRF p/ localhost/RFC-1918/link-local) antes do
+ * fetch. Validacao manual truthy-check substituida pelo gate de contrato.
  */
+import { parseOrReject } from '../_shared/contract-kit.ts';
+import { CONTRACT_SCHEMAS } from '../_shared/contract-schemas.ts';
 
 Deno.serve(async (req) => {
   const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY') || '';
@@ -25,19 +30,29 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'ELEVENLABS_API_KEY not configured' }, { status: 503 });
   }
 
-  let body;
-  try { body = await req.json(); } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
-
-  const { messageId, audioUrl } = body;
-  if (!messageId || !audioUrl) {
-    return Response.json({ error: 'messageId e audioUrl obrigatorios' }, { status: 400 });
-  }
+  const rawBody = await req.json().catch(() => null);
+  const parsed = parseOrReject(
+    'transcribe-audio-internal',
+    CONTRACT_SCHEMAS['transcribe-audio-internal'],
+    req,
+    rawBody,
+  );
+  if (parsed.ok === false) return parsed.response;
+  const { messageId, audioUrl } = parsed.data as { messageId: string; audioUrl: string };
 
   try {
     // --- Fetch audio ---
     let audioRes;
     try {
-      audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(25000) });
+      // Hotfix (auditoria 2026-08-21, Bloco 5.1 / SEC-2): isSafeHttpsUrl só valida
+      // a URL declarada no payload — sem redirect:'error', um 302 do host de
+      // destino pra 169.254.169.254/127.0.0.1/RFC-1918 era seguido automaticamente
+      // (comportamento default 'follow' do fetch), contornando o guard SSRF por
+      // completo. Os outros 6 fetches SSRF-guardados do repo (ai-router,
+      // batch-fetch-avatars, fetch-whatsapp-avatar, voice-changer,
+      // _shared/evolution-media.ts, _shared/evolution-webhook-messages.ts) já
+      // usam redirect:'error' — este era o único que faltava.
+      audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(25000), redirect: 'error' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'timeout';
       await updateTranscription(SUPABASE_URL, SERVICE_ROLE_KEY, messageId, null, 'failed', 'audio_fetch_error', msg);

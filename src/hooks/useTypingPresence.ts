@@ -69,6 +69,9 @@ export function useTypingPresence({
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           lastConnectedAtMs = Date.now();
+          void channel
+            .track({ userId: currentUserId, userName: currentUserName, isTyping: false })
+            .catch(() => {});
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           void logChannelError(log, '[TypingPresence] subscription status:', lastConnectedAtMs, status);
         }
@@ -82,7 +85,7 @@ export function useTypingPresence({
       channel.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, [conversationId, currentUserId]);
+  }, [conversationId, currentUserId, currentUserName]);
 
   const handleTypingStop = useCallback(() => {
     if (!channelRef.current) return;

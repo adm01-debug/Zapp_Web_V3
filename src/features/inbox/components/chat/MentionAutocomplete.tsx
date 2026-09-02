@@ -2,54 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
-import { useMountedRef } from '@/hooks/useMountedRef';
-import { MODULE_TTL_MS } from '@/lib/queryStaleTimes';
-
-interface AgentMention {
-  id: string;
-  name: string;
-  email: string;
-  avatar_url?: string | null;
-}
-
-// ── Cache module-level (TTL 5min) ─────────────────────────────────────────
-// Lista de agentes p/ @mention é catálogo quase-estático — evita refetch a
-// cada mount do composer de chat (era a query `profiles?select=id,name,
-// email,avatar_url&limit=50` repetida a cada 1-2min em produção).
-const MENTION_TTL_MS = MODULE_TTL_MS.catalog;
-let mentionCache: { data: AgentMention[]; fetchedAt: number } | null = null;
-let mentionInflight: Promise<AgentMention[]> | null = null;
-
-function fetchMentionAgents(): Promise<AgentMention[]> {
-  if (mentionCache && Date.now() - mentionCache.fetchedAt < MENTION_TTL_MS) {
-    return Promise.resolve(mentionCache.data);
-  }
-  if (mentionInflight) return mentionInflight;
-
-  // R4 regression review da onda: o null do in-flight precisa acontecer no
-  // finally da IIFE ASSÍNCRONA (após o await), não num finally síncrono —
-  // dois mounts no mesmo tick compartilham a MESMA promise (dedupe real).
-  mentionInflight = (async () => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, name, email, avatar_url')
-        .limit(50);
-      const agents = (data ?? []) as AgentMention[];
-      mentionCache = { data: agents, fetchedAt: Date.now() };
-      return agents;
-    } catch {
-      // Nunca rejeita: o caller usa `void fetchAgents()` — rejeição viraria
-      // unhandled rejection (R4).
-      return [];
-    } finally {
-      mentionInflight = null;
-    }
-  })();
-
-  return mentionInflight;
-}
+import { useMentionableProfiles, type AgentMention } from '../../hooks/useMentionableProfiles';
 
 interface MentionAutocompleteProps {
   inputValue: string;
@@ -67,22 +20,11 @@ export function MentionAutocomplete({
   onClose,
   isOpen,
 }: MentionAutocompleteProps) {
-  const [agents, setAgents] = useState<AgentMention[]>([]);
+  const { data: agents = [] } = useMentionableProfiles();
   const [filtered, setFiltered] = useState<AgentMention[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [_mentionQuery, setMentionQuery] = useState('');
   const [mentionStart, setMentionStart] = useState(-1);
-  const mounted = useMountedRef();
-
-  // Fetch agents once (cache module-level com TTL 5min)
-  useEffect(() => {
-    const fetchAgents = async () => {
-      const data = await fetchMentionAgents();
-      if (data && mounted.current) setAgents(data as AgentMention[]);
-    };
-    void fetchAgents();
-  }, [mounted]);
-
   // Detect @ mention
   useEffect(() => {
     if (!isOpen) return;
@@ -126,41 +68,50 @@ export function MentionAutocomplete({
   return (
     <AnimatePresence>
       {isOpen && filtered.length > 0 && (
-      <motion.div
-        key="mention-list"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 8 }}
-        className="absolute bottom-full left-0 z-50 mb-1 w-64 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
-      >
-        <div className="border-b border-border/50 p-2">
-          <span className="text-xs text-muted-foreground">Mencionar agente</span>
-        </div>
-        <div className="max-h-48 overflow-y-auto p-1">
-          {filtered.map((agent, i) => (
-            <button type="button"
-              key={agent.id}
-              onClick={() => handleSelect(agent)}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors',
-                i === selectedIndex ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-              )}
-            >
-              {agent.avatar_url ? (
-                <img src={agent.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
-              ) : (
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-xs font-medium text-primary">
-                  {agent.name.charAt(0).toUpperCase()}
+        <motion.div
+          key="mention-list"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          className="absolute bottom-full left-0 z-50 mb-1 w-64 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+        >
+          <div className="border-b border-border/50 p-2">
+            <span className="text-xs text-muted-foreground">Mencionar agente</span>
+          </div>
+          <div className="max-h-48 overflow-y-auto p-1">
+            {filtered.map((agent, i) => (
+              <button
+                type="button"
+                key={agent.id}
+                onClick={() => handleSelect(agent)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors',
+                  i === selectedIndex ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                )}
+              >
+                {agent.avatar_url ? (
+                  <img
+                    loading="lazy"
+                    decoding="async"
+                    src={agent.avatar_url}
+                    alt=""
+                    className="h-6 w-6 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-xs font-medium text-primary">
+                    {agent.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <span className="block truncate font-medium text-foreground">{agent.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {agent.email}
+                  </span>
                 </div>
-              )}
-              <div className="min-w-0">
-                <span className="block truncate font-medium text-foreground">{agent.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{agent.email}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </motion.div>
+              </button>
+            ))}
+          </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );
