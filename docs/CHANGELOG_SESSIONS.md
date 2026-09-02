@@ -635,6 +635,15 @@ Testado ao vivo: agente comum tentando a impersonação via `_admin_user_id` em 
 
 Testado ao vivo: replay adversarial (mesmo `message_id`, payload NULL) agora retorna `idempotent=true` sem alterar `name`/`company`; mensagem legítima nova do mesmo remetente com campo NULL preserva o dado existente em vez de apagar.
 
+### Rodada 3 (continuação) — review cubic sobre o próprio fix de idempotência: soft-delete + concorrência
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| Checagem de idempotência não via mensagens soft-deletadas | `20260902190000` | A checagem de `20260902180000` consultava `zapp.messages` (view, filtra `WHERE deleted_at IS NULL`) — uma mensagem soft-deletada (via `DELETE`, restrito a admin/supervisor) ficava invisível, então um replay dela não era detectado como duplicata. Reproduzido ao vivo: mensagem criada, soft-deletada, replay com payload divergente não detectado (idempotência retornava `false`), embora o conteúdo físico da mensagem tenha permanecido intacto (o handler da view já preserva o original via `ON CONFLICT DO NOTHING`) e o contato não tenha sido corrompido (só tocado à toa, graças ao NULL-safe já aplicado). Fix: checagem agora consulta a tabela FÍSICA (`evo.evolution_messages`) direto, sem o filtro de `deleted_at` | ✅ |
+| Race condition entre requisições verdadeiramente concorrentes | — (não corrigido) | Confirmado pelo cubic e pelo coderabbit: duas transações concorrentes podem passar pela checagem de `SELECT` antes de qualquer uma inserir a mensagem, ambas prosseguindo para alterar/criar o contato. Mesma classe já registrada (falta de lock/UNIQUE em `sicoob_contact_mapping`) — não vou empilhar mais uma correção parcial de concorrência sem desenhar a serialização (advisory lock ou reserva atômica) de forma unificada para as duas races da mesma função | ⚠️ Pendência de design, backlog do Joaquim |
+
+Testado ao vivo: mensagem soft-deletada + replay agora retorna `idempotent=true` sem tocar no contato (`updated_at` inalterado); cenário de replay normal (sem soft-delete) continua funcionando sem regressão.
+
 ### Metodologia das rodadas 2 e 3
 
 Por pedido explícito e repetido do dono ("SEJA EXAUSTIVO E MINUCIOSO"), cada rodada rodou 5 agentes especializados em paralelo, cada um focado num ângulo diferente (idempotência do lote completo, varredura ampla de RPCs sem guarda, teste E2E dos callers reais, matriz combinatória adversarial, consolidação de catálogo/CI). Cada achado real foi reproduzido ao vivo (erro real antes do fix) e reconfirmado corrigido depois, sem deixar dado de teste residual em produção. As rodadas 2 e 3 encontraram, cada uma, pelo menos 1 bug real que a rodada anterior não tinha pego — inclusive 2 regressões autoinfligidas pelos próprios fixes da rodada 1 (`fn_require_app_user` bloqueando `service_role`; `rpc_upsert_contact` quebrando automação real do frontend).
