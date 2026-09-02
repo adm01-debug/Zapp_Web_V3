@@ -27,12 +27,6 @@
       "expected_presence": "right-only"
     },
     {
-      "path": "schemas.public.Views.empresas",
-      "owner": "external-finance-namespace-transition",
-      "reason": "Entrada histórica do catálogo Zapp substituída no banco compartilhado pela tabela homônima do sistema financeiro.",
-      "expected_presence": "left-only"
-    },
-    {
       "path": "schemas.public.Views.empresas_zapp_legacy",
       "owner": "external-finance-system",
       "reason": "View de compatibilidade mantida pelo sistema financeiro após assumir o nome public.empresas.",

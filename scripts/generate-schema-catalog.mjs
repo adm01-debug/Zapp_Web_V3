@@ -34,6 +34,7 @@ import { mkdirSync } from 'node:fs';
 
 const DEFAULT_TYPES_FILE = 'src/integrations/supabase/types.ts';
 const DEFAULT_OUT_FILE = 'supabase/schema-catalog.json';
+const DEFAULT_EXTERNAL_OBJECTS_FILE = 'supabase/schema-catalog-external-objects.json';
 
 function readFlag(name, fallback = undefined) {
   const prefix = `--${name}=`;
@@ -57,9 +58,71 @@ const SCHEMAS_FILTER = (readFlag('schemas', '') || '')
 const FROM_META = process.argv.includes('--from-meta');
 const CHECK_ONLY = process.argv.includes('--check');
 const IGNORE_SOURCE = process.argv.includes('--ignore-source');
+const EXTERNAL_OBJECTS_FILE = readFlag('external-objects-file', DEFAULT_EXTERNAL_OBJECTS_FILE);
 
 function sha1(input) {
   return createHash('sha1').update(input).digest('hex');
+}
+
+// O catálogo canônico (gerado a partir do types.ts commitado, nunca via
+// --from-meta) não pode conter objetos que schema-catalog-external-objects.json
+// declara "right-only" (pertencem a outro sistema que compartilha o schema
+// `public` — ex.: o financeiro externo). O postgres-meta não distingue "dono"
+// ao introspectar `public`, então tanto o types.ts quanto um catálogo gerado
+// ao vivo (--from-meta) sempre os incluem; sem este filtro, o gate "Catalog
+// fresh" (db-guard.yml) trava porque compare-schema-catalog.mjs espera esses
+// objetos ausentes do lado esquerdo (o catálogo commitado) e presentes só no
+// lado direito (o catálogo ao vivo, que continua sem filtro nenhum aqui).
+function loadExternalObjectsAllowlist(file) {
+  if (!file || !existsSync(file)) return [];
+  try {
+    const config = JSON.parse(readFileSync(file, 'utf8'));
+    return Array.isArray(config?.objects) ? config.objects : [];
+  } catch {
+    return [];
+  }
+}
+
+function stripRightOnlyExternalObjects(catalog, entries) {
+  let removed = 0;
+  for (const entry of entries) {
+    if (entry.expected_presence !== 'right-only') continue;
+    const parts = entry.path.split('.');
+    let cursor = catalog;
+    let reachable = true;
+    for (const part of parts.slice(0, -1)) {
+      if (!cursor || typeof cursor !== 'object' || !(part in cursor)) {
+        reachable = false;
+        break;
+      }
+      cursor = cursor[part];
+    }
+    const leafKey = parts.at(-1);
+    if (reachable && cursor && typeof cursor === 'object' && leafKey in cursor) {
+      delete cursor[leafKey];
+      removed++;
+    }
+  }
+  return removed;
+}
+
+function recomputeSummary(catalog) {
+  const schemas = catalog.schemas || {};
+  catalog.summary = {
+    schemas: Object.keys(schemas).length,
+    tables: 0,
+    views: 0,
+    functions: 0,
+    enums: 0,
+    composite_types: 0,
+  };
+  for (const schema of Object.values(schemas)) {
+    catalog.summary.tables += Object.keys(schema.Tables || {}).length;
+    catalog.summary.views += Object.keys(schema.Views || {}).length;
+    catalog.summary.functions += Object.keys(schema.Functions || {}).length;
+    catalog.summary.enums += Object.keys(schema.Enums || {}).length;
+    catalog.summary.composite_types += Object.keys(schema.CompositeTypes || {}).length;
+  }
 }
 
 function stripQuotes(value) {
@@ -510,6 +573,13 @@ async function main() {
   const { source, text } = await loadTypesSource();
   const parsed = parseDatabaseTypes(text);
   const catalog = buildCatalog(parsed, source, text);
+
+  if (!FROM_META) {
+    const externalObjects = loadExternalObjectsAllowlist(EXTERNAL_OBJECTS_FILE);
+    const removed = stripRightOnlyExternalObjects(catalog, externalObjects);
+    if (removed > 0) recomputeSummary(catalog);
+  }
+
   const output = stableStringify(catalog);
 
   if (CHECK_ONLY) {
