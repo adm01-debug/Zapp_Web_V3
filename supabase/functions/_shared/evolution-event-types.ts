@@ -34,6 +34,8 @@ export const EVO_EVENT_TYPES_SET: ReadonlySet<string> = new Set<string>(EVO_EVEN
  * [PATCH 28] Map chave protobuf → message_type canônico (evolution_messages /
  * ingest_ledger). Espelha parseMessageContent (evolution-media.ts:284-337).
  * [P100-AUDIT-FIX01 AG-3] templateMessage adicionado (mensagem interativa WhatsApp Business).
+ * [P100-AUDIT-FIX02 AG-2] buttonsMessage + listMessage → 'interactive'; pollCreationMessage → 'poll'.
+ * 'poll' adicionado a CanonicalMessageType (domain/messaging.ts) para manter paridade de tipos.
  */
 export const EVO_PROTOBUF_MESSAGE_TYPE_MAP: Readonly<Record<string, string>> = {
   conversation: 'text',
@@ -50,4 +52,6 @@ export const EVO_PROTOBUF_MESSAGE_TYPE_MAP: Readonly<Record<string, string>> = {
   contactMessage: 'contact',
   contactsArrayMessage: 'contact',
   pollCreationMessage: 'poll',
+  buttonsMessage: 'interactive',
+  listMessage: 'interactive',
 };

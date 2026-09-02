@@ -38,7 +38,8 @@ jobs:
               grep -v '^infra/migrations/' | \
               grep -v '^scripts/' | \
               grep -v '^supabase/functions/' | \
-              grep -v '^supabase/ci/' || true)
+              grep -v '^supabase/ci/' | \
+              grep -v '^docs/runbooks/' || true)
           else
             changed_sql=""
           fi

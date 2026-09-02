@@ -23,7 +23,7 @@ export interface ChannelAccount {
 export type CanonicalMessageType =
   | 'text' | 'image' | 'video' | 'audio' | 'document'
   | 'sticker' | 'location' | 'contact' | 'reaction'
-  | 'interactive' | 'template' | 'unknown';
+  | 'interactive' | 'template' | 'poll' | 'unknown';
 
 // ─── DeliveryStatus canônico ──────────────────────────────────────────────────
 export type CanonicalDeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';

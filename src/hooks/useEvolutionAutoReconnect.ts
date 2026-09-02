@@ -285,7 +285,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
     backoffRef.current = nextDelay;
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void attemptSpecificReconnectRef.current?.(), nextDelay);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null; // descarta handle expirado antes de qualquer guard de re-entrada
+      void attemptSpecificReconnectRef.current?.();
+    }, nextDelay);
   }, [setIsReconnecting, instanceName]);
 
   // Populate ref AFTER definition — breaks circular deps without stale closures
@@ -317,6 +320,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         reconnectAttemptCountRef.current = 0;
         reconnectExhaustedRef.current = false;
         credentialErrorRef.current = false;
+        timerRef.current = null; // timer expirado — sem reset o guard bloqueia novo ciclo após re-queda
         setIsReconnecting(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.evolutionConversations.all() });
         eventBus.emit('connection:recovered', { instanceName });
@@ -413,7 +417,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
       // com backoff — nao interromper esse timer com uma chamada direta.
       if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
-      void attemptSpecificReconnect();
+      void attemptSpecificReconnectRef.current?.();
     } catch (err: unknown) {
       log.error(`Error checking status for ${instanceName}:`, err);
       const httpStatus = extractHttpStatus(err);
@@ -448,7 +452,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         );
       }
     }
-  }, [instanceName, getInstanceStatus, attemptSpecificReconnect, setIsReconnecting]);
+  }, [instanceName, getInstanceStatus, setIsReconnecting]);
 
   useEffect(() => {
     if (!instanceName) return;
@@ -456,7 +460,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const interval = setInterval(() => void checkStatus(), 30_000);
     return () => {
       clearInterval(interval);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [checkStatus, instanceName]);
 
@@ -466,6 +473,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
    * (ex.: botao "Tentar novamente" na tela de conexoes).
    */
   const resetReconnect = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     reconnectExhaustedRef.current = false;
     reconnectAttemptCountRef.current = 0;
     backoffRef.current = INITIAL_BACKOFF_MS;

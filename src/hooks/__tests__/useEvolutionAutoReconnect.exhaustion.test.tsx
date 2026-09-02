@@ -119,3 +119,75 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     expect(connectInstance.mock.calls.length).toBeGreaterThan(before);
   });
 });
+
+describe('useEvolutionAutoReconnect — regressao timerRef no success path', () => {
+  /**
+   * Regressao do bug HOOK-001 (auditoria P100 2026-09-02):
+   * apos reconexao bem-sucedida, timerRef.current nao era zerado.
+   * Na proxima queda, o guard `timerRef.current !== null` bloqueava o ciclo
+   * indefinidamente — o hook ficava mudo mesmo com a instancia caida.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers();
+    logError.mockClear();
+    logInfo.mockClear();
+    emit.mockClear();
+    connectInstance.mockClear();
+    getInstanceStatus.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reinicia ciclo de reconexao apos sucesso seguido de nova queda (regressao HOOK-001)', async () => {
+    // Sequencia de retornos:
+    // checkStatus #1: 'close' → dispara attemptSpecificReconnect
+    // attemptSpecificReconnect call 1: 'open' → sucesso, zera refs (incluindo timerRef)
+    // checkStatus #2 (30s depois): 'close' → deve disparar nova tentativa SEM bloqueio de guard
+    let callCount = 0;
+    getInstanceStatus.mockImplementation(async () => {
+      callCount += 1;
+      // 1a call: checkStatus detecta desconexao
+      // 2a call: dentro do attemptSpecificReconnect (apos connectInstance + 5s)
+      if (callCount === 2) return { instance: { state: 'open' } };
+      return { instance: { state: 'close' } };
+    });
+
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+
+    // 10s cobre checkStatus inicial + connectInstance + 5s de espera + getInstanceStatus
+    await advance(10_000);
+    const afterFirstReconnect = connectInstance.mock.calls.length;
+    expect(afterFirstReconnect).toBeGreaterThanOrEqual(1);
+    expect(logInfo.mock.calls.some((c) => String(c[0]).includes('Successfully reconnected'))).toBe(true);
+
+    // Mais 40s: checkStatus dispara novamente (30s), detecta 'close' de novo
+    // SEM o fix: timerRef.current != null → guard bloqueia, connectInstance NAO e chamado
+    // COM o fix: timerRef.current == null → nova tentativa dispara normalmente
+    await advance(40_000);
+    expect(connectInstance.mock.calls.length).toBeGreaterThan(afterFirstReconnect);
+  });
+
+  it('resetReconnect apos latch dispara nova tentativa sem timer fantasma', async () => {
+    getInstanceStatus.mockImplementation(async () => ({ instance: { state: 'close' } }));
+
+    const { result } = renderHook(() => useEvolutionAutoReconnect('wpp2'));
+
+    // Esgota o latch (~22min)
+    await advance(22 * 60_000);
+    const afterExhaustion = connectInstance.mock.calls.length;
+    expect(logError.mock.calls.some((c) => String(c[0]).includes('Giving up on wpp2'))).toBe(true);
+
+    // Sem resetReconnect, nenhuma tentativa extra
+    await advance(2 * 60_000);
+    expect(connectInstance.mock.calls.length).toBe(afterExhaustion);
+
+    // resetReconnect limpa timer e reinicia ciclo imediatamente
+    await act(async () => {
+      result.current.resetReconnect();
+    });
+    await advance(2_000);
+    expect(connectInstance.mock.calls.length).toBeGreaterThan(afterExhaustion);
+  });
+});
