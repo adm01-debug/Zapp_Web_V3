@@ -621,6 +621,18 @@ Agente dedicado ampliou a varredura além do padrão anterior (funções ligadas
 
 Testado ao vivo: agente comum tentando a impersonação via `_admin_user_id` em `manage_department_member` agora recebe `Permissão insuficiente`; o mesmo admin real chamando por si mesmo passa a checagem (falha depois só por `zapp.departments` estar vazia); nenhuma mutação real aconteceu em nenhum teste pós-fix (confirmado sem resíduo em `zapp.profiles`).
 
+### Rodada 3 (continuação) — review coderabbit: overwrite em replay + impersonação em rpc_complete_task
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| `fn_sicoob_bridge_ingest_message` — UPDATE do contato existente não NULL-safe | `20260902180000` | Reproduzido ao vivo: contato criado com `name`/`company` corretos, depois um replay do MESMO `p_message_id` com payload NULL sobrescreveu `name`→'Sem nome' e `company`→NULL — perda real de dado já gravado no CRM | ✅ |
+| `fn_sicoob_bridge_ingest_message` — detecção de duplicata é código morto | `20260902180000` | Já documentado nesta sessão que `EXCEPTION WHEN unique_violation` nunca dispara (view com `ON CONFLICT DO NOTHING`); isso significa que TODO replay executava o UPDATE do contato antes de qualquer checagem de duplicata. Fix: checagem real de idempotência no início da função via `SELECT` em `zapp.messages` por `external_id` — retorna `idempotent=true` sem tocar no contato | ✅ |
+| Achado extra durante o teste do fix acima: `zapp.messages` também descarta `channel_type` no INSERT | `20260902180000` | Mesmo bug já documentado para `zapp.contacts` (view ignora o valor passado) — `channel_type` gravado sempre como `'whatsapp'` literal, nunca `'internal_chat'`. Descoberto porque a checagem de idempotência inicial (filtrando por `channel_type='internal_chat'`) nunca batia; corrigida para checar só por `external_id` | ✅ (idempotência), ⚪ mesmo bug de view já documentado, não corrigido no trigger compartilhado |
+| `rpc_complete_task` — `completed_by` forjável | `20260902180000` | Gravava `p_completed_by` (texto livre do chamador) direto no campo de auditoria — qualquer autenticado forjava quem completou a tarefa. Sem callers reais (mesmo achado da `170000`); fix usa `auth.uid()::text` como valor principal, parâmetro só como fallback | ✅ |
+| `v_sicoob_user_id` usa `p_message_id` como chave quando `p_sender_id` é NULL | — (não corrigido) | Cada mensagem sem `sender_id` gera uma chave DIFERENTE, nunca reencontrando o mapping do mesmo remetente — mesma classe da pendência já registrada de UNIQUE em `sicoob_contact_mapping`. Requer decisão de design (derivar chave estável do telefone quando existe; como tratar remetente sem nenhum identificador confiável) | ⚠️ Pendência de design, backlog do Joaquim |
+
+Testado ao vivo: replay adversarial (mesmo `message_id`, payload NULL) agora retorna `idempotent=true` sem alterar `name`/`company`; mensagem legítima nova do mesmo remetente com campo NULL preserva o dado existente em vez de apagar.
+
 ### Metodologia das rodadas 2 e 3
 
 Por pedido explícito e repetido do dono ("SEJA EXAUSTIVO E MINUCIOSO"), cada rodada rodou 5 agentes especializados em paralelo, cada um focado num ângulo diferente (idempotência do lote completo, varredura ampla de RPCs sem guarda, teste E2E dos callers reais, matriz combinatória adversarial, consolidação de catálogo/CI). Cada achado real foi reproduzido ao vivo (erro real antes do fix) e reconfirmado corrigido depois, sem deixar dado de teste residual em produção. As rodadas 2 e 3 encontraram, cada uma, pelo menos 1 bug real que a rodada anterior não tinha pego — inclusive 2 regressões autoinfligidas pelos próprios fixes da rodada 1 (`fn_require_app_user` bloqueando `service_role`; `rpc_upsert_contact` quebrando automação real do frontend).
