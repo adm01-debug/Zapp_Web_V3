@@ -41,7 +41,7 @@ const GIT_SHA = resolveGitSha(process.env.VITE_GIT_SHA);
 
 export const createVersionPayload = (
   entry: string | null,
-  options: { buildId?: string; gitSha?: string; builtAt?: string } = {},
+  options: { buildId?: string; gitSha?: string; builtAt?: string; entryCss?: string | null } = {},
 ) => {
   const gitSha = resolveGitSha(options.gitSha ?? process.env.VITE_GIT_SHA);
   return {
@@ -52,6 +52,11 @@ export const createVersionPayload = (
     releaseId: gitSha,
     builtAt: options.builtAt ?? new Date().toISOString(),
     entry,
+    // BUG FIX (2026-09-02): o CSS do entry tem hash PROPRIO (index-y1dDjU6P.css
+    // para o entry index-CJ5bStv8.js). O prefetch derivava o nome trocando
+    // .js -> .css e batia 404 em todo deploy. Emitir o nome real aqui e a
+    // unica forma de o cliente saber qual arquivo pre-carregar.
+    entryCss: options.entryCss ?? null,
   };
 };
 
@@ -70,12 +75,26 @@ const emitVersionJsonPlugin = () => ({
         (bundle[name] as { isEntry?: boolean; type?: string })?.isEntry === true &&
         (bundle[name] as { type?: string })?.type === 'chunk'
     );
+    // CSS do entry: o Vite anota os arquivos emitidos em viteMetadata.importedCss.
+    // Fallback: primeiro asset .css do bundle (build single-entry).
+    const importedCss = entry
+      ? (bundle[entry] as { viteMetadata?: { importedCss?: Set<string> } })?.viteMetadata
+          ?.importedCss
+      : undefined;
+    const entryCss =
+      (importedCss && Array.from(importedCss)[0]) ??
+      Object.keys(bundle).find((name) => name.endsWith('.css')) ??
+      null;
     // @ts-expect-error — `this.emitFile` is provided by Rollup at build time
     this.emitFile({
       type: 'asset',
       fileName: 'version.json',
       source: JSON.stringify(
-        createVersionPayload(entry ?? null, { buildId: BUILD_ID, gitSha: GIT_SHA }),
+        createVersionPayload(entry ?? null, {
+          buildId: BUILD_ID,
+          gitSha: GIT_SHA,
+          entryCss,
+        }),
       ),
     });
   },
