@@ -122,7 +122,16 @@ export async function markEventProcessed(
   });
   if (!error) return true;
   if (error.code === '23505') return false;
-  console.warn('[idempotency] insert failed, proceeding as new:', error.message ?? error.code);
+  // Non-unique-violation insert failure (transient DB error, connection drop, etc).
+  // Deliberately fail-OPEN here: returning `false` would make callers treat this
+  // event as a duplicate and short-circuit with 200 without processing it — since
+  // the sender never re-delivers a 200'd event, that would silently and
+  // permanently drop a real customer message on every transient DB hiccup, which
+  // is worse than the rare double-processing this risks. console.error (not warn)
+  // so it is distinguishable in logs/alerts from ordinary duplicate-skip noise.
+  console.error('[idempotency] mark-processed insert failed (non-23505), processing as new — investigate DB health:', {
+    eventId, instance, eventType, code: error.code, message: error.message,
+  });
   return true;
 }
 

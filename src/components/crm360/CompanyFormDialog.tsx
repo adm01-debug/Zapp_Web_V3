@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExternalMutation } from '@/hooks/useExternalApiManagement';
+import { isValidCnpj } from '@/lib/cnpjUtils';
 import { toast } from 'sonner';
 import { Building2, Save, Loader2 } from 'lucide-react';
 
@@ -80,6 +81,11 @@ export function CompanyFormDialog({ open, onOpenChange, company, onSuccess }: Co
   const handleSubmit = async () => {
     if (!form.nome_fantasia.trim() && !form.razao_social.trim()) {
       toast.error('Preencha pelo menos o Nome Fantasia ou Razão Social.');
+      return;
+    }
+
+    if (form.cnpj.trim() && !isValidCnpj(form.cnpj)) {
+      toast.error('CNPJ inválido — confira os dígitos verificadores.');
       return;
     }
 
