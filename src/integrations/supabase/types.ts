@@ -59393,7 +59393,7 @@ export type Database = {
         Returns: {
           contact_id: string
           idempotent: boolean
-          message_id: string
+          message_id: string | null
         }[]
       }
       fn_snapshot_constraints_reference: {
