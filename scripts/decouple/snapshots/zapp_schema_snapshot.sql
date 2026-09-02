@@ -52140,8 +52140,8 @@ CREATE TABLE IF NOT EXISTS zapp.sicoob_contact_mapping (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     contact_id uuid NOT NULL,
     sicoob_user_id text NOT NULL,
-    sicoob_vendedor_id text NOT NULL,
-    sicoob_singular_id text NOT NULL,
+    sicoob_vendedor_id text,
+    sicoob_singular_id text,
     zappweb_agent_id uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
