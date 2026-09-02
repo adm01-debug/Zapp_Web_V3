@@ -1,4 +1,4 @@
-import { Logger, checkRateLimit, getClientIP, getCorsHeaders, handleCors, authorizeRoles, errorResponse } from "../_shared/validation.ts";
+import { Logger, checkRateLimit, getClientIP, getCorsHeaders, handleCors, authorizeRoles, errorEnvelope } from "../_shared/validation.ts";
 import { createZappAdminClient, createZappClient } from "../_shared/db-client.ts";
 import { initSentry, captureException } from "../_shared/sentry.ts";
 import { EVOLUTION_ENVELOPE_VERSION, proxyToEvolution, resolvePrivateBucketUrl, type ProxyToEvolutionOptions } from "../_shared/evolution-api-proxy.ts";
@@ -30,34 +30,43 @@ Deno.serve(async (req) => {
   const rl = isPollAction
     ? checkRateLimit(`evolution-poll:${ip}`, 600, 60_000)
     : checkRateLimit(`evolution:${ip}`, 120, 60_000);
-  if (!rl.allowed) return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' } });
+  if (!rl.allowed) return errorEnvelope('rate_limit_exceeded', 'Rate limit exceeded', 429, req, undefined, { 'Retry-After': '60' });
   let evolutionApiUrl: string;
-  try { evolutionApiUrl = getBaseUrl(); } catch { return new Response(JSON.stringify({ error: 'Evolution API not configured' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+  try { evolutionApiUrl = getBaseUrl(); } catch { return errorEnvelope('evolution_api_not_configured', 'Evolution API not configured', 503, req); }
   const evolutionApiKey = (Deno.env.get('EVOLUTION_API_KEY') || '').trim();
   const isPlaceholder = (v: string) => !v || /PLACEHOLDER|REPLACE_ME|YOUR_|CHANGE_ME/i.test(v);
-  if (isPlaceholder(evolutionApiKey)) return new Response(JSON.stringify({ error: 'Evolution API not configured' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  if (isPlaceholder(evolutionApiKey)) return errorEnvelope('evolution_api_not_configured', 'Evolution API not configured', 503, req);
   const supabase = createZappAdminClient();
   const supabaseUrl = ((Deno.env.get('SELFHOSTED_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL')) ?? '').replace(/\/+$/, '');
   const supabaseServiceKey = (Deno.env.get('SELFHOSTED_SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) ?? '';
   const { data: authData, error: authError } = await createZappClient(req).auth.getUser();
   let authedUser: { id: string; email: string | undefined } | null = null;
   if (!authError && authData?.user) authedUser = { id: authData.user.id, email: authData.user.email };
-  if (!authedUser) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  if (!authedUser) return errorEnvelope('unauthorized', 'Unauthorized', 401, req);
   const SEND_PER_INSTANCE_PER_MIN = Number(Deno.env.get('EVOLUTION_SEND_RATE_PER_INSTANCE') ?? '60');
   let _bodyCache: Record<string, unknown> | null = null;
   let _formDataCache: Record<string, unknown> | null = null;
   const safeJsonParse = (text: string): Record<string, unknown> => {
     try { const p = JSON.parse(text); return (typeof p === 'object' && p !== null && !Array.isArray(p)) ? p : { raw: text }; } catch { return { raw: text }; }
   };
+  // Auditoria de re-verificação (Bloco 3/etapa 32, CONFIRMED): `action` era lida
+  // do body e resolvida via fallback pra `pathAction` DEPOIS do gate — então o
+  // schema nunca via a action de verdade quando o caller confiava no path
+  // (padrão comum, ex. .../evolution-api/status). Resolve-se aqui, ANTES do
+  // parseOrReject, e injeta-se no body pra o enum obrigatório de
+  // EvolutionApiV1Schema.action validar a action REAL, não uma string vazia.
+  const resolveAction = (raw: string | undefined): string => (!raw || raw === 'evolution-api') ? pathAction : raw;
+
   const getParsedBody = async () => {
     const ct = req.headers.get('content-type') || '';
     if (ct.includes('multipart/form-data')) {
       if (_formDataCache) return { isMultipart: true, data: _formDataCache };
       try {
         const fd = await req.formData();
-        const raw = Object.fromEntries(fd.entries()); // preserva File (multipart)
-        // Contrato evolution-api@v1 (permissivo — roteado por action no handler):
-        // gate no ramo multipart, após auth.
+        const raw = Object.fromEntries(fd.entries()) as Record<string, unknown>; // preserva File (multipart)
+        raw.action = resolveAction(typeof raw.action === 'string' ? raw.action : undefined);
+        // Contrato evolution-api@v1 (roteado por action no handler): gate no
+        // ramo multipart, após auth, com a action já resolvida do path.
         const parsed = parseOrReject('evolution-api', CONTRACT_SCHEMAS['evolution-api'], req, raw, { extraHeaders: corsHeaders });
         if (parsed.ok === false) return parsed.response;
         _formDataCache = parsed.data as Record<string, any>;
@@ -67,7 +76,8 @@ Deno.serve(async (req) => {
     if (_bodyCache !== null) return { isMultipart: false, data: _bodyCache };
     try { _bodyCache = await req.json(); } catch { _bodyCache = {}; }
     if (typeof _bodyCache !== 'object' || _bodyCache === null || Array.isArray(_bodyCache)) _bodyCache = {};
-    // Contrato evolution-api@v1 — gate no ramo JSON, após auth.
+    (_bodyCache as Record<string, unknown>).action = resolveAction(typeof (_bodyCache as Record<string, unknown>).action === 'string' ? (_bodyCache as Record<string, unknown>).action as string : undefined);
+    // Contrato evolution-api@v1 — gate no ramo JSON, após auth, com a action já resolvida do path.
     const parsed = parseOrReject('evolution-api', CONTRACT_SCHEMAS['evolution-api'], req, _bodyCache!, { extraHeaders: corsHeaders });
     if (parsed.ok === false) return parsed.response;
     return { isMultipart: false, data: parsed.data as Record<string, any> };
@@ -86,15 +96,20 @@ Deno.serve(async (req) => {
   const bodyResult = await getParsedBody();
   if (bodyResult instanceof Response) return bodyResult;
   const { isMultipart, data: bodyForAction } = bodyResult;
-  let action = safeGet(bodyForAction, 'action', isMultipart) || '';
-  if (!action || action === 'evolution-api') action = pathAction;
+  // action já foi resolvida (path como fallback) e validada contra o enum
+  // pelo gate em getParsedBody() — chega aqui sempre não-vazia e válida.
+  const action = safeGet(bodyForAction, 'action', isMultipart) || pathAction;
   const idemKey = (req.headers.get('idempotency-key') || req.headers.get('x-idempotency-key') || '').trim() || undefined;
   const proxy = (path: string, method = 'POST', proxyBody?: unknown, proxyOpts?: ProxyToEvolutionOptions) => proxyToEvolution(evolutionApiUrl, evolutionApiKey, corsHeaders, path, method, proxyBody, undefined, idemKey, proxyOpts);
   try {
     const body = bodyForAction;
     let instance: string | null = safeGet(body, 'instanceName', isMultipart) || safeGet(body, 'instance', isMultipart) || null;
     const INSTANCE_RE = /^[a-zA-Z0-9_-]{1,128}$/;
-    if (instance && !INSTANCE_RE.test(instance)) return new Response(JSON.stringify({ error: 'Invalid instance name' }), { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Bloco 2 (etapa 22, 2026-08-21): shape avulso trocado pelo envelope de
+    // domínio canônico do arquivo (mesmo padrão usado nos outros ~20 422/403/
+    // 429/503 abaixo) — era o único 422 do evolution-api fora do formato
+    // {version,contract,error,status,code,message,details}.
+    if (instance && !INSTANCE_RE.test(instance)) return new Response(JSON.stringify({ version: EVOLUTION_ENVELOPE_VERSION, contract: 'evolution-api@v1', error: true, status: 422, code: 'INVALID_INSTANCE_NAME', message: 'Nome de instância inválido.', details: [{ path: 'instance', message: 'Nome de instância inválido.' }] }), { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const instanceLooksLikeUuid = (v: unknown): boolean => typeof v === 'string' && UUID_RE.test(v.trim());
     const READE_ONLY_INSTANCE_ACTIONS = new Set(['list-instances', 'instance-info', 'status', 'get-settings', 'get-webhook', 'find-status-messages']);
@@ -463,6 +478,7 @@ Deno.serve(async (req) => {
         });
         if (createRes.status === 401 || createRes.status === 403) return buildAuthError(createRes.status, 'create-instance');
         if (!createRes.ok) {
+          // Resposta OUTBOUND da Evolution API — {} é fallback inofensivo (message lida com || de fallback textual); não é o antipadrão de body de request (D1/etapa 27).
           const createData = await createRes.json().catch(() => ({}));
           return new Response(JSON.stringify({ version: EVOLUTION_ENVELOPE_VERSION, contract: 'evolution-api@v1', error: true, status: createRes.status, message: (createData as { message?: string }).message || 'Falha ao criar a instância na Evolution API', details: [{ path: 'instance', message: (createData as { message?: string }).message || 'Falha ao criar a instância na Evolution API' }] }), { status: createRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
@@ -472,10 +488,10 @@ Deno.serve(async (req) => {
       }
       return new Response(JSON.stringify({ version: EVOLUTION_ENVELOPE_VERSION, data }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    return new Response(JSON.stringify({ error: 'Unknown action', action }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return errorEnvelope('unknown_action', 'Unknown action', 404, req, { action });
   } catch (error: unknown) {
     const log = new Logger('evolution-api', req);
     log.error('Unhandled error', { error: error instanceof Error ? error.message : String(error) });
-    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return errorEnvelope('internal_error', 'Internal server error', 500, req);
   }
 });

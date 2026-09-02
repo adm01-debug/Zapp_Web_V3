@@ -39,7 +39,7 @@
 
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import {
-  handleCors, errorResponse, jsonResponse,
+  handleCors, errorResponse, errorEnvelope, jsonResponse,
   sanitizeString, isValidUUID, checkRateLimit, getClientIP, requireEnv, Logger, getCorsHeaders,
 } from "../_shared/validation.ts";
 import { timingSafeStringEqual } from "../_shared/auth.ts";
@@ -745,7 +745,7 @@ function decrementConcurrency(concurrencyKey: string): void {
  * - Rejects if signature mismatch or timestamp too old (>5 minutes)
  *
  * USAGE:
- * Client computes: signature = Base64(HMAC-SHA256(JSON.stringify(body) + '.' + timestamp, secret))
+ * Client computes: signature = Hex(HMAC-SHA256(JSON.stringify(body) + '.' + timestamp, secret))
  * Sends header: X-Signature: timestamp.signature
  * Server validates and rejects tampering
  *
@@ -753,6 +753,13 @@ function decrementConcurrency(concurrencyKey: string): void {
  * - Replay attack prevention (timestamp validation)
  * - Tampering detection (signature validation)
  * - Non-repudiation (client signed the request)
+ *
+ * NÃO migrou pra _shared/hmac-validation.ts (PLANO-100 etapa 22, 2026-08-25):
+ * esquema de assinatura de REQUEST próprio (header "timestamp.signature", HMAC
+ * Base64 sobre body+'.'+timestamp, janela anti-replay 5min, assinatura opcional)
+ * — o módulo valida assinatura de webhook em HEX sobre o body cru; migrar mudaria
+ * o protocolo de fio e quebraria clientes integrados. A comparação usa o
+ * timingSafeStringEqual canônico (_shared/auth.ts).
  */
 async function validateRequestSignature(
   req: Request,
@@ -1189,7 +1196,7 @@ Deno.serve(async (req) => {
     }
 
     // IMPROVEMENT 7: Add correlationId to error response
-    const errorResp = errorResponse("Internal server error", 500, req);
+    const errorResp = errorEnvelope("internal_error", "Internal server error", 500, req);
     return ctx ? addCorrelationIdHeader(errorResp, ctx.correlationId) : errorResp;
   }
 });

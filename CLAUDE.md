@@ -3,7 +3,7 @@
 
 ## OBRIGATORIO: leia antes de qualquer acao
 
-> **Regra de commits (multi-agente):** Commits de codigo, docs ou config vao pelo container VPS (stack 122, claude-code). Sessao de chat nunca faz git push direto no main - causa rebases competitivos com a sessao VPS. Use portainer_exec_container para delegar. Politica canonica: HERMES.md.
+> **Regra de commits (multi-agente) — v2, 2026-08-24:** Toda sessao de chat COMMITA o proprio trabalho (codigo, docs, config) — correcao sem commit e bug de processo. Fluxo padrao, igual ao Claude Code online: branch `fix/`|`feat/`|`docs/`|`chore/`|`ci/`|`hotfix/` criado de `origin/main` atualizada -> commit -> push -> **PR para `main`**. Push direto na `main` e proibido para qualquer agente/sessao (causa rebases competitivos com a sessao VPS). Merge do PR: ato humano (Joaquim), so com CI verde — a sessao de chat abre o PR e nao o mergeia. Merge que toca `supabase/functions/**` dispara `edge-deploy.yml`. Sessoes concorrentes na mesma maquina: cada uma em worktree propria (`git worktree add`). Politica canonica: HERMES.md.
 > Para agentes Hermes: leia tambem [`HERMES.md`](./HERMES.md) para regras especificas de execucao paralela e estado do framework.
 
 **1. Leia ESTADO.md (raiz do repo) antes de qualquer mudanca.**
@@ -93,18 +93,18 @@ ou de ligar algo intencionalmente desligado.
 
 1. **SEMPRE usar `schema: 'zapp'`** — o cliente Supabase já está configurado com isso em `src/integrations/supabase/client.ts`. Não trocar para `public`.
 
-2. **Para dados Evolution (mensagens/contatos/conversas)**: usar o cliente padrão (`supabase.from('evolution_messages')` etc.). **TOPOLOGIA ATUAL (migração evo→zapp; corrigido 2026-08-15 — fonte de verdade: `docs/decouple/ANALISE_FRONTEIRA_EVO_ZAPP_20260815.md`, ver issue #1098):** `zapp.evolution_messages` e `zapp.evolution_conversations` são as **tabelas físicas particionadas** e `zapp.evolution_contacts` é **tabela física** — NÃO são views. `evo.evolution_messages`, `evo.evolution_contacts` e `evo.evolution_conversations` **NÃO EXISTEM** (`evo.evolution_messages_v2` é uma view que lê `zapp`). NÃO usar `.schema('evo')` para dado de negócio: `evo` não está exposto no PostgREST (retorna `PGRST205`) e hoje contém apenas operação/monitoria/mídia/LID.
+2. **Para dados Evolution (mensagens/contatos/conversas)**: usar o cliente padrão (`supabase.from('evolution_messages')` etc.). **TOPOLOGIA ATUAL (revalidada AO VIVO em 2026-08-20 via `pg_class`/`pg_publication_tables` — ver `docs/plano-100/VALIDACAO_PLANO_100_2026-08-20.md`):** as tabelas **físicas** vivem no schema **`evo`** — `evo.evolution_messages` (raiz particionada, `relkind='p'`), `evo.evolution_conversations` (raiz particionada, `relkind='p'`) e `evo.evolution_contacts` (`relkind='r'`, 14 MB / 22.351 linhas). No schema `zapp`, `evolution_messages`/`evolution_conversations`/`evolution_contacts` são **views auto-updatable** (`security_invoker=on`) apontando para `evo` — por isso o cliente padrão (schema `zapp`) funciona para SELECT/INSERT/UPDATE. A afirmação anterior deste arquivo ("físicas em zapp; evo.evolution_messages NÃO EXISTE") estava **invertida** em relação ao banco de produção. NÃO usar `.schema('evo')` para REST: `evo` não está exposto no PostgREST (retorna `PGRST205`). **Exceção: Realtime** — subscriptions leem o WAL direto e DEVEM usar `schema: 'evo'` para as tabelas evolution_* (regra 4 abaixo).
 
 3. **PostgREST**: sem o header `Accept-Profile: zapp`, queries falham com `PGRST205`.
 
-4. **Realtime — IMPORTANTE**: a publicação `supabase_realtime` tem `publish_via_partition_root = true`. Isso significa que eventos CDC são publicados pela **tabela raiz particionada**, nunca pela partição. Use a tabela raiz nos listeners:
-   - Mensagens do WhatsApp → `schema: 'zapp'`, tabela **`evolution_messages`** (raiz física em `zapp` desde a migração evo→zapp), NÃO `evolution_messages_wpp2`. **Subscription em `schema: 'evo'` recebe ZERO eventos** — a relação física não está lá.
-   - Conversas → `schema: 'zapp'`, tabela **`evolution_conversations`** (raiz física em `zapp`), NÃO `evolution_conversations_wpp2`
-   - Perfis/notificações → `schema: 'zapp'`
-   - **`failed_messages`** → `schema: 'zapp'` (tabela física; `public.failed_messages` é VIEW, não entra na publication — subscription com `schema: 'public'` é no-op silencioso)
-   - **`dispatch_error_logs`** → `schema: 'zapp'` (adicionada à publication `supabase_realtime` em `20260721_fix_cursor_rpcs_and_search_path.sql`)
+4. **Realtime — IMPORTANTE**: a publicação `supabase_realtime` tem `publish_via_partition_root = true`. Eventos CDC saem pela **tabela raiz física** — nunca pela partição, nunca por view. Conteúdo da publication **verificado ao vivo em 2026-08-20** (`pg_publication_tables`): `evo.evolution_messages`, `evo.evolution_conversations`, `evo.evolution_contacts`, `zapp.profiles`, `zapp.app_notifications` (+ `zapp.failed_messages` e `zapp.dispatch_error_logs` reincorporadas pela migration `20260821001000`). Use nos listeners:
+   - Mensagens do WhatsApp → `schema: 'evo'`, tabela **`evolution_messages`** (raiz física em `evo`), NÃO `evolution_messages_wpp2`. **Subscription em `schema: 'zapp'` recebe ZERO eventos** — `zapp.evolution_messages` é view, e view nunca emite CDC. (O código de produção já faz isso: `useZappMessages.ts`, `useZappConversations.ts`, `useRealtimeContacts.ts` assinam `schema: 'evo'`.)
+   - Conversas → `schema: 'evo'`, tabela **`evolution_conversations`**; Contatos → `schema: 'evo'`, **`evolution_contacts`**.
+   - Perfis/notificações → `schema: 'zapp'` (`profiles`, `app_notifications` — físicas em `zapp` e presentes na publication).
+   - **`failed_messages`** → `schema: 'zapp'` (tabela física). Estava **fora** da publication em 2026-08-20 (canal silencioso p/ `useFailedMessageAlerts`) — corrigido pela migration `20260821001000_realtime_pub_failed_messages_dispatch_error_logs.sql`.
+   - **`dispatch_error_logs`** → `schema: 'zapp'` — idem (reincorporada pela mesma migration; a adição original de `20260721` havia se perdido).
    - **Subscriptions na partição ficam silenciosas** (zero eventos) com `publish_via_partition_root=true`.
-   - **Regra geral**: Realtime usa o WAL físico — apenas relations físicas na publication emitem eventos. Views nunca emitem, independentemente do schema.
+   - **Regra geral**: Realtime usa o WAL físico — apenas relations físicas na publication emitem eventos. Views nunca emitem, independentemente do schema. Antes de assinar uma tabela nova, confira `pg_publication_tables`.
 
 5. **Tipos TypeScript**: importar SEMPRE de `@/integrations/supabase/schema` (barrel canônico), nunca de `types.ts` diretamente.
 
@@ -131,14 +131,14 @@ ou de ligar algo intencionalmente desligado.
 
 | Tabela | Função |
 |--------|--------|
-| ~~`evolution_messages`~~ | **MOVIDA para `zapp`** (migração evo→zapp) — em `evo` só existe a view `evolution_messages_v2` → `zapp.evolution_messages` |
-| ~~`evolution_contacts`~~ | **MOVIDA para `zapp`** — `zapp.evolution_contacts` é a tabela física |
-| ~~`evolution_conversations`~~ | **MOVIDA para `zapp`** — raiz particionada física em `zapp` |
+| `evolution_messages` | **Raiz particionada FÍSICA em `evo`** (`relkind='p'`; revalidado ao vivo 2026-08-20 via `pg_class`) — `zapp.evolution_messages` é view auto-updatable sobre ela |
+| `evolution_contacts` | **TABELA FÍSICA** em `evo` (14 MB, 22.351 linhas; auditado 2026-08-20 via `pg_class`) — `zapp.evolution_contacts` é VIEW auto-updatable (security_invoker=on) que aponta para cá |
+| `evolution_conversations` | **Raiz particionada FÍSICA em `evo`** (`relkind='p'`) — `zapp.evolution_conversations` é view auto-updatable sobre ela |
 | `evolution_webhook_events_v2_*` | Webhooks particionados por mês (2026-03 a 2027-06 + default) |
 | `evolution_media` | Mídias (23.366, 10 MB) |
 | `evolution_whatsapp_status` | Status WA (14.789, 10 MB) |
 
-**Partições de `zapp.evolution_messages` (14 partições — raiz física em `zapp`; revalidado via `pg_class`/`pg_inherits` em 2026-08-15):**
+**Partições de `evo.evolution_messages` (raiz física em `evo`; revalidado via `pg_class` em 2026-08-20):**
 `wpp2`, `comercial_01`–`comercial_08`, `compras`, `default`, `financeiro`, `logistica`, `marketing`
 
 **Partições de `evolution_conversations` (13 partições — confirmado via `pg_inherits` em 2026-08-06):**
@@ -146,31 +146,75 @@ ou de ligar algo intencionalmente desligado.
 
 > **Nota:** `evo.evolution_messages_wpp2_archive` é uma **tabela standalone regular** (`relkind='r'`), NÃO uma partição — não aparece em `pg_inherits`. Não confundir com as partições acima.
 
-> `evolution_messages` e `evolution_conversations` são **tabelas raiz particionadas** (relkind='p' no evo schema).
-> Os dados ficam nas partições listadas acima. No schema `zapp`, `evolution_messages` existe como
-> **view auto-updatable** (security_invoker=on) que aponta para a raiz no schema `evo`.
+> `evolution_messages` e `evolution_conversations` são **tabelas raiz particionadas** (relkind='p' no schema `evo`).
+> Os dados ficam nas partições listadas acima. No schema `zapp`, `evolution_messages`/`evolution_conversations`/
+> `evolution_contacts` existem como **views auto-updatable** (security_invoker=on) que apontam para as raízes em `evo`.
 > Para queries SELECT, tanto a raiz quanto as partições funcionam.
-> Para **Realtime**, sempre use a raiz (regra 4 acima).
+> Para **Realtime**, sempre use a raiz física em `evo` (regra 4 acima).
+> Revalidado ao vivo em 2026-08-20 (`pg_class`) — este bloco é a descrição correta; ignorar qualquer texto antigo que afirme "físicas em zapp".
 
-### Storage Buckets (13 buckets em produção)
+### Storage Buckets (16 buckets em produção — revalidado ao vivo 2026-09-01)
 
 | Bucket | Público | Limite | Notas |
 |--------|---------|--------|---------|
-| `audio-memes` | **sim** | 5 MB | Público por decisão explícita do dono (migrations 20260806194000 e 20260806195000). Áudios de memes internos. |
-| `audio-messages` | **sim** | — | **LEITURA pública** via `/storage/v1/object/public/` — UPLOAD requer autenticação. `allowed_mime_types: [ogg,webm,mpeg,mp3,aac,mp4]`. |
+| `audio-memes` | **sim** | 10 MB | Público por decisão explícita do dono (migrations 20260806194000 e 20260806195000). Áudios de memes internos. |
+| `audio-messages` | **não** | 25 MB | Privado (não confirmado quando exatamente, mas `updated_at` do bucket é anterior a 2026-08-06 — **não** relacionado à migration `plano100_e028_storage_buckets_privados`, que era contaminação de outro projeto, ver nota abaixo). Frontend já compatível: `useMediaUrl.ts` (ADR-004) gera signed URL (TTL 1h) em vez de usar `/object/public/`. Validado ao vivo em 2026-09-01. |
 | `avatars` | sim | 5 MB | |
-| `comprovantes-financeiro` | não | 20 MB | |
-| `custom-emojis` | sim | 512 KB | |
-| `email-attachments` | não | — | |
+| `comprovantes-financeiro` | não | 25 MB | |
+| `custom-emojis` | sim | 2 MB | |
+| `email-attachments` | não | 25 MB | |
 | `etiquetas-remessa` | não | 10 MB | |
 | `fechamentos` | não | 20 MB | |
-| `quarantine` | não | — | |
+| `quarantine` | não | 100 MB | |
 | `recibos-entrega` | sim | 10 MB | |
-| `stickers` | sim | 512 KB | |
-| `team-chat-files` | não | — | |
-| `whatsapp-media` | **sim** | 50 MB | Público desde BUG-MEDIA-20260806. LEITURA pública via `/object/public/`. UPLOAD requer autenticação. 18.494 objetos. |
+| `stickers` | sim | 5 MB | |
+| `team-chat-files` | não | 50 MB | |
+| `whatsapp-media` | **não** | 50 MB | Privado — reverte o estado "público desde BUG-MEDIA-20260806" descrito anteriormente aqui. `updated_at` do bucket é **2026-07-26**, então **não** foi a migration `plano100_e028_storage_buckets_privados` (essa é de 30/08 e era contaminação de outro projeto — ver nota abaixo) que mudou isso; causa raiz não identificada nesta sessão. Frontend já compatível (mesma nota de `audio-messages`); signed URL testada ao vivo em 2026-09-01 (`HTTP 200`). **Não tratar a ausência de `/object/public/` como bug** — é o comportamento atual esperado. |
+| `whatsapp-status-media` | não | 50 MB | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
+| `zapp-exports` | não | 50 MB | Não documentado até 2026-08-20; presente no DB em 2026-09-01. |
+| `zapp-reports` | não | 50 MB | Não documentado até 2026-08-20; presente no DB em 2026-09-01. Policy `reports_storage_admin_all` (service_role apenas). |
 
-> **Cron jobs ativos:** 218 jobs em `cron.job` (pg_cron — auditado 2026-08-15; anterior: 151 em 2026-08-06)
+> Coluna Limite revalidada ao vivo em 2026-09-01 (`file_size_limit` de
+> `storage.buckets`, todas as 16 linhas) — a versão anterior desta tabela
+> tinha 11/16 valores desatualizados (nunca conferidos contra o DB desde a
+> criação original da tabela).
+
+> **Correção 2026-09-01 (sessão seguinte):** as 3 migrations acima
+> (`plano100_e028_storage_buckets_privados`, `plano100_e036_pii_access_logs`,
+> `plano100_e012_secdef_permissions_helpers`) eram **contaminação cross-tenant**
+> de outro projeto Supabase ("Departamento Pessoal V3") aplicada por engano no
+> banco do zapp em 2026-08-30 — **não são, e nunca foram, features do zapp**.
+> Confirmado ao vivo: criaram `public.pii_access_logs`/`pii_access_alerts`/
+> `v_pii_access_suspeitos`, 8 funções (`get_my_permissions`,
+> `user_belongs_to_empresa` etc.) e 10 storage policies `tenant_*` em 4 buckets
+> de RH (`comprovantes-despesas`, `contabilidade-anexos`, `relatorios-privados`,
+> `sst-programas`) — nada disso tem relação com `whatsapp-media`/`audio-messages`
+> (esses ficaram privados por outro motivo, anterior, não identificado). O
+> rollback já existe e já foi aplicado com sucesso:
+> `supabase/migrations/20260831124500_rollback_departamento_pessoal_contamination.sql`
+> (autorização explícita do dono registrada no próprio arquivo). Verificado
+> ao vivo 2026-09-01: zero objetos de contaminação restantes no banco. **Não
+> tentar "materializar" arquivo espelho para as 3 migrations estrangeiras** —
+> isso recriaria a contaminação na forma de código versionado do zapp.
+>
+> **Pendência real remanescente:** só 2 migrations aplicadas em 30/08 seguem
+> sem arquivo espelho no repo — `e2e_fix_extend_app_role_enum` (estende
+> `public.app_role` com `financeiro/operacional/visualizador/contador/
+> operator/viewer`, usado por `public.user_empresas.role`) e
+> `e2e_fix_finance_core_empresas_user_empresas` (tabelas `public.empresas`/
+> `public.user_empresas` do módulo multi-empresa, distinto de `zapp.empresas`
+> que é a base de 51.688 clientes/leads). Ambas são trabalho legítimo do zapp
+> (não contaminação) — materializadas em
+> `supabase/migrations/20260830180000_e2e_fix_extend_app_role_enum.sql` e
+> `supabase/migrations/20260830180300_e2e_fix_finance_core_empresas_user_empresas.sql`,
+> **ainda não mergeadas em `main`** no momento em que este parágrafo foi
+> escrito — ver PR #1478 (branch `fix/materializa-migrations-drift-30-31ago-v2`).
+> Se você está lendo isto em `main` e esses 2 arquivos não existem em
+> `supabase/migrations/`, o PR #1478 ainda não foi mergeado — confira o
+> estado dele antes de tentar recriar essas migrations do zero.
+
+> **Cron jobs ativos:** 239 jobs em `cron.job` (pg_cron — auditado ao vivo 2026-08-20; anteriores: 218 em 2026-08-15, 151 em 2026-08-06)
+> **Vault:** 37 secrets em `vault.secrets` (faxina concluída — zero `minio_*`/DEPRECATED; inventário canônico em `docs/SECRETS_INVENTORY.md`)
 
 ---
 
@@ -190,26 +234,32 @@ ou de ligar algo intencionalmente desligado.
 |------|-----------|-----------|-------------|
 | 2026-08-20 | Bundle público dos 3 hosts embutia **anon key inválida** → 401 em auth e dados (`PGRST301`, `Unauthorized` no Kong) | Secret GitHub `VITE_SUPABASE_PUBLISHABLE_KEY` continha anon key de **outro ambiente** (assinada com JWT_SECRET diferente; Kong e PostgREST recusavam). `client.ts` já era defensivo — a falha foi de **config de env**, que teste de código não pega | Secret corrigido via `gh secret set` + redeploy (run 32421024974). Guard reforçado (commit 3fcc3223): `bundle-secret-guard.yml` agora, além de barrar `service_role`, **valida que a anon key é ACEITA pelo Kong** e falha em 401 (`ANON_KEY_REJECTED`). Roda pós-deploy + diário |
 
-> **Domínio ZAPP:** `www.zappweb.app.br` migrado da Vercel → **VPS** (DNS A `209.142.67.51`; Traefik router `zappweb-www` inline no stack 157). Vercel **aposentada** para o ZAPP; projetos `zapp-web`/`zapp-web-v2` deletados. **Fonte única = VPS.** Não recriar deploy na Vercel para este app.
+> **Domínio ZAPP:** `www.zappweb.app.br` migrado da Vercel → **VPS** (DNS A `<IP-VPS>`; Traefik router `zappweb-www` inline no stack 157). Vercel **aposentada** para o ZAPP; verificado ao vivo em 2026-08-20 que o team `juca1` não tem mais NENHUM projeto zapp. **Fonte única = VPS.** Não recriar deploy na Vercel para este app.
+> **Domínio canônico:** `zapp.atomicabr.com.br` (é o `rel=canonical` do index.html); `zappweb.app.br` e `www.zappweb.app.br` são aliases servindo o MESMO bundle (verificado byte-a-byte em 2026-08-20). Detalhes: `docs/ARQUITETURA_CANONICA.md`.
 
 ---
 
 ## Stubs Ativos (RPCs sem implementação real)
 
-Estas funções existem como stubs em `supabase/migrations/20260717000002_create_missing_rpcs_stubs.sql`.
-Todas fazem `RAISE EXCEPTION P0001` exceto onde indicado. **Não implementar como tabelas** — requerem Edge Functions.
+Estas funções seguem catalogadas como stubs/parciais, mas a migration original
+`20260717000002_create_missing_rpcs_stubs.sql` não está mais no repo após o
+cleanup. Use `docs/RPC_STUBS_STATUS.md`, `src/integrations/supabase/types.ts`
+e o snapshot canônico para o contrato vivo. **Não implementar como tabelas** —
+requerem Edge Functions.
 
 | RPC | Comportamento do Stub | Implementação Real |
 |-----|-----------------------|--------------------|
 | `initiate_gmail_oauth` | RAISE P0001 | Edge Function OAuth Google |
 | `complete_gmail_oauth` | RAISE P0001 | Edge Function OAuth callback |
-| `sync_to_crm` | RAISE P0001 | Edge Function + API CRM |
+| `sync_to_crm` | Retorna `{synced:false,error:'CRM sync not yet implemented'}` | Edge Function + API CRM |
 | `export_user_data` | Retorna perfil básico (JSON) | Edge Function export completo |
 | `import_user_data` | RAISE P0001 | Edge Function com validação |
 | `enrich_contact` | Retorna `{enriched: false}` | Integração API enriquecimento |
-| `get_latest_analysis` | Retorna avg engagement_score | Analytics completo |
+| `get_latest_analysis` | Legado/parcial; UI nova usa `rpc_latest_contact_analysis` | Analytics completo |
 
-> `check_download_permission` — **NÃO é stub**: função intencionalmente ausente, frontend fail-open via SQLSTATE 42883.
+> `check_download_permission` — **NÃO é stub**: função intencionalmente ausente; o
+> design original era fail-open via SQLSTATE 42883, mas o hook atual do frontend
+> está fail-closed quando a RPC não existe.
 > Detalhes completos em `docs/RPC_STUBS_STATUS.md`.
 
 ---
@@ -255,16 +305,18 @@ O repositório possui um **grafo de conhecimento** em `graphify-out/` (Apache 2.
 - **Top god nodes (rebuild 2026-08-20):** `cn()` (982°), `Button` (504°), `supabase` (412°), `Badge` (366°), `Card` (329°), `CardContent` (316°), `CardHeader` (257°), `getLogger()` (257°), `CardTitle` (255°), `err()` (213°)
 - **Limitação conhecida do parser (NÃO é bug):** 31 arquivos `.tsx` saem como "partially extracted" — todos por **`&` literal em texto JSX** (ex.: `VoIP & Chamadas`, `Conexões & Integrações`, `Privacidade & LGPD`). O tree-sitter do graphify aborta no `&` cru; esbuild/tsc/React aceitam (build de prod passa). Consultas a esses componentes podem faltar nós/arestas a partir da 1ª linha com `&`. **Não** trocar por `&amp;` — é churn por falso positivo de ferramenta.
 - **MCP server:** 8 tools (`graphify_query`, `graphify_path`, `graphify_db_crossref`, etc.)
+- **Wiki do grafo:** `graphify export wiki` (≤1 s a partir do `graph.json` existente) gera `graphify-out/wiki/` — ~1,5 mil artigos (1 por comunidade) + `index.md` como ponto de entrada para navegação ampla de agentes. Regenerar junto com o rebuild. Não versionado (coberto pelo ignore `graphify-out/*`).
+- **Watch (`graphify watch .`) — NÃO usar como daemon neste repo (testado 2026-08-25):** requer `watchdog` no venv do tool; debounce 3 s; cada mudança dispara **re-extração AST completa** (~2,8 mil arquivos — o cache não é aproveitado entre builds). Pior: o rebuild escreve cache/saídas no próprio diretório vigiado e **re-dispara o watcher em loop** (observado: `4010 file(s) changed` logo após o 1º rebuild → 2º rebuild imediato). Fluxo canônico permanece `graphify update .` pós-commit (~40 s nesta máquina; ~2,5 min no container) + `graphify export wiki`.
 
 **Sempre consultar o grafo antes de `search_files`/grep.**
 
-Regenerar (via container claude-code, ~2,5 min, sem custo de API):
+Regenerar (via container claude-code, ~2,5 min, sem custo de API) + wiki:
 ```sh
-. /workspace/.local/env.sh && cd /workspace/repos/zapp-web-v3 && graphify update . --force
+. /workspace/.local/env.sh && cd /workspace/repos/zapp-web-v3 && graphify update . --force && graphify export wiki
 ```
 Consultar: `graphify explain "<no>"` · `graphify path "A" "B"`
 
-`graph.json` (35 MB) e `graph.html` **não** são versionados — só `GRAPH_REPORT.md` e `manifest.json`.
+`graph.json` (35 MB), `graph.html` e `wiki/` **não** são versionados — `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json` e `.graphify_labels.json.sig` são preservados.
 
 ---
 
@@ -272,6 +324,9 @@ Consultar: `graphify explain "<no>"` · `graphify path "A" "B"`
 
 | Doc | Conteúdo |
 |-----|----------|
+| `docs/ARQUITETURA_CANONICA.md` | **Arquitetura canônica pós-auditoria** (hosting, DB, edge, secrets, deploy) — 2026-08-20 |
+| `docs/plano-100/VALIDACAO_PLANO_100_2026-08-20.md` | Validação exaustiva das 100 etapas do plano de melhorias (status + evidências) |
+| `docs/SECRETS_INVENTORY.md` | Inventário único de chaves/secrets (onde vive, rotação) |
 | `docs/SCHEMA_REFERENCE.md` | **Documento canônico** de schemas e tabelas |
 | `docs/SCHEMA_SNAPSHOT.md` | Snapshot de contagens do DB (2026-08-04) |
 | `docs/RPC_STUBS_STATUS.md` | Status dos stubs de RPC ativos |
@@ -320,3 +375,23 @@ infra/                       # Infraestrutura
 └── evolution/               # Configurações Evolution
     └── SETTINGS.md          # Settings atuais da wpp2
 ```
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Frescura do Grafo
+Antes de consultar graphify, verifique se o grafo esta atualizado:
+```sh
+git rev-parse --short HEAD
+grep "Built from commit" graphify-out/GRAPH_REPORT.md
+```
+Se divergirem, o auto-sync via N8N deve ter corrigido em ate 15 min.
+Para forcar rebuild manual: `graphify update . --force`
+

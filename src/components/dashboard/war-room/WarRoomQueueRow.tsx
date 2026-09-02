@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,10 @@ export function WarRoomQueueRow({ queue, onClick }: QueueRowProps) {
     >
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: queue.color ?? undefined }} />
+          <div
+            className="h-3 w-3 rounded-full"
+            style={{ backgroundColor: queue.color ?? undefined }}
+          />
           <span className="font-medium">{queue.name}</span>
         </div>
         <div className="flex items-center gap-2">

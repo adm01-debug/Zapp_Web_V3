@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, RefObject } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +12,11 @@ interface ScrollToTopButtonProps {
 }
 
 /** Floating button that appears when the monitored container is scrolled past the threshold and scrolls it back to the top on click. */
-export function ScrollToTopButton({ scrollRef, threshold = 400, className }: ScrollToTopButtonProps) {
+export function ScrollToTopButton({
+  scrollRef,
+  threshold = 400,
+  className,
+}: ScrollToTopButtonProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -42,15 +46,15 @@ export function ScrollToTopButton({ scrollRef, threshold = 400, className }: Scr
           onClick={scrollToTop}
           className={cn(
             'fixed bottom-6 right-6 z-40 flex items-center justify-center',
-            'w-10 h-10 rounded-full',
+            'h-10 w-10 rounded-full',
             'bg-primary text-primary-foreground shadow-lg',
-            'hover:bg-primary/90 active:scale-95 transition-colors',
+            'transition-colors hover:bg-primary/90 active:scale-95',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             className
           )}
           aria-label="Voltar ao topo"
         >
-          <ArrowUp className="w-4 h-4" />
+          <ArrowUp className="h-4 w-4" />
         </motion.button>
       )}
     </AnimatePresence>

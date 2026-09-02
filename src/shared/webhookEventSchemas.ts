@@ -7,7 +7,8 @@ import { z } from 'zod';
 /**
  * Typed error codes used by safeParseEvent and aligned with the backend contract-kit.ts.
  *
- * Backend codes (contract-kit.ts): `invalid_json`, `contract_violation`, `unsupported_contract_version`
+ * Backend codes (contract-kit.ts): `invalid_json`, `contract_violation`, `unsupported_contract_version`,
+ * `contract_version_sunset` (etapa 55, Bloco 5 — versão suportada mas com sunset expirado, HTTP 410)
  * Frontend codes (local validation): `INVALID_PAYLOAD`, `INVALID_EVENT_SHAPE`
  *
  * All codes are valid in both directions — the frontend must handle backend error responses
@@ -18,6 +19,7 @@ export enum ContractErrorCode {
   INVALID_JSON = 'invalid_json',
   CONTRACT_VIOLATION = 'contract_violation',
   UNSUPPORTED_CONTRACT_VERSION = 'unsupported_contract_version',
+  CONTRACT_VERSION_SUNSET = 'contract_version_sunset',
 
   // Frontend-local codes (local schema validation)
   INVALID_PAYLOAD = 'INVALID_PAYLOAD',
@@ -29,6 +31,7 @@ export type ContractErrorCodeValue =
   | 'invalid_json'
   | 'contract_violation'
   | 'unsupported_contract_version'
+  | 'contract_version_sunset'
   | 'INVALID_PAYLOAD'
   | 'INVALID_EVENT_SHAPE';
 
@@ -302,24 +305,55 @@ export type ConversationEventRow = z.infer<typeof conversationEventRowSchema>;
 // Conversation transfer row
 // ─────────────────────────────────────────────
 
-/** Zod schema for a zapp.conversation_transfers row tracking agent/queue handoff lifecycle (pending→active→closed). */
-export const conversationTransferRowSchema = z.object({
+const conversationTransferCommonShape = {
   id: z.string().uuid(),
-  source_conversation_id: z.string().uuid(), // non-nullable per DB constraint
   from_agent_id: z.string().nullable(),
   to_agent_id: z.string().nullable(),
   from_queue_id: z.string().nullable(),
   to_queue_id: z.string().nullable(),
+  ticket_number: z.string(),
+  contact_id: z.string().nullable(),
+  contact_name: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+};
+
+const canonicalConversationTransferRowSchema = z.object({
+  ...conversationTransferCommonShape,
+  source_conversation_id: z.string().uuid().nullable(),
+  status: z.enum([
+    'pending',
+    'accepted',
+    'in_progress',
+    'completed',
+    'returned',
+    'rejected',
+    'expired',
+    'cancelled',
+  ]),
+  transfer_type: z.enum(['internal', 'direct']),
+  priority: z.number().int().min(1).max(4),
+  remote_jid: z.string(),
+  created_at: z.string(),
+});
+
+// Compatibilidade de leitura durante o rollout: snapshots/API legados ainda podem
+// trazer o vocabulário anterior e colunas nullable. Escritas novas seguem apenas o
+// contrato canônico acima; remover este ramo exige evidência de zero produtores legados.
+const legacyConversationTransferRowSchema = z.object({
+  ...conversationTransferCommonShape,
+  source_conversation_id: z.string().uuid(),
   status: z.enum(['pending', 'active', 'closed', 'cancelled', 'rejected']),
   transfer_type: z.enum(['queue', 'agent', 'bot', 'external']),
   priority: z.number().int().nullable(),
-  ticket_number: z.string(),
-  contact_id: z.string().nullable(),
   remote_jid: z.string().nullable(),
-  contact_name: z.string().nullable(),
-  metadata: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string().nullable(),
 });
+
+/** Zod schema for canonical zapp.conversation_transfers rows with a read-only legacy compatibility branch. */
+export const conversationTransferRowSchema = z.union([
+  canonicalConversationTransferRowSchema,
+  legacyConversationTransferRowSchema,
+]);
 
 // ─────────────────────────────────────────────
 // Team message row (zapp.team_messages)

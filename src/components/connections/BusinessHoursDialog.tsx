@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { motion } from '@/components/ui/motion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -42,19 +37,19 @@ export function BusinessHoursDialog({
   connectionId,
   connectionName,
 }: BusinessHoursDialogProps) {
-  const { 
-    businessHours: fetchedHours, 
-    awayMessage: fetchedAway, 
-    isLoading, 
-    isSaving, 
-    saveSettings 
+  const {
+    businessHours: fetchedHours,
+    awayMessage: fetchedAway,
+    isLoading,
+    isSaving,
+    saveSettings,
   } = useBusinessHours(connectionId);
 
   const [localHours, setLocalHours] = useState<BusinessHour[]>([]);
-  const [localAway, setLocalAway] = useState<AwayMessage>({ 
-    whatsapp_connection_id: connectionId, 
-    content: '', 
-    is_enabled: true 
+  const [localAway, setLocalAway] = useState<AwayMessage>({
+    whatsapp_connection_id: connectionId,
+    content: '',
+    is_enabled: true,
   });
 
   // Sync local state when data is fetched
@@ -110,32 +105,32 @@ export function BusinessHoursDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-h-[90vh] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
+            <Clock className="h-5 w-5 text-primary" />
             Horário de Atendimento - {connectionName}
           </DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <Tabs defaultValue="hours" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="hours" className="flex items-center gap-2">
-                <Clock className="w-4 h-4" />
+                <Clock className="h-4 w-4" />
                 Horários
               </TabsTrigger>
               <TabsTrigger value="message" className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
+                <MessageSquare className="h-4 w-4" />
                 Mensagem Ausente
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="hours" className="space-y-4 mt-4">
+            <TabsContent value="hours" className="mt-4 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   Configure o horário de funcionamento para cada dia da semana.
@@ -156,7 +151,7 @@ export function BusinessHoursDialog({
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: hour.day_of_week * 0.05 }}
                         className={cn(
-                          'flex items-center gap-4 p-3 rounded-lg border transition-colors',
+                          'flex items-center gap-4 rounded-lg border p-3 transition-colors',
                           hour.is_enabled
                             ? 'border-primary/30 bg-primary/5'
                             : 'border-border bg-muted/30'
@@ -170,7 +165,12 @@ export function BusinessHoursDialog({
                                 updateHour(hour.day_of_week, 'is_enabled', checked)
                               }
                             />
-                            <span className={cn('font-medium', !hour.is_enabled && 'text-muted-foreground')}>
+                            <span
+                              className={cn(
+                                'font-medium',
+                                !hour.is_enabled && 'text-muted-foreground'
+                              )}
+                            >
                               {day?.label}
                             </span>
                           </div>
@@ -183,7 +183,9 @@ export function BusinessHoursDialog({
                               <Input
                                 type="time"
                                 value={hour.start_time}
-                                onChange={(e) => updateHour(hour.day_of_week, 'start_time', e.target.value)}
+                                onChange={(e) =>
+                                  updateHour(hour.day_of_week, 'start_time', e.target.value)
+                                }
                                 className="w-28"
                               />
                             </div>
@@ -192,12 +194,21 @@ export function BusinessHoursDialog({
                               <Input
                                 type="time"
                                 value={hour.end_time}
-                                onChange={(e) => updateHour(hour.day_of_week, 'end_time', e.target.value)}
+                                onChange={(e) =>
+                                  updateHour(hour.day_of_week, 'end_time', e.target.value)
+                                }
                                 className="w-28"
                               />
                             </div>
-                            <Button aria-label="Copiar para todos os dias" variant="ghost" size="icon" className="ml-auto" onClick={() => copyToAllDays(hour.day_of_week)} title="Copiar para todos os dias">
-                              <Copy className="w-4 h-4" />
+                            <Button
+                              aria-label="Copiar para todos os dias"
+                              variant="ghost"
+                              size="icon"
+                              className="ml-auto"
+                              onClick={() => copyToAllDays(hour.day_of_week)}
+                              title="Copiar para todos os dias"
+                            >
+                              <Copy className="h-4 w-4" />
                             </Button>
                           </>
                         ) : (
@@ -210,17 +221,20 @@ export function BusinessHoursDialog({
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="message" className="space-y-4 mt-4">
+            <TabsContent value="message" className="mt-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label>Mensagem automática fora do horário</Label>
                   <p className="text-xs text-muted-foreground">
-                    Esta mensagem será enviada automaticamente quando clientes entrarem em contato fora do expediente.
+                    Esta mensagem será enviada automaticamente quando clientes entrarem em contato
+                    fora do expediente.
                   </p>
                 </div>
                 <Switch
                   checked={localAway.is_enabled}
-                  onCheckedChange={(checked) => setLocalAway((prev) => ({ ...prev, is_enabled: checked }))}
+                  onCheckedChange={(checked) =>
+                    setLocalAway((prev) => ({ ...prev, is_enabled: checked }))
+                  }
                 />
               </div>
 
@@ -232,11 +246,19 @@ export function BusinessHoursDialog({
                 className="min-h-[150px]"
               />
 
-              <div className="p-4 rounded-lg bg-muted/50 border border-border">
-                <p className="text-xs text-muted-foreground mb-2">Variáveis disponíveis:</p>
+              <div className="rounded-lg border border-border bg-muted/50 p-4">
+                <p className="mb-2 text-xs text-muted-foreground">Variáveis disponíveis:</p>
                 <div className="flex flex-wrap gap-2">
                   {['{nome}', '{horario_abertura}', '{horario_fechamento}'].map((v) => (
-                    <Button key={v} variant="outline" size="sm" className="text-xs h-7" onClick={() => setLocalAway((prev) => ({ ...prev, content: prev.content + ' ' + v }))}>
+                    <Button
+                      key={v}
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        setLocalAway((prev) => ({ ...prev, content: prev.content + ' ' + v }))
+                      }
+                    >
                       {v}
                     </Button>
                   ))}
@@ -246,13 +268,21 @@ export function BusinessHoursDialog({
           </Tabs>
         )}
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+        <div className="flex justify-end gap-2 border-t pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
           <Button onClick={handleSave} disabled={isSaving || isLoading}>
             {isSaving ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Salvando...
+              </>
             ) : (
-              <><Save className="w-4 h-4 mr-2" />Salvar Configurações</>
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Salvar Configurações
+              </>
             )}
           </Button>
         </div>

@@ -1,9 +1,11 @@
 import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import { Message, MessageReaction, InteractiveButton } from '@/types/chat';
 import { useSwipeGesture } from '@/hooks/useSwipeControl';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { motion } from '@/components/ui/motion';
+import { bubbleVariants } from '@/components/ui/bubble';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MessageReactions } from '../MessageReactions';
 import { MessageImage } from '../ImagePreview';
@@ -100,8 +102,6 @@ export function ChatMessageBubble({
           remoteJid: contactJid,
           fromMe: isSent,
           id: message.external_id,
-          // FIX 2026-08-03 (Gap 4): propagar tipo para skip-list de mídia
-          // Evita 23+ tentativas desnecessárias de refresh em stickers/ephemeral
           messageType: message.message_type ?? message.type ?? null,
         }
       : undefined;
@@ -223,8 +223,12 @@ export function ChatMessageBubble({
             message.isWhisper
               ? 'rounded-2xl border border-warning/40 bg-warning/10 text-warning-foreground shadow-inner'
               : isSent
-                ? 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                : 'rounded-2xl rounded-bl-md border border-border/70 bg-card text-card-foreground shadow-sm'
+                ? isFeatureEnabled('chat_bubble_v2')
+                  ? bubbleVariants({ side: 'sent' })
+                  : 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                : isFeatureEnabled('chat_bubble_v2')
+                  ? bubbleVariants({ side: 'received' })
+                  : 'rounded-2xl rounded-bl-md border border-border/70 bg-card text-card-foreground shadow-sm'
           )}
         >
           {/* Quoted message (reply) */}
@@ -232,7 +236,9 @@ export function ChatMessageBubble({
             <QuotedMessage
               replyTo={message.replyTo}
               isSent={isSent}
-              onClick={() => { if (message.replyTo) onScrollToMessage(message.replyTo.messageId); }}
+              onClick={() => {
+                if (message.replyTo) onScrollToMessage(message.replyTo.messageId);
+              }}
             />
           )}
 

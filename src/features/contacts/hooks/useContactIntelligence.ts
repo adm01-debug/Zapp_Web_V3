@@ -10,6 +10,7 @@ import { dbGet } from '@/integrations/datasource/db';
 import { RPC } from '@/integrations/datasource/rpcCatalog';
 import { getLogger } from '@/lib/logger';
 import { queryKeys } from '@/services/api/queryKeys';
+import { isAbortLikeError } from '@/lib/abortError';
 
 const log = getLogger('useContactIntelligence');
 
@@ -108,13 +109,15 @@ export function useContactIntelligence(phone: string | undefined) {
 
   return useQuery<ContactIntelligenceData | null>({
     queryKey: queryKeys.contactDetails.intelligence(cleanedPhone),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!cleanedPhone || cleanedPhone.length < 8) return null;
-      const { data, error } = await dbGet(RPC.getContactIntelligenceByPhone, {
-        p_phone: cleanedPhone,
-      });
+      const { data, error } = await dbGet(
+        RPC.getContactIntelligenceByPhone,
+        { p_phone: cleanedPhone },
+        { signal }
+      );
       if (error) {
-        log.error('Intelligence RPC error:', error);
+        if (!isAbortLikeError(error)) log.error('Intelligence RPC error:', error);
         return null;
       }
       return data as ContactIntelligenceData; // ignore-audit: narrows Supabase query result to local interface

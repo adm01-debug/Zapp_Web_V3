@@ -23,12 +23,114 @@ import { test, expect, type Page } from '@playwright/test';
 const PREVIEW_URL = process.env.E2E_PREVIEW_URL ?? 'http://localhost:5173/';
 const PUBLISHED_URL = process.env.E2E_PUBLISHED_URL ?? 'http://localhost:5173/';
 const STRICT = process.env.E2E_STRICT_WORKBOX === '1';
+const SW_SKIP_CLEANUP_STATE_KEY = '__zappSwCleanup';
+const SAME_AUDIT_URL = new URL(PREVIEW_URL).toString() === new URL(PUBLISHED_URL).toString();
+const PUBLISHED_TEST_TITLE = SAME_AUDIT_URL
+  ? `segundo alvo (${PUBLISHED_URL}) no mesmo URL do preview — não valida published real`
+  : `publicado (${PUBLISHED_URL}) sem workbox após reload`;
+const PUBLISHED_ASSERT_LABEL = SAME_AUDIT_URL ? 'segundo-alvo-mesmo-url' : 'publicado';
 
 type AuditResult = {
   workboxRequests: string[];
   workboxCaches: string[];
   workboxSWs: string[];
+  controllerUrl: string | null;
+  cleanupPhase: string | null;
+  cleanupError: string | null;
 };
+
+function expectsSkipCleanup(url: string): boolean {
+  const parsed = new URL(url);
+  const host = parsed.hostname;
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.startsWith('id-preview--') ||
+    host.startsWith('preview--') ||
+    host === 'lovableproject.com' ||
+    host.endsWith('.lovableproject.com') ||
+    host === 'lovableproject-dev.com' ||
+    host.endsWith('.lovableproject-dev.com') ||
+    host === 'beta.lovable.dev' ||
+    host.endsWith('.beta.lovable.dev') ||
+    parsed.searchParams.get('sw') === 'off'
+  );
+}
+
+async function readWorkboxState(page: Page): Promise<AuditResult> {
+  return page.evaluate(
+    async ({ cleanupKey }) => {
+      const cleanup =
+        typeof window === 'undefined'
+          ? null
+          : ((
+              window as typeof window & {
+                [key: string]:
+                  | {
+                      phase?: string;
+                      error?: string | null;
+                    }
+                  | undefined;
+              }
+            )[cleanupKey] ?? null);
+      const workboxCaches =
+        typeof caches === 'undefined'
+          ? []
+          : (await caches.keys()).filter((k) => /workbox-precache/i.test(k));
+      const workboxSWs = !('serviceWorker' in navigator)
+        ? []
+        : (await navigator.serviceWorker.getRegistrations())
+            .map(
+              (r) => r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || ''
+            )
+            .filter((u) => u && /workbox/i.test(u));
+
+      return {
+        workboxRequests: [],
+        workboxCaches,
+        workboxSWs,
+        controllerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null,
+        cleanupPhase: cleanup?.phase ?? null,
+        cleanupError: cleanup?.error ?? null,
+      };
+    },
+    { cleanupKey: SW_SKIP_CLEANUP_STATE_KEY }
+  );
+}
+
+async function waitForConvergence(page: Page, url: string, label: string): Promise<AuditResult> {
+  const requireCleanupMarker = expectsSkipCleanup(url);
+  await expect
+    .poll(
+      async () => {
+        const state = await readWorkboxState(page);
+        return {
+          cleanupPhase: state.cleanupPhase,
+          cleanupError: state.cleanupError,
+          workboxCaches: state.workboxCaches,
+          workboxSWs: state.workboxSWs,
+          controllerUrl: state.controllerUrl,
+          ready:
+            state.workboxCaches.length === 0 &&
+            state.workboxSWs.length === 0 &&
+            (!requireCleanupMarker ||
+              state.cleanupPhase === 'done' ||
+              state.cleanupPhase === 'error'),
+        };
+      },
+      {
+        timeout: 15_000,
+        message: `[${label}] aguardando convergência do cleanup de SW/Workbox`,
+      }
+    )
+    .toMatchObject({
+      ready: true,
+      workboxCaches: [],
+      workboxSWs: [],
+    });
+
+  return readWorkboxState(page);
+}
 
 async function auditWorkbox(page: Page, url: string): Promise<AuditResult | null> {
   const workboxRequests: string[] = [];
@@ -59,62 +161,53 @@ async function auditWorkbox(page: Page, url: string): Promise<AuditResult | null
     throw err;
   }
 
-  // Give the client-side workbox-detector + SW cleanup a chance to run.
-  await page.waitForTimeout(1500);
+  await waitForConvergence(page, url, 'first-load');
 
   // Reload — this is the key contract: after reload, workbox must be gone.
   workboxRequests.length = 0;
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 20_000 });
-  await page.waitForTimeout(1500);
-
-  const workboxCaches: string[] = await page.evaluate(async () => {
-    if (typeof caches === 'undefined') return [];
-    const keys = await caches.keys();
-    return keys.filter((k) => /workbox-precache/i.test(k));
-  });
-
-  const workboxSWs: string[] = await page.evaluate(async () => {
-    if (!('serviceWorker' in navigator)) return [];
-    const regs = await navigator.serviceWorker.getRegistrations();
-    return regs
-      .map(
-        (r) =>
-          (r.active && r.active.scriptURL) ||
-          (r.waiting && r.waiting.scriptURL) ||
-          (r.installing && r.installing.scriptURL) ||
-          '',
-      )
-      .filter((u) => u && /workbox/i.test(u));
-  });
-
-  return { workboxRequests, workboxCaches, workboxSWs };
+  const result = await waitForConvergence(page, url, 'after-reload');
+  return { ...result, workboxRequests };
 }
 
 function assertClean(result: AuditResult, label: string) {
   expect(
     result.workboxRequests,
-    `[${label}] Workbox JS requests após reload: ${result.workboxRequests.join(', ')}`,
+    `[${label}] Workbox JS requests após reload: ${result.workboxRequests.join(', ')}`
   ).toEqual([]);
   expect(
     result.workboxCaches,
-    `[${label}] Workbox caches após reload: ${result.workboxCaches.join(', ')}`,
+    `[${label}] Workbox caches após reload: ${result.workboxCaches.join(', ')}`
   ).toEqual([]);
   expect(
     result.workboxSWs,
-    `[${label}] Service Workers com Workbox após reload: ${result.workboxSWs.join(', ')}`,
+    `[${label}] Service Workers com Workbox após reload: ${result.workboxSWs.join(', ')}`
   ).toEqual([]);
+  expect(
+    result.cleanupError,
+    `[${label}] cleanup de SW reportou erro: ${result.cleanupError}`
+  ).toBeNull();
 }
 
 test.describe('No Workbox após reload — preview + publicado', () => {
+  test.describe.configure({ mode: SAME_AUDIT_URL ? 'serial' : 'parallel' });
+
   test(`preview (${PREVIEW_URL}) sem workbox após reload`, async ({ page }) => {
     const result = await auditWorkbox(page, PREVIEW_URL);
     test.skip(result === null, 'Preview URL inacessível (rede/CI offline)');
     assertClean(result!, 'preview');
   });
 
-  test(`publicado (${PUBLISHED_URL}) sem workbox após reload`, async ({ page }) => {
+  test(PUBLISHED_TEST_TITLE, async ({ page }) => {
+    if (SAME_AUDIT_URL) {
+      test.info().annotations.push({
+        type: 'audit-note',
+        description:
+          'Preview e published usam o mesmo URL; este segundo alvo não representa deploy publicado real.',
+      });
+    }
     const result = await auditWorkbox(page, PUBLISHED_URL);
     test.skip(result === null, 'Published URL inacessível (rede/CI offline)');
-    assertClean(result!, 'publicado');
+    assertClean(result!, PUBLISHED_ASSERT_LABEL);
   });
 });

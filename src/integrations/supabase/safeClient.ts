@@ -56,6 +56,41 @@ const MAX_FAILURES = 20;
 const CACHE_TTL = 5 * 60 * 1000;
 const CACHE_MAX_SIZE = 100;
 
+// ---------------------------------------------------------------------------
+// RCA 2026-08-20 — classificação de erros CLIENT-SIDE transitórios.
+//
+// Saturação/timeout da fila do semáforo (client.ts) e aborts (unmount,
+// cancelRefetch do TanStack, page unload) NÃO são falhas do backend:
+//  1. Logá-los como ERROR poluía console/Sentry (624 ERRORs em 103s de prod;
+//     o tunnel do Sentry respondeu 429 pelo volume).
+//  2. recordFailure disparava rpc_log_email_health PELA MESMA fila saturada —
+//     amplificação: cada falha gerava outra request no meio do incidente.
+// Erros desse grupo são logados como WARN e NUNCA geram persistência remota.
+// ---------------------------------------------------------------------------
+function isClientSideTransientError(detail: unknown): boolean {
+  if (!detail) return false;
+  const name =
+    typeof detail === 'object' && detail !== null && 'name' in detail
+      ? String((detail as { name?: unknown }).name ?? '')
+      : '';
+  const message =
+    typeof detail === 'object' && detail !== null && 'message' in detail
+      ? String((detail as { message?: unknown }).message ?? '')
+      : typeof detail === 'string'
+        ? detail
+        : '';
+  const text = `${name} ${message}`.toLowerCase();
+  return (
+    text.includes('aborterror') ||
+    text.includes('signal is aborted') ||
+    text.includes('slot acquire aborted') ||
+    text.includes('queue saturated') ||
+    text.includes('queue wait timed out') ||
+    text.includes('request timed out') ||
+    text.includes('page unload')
+  );
+}
+
 const telemetry: ClientTelemetry = {
   lastValidation: null,
   recentFailures: [],
@@ -64,7 +99,6 @@ const telemetry: ClientTelemetry = {
 
 const resourceCache = new Map<string, { exists: boolean; expires: number }>();
 const _validationInFlight = new Map<string, Promise<boolean>>();
-let _healthLogInProgress = false;
 
 function pruneResourceCache(): void {
   const entries = Array.from(resourceCache.entries()).sort((a, b) => a[1].expires - b[1].expires);
@@ -89,16 +123,30 @@ export function safeFrom(table: string): SafeQueryBuilder {
   return _dynamicClient.from(table);
 }
 
+// RCA 2026-08-21 (fan-out de fila / troca rápida de contato): nenhum caller
+// deste módulo conseguia propagar AbortSignal — a assinatura não tinha onde
+// plugar. O builder retornado por `queryBuilder(...)` ainda é "thenable"
+// (não vira Promise de verdade até o await), então ele ainda expõe
+// `.abortSignal()` do postgrest-js nesse ponto. Interceptamos aqui, antes do
+// await, em vez de exigir que cada hook conheça a API interna do builder.
+function withAbortSignal<B>(builder: B, signal: AbortSignal | undefined): B {
+  if (!signal) return builder;
+  const maybe = builder as unknown as { abortSignal?: (s: AbortSignal) => B };
+  return typeof maybe.abortSignal === 'function' ? maybe.abortSignal(signal) : builder;
+}
+
 /** safe Client. */
 export const safeClient = {
   async from<T = unknown>(
     table: string,
-    queryBuilder: (query: SafeQueryBuilder) => PromiseLike<{ data: unknown; error: unknown }>
+    queryBuilder: (query: SafeQueryBuilder) => PromiseLike<{ data: unknown; error: unknown }>,
+    signal?: AbortSignal
   ): Promise<SafeResponse<T[]>> {
     const requestId = crypto.randomUUID();
     telemetry.stats.totalCalls++;
     try {
-      const { data, error } = await queryBuilder(_dynamicClient.from(table));
+      const builder = withAbortSignal(queryBuilder(_dynamicClient.from(table)), signal);
+      const { data, error } = await builder;
       if (error) {
         this.log(requestId, 'error', `Erro na query from ${table}`, error);
         await this.recordFailure(
@@ -132,13 +180,15 @@ export const safeClient = {
     table: string,
     queryBuilder: (query: SafeQueryBuilder) => {
       single(): PromiseLike<{ data: unknown; error: unknown }>;
-    }
+    },
+    signal?: AbortSignal
   ): Promise<SafeResponse<T>> {
     const requestId = crypto.randomUUID();
     telemetry.stats.totalCalls++;
     try {
       validateTableName(table);
-      const { data, error } = await queryBuilder(_dynamicClient.from(table)).single();
+      const builder = withAbortSignal(queryBuilder(_dynamicClient.from(table)).single(), signal);
+      const { data, error } = await builder;
       if (error) {
         this.log(requestId, 'error', `Erro single query ${table}`, error);
         await this.recordFailure(
@@ -164,11 +214,17 @@ export const safeClient = {
     }
   },
 
-  async rpc<T = unknown>(name: string, params?: Record<string, unknown>): Promise<SafeResponse<T>> {
+  async rpc<T = unknown>(
+    name: string,
+    params?: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<SafeResponse<T>> {
     const requestId = crypto.randomUUID();
     telemetry.stats.totalCalls++;
     try {
-      const { data, error } = await _rpcClient.rpc(name, params); // ignore-audit — dynamic RPC name not in generated union
+      // ignore-audit — dynamic RPC name not in generated union
+      const builder = withAbortSignal(_rpcClient.rpc(name, params), signal);
+      const { data, error } = await builder;
       if (error) {
         this.log(requestId, 'error', `Erro ao executar RPC ${name}`, error);
         await this.recordFailure(requestId, 'rpc', name, error.message || 'Erro desconhecido');
@@ -270,50 +326,19 @@ export const safeClient = {
     return promise;
   },
 
-  // Uses supabase.rpc() directly — NOT this.rpc() — to avoid recordFailure() recursion.
-  async syncHealthState() {
-    if (_healthLogInProgress) return;
-    _healthLogInProgress = true;
-    try {
-      const snap = this.getTelemetry();
-      let status: 'healthy' | 'degraded' | 'error' = 'healthy';
-      if (snap.recentFailures.length > 10) status = 'error';
-      else if (snap.recentFailures.length > 0) status = 'degraded';
-
-      const { error: rpcErr } = await _rpcClient.rpc('rpc_update_email_health_state', {
-        p_status: status,
-        p_failure_count: snap.recentFailures.length,
-        p_metadata: {
-          total_calls: snap.stats.totalCalls,
-          cache_hits: snap.stats.cacheHits,
-          last_validation: snap.lastValidation?.toISOString(),
-        },
-      });
-      if (rpcErr) {
-        _log.warn('Erro ao sincronizar estado de saúde', {
-          error: (rpcErr as { message?: string }).message,
-        });
-      }
-    } catch (err) {
-      _log.warn('Erro ao sincronizar estado de saúde (exceção)', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      _healthLogInProgress = false;
-    }
-  },
+  // RCA 2026-08-20: syncHealthState() foi removido — não tinha NENHUM caller
+  // e chamava rpc_update_email_health_state, que só tem EXECUTE para
+  // postgres/service_role (permission denied garantido para o browser).
 
   log(requestId: string, level: 'info' | 'warn' | 'error', message: string, detail?: unknown) {
     const maskedDetail = this.maskSensitiveData(detail);
     const meta: Record<string, unknown> = { requestId };
     if (maskedDetail != null) meta['detail'] = maskedDetail;
-    // AbortError: Page unload e ruido esperado — dispara em TODA navegacao de
-    // pagina (SPA unmount + beforeunload aborta fetches em voo). Logado como
-    // warn em vez de error para nao poluir o Sentry/console com false positives.
-    const isPageUnloadAbort =
-      level === 'error' &&
-      (detail as { message?: string } | null)?.message?.toLowerCase().includes('page unload');
-    const effectiveLevel = isPageUnloadAbort ? 'warn' : level;
+    // RCA 2026-08-20: erros client-side transitórios (abort de unmount/
+    // cancelRefetch, fila do semáforo saturada, timeout local, page unload)
+    // são ruído esperado sob carga — rebaixados a WARN para não inundar
+    // console/Sentry durante o próprio incidente que os causou.
+    const effectiveLevel = level === 'error' && isClientSideTransientError(detail) ? 'warn' : level;
     if (effectiveLevel === 'error') _log.error(message, meta);
     else if (effectiveLevel === 'warn') _log.warn(message, meta);
     else _log.info(message, meta);
@@ -338,8 +363,20 @@ export const safeClient = {
     return _applyMasking(str);
   },
 
-  // Uses supabase.rpc() directly — NOT this.rpc() — to prevent recordFailure() → rpc() → recordFailure() recursion.
-  async recordFailure(requestId: string, operation: string, resource: string, error: string) {
+  // RCA 2026-08-20: a persistência remota via rpc_log_email_health foi
+  // REMOVIDA do browser. Motivos (verificados em produção):
+  //  1. GRANT: rpc_log_email_health/rpc_update_email_health_state só têm
+  //     EXECUTE para postgres/service_role — o role `authenticated` recebe
+  //     "permission denied" em 100% das chamadas. O browser NUNCA conseguiu
+  //     gravar; só gerava uma request extra fadada a falhar.
+  //  2. AMPLIFICAÇÃO: a RPC passava pela MESMA fila do semáforo — durante
+  //     saturação, cada query dropada disparava OUTRA request (463 tentativas
+  //     de health-log falhas em 103s no log de 2026-08-20T22:26Z).
+  //  3. O Promise.race de 5s não CANCELAVA a RPC subjacente — ela continuava
+  //     ocupando a fila mesmo após o "timeout".
+  // A telemetria em memória (getTelemetry) permanece; edge functions logam
+  // saúde de email com service_role pelos seus próprios clientes.
+  recordFailure(requestId: string, operation: string, resource: string, error: string) {
     const record: FailureRecord = {
       requestId,
       operation,
@@ -349,37 +386,6 @@ export const safeClient = {
     };
     telemetry.recentFailures.unshift(record as unknown as OperationFailure);
     if (telemetry.recentFailures.length > MAX_FAILURES) telemetry.recentFailures.pop();
-
-    if (_healthLogInProgress) return;
-    _healthLogInProgress = true;
-    try {
-      // Enforce 5s timeout — health logging must never block shutdown
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('health log timeout')), 5_000)
-      );
-      const { error: rpcErr } = await Promise.race([
-        _rpcClient.rpc('rpc_log_email_health', {
-          p_status: 'error',
-          p_operation: operation,
-          p_resource: resource,
-          p_request_id: requestId,
-          p_error_message: error,
-          p_is_failure: true,
-        }),
-        timeoutPromise,
-      ]);
-      if (rpcErr) {
-        _log.warn('Falha ao persistir log de saúde', {
-          error: (rpcErr as { message?: string }).message,
-        });
-      }
-    } catch (dbErr) {
-      _log.warn('Falha ao persistir log de saúde (exceção)', {
-        error: dbErr instanceof Error ? dbErr.message : String(dbErr),
-      });
-    } finally {
-      _healthLogInProgress = false;
-    }
   },
 
   getTelemetry(): ClientTelemetry {
@@ -408,12 +414,35 @@ export const safeClient = {
   },
 
   formatError(error: PostgrestError | unknown): Error {
-    if (error && typeof error === 'object' && 'message' in error) {
-      const msg = (error as { message: string }).message;
-      if (msg.toLowerCase().includes('does not exist')) {
-        return new Error(`Recurso indisponível: ${msg}`);
+    if (error instanceof Error) {
+      if (!error.message.toLowerCase().includes('does not exist')) return error;
+
+      const formatted = new Error(`Recurso indisponível: ${error.message}`) as Error &
+        Record<string, unknown>;
+      formatted['cause'] = error;
+      for (const key of ['name', 'code', 'status', 'details', 'hint']) {
+        const value = (error as Error & Record<string, unknown>)[key];
+        if (value !== undefined) formatted[key] = value;
       }
-      return new Error(msg);
+      return formatted;
+    }
+
+    if (error && typeof error === 'object' && 'message' in error) {
+      const source = error as Record<string, unknown>;
+      const msg = String(source['message']);
+      const formatted = new Error(
+        msg.toLowerCase().includes('does not exist') ? `Recurso indisponível: ${msg}` : msg
+      ) as Error & Record<string, unknown>;
+      formatted['cause'] = error;
+
+      for (const key of ['name', 'code', 'status', 'details', 'hint']) {
+        if (source[key] !== undefined) formatted[key] = source[key];
+      }
+
+      if (msg.toLowerCase().includes('does not exist')) {
+        return formatted;
+      }
+      return formatted;
     }
     return new Error(String(error));
   },

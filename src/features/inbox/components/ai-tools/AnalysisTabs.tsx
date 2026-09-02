@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { MessageSquareText, BarChart3, ListChecks, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -47,14 +47,27 @@ const TAB_ITEMS = [
 
 /** Analysis Tabs component for the ai tools section. */
 export function AnalysisTabs({
-  analysis, activeTab, setActiveTab, sentimentScore, currentSentiment,
-  analyses, historyLoading, isTtsPlaying, isTtsLoading,
-  onPlaySummary, onPlayText, onLoadHistory,
+  analysis,
+  activeTab,
+  setActiveTab,
+  sentimentScore,
+  currentSentiment,
+  analyses,
+  historyLoading,
+  isTtsPlaying,
+  isTtsLoading,
+  onPlaySummary,
+  onPlayText,
+  onLoadHistory,
 }: AnalysisTabsProps) {
   const ttsButtonClass = `h-6 w-6 ${isTtsLoading ? 'text-warning animate-spin' : isTtsPlaying ? 'text-primary animate-pulse' : 'text-muted-foreground hover:text-foreground'}`;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid h-9 w-full grid-cols-4 rounded-xl">
           <TooltipProvider delayDuration={300}>
@@ -65,26 +78,49 @@ export function AnalysisTabs({
                     <Icon className="h-3.5 w-3.5" />
                   </TabsTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="bottom"><p>{label}</p></TooltipContent>
+                <TooltipContent side="bottom">
+                  <p>{label}</p>
+                </TooltipContent>
               </Tooltip>
             ))}
           </TooltipProvider>
         </TabsList>
 
         <TabsContent value="resumo" className="mt-4">
-          <SummaryTab analysis={analysis} ttsButtonClass={ttsButtonClass} isTtsLoading={isTtsLoading} isTtsPlaying={isTtsPlaying} onPlaySummary={onPlaySummary} />
+          <SummaryTab
+            analysis={analysis}
+            ttsButtonClass={ttsButtonClass}
+            isTtsLoading={isTtsLoading}
+            isTtsPlaying={isTtsPlaying}
+            onPlaySummary={onPlaySummary}
+          />
         </TabsContent>
 
         <TabsContent value="sentimento" className="mt-4">
-          <SentimentTab analysis={analysis} sentimentScore={sentimentScore} currentSentiment={currentSentiment} analyses={analyses} />
+          <SentimentTab
+            analysis={analysis}
+            sentimentScore={sentimentScore}
+            currentSentiment={currentSentiment}
+            analyses={analyses}
+          />
         </TabsContent>
 
         <TabsContent value="pontos" className="mt-4">
-          <KeyPointsTab analysis={analysis} ttsButtonClass={ttsButtonClass} isTtsLoading={isTtsLoading} isTtsPlaying={isTtsPlaying} onPlayText={onPlayText} />
+          <KeyPointsTab
+            analysis={analysis}
+            ttsButtonClass={ttsButtonClass}
+            isTtsLoading={isTtsLoading}
+            isTtsPlaying={isTtsPlaying}
+            onPlayText={onPlayText}
+          />
         </TabsContent>
 
         <TabsContent value="historico" className="mt-4">
-          <HistoryTab analyses={analyses} historyLoading={historyLoading} onLoadHistory={onLoadHistory} />
+          <HistoryTab
+            analyses={analyses}
+            historyLoading={historyLoading}
+            onLoadHistory={onLoadHistory}
+          />
         </TabsContent>
       </Tabs>
     </motion.div>

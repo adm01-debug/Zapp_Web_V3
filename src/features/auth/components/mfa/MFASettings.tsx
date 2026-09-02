@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Shield, ShieldCheck, ShieldOff, Trash2, Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { useMFA } from '@/features/auth';
 import { MFAEnroll } from './MFAEnroll';
@@ -16,10 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 /** MFASettings component for the mfa section. */
 export function MFASettings() {
@@ -34,7 +31,7 @@ export function MFASettings() {
 
   const handleRemove = async () => {
     if (!factorToRemove) return;
-    
+
     setRemoving(true);
     try {
       await unenroll(factorToRemove);
@@ -50,20 +47,22 @@ export function MFASettings() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                isMFAEnabled ? 'bg-success/10 dark:bg-success/20/30' : 'bg-muted'
-              }`}>
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                  isMFAEnabled ? 'dark:bg-success/20/30 bg-success/10' : 'bg-muted'
+                }`}
+              >
                 {isMFAEnabled ? (
-                  <ShieldCheck className="w-5 h-5 text-success dark:text-success" />
+                  <ShieldCheck className="h-5 w-5 text-success dark:text-success" />
                 ) : (
-                  <ShieldOff className="w-5 h-5 text-muted-foreground" />
+                  <ShieldOff className="h-5 w-5 text-muted-foreground" />
                 )}
               </div>
               <div>
                 <CardTitle className="text-lg">Autenticação de Dois Fatores (2FA)</CardTitle>
                 <CardDescription>
-                  {isMFAEnabled 
-                    ? 'Sua conta está protegida com 2FA' 
+                  {isMFAEnabled
+                    ? 'Sua conta está protegida com 2FA'
                     : 'Adicione uma camada extra de segurança'}
                 </CardDescription>
               </div>
@@ -79,11 +78,11 @@ export function MFASettings() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-start gap-3 p-3 bg-warning/10 dark:bg-warning/20/20 border border-warning dark:border-warning rounded-lg"
+              className="dark:bg-warning/20/20 flex items-start gap-3 rounded-lg border border-warning bg-warning/10 p-3 dark:border-warning"
             >
-              <AlertTriangle className="w-5 h-5 text-warning dark:text-warning mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-warning dark:text-warning" />
               <div>
-                <p className="font-medium text-sm text-warning dark:text-warning">
+                <p className="text-sm font-medium text-warning dark:text-warning">
                   Recomendado ativar 2FA
                 </p>
                 <p className="text-xs text-warning dark:text-warning">
@@ -95,7 +94,7 @@ export function MFASettings() {
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className="space-y-3">
@@ -106,12 +105,12 @@ export function MFASettings() {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="flex items-center justify-between p-3 border rounded-lg"
+                    className="flex items-center justify-between rounded-lg border p-3"
                   >
                     <div className="flex items-center gap-3">
-                      <Shield className="w-5 h-5 text-primary" />
+                      <Shield className="h-5 w-5 text-primary" />
                       <div>
-                        <p className="font-medium text-sm">
+                        <p className="text-sm font-medium">
                           {factor.friendly_name || 'App Autenticador'}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -119,13 +118,14 @@ export function MFASettings() {
                         </p>
                       </div>
                     </div>
-                    <Button aria-label="Excluir"
+                    <Button
+                      aria-label="Excluir"
                       variant="ghost"
                       size="sm"
                       onClick={() => setFactorToRemove(factor.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </motion.div>
                 ))}
@@ -136,7 +136,7 @@ export function MFASettings() {
                 className="w-full"
                 onClick={() => setShowEnrollDialog(true)}
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 {isMFAEnabled ? 'Adicionar outro método' : 'Configurar 2FA'}
               </Button>
             </div>
@@ -146,7 +146,7 @@ export function MFASettings() {
 
       {/* Enroll Dialog */}
       <Dialog open={showEnrollDialog} onOpenChange={setShowEnrollDialog}>
-        <DialogContent className="sm:max-w-md p-0">
+        <DialogContent className="p-0 sm:max-w-md">
           <MFAEnroll
             onSuccess={() => {
               setShowEnrollDialog(false);
@@ -163,7 +163,8 @@ export function MFASettings() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover Autenticação 2FA?</AlertDialogTitle>
             <AlertDialogDescription>
-              Isso vai remover a proteção adicional da sua conta. Você pode configurar novamente a qualquer momento.
+              Isso vai remover a proteção adicional da sua conta. Você pode configurar novamente a
+              qualquer momento.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -175,7 +176,7 @@ export function MFASettings() {
             >
               {removing ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Removendo...
                 </>
               ) : (

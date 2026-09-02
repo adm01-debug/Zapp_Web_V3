@@ -8,6 +8,7 @@ import type { ContactIntelligenceRow } from '@/integrations/supabase/schema';
 import { log } from '@/lib/logger';
 import { sanitizePostgrestFilter } from '@/lib/sanitize';
 import { isValidUUID } from '@/utils/uuid';
+import { isAbortLikeError } from '@/lib/abortError';
 
 type ResolvedIdent = { kind: 'uuid'; value: string } | { kind: 'phone'; value: string };
 
@@ -50,12 +51,33 @@ function resolveIdentifier(value?: string): ResolvedIdent | null {
  * Detecta TimeoutError do fetch/supabase-js: o erro chega com
  * `name === 'TimeoutError'` (undici/fetch) ou mensagem de timeout/abort.
  * Usado para logar com `log.error` (Sentry) em vez de `log.warn` generico.
+ *
+ * RCA 2026-08-22: um abort disparado pelo PROPRIO `signal` da query (troca de
+ * contato, unmount) tambem produz mensagem contendo "aborted" — sem excluir
+ * esse caso, navegacao normal virava falso "timeout real do banco" no Sentry.
+ * So classifica como timeout real quando o abort NAO veio do signal desta
+ * query (ex.: watchdog interno de 12s do boundedFetch em client.ts, que usa
+ * seu proprio AbortController e por isso continua indistinguivel — e
+ * corretamente ainda tratado como timeout real aqui).
  */
-function isTimeoutError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
+function isTimeoutError(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted && isAbortLikeError(err)) return false;
+  const name =
+    err instanceof Error
+      ? err.name
+      : typeof err === 'object' && err !== null && 'name' in err
+        ? String((err as { name?: unknown }).name ?? '')
+        : '';
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as { message?: unknown }).message ?? '')
+        : '';
+  if (!name && !message) return false;
   return (
-    err.name === 'TimeoutError' ||
-    /timeout|timed ?out|ETIMEDOUT|aborted?/i.test(err.message)
+    name === 'TimeoutError' ||
+    /timeout|timed ?out|ETIMEDOUT|aborted?|fetch/i.test(message)
   );
 }
 
@@ -275,7 +297,7 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
 
   const { data, isLoading } = useQuery<ContactIntelligenceView | null>({
     queryKey: ['contact-intelligence-view', contactIdOrPhone],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!contactIdOrPhone) return null;
 
       const ident = resolveIdentifier(contactIdOrPhone);
@@ -295,10 +317,17 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
           .select('*')
           .or(ident.kind === 'uuid' ? `contact_id.eq.${ident.value}` : `phone.eq.${ident.value}`)
           .limit(1)
+          .abortSignal(signal)
           .maybeSingle();
-        if (error) log.warn('contact_intelligence lookup failed:', error.message);
+        if (error) {
+          // PostgREST devolve abort de fetch em `error` em vez de rejeitar.
+          // Não converta cancelamento em inteligência vazia cacheável.
+          if (signal.aborted && isAbortLikeError(error)) throw error;
+          log.warn('contact_intelligence lookup failed:', error.message);
+        }
         raw = (intel ?? null) as unknown as RawIntel | null; // ignore-audit — ponte intencional: Row do PostgREST (schema zapp fora do types gerado) → RawIntel verificado
       } catch (err) {
+        if (signal.aborted && isAbortLikeError(err)) throw err;
         log.warn('contact_intelligence lookup threw:', err);
       }
 
@@ -342,7 +371,8 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
             .from('evolution_messages' as never)
             .select('created_at')
             .order('created_at', { ascending: false })
-            .limit(1);
+            .limit(1)
+            .abortSignal(signal);
           if (ident.kind === 'uuid') {
             query = query.eq('contact_id', ident.value);
           } else {
@@ -356,7 +386,13 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
             // postgrest-js NUNCA lanca TimeoutError: ele captura erros de fetch
             // (incluindo AbortError/TimeoutError) e os devolve no campo `error`.
             // Sem esta checagem o timeout de producao vira apenas um warn.
-            if (/timeout|aborted|fetch/i.test(error.message ?? '')) {
+            // RCA 2026-08-22: abort do PROPRIO signal desta query (troca de
+            // contato/unmount) e cancelamento deliberado nosso, nao timeout
+            // real — nao reclassifica como error mesmo casando com o regex.
+            const isOwnSignalAbort = signal?.aborted && isAbortLikeError(error);
+            if (isOwnSignalAbort) {
+              throw error;
+            } else if (isTimeoutError(error, signal)) {
               log.error('messages stats lookup timed out (evolution_messages scan):', error);
             } else {
               log.warn('messages stats lookup failed:', error.message);
@@ -365,7 +401,8 @@ export function useContactIntelligence(contactIdOrPhone?: string) {
           const rows = (msgs ?? []) as Array<{ created_at?: string }>;
           if (!lastAt && rows[0]?.created_at) lastAt = new Date(rows[0].created_at);
         } catch (err) {
-          if (isTimeoutError(err)) {
+          if (signal.aborted && isAbortLikeError(err)) throw err;
+          if (isTimeoutError(err, signal)) {
             log.error('messages stats lookup timed out (evolution_messages scan):', err);
           } else {
             log.warn('messages stats lookup skipped:', err);

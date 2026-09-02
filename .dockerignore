@@ -1,5 +1,12 @@
 .git
 .github
+.claude
+.codex
+.hermes
+.agents
+graphify-out
+reports
+previous-assets
 .husky
 .storybook
 node_modules

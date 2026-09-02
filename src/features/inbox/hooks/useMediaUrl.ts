@@ -25,7 +25,7 @@ import { buildFileHash } from '@/lib/crypto';
 import { isBucketPublic } from '@/lib/mediaUrl';
 // F4-20: cache LRU com maxSize (50 MB de bytes) + cap de 200 entradas.
 // Data URLs base64 são ASCII → length ≈ bytes. Módulo puro em mediaRefreshCache.
-import { mediaCacheGet, mediaCacheSet } from './mediaRefreshCache';
+import { mediaCacheGet, mediaCacheSet, MEDIA_REFRESH_SKIP_TYPES } from './mediaRefreshCache';
 
 const log = getLogger('useMediaUrl');
 
@@ -340,20 +340,9 @@ function isSessionRefreshWindowExpired(): boolean {
   return Date.now() - sessionRefreshWindowStart >= SESSION_REFRESH_WINDOW_MS;
 }
 
-/** WhatsApp message types that never produce valid base64 via the Evolution API. */
-const UNREFRESHABLE_MESSAGE_TYPES = new Set([
-  'sticker',
-  'ephemeral',
-  'ptv', // view-once video
-  'viewOnce',
-  'vcard',
-  'contact',
-  'location',
-  'liveLocation',
-  'reaction',
-  'poll',
-  'pollUpdate',
-]);
+// E21: UNREFRESHABLE_MESSAGE_TYPES movido para mediaRefreshCache.ts como MEDIA_REFRESH_SKIP_TYPES
+// Alias local para evitar rename em toda a função (único consumidor)
+const UNREFRESHABLE_MESSAGE_TYPES = MEDIA_REFRESH_SKIP_TYPES;
 
 /** Auto-refreshes expired WhatsApp media URLs via Evolution `chat/getBase64`; deduplicates in-flight requests, caps retry attempts, and surfaces structured errors for fallback UI. */
 export function useMediaUrl(opts: UseMediaUrlOptions): UseMediaUrlResult {
@@ -372,9 +361,7 @@ export function useMediaUrl(opts: UseMediaUrlOptions): UseMediaUrlResult {
   // E39.7: tenta espelhar o contador PERSISTIDO da mensagem (module-level) —
   // remontar o componente não zera tentativas de uma mídia já falha.
   const [attempts, setAttempts] = useState(() =>
-    messageKey && instanceName
-      ? getRefreshKeyState(cacheKey(instanceName, messageKey)).attempts
-      : 0
+    messageKey && instanceName ? getRefreshKeyState(cacheKey(instanceName, messageKey)).attempts : 0
   );
   const [failed, setFailed] = useState(false);
   const inFlightRef = useRef<Promise<void> | null>(null);

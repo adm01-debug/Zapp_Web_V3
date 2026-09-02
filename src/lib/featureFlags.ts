@@ -39,7 +39,13 @@ type FeatureFlag =
    * Flag ligada exibe os botões de videochamada e inicia o fluxo real
    * (VideoCallDialog + useSipClient). Desligada esconde os botões.
    */
-  | 'video_call';
+  | 'video_call'
+  /** CHAT-UI-100 E04: primitivos shadcn portados. Default off. */
+  | 'chat_bubble_v2'
+  /** CHAT-UI-100 E04: scroller v2 por id. Default off. */
+  | 'chat_scroller_v2'
+  /** CHAT-UI-100 E04: team-chat TanStack Virtual. Default off. */
+  | 'team_chat_tanstack';
 
 interface FeatureConfig {
   enabled: boolean;
@@ -79,6 +85,9 @@ const DEFAULTS: Record<FeatureFlag, FeatureConfig> = {
   advanced_transcription: { enabled: false },
   message_queue_retry: { enabled: true },
   video_call: { enabled: true },
+  chat_bubble_v2: { enabled: false },
+  chat_scroller_v2: { enabled: false },
+  team_chat_tanstack: { enabled: false },
 };
 
 let flagCache: Record<string, FeatureConfig> | null = null;
@@ -153,9 +162,7 @@ export async function loadFeatureFlags(): Promise<void> {
             blockedUsers: row.blocked_user_ids ?? flags[flagName].blockedUsers,
             expiresAt: row.expires_at ?? flags[flagName].expiresAt,
             killSwitch:
-              typeof meta.killSwitch === 'boolean'
-                ? meta.killSwitch
-                : flags[flagName].killSwitch,
+              typeof meta.killSwitch === 'boolean' ? meta.killSwitch : flags[flagName].killSwitch,
           };
           canonicalKeys.add(flagName);
           loaded += 1;
@@ -200,7 +207,13 @@ export async function loadFeatureFlags(): Promise<void> {
       // Cooldown só quando a fonte canônica foi legível (authenticated):
       // um load anon (RLS bloqueou) não pode suprimir o reload pós-login.
       if (canonicalRead) lastCanonicalLoadAt = Date.now();
-      log.info('[FeatureFlags] Sync complete', Object.keys(flags).length, 'flags active', loaded, 'from feature_flags');
+      log.info(
+        '[FeatureFlags] Sync complete',
+        Object.keys(flags).length,
+        'flags active',
+        loaded,
+        'from feature_flags'
+      );
     } catch (err) {
       log.warn('[FeatureFlags] Load failed, using safety defaults', err);
     }
@@ -209,10 +222,7 @@ export async function loadFeatureFlags(): Promise<void> {
   });
   return flagLoadInflight;
 }
-export function isFeatureEnabled(
-  flag: FeatureFlag,
-  context?: FeatureFlagContext
-): boolean {
+export function isFeatureEnabled(flag: FeatureFlag, context?: FeatureFlagContext): boolean {
   const config = flagCache?.[flag] || DEFAULTS[flag];
 
   if (config.killSwitch) return false;
@@ -233,10 +243,7 @@ export function isFeatureEnabled(
 
   // Restrição por role (zapp.feature_flags.allowed_roles)
   if (config.roles && config.roles.length > 0) {
-    if (
-      !context?.roles ||
-      !context.roles.some((r) => config.roles?.includes(r))
-    ) {
+    if (!context?.roles || !context.roles.some((r) => config.roles?.includes(r))) {
       return false;
     }
   }

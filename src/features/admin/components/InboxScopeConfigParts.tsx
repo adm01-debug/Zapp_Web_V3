@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';

@@ -1,14 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { forwardRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Smile, Meh, Frown, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 /** Sentiment Level component. */
 export type SentimentLevel = 'positive' | 'neutral' | 'negative' | 'critical';
@@ -21,13 +16,16 @@ interface SentimentIndicatorProps {
   animated?: boolean;
 }
 
-const sentimentConfig: Record<SentimentLevel, {
-  icon: typeof Smile;
-  color: string;
-  bgColor: string;
-  label: string;
-  emoji: string;
-}> = {
+const sentimentConfig: Record<
+  SentimentLevel,
+  {
+    icon: typeof Smile;
+    color: string;
+    bgColor: string;
+    label: string;
+    emoji: string;
+  }
+> = {
   positive: {
     icon: Smile,
     color: 'text-success',
@@ -87,7 +85,7 @@ export function SentimentIndicator({
               animate={{ scale: 1 }}
               whileHover={{ scale: 1.1 }}
               className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center cursor-help",
+                'flex h-5 w-5 cursor-help items-center justify-center rounded-full',
                 config.bgColor
               )}
             >
@@ -96,11 +94,9 @@ export function SentimentIndicator({
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
             <div className="flex items-center gap-1.5">
-              <Icon className={cn("w-3 h-3", config.color)} />
+              <Icon className={cn('h-3 w-3', config.color)} />
               <span>Sentimento: {config.label}</span>
-              {score !== undefined && (
-                <span className="text-muted-foreground">({score}%)</span>
-              )}
+              {score !== undefined && <span className="text-muted-foreground">({score}%)</span>}
             </div>
           </TooltipContent>
         </Tooltip>
@@ -112,29 +108,18 @@ export function SentimentIndicator({
     <motion.div
       initial={animated ? { opacity: 0, x: -10 } : false}
       animate={{ opacity: 1, x: 0 }}
-      className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded-full",
-        config.bgColor
-      )}
+      className={cn('flex items-center gap-1.5 rounded-full px-2 py-1', config.bgColor)}
     >
       <motion.div
         animate={sentiment === 'critical' ? { scale: [1, 1.2, 1] } : {}}
         transition={{ duration: 0.5, repeat: sentiment === 'critical' ? Infinity : 0 }}
       >
-        <Icon className={cn("w-3.5 h-3.5", config.color)} />
+        <Icon className={cn('h-3.5 w-3.5', config.color)} />
       </motion.div>
-      
-      {showLabel && (
-        <span className={cn("text-xs font-medium", config.color)}>
-          {config.label}
-        </span>
-      )}
-      
-      {score !== undefined && (
-        <span className="text-xs text-muted-foreground">
-          {score}%
-        </span>
-      )}
+
+      {showLabel && <span className={cn('text-xs font-medium', config.color)}>{config.label}</span>}
+
+      {score !== undefined && <span className="text-xs text-muted-foreground">{score}%</span>}
     </motion.div>
   );
 }
@@ -158,7 +143,7 @@ export const SentimentEmoji = forwardRef<
             whileHover={{ scale: 1.2 }}
             transition={{ type: 'spring', stiffness: 300 }}
             className={cn(
-              'text-[16px] cursor-help',
+              'cursor-help text-[16px]',
               sentiment === 'critical' && 'animate-pulse',
               className
             )}
@@ -182,24 +167,22 @@ export function SentimentBar({ score }: { score: number }) {
   const config = sentimentConfig[sentiment];
 
   return (
-    <div className="flex items-center gap-2 w-full">
-      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+    <div className="flex w-full items-center gap-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${score}%` }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className={cn(
-            "h-full rounded-full",
-            score >= 70 && "bg-success",
-            score >= 45 && score < 70 && "bg-muted-foreground",
-            score >= 25 && score < 45 && "bg-warning",
-            score < 25 && "bg-destructive"
+            'h-full rounded-full',
+            score >= 70 && 'bg-success',
+            score >= 45 && score < 70 && 'bg-muted-foreground',
+            score >= 25 && score < 45 && 'bg-warning',
+            score < 25 && 'bg-destructive'
           )}
         />
       </div>
-      <span className={cn("text-xs font-medium w-8", config.color)}>
-        {score}%
-      </span>
+      <span className={cn('w-8 text-xs font-medium', config.color)}>{score}%</span>
     </div>
   );
 }

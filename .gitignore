@@ -291,3 +291,4 @@ evo_exec.json
 scripts/preview/design-*.png
 scripts/preview/logs/
 docs/ops/_scratch/
+src/integrations/supabase/types.ts.new

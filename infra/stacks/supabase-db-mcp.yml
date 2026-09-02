@@ -4,6 +4,12 @@ version: "3.7"
 # Docker secret supabase_db_url_v1 (lido no entrypoint). Rotação de senha só exige
 # criar secret _v2 e trocar a referência aqui.
 # Healthcheck: 127.0.0.1 explícito (wget resolvia localhost -> ::1 e o Node escuta só IPv4).
+#
+# 2026-08-24 (incidente 2026-07-26 — FECHADO): o token de PathPrefix foi ROTACIONADO
+# via Portainer (stack 128). O valor REAL vive SÓ no stack deployado — NUNCA versionar
+# aqui (repo público; o token antigo ficou 12+ dias exposto no git, ver
+# docs/INCIDENT_SECURITY_TOKEN_2026-07-26.md). O placeholder abaixo NÃO funciona como
+# rota; ao recriar o stack, substituir pelo token real mantido no Portainer/1Password.
 
 services:
   supabase-db-mcp:
@@ -53,7 +59,7 @@ services:
         - traefik.http.services.supabase-db-mcp.loadbalancer.server.port=3100
         # router principal: PathPrefix com o token do tenant (autentica pelo link, sem header).
         # NAO trocar por Host() puro: expoe SQL arbitrario em / e /mcp para qualquer caller.
-        - traefik.http.routers.supabase-db-mcp.rule=Host(`supabase-mcp.atomicabr.com.br`) && PathPrefix(`/s-a50174164e4b03ef181a29db65d2db80`)
+        - traefik.http.routers.supabase-db-mcp.rule=Host(`supabase-mcp.atomicabr.com.br`) && PathPrefix(`/s-REDACTED-rotacionado-20260824`)
         - traefik.http.routers.supabase-db-mcp.service=supabase-db-mcp
         - traefik.http.routers.supabase-db-mcp.entrypoints=websecure
         - traefik.http.routers.supabase-db-mcp.tls.certresolver=letsencryptresolver

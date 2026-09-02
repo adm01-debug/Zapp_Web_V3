@@ -1,14 +1,24 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import {
-  Building, Briefcase, Tag, CalendarDays, TrendingUp, Heart,
-  RotateCcw, Sparkles,
+  Building,
+  Briefcase,
+  Tag,
+  CalendarDays,
+  TrendingUp,
+  Heart,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 const DATE_FILTERS = [
@@ -49,50 +59,74 @@ interface ContactAdvancedFiltersProps {
 
 /** Contact Advanced Filters component for the contacts section. */
 export function ContactAdvancedFilters({
-  filterCompany, setFilterCompany,
-  filterJobTitle, setFilterJobTitle,
-  filterTag, setFilterTag,
-  filterDateRange, setFilterDateRange,
-  filterSentiment, setFilterSentiment,
-  filterLeadScoreRange, setFilterLeadScoreRange,
-  uniqueCompanies, uniqueJobTitles, uniqueTags,
-  onClearFilters, activeFiltersCount,
+  filterCompany,
+  setFilterCompany,
+  filterJobTitle,
+  setFilterJobTitle,
+  filterTag,
+  setFilterTag,
+  filterDateRange,
+  setFilterDateRange,
+  filterSentiment,
+  setFilterSentiment,
+  filterLeadScoreRange,
+  setFilterLeadScoreRange,
+  uniqueCompanies,
+  uniqueJobTitles,
+  uniqueTags,
+  onClearFilters,
+  activeFiltersCount,
 }: ContactAdvancedFiltersProps) {
   return (
     <motion.div
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
-      className="bg-muted/30 rounded-xl p-5 border border-border/30 space-y-4"
+      className="space-y-4 rounded-xl border border-border/30 bg-muted/30 p-5"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
+          <Sparkles className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold text-foreground">Filtros Avançados</span>
           {activeFiltersCount > 0 && (
-            <Badge variant="secondary" className="text-[10px] h-5">{activeFiltersCount} ativo{activeFiltersCount > 1 ? 's' : ''}</Badge>
+            <Badge variant="secondary" className="h-5 text-[10px]">
+              {activeFiltersCount} ativo{activeFiltersCount > 1 ? 's' : ''}
+            </Badge>
           )}
         </div>
         {activeFiltersCount > 0 && (
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground" onClick={onClearFilters}>
-            <RotateCcw className="w-3 h-3" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 text-xs text-muted-foreground"
+            onClick={onClearFilters}
+          >
+            <RotateCcw className="h-3 w-3" />
             Limpar tudo
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Company */}
         <div className="space-y-2">
-          <Label className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
-            <Building className="w-3.5 h-3.5" />Empresa
+          <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Building className="h-3.5 w-3.5" />
+            Empresa
           </Label>
-          <Select value={filterCompany || '__all__'} onValueChange={(v) => setFilterCompany(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
+          <Select
+            value={filterCompany || '__all__'}
+            onValueChange={(v) => setFilterCompany(v === '__all__' ? '' : v)}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Todas" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todas as empresas</SelectItem>
               {uniqueCompanies.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -100,15 +134,23 @@ export function ContactAdvancedFilters({
 
         {/* Job Title */}
         <div className="space-y-2">
-          <Label className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
-            <Briefcase className="w-3.5 h-3.5" />Cargo
+          <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Briefcase className="h-3.5 w-3.5" />
+            Cargo
           </Label>
-          <Select value={filterJobTitle || '__all__'} onValueChange={(v) => setFilterJobTitle(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="h-9"><SelectValue placeholder="Todos" /></SelectTrigger>
+          <Select
+            value={filterJobTitle || '__all__'}
+            onValueChange={(v) => setFilterJobTitle(v === '__all__' ? '' : v)}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todos os cargos</SelectItem>
               {uniqueJobTitles.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -116,15 +158,23 @@ export function ContactAdvancedFilters({
 
         {/* Tag */}
         <div className="space-y-2">
-          <Label className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
-            <Tag className="w-3.5 h-3.5" />Etiqueta
+          <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Tag className="h-3.5 w-3.5" />
+            Etiqueta
           </Label>
-          <Select value={filterTag || '__all__'} onValueChange={(v) => setFilterTag(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="h-9"><SelectValue placeholder="Todas" /></SelectTrigger>
+          <Select
+            value={filterTag || '__all__'}
+            onValueChange={(v) => setFilterTag(v === '__all__' ? '' : v)}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Todas" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todas as etiquetas</SelectItem>
               {uniqueTags.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -132,14 +182,19 @@ export function ContactAdvancedFilters({
 
         {/* Date */}
         <div className="space-y-2">
-          <Label className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
-            <CalendarDays className="w-3.5 h-3.5" />Período
+          <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Período
           </Label>
           <Select value={filterDateRange} onValueChange={setFilterDateRange}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               {DATE_FILTERS.map((f) => (
-                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -147,19 +202,27 @@ export function ContactAdvancedFilters({
       </div>
 
       {/* Second row - Sentiment + Lead Score */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/20">
+      <div className="grid grid-cols-1 gap-4 border-t border-border/20 pt-2 md:grid-cols-2">
         {/* Sentiment */}
         {setFilterSentiment && (
           <div className="space-y-2">
-            <Label className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
-              <Heart className="w-3.5 h-3.5" />Sentimento (IA)
+            <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Heart className="h-3.5 w-3.5" />
+              Sentimento (IA)
             </Label>
-            <Select value={filterSentiment || '__all__'} onValueChange={(v) => setFilterSentiment(v === '__all__' ? '' : v)}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <Select
+              value={filterSentiment || '__all__'}
+              onValueChange={(v) => setFilterSentiment(v === '__all__' ? '' : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {SENTIMENT_OPTIONS.map((s) => (
                   <SelectItem key={s.value} value={s.value}>
-                    <span className="flex items-center gap-2">{s.icon} {s.label}</span>
+                    <span className="flex items-center gap-2">
+                      {s.icon} {s.label}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -170,16 +233,23 @@ export function ContactAdvancedFilters({
         {/* Lead Score */}
         {setFilterLeadScoreRange && filterLeadScoreRange && (
           <div className="space-y-3">
-            <Label className="text-xs font-medium flex items-center gap-2 text-muted-foreground">
-              <TrendingUp className="w-3.5 h-3.5" />
+            <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <TrendingUp className="h-3.5 w-3.5" />
               Lead Score
-              <Badge variant="outline" className="ml-auto text-[10px] h-4 px-1.5">
+              <Badge variant="outline" className="ml-auto h-4 px-1.5 text-[10px]">
                 {filterLeadScoreRange[0]} – {filterLeadScoreRange[1]}
               </Badge>
             </Label>
             <Slider
               value={filterLeadScoreRange}
-              onValueChange={(v) => setFilterLeadScoreRange(v as [number, number] /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */)}
+              onValueChange={(v) =>
+                setFilterLeadScoreRange(
+                  v as [
+                    number,
+                    number,
+                  ] /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */
+                )
+              }
               min={0}
               max={100}
               step={5}

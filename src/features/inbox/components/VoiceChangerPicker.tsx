@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 // Tooltip removido para evitar loop de refs Tooltip+Popover (Radix Slot).
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Mic, MicOff, Loader2, Play, Pause, Send, X, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -157,7 +157,11 @@ export function VoiceChangerPicker({ onSendAudio, disabled }: VoiceChangerPicker
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errData.error || `Error ${response.status}`);
+        throw new Error(
+          (typeof errData.error === 'string' ? errData.error : null) ||
+            errData.message ||
+            `Error ${response.status}`
+        );
       }
 
       const audioBlob = await response.blob();

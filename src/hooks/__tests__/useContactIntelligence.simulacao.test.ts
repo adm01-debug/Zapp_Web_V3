@@ -24,6 +24,12 @@ import { useContactIntelligence } from '@/hooks/useContactIntelligence';
 
 type LogFn = (message: string, ...args: unknown[]) => void;
 type QueryResult = { data: unknown; error: unknown };
+type DeferredQueryControl = {
+  started: Promise<void>;
+  getSignal: () => AbortSignal | undefined;
+  resolveResult: (result: QueryResult) => void;
+  rejectWith: (error: unknown) => void;
+};
 
 interface MockChain {
   select: (fields?: string) => MockChain;
@@ -32,6 +38,7 @@ interface MockChain {
   in: (column: string, values: unknown[]) => MockChain;
   order: (column: string, options?: { ascending?: boolean }) => MockChain;
   limit: (count?: number) => MockChain;
+  abortSignal: (signal: AbortSignal | undefined) => MockChain;
   maybeSingle: () => Promise<QueryResult>;
   // O hook faz `await query` no fallback (query = chain após .in/.eq):
   // a cadeia precisa ser thenable para o destructure { data, error } funcionar.
@@ -53,6 +60,7 @@ const logMock = vi.hoisted(() => ({
 const sb = vi.hoisted(() => {
   const results = new Map<string, QueryResult>();
   const rejections = new Map<string, unknown>();
+  const plans = new Map<string, Array<(signal: AbortSignal | undefined) => Promise<QueryResult>>>();
   const calls = {
     from: [] as string[],
     or: [] as string[],
@@ -64,6 +72,7 @@ const sb = vi.hoisted(() => {
   return {
     results,
     rejections,
+    plans,
     calls,
     setResult(table: string, result: QueryResult) {
       results.set(table, result);
@@ -71,9 +80,40 @@ const sb = vi.hoisted(() => {
     setRejection(table: string, err: unknown) {
       rejections.set(table, err);
     },
+    setDeferred(table: string): DeferredQueryControl {
+      let signalRef: AbortSignal | undefined;
+      let resolveStart!: () => void;
+      let resolveQuery!: (result: QueryResult) => void;
+      let rejectQuery!: (error: unknown) => void;
+
+      const started = new Promise<void>((resolve) => {
+        resolveStart = resolve;
+      });
+
+      const task = new Promise<QueryResult>((resolve, reject) => {
+        resolveQuery = resolve;
+        rejectQuery = reject;
+      });
+
+      const queue = plans.get(table) ?? [];
+      queue.push((signal) => {
+        signalRef = signal;
+        resolveStart();
+        return task;
+      });
+      plans.set(table, queue);
+
+      return {
+        started,
+        getSignal: () => signalRef,
+        resolveResult: (result) => resolveQuery(result),
+        rejectWith: (error) => rejectQuery(error),
+      };
+    },
     reset() {
       results.clear();
       rejections.clear();
+      plans.clear();
       calls.from.length = 0;
       calls.or.length = 0;
       calls.eq.length = 0;
@@ -98,6 +138,31 @@ vi.mock('@/integrations/supabase/client', () => {
 
   const makeChain = (table: string): MockChain => {
     const chain = {} as MockChain;
+    let signalRef: AbortSignal | undefined;
+    let execution: Promise<QueryResult> | null = null;
+
+    const execute = (): Promise<QueryResult> => {
+      if (execution) return execution;
+
+      const queue = sb.plans.get(table);
+      if (queue && queue.length > 0) {
+        const plan = queue.shift();
+        if (queue.length === 0) {
+          sb.plans.delete(table);
+        }
+        execution = plan!(signalRef);
+        return execution;
+      }
+
+      if (sb.rejections.has(table)) {
+        execution = Promise.reject(sb.rejections.get(table));
+        return execution;
+      }
+
+      execution = Promise.resolve(resolveFor(table));
+      return execution;
+    };
+
     chain.select = vi.fn<(fields?: string) => MockChain>(() => chain);
     chain.or = vi.fn<(filter: string) => MockChain>((filter) => {
       sb.calls.or.push(filter);
@@ -121,19 +186,17 @@ vi.mock('@/integrations/supabase/client', () => {
       sb.calls.limit.push(count);
       return chain;
     });
-    chain.maybeSingle = vi.fn<() => Promise<QueryResult>>(() => {
-      if (sb.rejections.has(table)) return Promise.reject(sb.rejections.get(table));
-      return Promise.resolve(resolveFor(table));
+    // Espelha o postgrest-js real: .abortSignal() muta e retorna a MESMA
+    // instância (não cria um novo builder) — ver RCA 2026-08-22.
+    chain.abortSignal = vi.fn<(signal: AbortSignal | undefined) => MockChain>((signal) => {
+      signalRef = signal;
+      return chain;
     });
+    chain.maybeSingle = vi.fn<() => Promise<QueryResult>>(() => execute());
     chain.then = (
       onfulfilled?: ((value: QueryResult) => QueryResult | PromiseLike<QueryResult>) | null,
       onrejected?: ((reason: unknown) => QueryResult | PromiseLike<QueryResult>) | null
-    ): Promise<QueryResult> => {
-      if (sb.rejections.has(table)) {
-        return Promise.reject(sb.rejections.get(table)).then(onfulfilled, onrejected);
-      }
-      return Promise.resolve(resolveFor(table)).then(onfulfilled, onrejected);
-    };
+    ): Promise<QueryResult> => execute().then(onfulfilled, onrejected);
     return chain;
   };
 
@@ -147,11 +210,40 @@ vi.mock('@/integrations/supabase/client', () => {
   };
 });
 
-function renderIntel(input?: string) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrapper = ({ children }: { children: React.ReactNode }) =>
+function makeAbortLikeError(message = 'AbortError: Supabase slot acquire aborted') {
+  return Object.assign(new Error(message), { name: 'AbortError' });
+}
+
+function createQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
+function makeWrapper(qc: QueryClient) {
+  return ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: qc }, children);
+}
+
+function renderIntel(input?: string) {
+  const qc = createQueryClient();
+  const wrapper = makeWrapper(qc);
   return { ...renderHook(() => useContactIntelligence(input), { wrapper }), qc };
+}
+
+function renderIntelDynamic(initialInput: string) {
+  const qc = createQueryClient();
+  const wrapper = makeWrapper(qc);
+  return {
+    ...renderHook(({ input }: { input: string }) => useContactIntelligence(input), {
+      initialProps: { input: initialInput },
+      wrapper,
+    }),
+    qc,
+  };
+}
+
+async function waitForSilentCancellation(qc: QueryClient, key: readonly unknown[]) {
+  await waitFor(() => expect(qc.getQueryState(key)?.fetchStatus).toBe('idle'));
+  await waitFor(() => expect(qc.getQueryData(key)).toBeUndefined());
 }
 
 const UUID = '123e4567-e89b-12d3-a456-426614174000';
@@ -160,6 +252,7 @@ const PHONE_12 = '551199999999';
 const PHONE_10 = '1199999999';
 const LID_14 = '55119938451813';
 const LID_15 = '551199384518134';
+const PHONE_B = '5511888888888';
 
 describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
   beforeEach(() => {
@@ -287,7 +380,7 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       expect(result.current.intelligence).toBeNull();
     });
 
-    it("string vazia: NENHUMA query (enabled=false)", async () => {
+    it('string vazia: NENHUMA query (enabled=false)', async () => {
       const { result } = renderIntel('');
       // enabled=false → nunca há fetch; loading já é false no primeiro render
       expect(result.current.loading).toBe(false);
@@ -554,10 +647,6 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
     });
 
     it('fallback com timeout (error.message contendo "timeout") → log.error, NÃO warn', async () => {
-      // NOTA: o regex do error-field é /timeout|aborted|fetch/i — só "timeout"
-      // justaposto (ou aborted/fetch) cai em log.error neste caminho. A
-      // mensagem real 'Supabase request timed out' (com espaço em "timed out")
-      // NÃO casa — coberto pelo teste do gap abaixo.
       sb.setResult('contact_intelligence', { data: null, error: null });
       sb.setResult('evolution_messages', {
         data: null,
@@ -574,11 +663,7 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       expect(logMock.warn).not.toHaveBeenCalled();
     });
 
-    it('GAP real: error.message "Supabase request timed out" (com espaço) no error-field → log.warn, não log.error', async () => {
-      // O DOMException do boundedFetch do client.ts tem message 'Supabase
-      // request timed out' — "timed out" com espaço NÃO casa /timeout/i do
-      // error-field (só o isTimeoutError do catch pega 'timed ?out'). No
-      // caminho error-field (postgrest-js nunca lança), isso vira warn.
+    it('error.message "Supabase request timed out" (com espaço) no error-field → log.error, não log.warn', async () => {
       sb.setResult('contact_intelligence', { data: null, error: null });
       sb.setResult('evolution_messages', {
         data: null,
@@ -588,11 +673,29 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       const { result } = renderIntel(PHONE_13);
       await waitFor(() => expect(result.current.loading).toBe(false));
 
-      expect(logMock.warn).toHaveBeenCalledWith(
-        'messages stats lookup failed:',
-        'Supabase request timed out'
+      expect(logMock.error).toHaveBeenCalledWith(
+        'messages stats lookup timed out (evolution_messages scan):',
+        expect.objectContaining({ message: 'Supabase request timed out' })
       );
+      expect(logMock.warn).not.toHaveBeenCalled();
+    });
+
+    it('abort próprio no error-field → relança cancelamento, sem log.error nem log.warn', async () => {
+      sb.setResult('contact_intelligence', { data: null, error: null });
+      const deferred = sb.setDeferred('evolution_messages');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+      await qc.cancelQueries({ queryKey: ['contact-intelligence-view', PHONE_13] });
+      expect(deferred.getSignal()?.aborted).toBe(true);
+      deferred.resolveResult({
+        data: null,
+        error: { name: 'AbortError', message: 'The operation was aborted.' },
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
       expect(logMock.error).not.toHaveBeenCalled();
+      expect(logMock.warn).not.toHaveBeenCalled();
     });
 
     it("fallback com error.message 'Failed to fetch' → log.error (regex aborted|fetch)", async () => {
@@ -699,6 +802,145 @@ describe('useContactIntelligence — simulação (fix 2026-07-31)', () => {
       // staleTime vive no observer (QueryObserverOptions); Query.options
       // (cache-level) não o expõe na v5
       expect(query.observers[0].options.staleTime).toBe(5 * 60_000);
+    });
+  });
+
+  describe('cancelQueries — abort silencioso nos dois estágios', () => {
+    it('contact_intelligence via campo error aborta silenciosamente, sem fallback/cache/log', async () => {
+      const deferred = sb.setDeferred('contact_intelligence');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+
+      const key = ['contact-intelligence-view', PHONE_13] as const;
+      const signal = deferred.getSignal();
+      expect(signal?.aborted).toBe(false);
+
+      await qc.cancelQueries({ queryKey: key });
+      await waitFor(() => expect(signal?.aborted).toBe(true));
+
+      deferred.resolveResult({
+        data: null,
+        error: { message: 'AbortError: Supabase slot acquire aborted' },
+      });
+
+      await waitForSilentCancellation(qc, key);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.intelligence).toBeNull();
+      expect(sb.calls.from).toEqual(['contact_intelligence']);
+      expect(logMock.warn).not.toHaveBeenCalled();
+      expect(logMock.error).not.toHaveBeenCalled();
+    });
+
+    it('contact_intelligence via rejection aborta silenciosamente, sem fallback/cache/log', async () => {
+      const deferred = sb.setDeferred('contact_intelligence');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+
+      const key = ['contact-intelligence-view', PHONE_13] as const;
+      const signal = deferred.getSignal();
+
+      await qc.cancelQueries({ queryKey: key });
+      await waitFor(() => expect(signal?.aborted).toBe(true));
+
+      deferred.rejectWith(makeAbortLikeError());
+
+      await waitForSilentCancellation(qc, key);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.intelligence).toBeNull();
+      expect(sb.calls.from).toEqual(['contact_intelligence']);
+      expect(logMock.warn).not.toHaveBeenCalled();
+      expect(logMock.error).not.toHaveBeenCalled();
+    });
+
+    it('fallback evolution_messages via campo error aborta silenciosamente, sem cache/log', async () => {
+      sb.setResult('contact_intelligence', { data: null, error: null });
+      const deferred = sb.setDeferred('evolution_messages');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+
+      const key = ['contact-intelligence-view', PHONE_13] as const;
+      const signal = deferred.getSignal();
+
+      await qc.cancelQueries({ queryKey: key });
+      await waitFor(() => expect(signal?.aborted).toBe(true));
+
+      deferred.resolveResult({
+        data: null,
+        error: { message: 'AbortError: Supabase slot acquire aborted' },
+      });
+
+      await waitForSilentCancellation(qc, key);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.intelligence).toBeNull();
+      expect(sb.calls.from).toEqual(['contact_intelligence', 'evolution_messages']);
+      expect(logMock.warn).not.toHaveBeenCalled();
+      expect(logMock.error).not.toHaveBeenCalled();
+    });
+
+    it('fallback evolution_messages via rejection aborta silenciosamente, sem cache/log', async () => {
+      sb.setResult('contact_intelligence', { data: null, error: null });
+      const deferred = sb.setDeferred('evolution_messages');
+
+      const { result, qc } = renderIntel(PHONE_13);
+      await deferred.started;
+
+      const key = ['contact-intelligence-view', PHONE_13] as const;
+      const signal = deferred.getSignal();
+
+      await qc.cancelQueries({ queryKey: key });
+      await waitFor(() => expect(signal?.aborted).toBe(true));
+
+      deferred.rejectWith(makeAbortLikeError());
+
+      await waitForSilentCancellation(qc, key);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.intelligence).toBeNull();
+      expect(sb.calls.from).toEqual(['contact_intelligence', 'evolution_messages']);
+      expect(logMock.warn).not.toHaveBeenCalled();
+      expect(logMock.error).not.toHaveBeenCalled();
+    });
+
+    it('troca A→B cancela A sem fallback/cache/log e mantém B íntegro', async () => {
+      const deferredA = sb.setDeferred('contact_intelligence');
+      const deferredB = sb.setDeferred('contact_intelligence');
+
+      const { result, rerender, qc } = renderIntelDynamic(PHONE_13);
+      await deferredA.started;
+
+      const keyA = ['contact-intelligence-view', PHONE_13] as const;
+      const keyB = ['contact-intelligence-view', PHONE_B] as const;
+      const signalA = deferredA.getSignal();
+      expect(signalA?.aborted).toBe(false);
+
+      rerender({ input: PHONE_B });
+      await deferredB.started;
+      await waitFor(() => expect(signalA?.aborted).toBe(true));
+
+      deferredA.resolveResult({
+        data: null,
+        error: { message: 'AbortError: Supabase slot acquire aborted' },
+      });
+      deferredB.resolveResult({
+        data: { total_messages: 9, days_since_contact: 2 },
+        error: null,
+      });
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      await waitFor(() => expect(result.current.intelligence?.briefing.total_interactions).toBe(9));
+
+      expect(qc.getQueryData(keyA)).toBeUndefined();
+      expect(qc.getQueryData(keyB)).toEqual(
+        expect.objectContaining({
+          found: true,
+          briefing: expect.objectContaining({ total_interactions: 9 }),
+        })
+      );
+      expect(sb.calls.from).toEqual(['contact_intelligence', 'contact_intelligence']);
+      expect(logMock.warn).not.toHaveBeenCalled();
+      expect(logMock.error).not.toHaveBeenCalled();
     });
   });
 });

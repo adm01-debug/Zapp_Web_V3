@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { Tag as TagIcon, GitMerge, Download, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';

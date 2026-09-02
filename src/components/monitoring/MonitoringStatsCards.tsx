@@ -1,8 +1,13 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Wifi, MessageSquare, Zap, ArrowUpDown, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
-import type { ConnectionInfo, MessageStats, UptimeInfo, SparklineData } from './hooks/useEvolutionMonitoring';
+import { motion } from '@/components/ui/motion';
+import type {
+  ConnectionInfo,
+  MessageStats,
+  UptimeInfo,
+  SparklineData,
+} from './hooks/useEvolutionMonitoring';
 
 interface Props {
   connections: ConnectionInfo[];
@@ -15,12 +20,14 @@ function PulseDot({ active }: { active: boolean }) {
   return (
     <span className="relative flex h-2.5 w-2.5">
       {active && (
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
       )}
-      <span className={cn(
-        'relative inline-flex rounded-full h-2.5 w-2.5',
-        active ? 'bg-primary' : 'bg-destructive'
-      )} />
+      <span
+        className={cn(
+          'relative inline-flex h-2.5 w-2.5 rounded-full',
+          active ? 'bg-primary' : 'bg-destructive'
+        )}
+      />
     </span>
   );
 }
@@ -34,18 +41,30 @@ function MiniSparkline({ data, color = 'text-primary' }: { data: number[]; color
   const w = 64;
   const step = w / (data.length - 1);
 
-  const points = data.map((v, i) => {
-    const x = i * step;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
+  const points = data
+    .map((v, i) => {
+      const x = i * step;
+      const y = h - ((v - min) / range) * (h - 4) - 2;
+      return `${x},${y}`;
+    })
+    .join(' ');
 
   // Fill area
   const fillPoints = `0,${h} ${points} ${w},${h}`;
 
   return (
     <svg width={w} height={h} className="shrink-0" viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <polygon points={fillPoints} className={cn('opacity-10', color === 'text-primary' ? 'fill-emerald-500' : color === 'text-destructive' ? 'fill-destructive' : 'fill-primary')} />
+      <polygon
+        points={fillPoints}
+        className={cn(
+          'opacity-10',
+          color === 'text-primary'
+            ? 'fill-emerald-500'
+            : color === 'text-destructive'
+              ? 'fill-destructive'
+              : 'fill-primary'
+        )}
+      />
       <polyline
         points={points}
         fill="none"
@@ -60,11 +79,15 @@ function MiniSparkline({ data, color = 'text-primary' }: { data: number[]; color
 
 /** Monitoring Stats Cards component for the monitoring section. */
 export function MonitoringStatsCards({ connections, messageStats, uptime, sparklines }: Props) {
-  const activeCount = connections.filter(c => c.status === 'connected').length;
-  const connWithLatency = connections.filter(c => c.health_response_ms);
-  const avgLatency = connWithLatency.length > 0
-    ? Math.round(connWithLatency.reduce((s, c) => s + (c.health_response_ms || 0), 0) / connWithLatency.length)
-    : null;
+  const activeCount = connections.filter((c) => c.status === 'connected').length;
+  const connWithLatency = connections.filter((c) => c.health_response_ms);
+  const avgLatency =
+    connWithLatency.length > 0
+      ? Math.round(
+          connWithLatency.reduce((s, c) => s + (c.health_response_ms || 0), 0) /
+            connWithLatency.length
+        )
+      : null;
 
   const allOnline = activeCount === connections.length && connections.length > 0;
   const hasIncoming = messageStats.incoming > 0;
@@ -83,11 +106,24 @@ export function MonitoringStatsCards({ connections, messageStats, uptime, sparkl
     },
     {
       icon: Shield,
-      iconColor: uptime.percentage >= 99 ? 'text-primary' : uptime.percentage >= 95 ? 'text-warning-foreground' : 'text-destructive',
-      bgColor: uptime.percentage >= 99 ? 'bg-primary/10' : uptime.percentage >= 95 ? 'bg-warning/10' : 'bg-destructive/10',
+      iconColor:
+        uptime.percentage >= 99
+          ? 'text-primary'
+          : uptime.percentage >= 95
+            ? 'text-warning-foreground'
+            : 'text-destructive',
+      bgColor:
+        uptime.percentage >= 99
+          ? 'bg-primary/10'
+          : uptime.percentage >= 95
+            ? 'bg-warning/10'
+            : 'bg-destructive/10',
       label: 'Uptime 24h',
       value: `${uptime.percentage}%`,
-      subtitle: uptime.totalChecks > 0 ? `${uptime.healthyChecks}/${uptime.totalChecks} checks OK` : 'Sem dados',
+      subtitle:
+        uptime.totalChecks > 0
+          ? `${uptime.healthyChecks}/${uptime.totalChecks} checks OK`
+          : 'Sem dados',
       pulse: uptime.percentage >= 99,
       sparkline: sparklines.uptime,
       sparkColor: uptime.percentage >= 95 ? 'text-primary' : 'text-destructive',
@@ -109,7 +145,14 @@ export function MonitoringStatsCards({ connections, messageStats, uptime, sparkl
       bgColor: avgLatency && avgLatency < 500 ? 'bg-primary/10' : 'bg-warning/10',
       label: 'Latência Média',
       value: avgLatency ? `${avgLatency}ms` : '--',
-      subtitle: avgLatency && avgLatency < 300 ? 'Excelente' : avgLatency && avgLatency < 800 ? 'Boa' : avgLatency ? 'Lenta' : 'Sem dados',
+      subtitle:
+        avgLatency && avgLatency < 300
+          ? 'Excelente'
+          : avgLatency && avgLatency < 800
+            ? 'Boa'
+            : avgLatency
+              ? 'Lenta'
+              : 'Sem dados',
       pulse: false,
       sparkline: sparklines.latency,
       sparkColor: avgLatency && avgLatency < 500 ? 'text-primary' : 'text-warning-foreground',
@@ -128,34 +171,41 @@ export function MonitoringStatsCards({ connections, messageStats, uptime, sparkl
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      {stats.map(({ icon: Icon, iconColor, bgColor, label, value, subtitle, pulse, sparkline, sparkColor }, i) => (
-        <motion.div
-          key={label}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.05, duration: 0.25 }}
-        >
-          <Card className="hover:shadow-md transition-shadow border-border/60 h-full">
-            <CardContent className="pt-4 pb-3 px-4">
-              <div className="flex items-start justify-between mb-2">
-                <div className={cn('p-2 rounded-lg', bgColor)}>
-                  <Icon className={cn('w-4 h-4', iconColor)} />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {stats.map(
+        (
+          { icon: Icon, iconColor, bgColor, label, value, subtitle, pulse, sparkline, sparkColor },
+          i
+        ) => (
+          <motion.div
+            key={label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05, duration: 0.25 }}
+          >
+            <Card className="h-full border-border/60 transition-shadow hover:shadow-md">
+              <CardContent className="px-4 pb-3 pt-4">
+                <div className="mb-2 flex items-start justify-between">
+                  <div className={cn('rounded-lg p-2', bgColor)}>
+                    <Icon className={cn('h-4 w-4', iconColor)} />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {sparkline && sparkline.length > 1 && (
+                      <MiniSparkline data={sparkline} color={sparkColor} />
+                    )}
+                    {pulse && <PulseDot active />}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {sparkline && sparkline.length > 1 && (
-                    <MiniSparkline data={sparkline} color={sparkColor} />
-                  )}
-                  {pulse && <PulseDot active />}
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{label}</p>
-              <p className="text-lg font-bold truncate mt-0.5">{value}</p>
-              <p className="text-[11px] text-muted-foreground">{subtitle}</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-      ))}
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {label}
+                </p>
+                <p className="mt-0.5 truncate text-lg font-bold">{value}</p>
+                <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 
 // ============= SKELETON PULSE =============
 
@@ -8,7 +8,13 @@ interface SkeletonPulseProps {
   rounded?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }
 
-const roundedClasses = { sm: 'rounded-sm', md: 'rounded-md', lg: 'rounded-lg', xl: 'rounded-xl', full: 'rounded-full' };
+const roundedClasses = {
+  sm: 'rounded-sm',
+  md: 'rounded-md',
+  lg: 'rounded-lg',
+  xl: 'rounded-xl',
+  full: 'rounded-full',
+};
 
 /** Skeleton Pulse component for the ui section. */
 export function SkeletonPulse({ className, rounded = 'md' }: SkeletonPulseProps) {
@@ -35,16 +41,21 @@ export function ContentSkeleton({ type, count = 1 }: ContentSkeletonProps) {
       return (
         <div className="space-y-4">
           {items.map((i) => (
-            <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}
-              className="p-6 rounded-xl border border-border bg-card">
-              <div className="flex items-center gap-4 mb-4">
-                <SkeletonPulse className="w-12 h-12" rounded="full" />
-                <div className="space-y-2 flex-1">
+            <motion.div
+              key={i}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: i * 0.1 }}
+              className="rounded-xl border border-border bg-card p-6"
+            >
+              <div className="mb-4 flex items-center gap-4">
+                <SkeletonPulse className="h-12 w-12" rounded="full" />
+                <div className="flex-1 space-y-2">
                   <SkeletonPulse className="h-4 w-1/3" />
                   <SkeletonPulse className="h-3 w-1/2" />
                 </div>
               </div>
-              <SkeletonPulse className="h-4 w-full mb-2" />
+              <SkeletonPulse className="mb-2 h-4 w-full" />
               <SkeletonPulse className="h-4 w-4/5" />
             </motion.div>
           ))}
@@ -54,9 +65,14 @@ export function ContentSkeleton({ type, count = 1 }: ContentSkeletonProps) {
       return (
         <div className="space-y-2">
           {items.map((i) => (
-            <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-              className="flex items-center gap-3 p-3 rounded-lg">
-              <SkeletonPulse className="w-10 h-10" rounded="full" />
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="flex items-center gap-3 rounded-lg p-3"
+            >
+              <SkeletonPulse className="h-10 w-10" rounded="full" />
               <div className="flex-1 space-y-2">
                 <SkeletonPulse className="h-4 w-1/2" />
                 <SkeletonPulse className="h-3 w-3/4" />
@@ -70,9 +86,14 @@ export function ContentSkeleton({ type, count = 1 }: ContentSkeletonProps) {
       return (
         <div className="space-y-3">
           {items.map((i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
-              className={cn('flex gap-2', i % 2 === 0 ? 'justify-start' : 'justify-end')}>
-              {i % 2 === 0 && <SkeletonPulse className="w-8 h-8" rounded="full" />}
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.08 }}
+              className={cn('flex gap-2', i % 2 === 0 ? 'justify-start' : 'justify-end')}
+            >
+              {i % 2 === 0 && <SkeletonPulse className="h-8 w-8" rounded="full" />}
               <SkeletonPulse className={cn('h-12', i % 2 === 0 ? 'w-48' : 'w-40')} rounded="xl" />
             </motion.div>
           ))}
@@ -82,20 +103,30 @@ export function ContentSkeleton({ type, count = 1 }: ContentSkeletonProps) {
       return (
         <div className="flex gap-2">
           {items.map((i) => (
-            <motion.div key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.05, type: 'spring' }}>
-              <SkeletonPulse className="w-10 h-10" rounded="full" />
+            <motion.div
+              key={i}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: i * 0.05, type: 'spring' }}
+            >
+              <SkeletonPulse className="h-10 w-10" rounded="full" />
             </motion.div>
           ))}
         </div>
       );
     case 'stat':
       return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {items.map((i) => (
-            <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}
-              className="p-4 rounded-xl border border-border bg-card">
-              <SkeletonPulse className="h-4 w-1/2 mb-3" />
-              <SkeletonPulse className="h-8 w-3/4 mb-2" />
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.1 }}
+              className="rounded-xl border border-border bg-card p-4"
+            >
+              <SkeletonPulse className="mb-3 h-4 w-1/2" />
+              <SkeletonPulse className="mb-2 h-8 w-3/4" />
               <SkeletonPulse className="h-3 w-1/3" />
             </motion.div>
           ))}

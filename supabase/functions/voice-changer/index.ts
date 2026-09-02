@@ -1,10 +1,9 @@
-import { handleCors, errorResponse, getCorsHeaders, Logger, requireEnv, checkRateLimit } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, getCorsHeaders, Logger, requireEnv, checkRateLimit } from "../_shared/validation.ts";
 import { requireUser, requireServiceRoleOrCron } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import { getStoragePublicUrl } from "../_shared/storage-url.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
-import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
-import { VoiceChangerV1Schema } from "../_shared/schemas.ts";
+import { CONTRACT_SCHEMAS, VoiceChangerQueueContractMap } from "../_shared/contract-schemas.ts";
 
 const VOICE_PRESETS: Record<string, { voiceId: string; label: string; isCloned?: boolean }> = {
   // Masculinas
@@ -59,7 +58,7 @@ Deno.serve(async (req) => {
       const authed = await requireUser(req);
       if (authed instanceof Response) return authed;
       const rl = checkRateLimit(`voice-changer:${authed.user.id}`, 5, 60_000);
-      if (!rl.allowed) return errorResponse('Rate limit exceeded', 429, req);
+      if (!rl.allowed) return errorEnvelope('rate_limit_exceeded', 'Rate limit exceeded', 429, req);
     }
 
     const supabaseClient = createZappAdminClient();
@@ -84,10 +83,13 @@ Deno.serve(async (req) => {
       authorized = body.authorized === true || body.authorized === 'true';
     } else if (contentType.includes('application/json')) {
       const json = await req.json().catch(() => null);
-      // Ramo JSON (fila/queue): CONTRACT_SCHEMAS['voice-changer'] é o schema
-      // MULTIPART (audio File obrigatório) — usar a variante JSON registrada
-      // (VoiceChangerV1Schema) para não 422ar todos os requests de fila.
-      const parsed = parseOrReject('voice-changer', { v1: VoiceChangerV1Schema }, req, json, { extraHeaders: getCorsHeaders(req) });
+      // Ramo JSON (fila/queue): variante JSON do contrato voice-changer@v1.
+      // Etapa 34 (PLANO-100, 2026-08-25): o version-map vem do módulo de
+      // registro (contract-schemas-infra.ts — VoiceChangerQueueContractMap),
+      // nunca inline. O registro canônico CONTRACT_SCHEMAS['voice-changer']
+      // aponta a variante multipart (ramo acima); usar a multipart aqui
+      // 422aria todos os requests de fila (exigiria audio File).
+      const parsed = parseOrReject('voice-changer', VoiceChangerQueueContractMap, req, json, { extraHeaders: getCorsHeaders(req) });
       if (parsed.ok === false) return parsed.response;
       const body = parsed.data as Record<string, any>;
       taskId = (body.task_id as string | null) ?? null;
@@ -128,7 +130,7 @@ Deno.serve(async (req) => {
         const { data: file, error: fileErr } = await supabaseClient.storage
           .from('audio-memes')
           .download(task.input_audio_url);
-        if (fileErr) return errorResponse('Storage error', 500, req);
+        if (fileErr) return errorEnvelope('storage_error', 'Storage error', 500, req);
         audioData = file;
       }
     }
@@ -144,7 +146,7 @@ Deno.serve(async (req) => {
 
     // Validation for cloned voices
     if (preset.isCloned && !authorized) {
-      return errorResponse('Permissão necessária para usar esta voz clonada.', 403, req);
+      return errorEnvelope('permission_denied', 'Permissão necessária para usar esta voz clonada.', 403, req);
     }
 
     const startTime = Date.now();
@@ -283,6 +285,6 @@ Deno.serve(async (req) => {
     }
   } catch (err: unknown) {
     log.error("Global Voice Changer Error", { error: err instanceof Error ? err.message : String(err) });
-    return errorResponse('Internal server error', 500, req);
+    return errorEnvelope('internal_error', 'Internal server error', 500, req);
   }
 });

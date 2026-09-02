@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import {
   Keyboard,
@@ -62,7 +62,13 @@ export function ContactsShortcutHelp({ open, onClose }: Props) {
                 <h2 className="text-xl font-bold">Atalhos de Teclado</h2>
                 <p className="text-sm text-muted-foreground">Aumente sua produtividade</p>
               </div>
-              <Button aria-label="Fechar atalhos de teclado" variant="ghost" size="icon" className="ml-auto" onClick={onClose}>
+              <Button
+                aria-label="Fechar atalhos de teclado"
+                variant="ghost"
+                size="icon"
+                className="ml-auto"
+                onClick={onClose}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>

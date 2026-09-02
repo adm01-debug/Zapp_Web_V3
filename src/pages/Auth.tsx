@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -289,7 +289,7 @@ export default function Auth() {
                     <div className="flex justify-end">
                       <Link
                         to="/forgot-password"
-                        className="text-xs text-primary transition-colors hover:opacity-80 hover:underline"
+                        className="text-xs text-primary transition-colors hover:underline hover:opacity-80"
                       >
                         Esqueci minha senha
                       </Link>

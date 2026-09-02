@@ -17,10 +17,10 @@
 //   scheduled-reports-dispatch a cada 15 min chama com body '{}').
 //
 // Auth: requireServiceRoleOrCron (cron usa service_role do vault).
-import { handleCors, errorResponse, jsonResponse, Logger, getCorsHeaders } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, Logger, getCorsHeaders } from "../_shared/validation.ts";
 import { requireServiceRoleOrCron } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
-import { parseOrReject } from "../_shared/contract-kit.ts";
+import { parseOrReject, respondWithContract } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { fetchWithRetry } from "../_shared/retry-with-backoff.ts";
 
@@ -49,6 +49,11 @@ Deno.serve(async (req: Request) => {
 
   const log = new Logger("send-scheduled-report");
 
+  // Hotfix (auditoria 2026-08-21, Bloco 5.1): mutável içada pra fora — precisa
+  // estar acessível também no catch-all (parsed é const, escopo do try), pra
+  // errorResponse() pós-gate não descartar x-contract-version/deprecated/sunset.
+  let contractResponseHeaders: Record<string, string> = {};
+
   try {
     const supabase = createZappAdminClient();
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -59,6 +64,7 @@ Deno.serve(async (req: Request) => {
       extraHeaders: getCorsHeaders(req),
     });
     if (parsed.ok === false) return parsed.response;
+    contractResponseHeaders = parsed.headers;
 
     const { version, data } = parsed;
     const payload = data as { reportId?: string; limit?: number; dryRun?: boolean };
@@ -75,13 +81,17 @@ Deno.serve(async (req: Request) => {
 
     if (claimError) {
       log.error("claim failed", { error: claimError.message });
-      return errorResponse("claim_failed", 500, req);
+      return errorResponse("claim_failed", 500, req, undefined, contractResponseHeaders);
     }
 
     const runs = (Array.isArray(claimed) ? claimed : []) as ClaimedRun[];
     if (runs.length === 0) {
       log.done(200, { claimed: 0, sent: 0, failed: 0, dryRun });
-      return jsonResponse({ claimed: 0, sent: 0, failed: 0, dryRun }, 200, req);
+      // Bloco 5 (2026-08-21): propaga parsed.headers (x-contract-version/
+      // deprecated/sunset) — antes nunca chegava ao cliente.
+      // Etapa 54 (PLANO-100-CONTRATOS-EDGE): propagação agora via
+      // respondWithContract (contract-kit), sem spread manual.
+      return respondWithContract(parsed, { claimed: 0, sent: 0, failed: 0, dryRun }, { status: 200, headers: getCorsHeaders(req) });
     }
 
     let sent = 0;
@@ -169,11 +179,11 @@ Deno.serve(async (req: Request) => {
     }
 
     log.done(200, { claimed: runs.length, sent, failed, dryRun });
-    return jsonResponse({ claimed: runs.length, sent, failed, dryRun }, 200, req);
+    return respondWithContract(parsed, { claimed: runs.length, sent, failed, dryRun }, { status: 200, headers: getCorsHeaders(req) });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     log.error("Error processing scheduled reports", { error: errorMessage });
-    return errorResponse("Internal server error", 500, req);
+    return errorEnvelope('internal_error', "Internal server error", 500, req, undefined, contractResponseHeaders);
   }
 });
 

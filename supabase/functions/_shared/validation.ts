@@ -7,12 +7,53 @@ import { createZappAdminClient } from "./db-client.ts";
  */
 
 // Re-export HMAC validation utilities
-export { 
-  verifyHmacSignature, 
-  extractSignatureFromHeaders, 
-  WebhookSecurityService, 
-  createWebhookValidator 
+export {
+  verifyHmacSignature,
+  extractSignatureFromHeaders,
+  WebhookSecurityService,
+  createWebhookValidator
 } from './hmac-validation.ts';
+
+// ─── Leitura de body JSON (distingue corpo vazio de malformado) ────────────
+
+/**
+ * Lê o body da requisição como JSON, distinguindo dois casos que
+ * `req.json().catch(() => ({}))` (antipadrão D1/etapa 27 do
+ * PLANO-100-CONTRATOS-EDGE) tratava como se fossem o mesmo:
+ *
+ *  - Corpo GENUINAMENTE vazio (cron/GET/health-check sem payload) → `{}`.
+ *    Legítimo pros ~35 endpoints internos cujo contrato documenta
+ *    "sem body → {} aceito".
+ *  - Corpo NÃO-VAZIO mas malformado (JSON quebrado) → `null`, que faz
+ *    `parseOrReject` disparar 422 `invalid_json` de verdade — o
+ *    comportamento que `.catch(() => ({}))` mascarava silenciosamente.
+ *
+ * `req.json()` sozinho NÃO distingue os dois: ambos lançam SyntaxError.
+ * Por isso um simples `.catch(() => null)` (a troca ingênua que a etapa 27
+ * propunha) quebraria os cron/health-check legítimos — `parseOrReject`
+ * rejeita `null` incondicionalmente (`isStructured = body !== null && ...`),
+ * mesmo quando o schema aceitaria `{}`.
+ *
+ * Auditoria pós-Bloco 6 (2026-08-21): `JSON.parse` rodava sobre o texto
+ * NÃO-trimado — um corpo JSON válido com um BOM (U+FEFF) líder (comum em
+ * exports/payloads de origem Windows) tinha `text.trim() !== ""` (correto,
+ * não é vazio) mas `JSON.parse(text)` lançava `SyntaxError` no BOM, caindo
+ * incorretamente no caminho de malformado (`null` → 422 `invalid_json`) para
+ * um payload que na verdade era válido. `String.prototype.trim()` remove
+ * BOM (é WhiteSpace pela spec de ECMAScript); `JSON.parse` tolera espaço/
+ * quebra de linha ao redor do valor, então parsear o texto JÁ trimado é
+ * seguro pro caso comum e corrige o caso do BOM.
+ */
+export async function readJsonBodyOrEmpty(req: Request): Promise<unknown> {
+  const text = await req.text().catch(() => "");
+  const trimmed = text.trim();
+  if (trimmed === "") return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
 
 // ─── Secret Sanitization (Bug 1 fix — never log secrets) ────────────────────
 
@@ -268,18 +309,59 @@ export function getCorsHeaders(req?: Request): Record<string, string> {
 /** @deprecated Use getCorsHeaders(req) for origin-validated CORS. Kept for backward compat — do NOT use in new code. */
 export const corsHeaders = getCorsHeaders();
 
-/** Standard JSON error response (with origin-validated CORS) */
+/**
+ * Standard JSON error response (with origin-validated CORS).
+ *
+ * Hotfix (auditoria 2026-08-21, Bloco 5.1): 5º parâmetro opcional
+ * `extraHeaders` — mesmo mecanismo do jsonResponse(), pro caso de erro de
+ * aplicação (400/403/404/500/502/504) pós-gate parseOrReject também poder
+ * propagar x-contract-version/x-contract-deprecated/sunset. Sem isso, TODA
+ * chamada errorResponse() pós-gate nos webhooks v1/v2 descartava esses
+ * headers mesmo quando a resposta 200 de sucesso do mesmo endpoint os
+ * carregava — achado da auditoria multi-agente pós-Bloco 5.
+ */
 export function errorResponse(
   message: string,
   status = 400,
   req?: Request,
   details?: Record<string, unknown>,
+  extraHeaders?: Record<string, string>,
 ) {
   const headers = req ? getCorsHeaders(req) : corsHeaders;
   const body = details ? { error: message, ...details } : { error: message };
   return new Response(
     JSON.stringify(body),
-    { status, headers: { ...headers, 'Content-Type': 'application/json' } }
+    { status, headers: { ...headers, ...extraHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * Envelope canônico pra erros NÃO-validação (auth/rate-limit/config/500) —
+ * etapa 26 do Bloco 2 (2026-08-21). Diferente do envelope 422 de contrato
+ * (contract-kit.ts, que tem `contract`+`details[]`, específico de payload
+ * inválido) e de `errorResponse()` acima (que produz `{error: "string"}`,
+ * o próprio shape inconsistente que esta etapa reduz — 313 ocorrências em
+ * 62 arquivos no baseline). Shape único: `{error: true, code, message}`,
+ * com `extra` opcional pra campos adicionais (requestId, reason, etc.).
+ *
+ * Migração é gradual e explícita, não um rename em massa: PoC nesta etapa
+ * cobre as 3 functions de maior tráfego (evolution-api, whatsapp-cloud-
+ * webhook, main); o restante do repo segue com `errorResponse()`/ad-hoc
+ * até ser migrado function por function.
+ */
+export function errorEnvelope(
+  code: string,
+  message: string,
+  status = 400,
+  req?: Request,
+  extra?: Record<string, unknown>,
+  extraHeaders?: Record<string, string>,
+) {
+  const headers = req ? getCorsHeaders(req) : corsHeaders;
+  const body = { error: true, code, message, ...extra };
+  return new Response(
+    JSON.stringify(body),
+    { status, headers: { ...headers, ...extraHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
@@ -359,40 +441,21 @@ export function securityErrorResponse(
 }
 
 /** Standard JSON success response (with origin-validated CORS) */
-export function jsonResponse(data: unknown, status = 200, req?: Request) {
+/**
+ * Bloco 5 (2026-08-21, PLANO-100-CONTRATOS-EDGE): 4º parâmetro opcional
+ * `extraHeaders` — usado por webhooks versionados (v1/v2) para propagar
+ * `parsed.headers` (x-contract-version, x-contract-deprecated, sunset) na
+ * resposta de sucesso. Antes desse fix, ESSES headers nunca chegavam ao
+ * cliente em nenhuma função — o versionamento existia só no servidor.
+ * Aditivo: chamadas existentes (2-3 args) continuam idênticas.
+ */
+export function jsonResponse(data: unknown, status = 200, req?: Request, extraHeaders?: Record<string, string>) {
   const headers = req ? getCorsHeaders(req) : corsHeaders;
   return new Response(
     JSON.stringify(data),
-    { status, headers: { ...headers, 'Content-Type': 'application/json' } }
+    { status, headers: { ...headers, ...extraHeaders, 'Content-Type': 'application/json' } }
   );
 }
-
-/** Standard Contract Validation Error Response (422) */
-export function contractErrorResponse(
-  code: string,
-  message: string,
-  issues: { path?: (string | number)[]; message?: string }[] = [],
-  requestId?: string,
-  req?: Request
-) {
-  const body = {
-    error: true,
-    code,
-    message,
-    requestId,
-    fields: issues.map(i => i.path?.join('.') || 'root'),
-    details: issues.map(i => ({
-      path: i.path?.join('.') || 'root',
-      message: i.message
-    }))
-  };
-  const headers = req ? getCorsHeaders(req) : corsHeaders;
-  return new Response(
-    JSON.stringify(body),
-    { status: 422, headers: { ...headers, 'Content-Type': 'application/json' } }
-  );
-}
-
 
 /** Handle CORS preflight with origin validation */
 export function handleCors(req: Request): Response | null {
@@ -640,41 +703,18 @@ export async function authorizeRoles(
   return { user, roles: userRoles };
 }
 
-// ─── parseBody + CommonSchemas + z (migrado de validation-legacy.ts em v2.2) ─
+// ─── CommonSchemas + z (migrado de validation-legacy.ts em v2.2) ────────────
 // Antes vivia só no arquivo -legacy; movido para cá para permitir a remoção
 // definitiva do legacy e destravar novos consumidores sem duplicar helpers.
+//
+// Bloco 2 (etapas 20/21/93, 2026-08-21): parseBody(req, schema) — o homônimo
+// de assinatura invertida vs. schemas.ts:parseBody(schema, body) — tinha 0
+// chamadores de produção e emitia status 400 (fora do envelope 422 canônico).
+// Removido junto com ParseSuccess/ParseFailure/ParseResult (usados só por
+// ele). O parseBody real em uso é o de schemas.ts (consumido por ai-router).
 /** Re-exported module members. */
 export { z } from './schemas.ts';
 import { z as _z } from './schemas.ts';
-
-/** Parse Success interface definition. */
-export interface ParseSuccess<T> { data: T; error: null; }
-/** Parse Failure interface definition. */
-export interface ParseFailure { data: null; error: Response; }
-/** Parse Result type alias. */
-export type ParseResult<T> = ParseSuccess<T> | ParseFailure;
-
-/** Parse JSON body and validate via Zod schema. Returns { data, error } discriminated union. */
-export async function parseBody<T>(req: Request, schema: _z.ZodSchema<T>): Promise<ParseResult<T>> {
-  let raw: unknown;
-  try {
-    raw = await req.json();
-  } catch {
-    return { data: null, error: errorResponse('Invalid JSON body', 400, req) };
-  }
-  const result = schema.safeParse(raw);
-  if (!result.success) {
-    return {
-      data: null,
-      error: errorResponse(
-        'Validation failed: ' + result.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; '),
-        400,
-        req
-      ),
-    };
-  }
-  return { data: result.data, error: null };
-}
 
 /** Common Schemas constant. */
 export const CommonSchemas = {

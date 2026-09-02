@@ -41,7 +41,7 @@ import { CampaignCreateDialog } from './CampaignCreateDialog';
 const CampaignABTesting = lazy(() =>
   import('./CampaignABTesting').then((m) => ({ default: m.CampaignABTesting }))
 );
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -60,7 +60,14 @@ const statusConfig: Record<
 
 /** Campaigns View component for the campaigns section. */
 export function CampaignsView() {
-  const { campaigns, isLoading, createCampaign, updateCampaign, deleteCampaign, addContactsToCampaign } = useCampaigns();
+  const {
+    campaigns,
+    isLoading,
+    createCampaign,
+    updateCampaign,
+    deleteCampaign,
+    addContactsToCampaign,
+  } = useCampaigns();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [filter, setFilter] = useState<string>('all');

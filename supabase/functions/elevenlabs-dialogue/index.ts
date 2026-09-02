@@ -1,4 +1,4 @@
-import { handleCors, errorResponse, jsonResponse, requireEnv, Logger, getCorsHeaders, checkRateLimit } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, jsonResponse, requireEnv, Logger, getCorsHeaders, checkRateLimit } from "../_shared/validation.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { requireUser } from "../_shared/auth.ts";
@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     if (authed instanceof Response) return authed;
 
     const rl = checkRateLimit(`elevenlabs-dialogue:${authed.user.id}`, 10, 60_000);
-    if (!rl.allowed) return errorResponse('Rate limit exceeded. Tente novamente em instantes.', 429, req);
+    if (!rl.allowed) return errorEnvelope('rate_limit_exceeded', 'Rate limit exceeded. Tente novamente em instantes.', 429, req);
 
     // Contrato elevenlabs-dialogue@v1 — validação unificada 422 (parseOrReject).
     const raw = await req.json().catch(() => null);
@@ -23,14 +23,13 @@ Deno.serve(async (req) => {
       extraHeaders: getCorsHeaders(req),
     });
     if (parsed.ok === false) return parsed.response;
-    const body = parsed.data as Record<string, any>;
-
-    // Guarda de compatibilidade: schema registrado é permissivo (placeholder);
-    // preserva o 400 do antigo parseBody(ElevenLabsDialogueSchema).
-    const { script, languageCode } = body;
-    if (!Array.isArray(script) || script.length === 0 || script.length > 100) {
-      return errorResponse('script: Required (array 1..100)', 400, req);
-    }
+    // Bloco 2/3 (2026-08-21): schema agora valida script/languageCode de
+    // verdade — o 422 canônico já reprova payload inválido; o bloco 400
+    // manual que existia foi removido.
+    const { script, languageCode } = parsed.data as {
+      script: Array<{ voice_id: string; text: string }>;
+      languageCode?: string;
+    };
     const ELEVENLABS_API_KEY = requireEnv("ELEVENLABS_API_KEY");
 
     log.info(`Generating dialogue with ${script.length} lines`);
@@ -60,7 +59,7 @@ Deno.serve(async (req) => {
       log.error(`API error ${response.status}`, { detail: errorText.substring(0, 300) });
 
       if (response.status === 401) return errorResponse("Invalid ElevenLabs API key", 401, req);
-      if (response.status === 429) return errorResponse("Rate limit exceeded", 429, req);
+      if (response.status === 429) return errorEnvelope("rate_limit_exceeded", "Rate limit exceeded", 429, req);
       return errorResponse(`ElevenLabs Dialogue API error: ${response.status}`, response.status, req);
     }
 
@@ -72,6 +71,6 @@ Deno.serve(async (req) => {
     });
   } catch (err: unknown) {
     log.error("Unhandled error", { error: err instanceof Error ? err.message : String(err) });
-    return errorResponse('Internal server error', 500, req);
+    return errorEnvelope('internal_error', 'Internal server error', 500, req);
   }
 });

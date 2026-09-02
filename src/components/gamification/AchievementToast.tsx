@@ -1,15 +1,25 @@
 /* eslint-disable react-refresh/only-export-components */
-import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Zap, MessageSquare, Star, Flame, Rocket, Target, PartyPopper, Crown } from 'lucide-react';
+import { motion, AnimatePresence } from '@/components/ui/motion';
+import {
+  Trophy,
+  Zap,
+  MessageSquare,
+  Star,
+  Flame,
+  Rocket,
+  Target,
+  PartyPopper,
+  Crown,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
 /** Achievement Type component for the gamification section. */
-export type AchievementType = 
-  | 'fast_response' 
-  | 'streak' 
-  | 'first_message' 
-  | 'resolution' 
+export type AchievementType =
+  | 'fast_response'
+  | 'streak'
+  | 'first_message'
+  | 'resolution'
   | 'perfect_rating'
   | 'level_up'
   | 'daily_goal'
@@ -95,36 +105,36 @@ interface AchievementToastProps {
 function Particle({ delay, config }: { delay: number; config: AchievementConfig }) {
   return (
     <motion.div
-      className={cn("absolute w-2 h-2 rounded-full", config.particles)}
-      initial={{ 
-        x: 0, 
-        y: 0, 
+      className={cn('absolute h-2 w-2 rounded-full', config.particles)}
+      initial={{
+        x: 0,
+        y: 0,
         scale: 0,
-        opacity: 1 
+        opacity: 1,
       }}
-      animate={{ 
+      animate={{
         x: (Math.random() - 0.5) * 200,
         y: (Math.random() - 0.5) * 200,
         scale: [0, 1, 0],
-        opacity: [1, 1, 0]
+        opacity: [1, 1, 0],
       }}
-      transition={{ 
+      transition={{
         duration: 1,
         delay: delay,
-        ease: "easeOut"
+        ease: 'easeOut',
       }}
     />
   );
 }
 
 /** Achievement Toast component for the gamification section. */
-export function AchievementToast({ 
-  type, 
-  message, 
-  xpReward, 
-  isVisible, 
+export function AchievementToast({
+  type,
+  message,
+  xpReward,
+  isVisible,
   onClose,
-  duration = 4000 
+  duration = 4000,
 }: AchievementToastProps) {
   const config = achievementConfigs[type];
   const Icon = config.icon;
@@ -146,18 +156,18 @@ export function AchievementToast({
           initial={{ opacity: 0, y: -100, scale: 0.8 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -50, scale: 0.9 }}
-          transition={{ 
-            type: "spring", 
-            stiffness: 400, 
-            damping: 25 
+          transition={{
+            type: 'spring',
+            stiffness: 400,
+            damping: 25,
           }}
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] pointer-events-auto"
+          className="pointer-events-auto fixed left-1/2 top-6 z-[100] -translate-x-1/2"
         >
           {/* Main container */}
           <motion.div
             className={cn(
-              "relative overflow-hidden rounded-2xl p-1",
-              "bg-gradient-to-r",
+              'relative overflow-hidden rounded-2xl p-1',
+              'bg-gradient-to-r',
               config.gradient
             )}
             animate={{
@@ -165,19 +175,19 @@ export function AchievementToast({
                 `0 0 20px ${config.glowColor}`,
                 `0 0 40px ${config.glowColor}`,
                 `0 0 20px ${config.glowColor}`,
-              ]
+              ],
             }}
             transition={{ duration: 1.5, repeat: Infinity }}
           >
             {/* Particles */}
-            <div className="absolute inset-0 flex items-center justify-center overflow-visible pointer-events-none">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-visible">
               {particles.map((i) => (
                 <Particle key={i} delay={i * 0.05} config={config} />
               ))}
             </div>
 
             {/* Inner content */}
-            <div className="relative bg-card/95 backdrop-blur-xl rounded-xl px-6 py-4">
+            <div className="relative rounded-xl bg-card/95 px-6 py-4 backdrop-blur-xl">
               {/* Shimmer effect */}
               <motion.div
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
@@ -189,38 +199,40 @@ export function AchievementToast({
                 {/* Icon with animation */}
                 <motion.div
                   className={cn(
-                    "w-14 h-14 rounded-xl flex items-center justify-center",
-                    "bg-gradient-to-br",
+                    'flex h-14 w-14 items-center justify-center rounded-xl',
+                    'bg-gradient-to-br',
                     config.gradient
                   )}
-                  animate={{ 
+                  animate={{
                     rotate: [0, 10, -10, 0],
-                    scale: [1, 1.1, 1]
+                    scale: [1, 1.1, 1],
                   }}
                   transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 2 }}
                 >
-                  <Icon className="w-7 h-7 text-primary-foreground" />
+                  <Icon className="h-7 w-7 text-primary-foreground" />
                 </motion.div>
 
                 {/* Text content */}
                 <div className="flex-1">
-                  <motion.div 
+                  <motion.div
                     className="flex items-center gap-2"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 }}
                   >
-                    <PartyPopper className="w-4 h-4 text-accent" />
-                    <span className={cn(
-                      "text-sm font-bold bg-gradient-to-r bg-clip-text text-transparent",
-                      config.gradient
-                    )}>
+                    <PartyPopper className="h-4 w-4 text-accent" />
+                    <span
+                      className={cn(
+                        'bg-gradient-to-r bg-clip-text text-sm font-bold text-transparent',
+                        config.gradient
+                      )}
+                    >
                       {config.title}
                     </span>
                   </motion.div>
-                  
-                  <motion.p 
-                    className="text-foreground font-semibold mt-1"
+
+                  <motion.p
+                    className="mt-1 font-semibold text-foreground"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 }}
@@ -229,19 +241,21 @@ export function AchievementToast({
                   </motion.p>
 
                   {xpReward && (
-                    <motion.div 
-                      className="flex items-center gap-1.5 mt-2"
+                    <motion.div
+                      className="mt-2 flex items-center gap-1.5"
                       initial={{ opacity: 0, scale: 0 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.4, type: "spring" }}
+                      transition={{ delay: 0.4, type: 'spring' }}
                     >
                       <motion.div
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-xp to-primary"
+                        className="flex items-center gap-1 rounded-full bg-gradient-to-r from-xp to-primary px-2 py-0.5"
                         animate={{ scale: [1, 1.05, 1] }}
                         transition={{ duration: 0.8, repeat: Infinity }}
                       >
-                        <Zap className="w-3 h-3 text-primary-foreground" />
-                        <span className="text-xs font-bold text-primary-foreground">+{xpReward} XP</span>
+                        <Zap className="h-3 w-3 text-primary-foreground" />
+                        <span className="text-xs font-bold text-primary-foreground">
+                          +{xpReward} XP
+                        </span>
                       </motion.div>
                     </motion.div>
                   )}
@@ -250,7 +264,7 @@ export function AchievementToast({
                 {/* Close button area - invisible but clickable */}
                 <motion.button
                   onClick={onClose}
-                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-foreground/10 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                  className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10 opacity-0 transition-opacity hover:opacity-100"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >

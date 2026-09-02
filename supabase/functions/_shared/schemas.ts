@@ -63,29 +63,211 @@ export const DetectNewDeviceSchema = z.object({
  * P1 security fix (extracted from PR #205): blocks IPv4-mapped IPv6 SSRF bypass.
  * Validated: 139 adversarial scenarios, 0 failures.
  */
-function isSafeHttpsUrl(url: string): boolean {
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { return false; }
-  if (parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase();
+// SEC-2 fix (2026-08-21): `URL.hostname` para literais IPv6 (`https://[::1]/x`)
+// vem COM colchetes nesta versão do Deno ("[::1]") — o comentário original
+// ("Deno retorna bracketless") não bate com o runtime atual e o guard
+// `startsWith('::')` nunca casava contra `[::1]`, deixando o bypass aberto.
+// Remover colchetes torna a checagem robusta independente da versão.
+//
+// Auditoria pós-Bloco 6 (2026-08-21, CRITICAL): "localhost." (ponto final —
+// sintaxe FQDN válida) resolve por DNS exatamente como "localhost", mas
+// `new URL("https://localhost./x").hostname` preserva o ponto — o WHATWG URL
+// parser NÃO normaliza isso — e `host === 'localhost'`/`.endsWith('.localhost')`
+// não casavam contra o sufixo com ponto, deixando um bypass de SSRF explorável
+// contra o fetch() já ativo em transcribe-audio-internal. Corrigido removendo
+// o ponto final ANTES das comparações (os regexes de IP numérico já eram
+// imunes a isso, por serem prefix-match).
+function isPrivateOrReservedIPv4(ipv4: string): boolean {
+  return (
+    ipv4 === '0.0.0.0' ||
+    /^127\./.test(ipv4) || /^169\.254\./.test(ipv4) ||
+    /^10\./.test(ipv4) || /^192\.168\./.test(ipv4) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ipv4)
+  );
+}
+
+/**
+ * Converte um host IPv6 (sem colchetes, sem zone-id) para 16 bytes, honrando
+ * a compressão "::" e um eventual sufixo IPv4 pontilhado (ex.: "::ffff:1.2.3.4").
+ * Retorna null se a string não for uma forma IPv6 reconhecível.
+ */
+function parseIPv6ToBytes(host: string): number[] | null {
+  if (host.indexOf(':') === -1) return null;
+  const sides = host.split('::');
+  if (sides.length > 2) return null;
+
+  const parsePiece = (piece: string): number[] | null => {
+    if (piece.includes('.')) {
+      const octets = piece.split('.');
+      if (octets.length !== 4) return null;
+      const bytes = octets.map((o) => (/^\d{1,3}$/.test(o) ? Number(o) : NaN));
+      if (bytes.some((b) => Number.isNaN(b) || b > 255)) return null;
+      return bytes;
+    }
+    if (!/^[0-9a-f]{1,4}$/i.test(piece)) return null;
+    const n = parseInt(piece, 16);
+    return [(n >> 8) & 0xff, n & 0xff];
+  };
+
+  const expandSide = (side: string): number[] | null => {
+    if (side === '') return [];
+    const pieces = side.split(':');
+    const bytes: number[] = [];
+    for (let i = 0; i < pieces.length; i++) {
+      const g = parsePiece(pieces[i]);
+      if (!g) return null;
+      if (g.length === 4 && i !== pieces.length - 1) return null; // dotted-quad só no fim
+      bytes.push(...g);
+    }
+    return bytes;
+  };
+
+  if (sides.length === 1) {
+    const bytes = expandSide(sides[0]);
+    return bytes && bytes.length === 16 ? bytes : null;
+  }
+
+  const left = expandSide(sides[0]);
+  const right = expandSide(sides[1]);
+  if (!left || !right) return null;
+  const missing = 16 - left.length - right.length;
+  if (missing < 0) return null;
+  return [...left, ...new Array(missing).fill(0), ...right];
+}
+
+// SEC-5 fix (auditoria de re-verificação): mecanismos de transição IPv6<->IPv4
+// bem conhecidos embutem um IPv4 arbitrário fora dos prefixos IPv6 já cobertos
+// acima (::, fe80::/10, fec0::/10, fc00::/7) — em topologias com gateway
+// NAT64/DNS64, 6to4 ou Teredo, esse IPv4 embutido é o endereço de rede real
+// alcançado. Sem tratar isso, `https://[64:ff9b::a9fe:a9fe]/` (NAT64 embutindo
+// 169.254.169.254, o endpoint de metadata AWS/GCP) e formas equivalentes de
+// 6to4 (2002::/16) e Teredo (2001:0000::/32) passavam pelo guard.
+function extractTransitionEmbeddedIPv4Addresses(host: string): string[] {
+  const bytes = parseIPv6ToBytes(host);
+  if (!bytes) return [];
+  const toIp = (b: number[]) => b.join('.');
+  const results: string[] = [];
+
+  // NAT64 (RFC 6052), prefixo bem-conhecido 64:ff9b::/96 — últimos 32 bits = IPv4.
   if (
-    host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0' ||
-    /^127\./.test(host) || /^169\.254\./.test(host) ||
-    /^10\./.test(host) || /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    // IPv6: Deno URL.hostname returns bracketless (e.g. '::1', 'fe80::1').
-    // WHATWG normalizes IPv4-compatible: ::127.0.0.1→::7f00:1, ::169.254.169.254→::a9fe:a9fe
+    bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b &&
+    bytes.slice(4, 12).every((b) => b === 0)
+  ) {
+    results.push(toIp(bytes.slice(12, 16)));
+  }
+
+  // 6to4 (RFC 3056), 2002::/16 — os 32 bits logo após o prefixo = IPv4.
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) {
+    results.push(toIp(bytes.slice(2, 6)));
+  }
+
+  // Teredo (RFC 4380), 2001:0000::/32 — bytes 8-11 = IPv4 do servidor (claro);
+  // bytes 12-15 = IPv4 do cliente, ofuscado por XOR com 0xff em cada byte.
+  if (bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00) {
+    results.push(toIp(bytes.slice(8, 12)));
+    results.push(toIp(bytes.slice(12, 16).map((b) => b ^ 0xff)));
+  }
+
+  return results;
+}
+
+function isPrivateOrLoopbackHost(hostRaw: string): boolean {
+  const host = hostRaw.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  if (
+    host === 'localhost' || host.endsWith('.localhost') ||
+    isPrivateOrReservedIPv4(host) ||
+    // IPv6 (host já sem colchetes neste ponto).
+    // WHATWG normaliza IPv4-compatível: ::127.0.0.1→::7f00:1, ::169.254.169.254→::a9fe:a9fe
     host.startsWith('::') ||                   // loopback ::1, unspecified ::, IPv4-compat ::x, IPv4-mapped ::ffff:x
     /^fe[89ab][0-9a-f]:/i.test(host) ||       // link-local fe80::/10 (fe80–febf)
     /^fec[0-9a-f]:/i.test(host) ||            // site-local fec0::/10
     /^f[cd][0-9a-f]{2}:/i.test(host)          // ULA fc00::/7 (fc00–fdff)
-  ) return false;
-  return true;
+  ) {
+    return true;
+  }
+  if (host.includes(':')) {
+    const embedded = extractTransitionEmbeddedIPv4Addresses(host);
+    if (embedded.some(isPrivateOrReservedIPv4)) return true;
+  }
+  return false;
+}
+
+export function isSafeHttpsUrl(url: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'https:') return false;
+  return !isPrivateOrLoopbackHost(parsed.hostname);
+}
+
+/**
+ * SEC-4 (Bloco 0, 2026-08-21): mesma blocklist de rede privada/loopback de
+ * isSafeHttpsUrl, mas para campos que são um HOSTNAME cru (ex.: imap_host/
+ * smtp_host), não uma URL. Defesa em profundidade: nenhum consumidor deste
+ * repo hoje abre socket TCP com esses valores (email-imap-bridge só valida
+ * formato — "Teste de conectividade TCP não disponível em Edge Functions"),
+ * mas o campo é persistido e pode ser lido por um worker externo no futuro.
+ *
+ * Auditoria pós-Bloco 6 (2026-08-21, MEDIUM): a blocklist rodava sobre a
+ * string CRUA, sem a normalização de IPv4 que `new URL()` faz — notação
+ * decimal/octal/hex de 127.0.0.1 (ex.: "2130706433", "0x7f000001",
+ * "0177.0.0.1") e espaços de borda passavam como "seguro". Corrigido
+ * emprestando a normalização de HOSTNAME do parser WHATWG: constrói uma URL
+ * sintética só para extrair `hostname` já canonicalizado (aceita host IPv6
+ * sem colchetes, envolvendo em `[...]` antes de montar a URL), sem se
+ * importar com o resto da URL — não há scheme próprio pra usar aqui.
+ */
+export function isSafeHost(host: string): boolean {
+  const bracketed = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  let normalized: string;
+  try {
+    normalized = new URL(`https://${bracketed}/`).hostname;
+  } catch {
+    return false; // nem forma um hostname válido — não presumir seguro
+  }
+  return !isPrivateOrLoopbackHost(normalized);
 }
 
 const safeImageUrlSchema = z.string().url().refine(isSafeHttpsUrl, {
   message: 'image_url must be a public HTTPS URL',
 });
+
+/**
+ * Bloco 4 (2026-08-21, PLANO-100-CONTRATOS-EDGE): validador de telefone
+ * compartilhado — NÃO transforma o valor (preserva a string original).
+ *
+ * Campos como whatsapp-cloud-send.to aceitam telefone OU JID do WhatsApp
+ * (handler faz `to.includes('@')` para decidir o caminho) — um validador
+ * que normaliza para dígitos (strip de +/-/espaço) quebraria o caminho JID
+ * ao mutar o valor. Este helper só REPROVA lixo óbvio (garante formato de
+ * telefone OU JID), sem alterar o que passa adiante.
+ */
+export function phoneOrJidField(opts: { min?: number; max?: number } = {}) {
+  const { min = 6, max = 30 } = opts;
+  return z.string()
+    .min(min, `Informe um número com DDI e DDD (mínimo ${min} caracteres).`)
+    .max(max, `Número excede o tamanho permitido (${max} caracteres).`)
+    .refine(
+      (value: string) => value.includes('@') || value.replace(/\D/g, '').length >= 10,
+      { message: 'Número inválido. Use DDI + DDD + número, ou um JID do WhatsApp.' },
+    );
+}
+
+/**
+ * Validador de telefone PURO — para campos que nunca recebem JID (ex.:
+ * cadastro de contato, avatar por telefone). Também não transforma: só
+ * reprova valores sem dígitos suficientes, preservando a formatação
+ * original (alguns consumidores esperam o valor como o cliente enviou).
+ */
+export function phoneOnlyField(opts: { min?: number; max?: number } = {}) {
+  const { min = 6, max = 30 } = opts;
+  return z.string()
+    .min(min, `Informe um número com DDI e DDD (mínimo ${min} caracteres).`)
+    .max(max, `Número excede o tamanho permitido (${max} caracteres).`)
+    .refine(
+      (value: string) => value.replace(/\D/g, '').length >= 10,
+      { message: 'Número inválido. Use DDI + DDD + número (mínimo 10 dígitos).' },
+    );
+}
 
 /** Schema para classificação de emoji customizado (classify-emoji) */
 export const ClassifyEmojiSchema = z.object({
@@ -380,7 +562,12 @@ export const VoiceAgentV1Schema = z.object({
 
 /**
  * voice-changer@v1 — rota JSON (fila/queue). index.ts consome task_id e
- * authorized. Rota multipart/form-data (áudio) não passa por contrato JSON.
+ * authorized. Rota multipart/form-data usa VoiceChangerMultipartV1Schema
+ * (contract-schemas-infra.ts) no registro canônico. Etapa 34 (PLANO-100,
+ * 2026-08-25): o version-map DESTA variante é VoiceChangerQueueContractMap,
+ * exportado de contract-schemas-infra.ts — o handler importa de lá (nunca
+ * monta o map inline). Definição física fica aqui porque
+ * contract-schemas-ai.ts também re-exporta este símbolo.
  */
 export const VoiceChangerV1Schema = z.object({
   task_id: z.string().min(1).max(100).optional(),

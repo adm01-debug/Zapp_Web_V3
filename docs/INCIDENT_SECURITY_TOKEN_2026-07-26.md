@@ -2,7 +2,28 @@
 
 **Report Date:** 2026-07-26
 **Severity:** CRITICAL (P0)
-**Status:** IN PROGRESS — Awaits Manual Token Rotation
+**Status:** ✅ **RESOLVED (2026-08-24)** — token rotacionado via Portainer e verificado (evidência abaixo)
+
+## ✅ RESOLUÇÃO (2026-08-24)
+
+| Passo | Evidência |
+|---|---|
+| **Rotação** | Stack `supabase-db-mcp` (Portainer, ID 128) atualizado com novo token no PathPrefix do Traefik (`portainer_update_stack`, "updated successfully") |
+| **Token antigo MORTO** | `POST …/s-a501…(antigo)/mcp` → **404** |
+| **Token novo FUNCIONA** | `POST …/<novo>/mcp` → **200**; smoke `supabase_db_query` (`select current_database()`) → `postgres` em 1ms |
+| **Serviço saudável** | `GET /health` → **200** |
+| **Redação no repo** | 14 ocorrências do token antigo substituídas por placeholder em 8 arquivos (este incluído); stack file versionado agora documenta que o valor real vive só no Portainer — **repo é público, token novo jamais é versionado** |
+
+> **Precisão do registro original:** o valor exposto era o **token de path do Traefik** que
+> autentica o acesso ao MCP endpoint (concede SQL arbitrário via `supabase_db_query`), não
+> uma service_role key literal. A service_role subjacente (`supabase_service_key_v3`) já
+> havia sido rotacionada em 2026-08-10 — a rotação de hoje mata o último caminho de acesso
+> derivado da exposição.
+>
+> **Controle pendente (dono):** tornar o repo **private** permanece recomendado (tabela
+> "SECURITY CONTROLS TO ENABLE"); o token em git history segue lá (limpeza via
+> `git filter-repo` = backlog da etapa 9 do PLANO-100), porém **sem valor** — a rotação
+> o invalidou.
 
 ---
 
@@ -12,7 +33,7 @@
 |-------|-------|
 | **Type** | Credential Exposure in Version Control |
 | **Location** | `.mcp.json` (versioned in git) |
-| **Exposed Token** | `s-a50174164e4b03ef181a29db65d2db80` |
+| **Exposed Token** | `s-REDACTED-rotacionado-20260824` |
 | **Token Type** | Supabase Service Role Key (URL-embedded) |
 | **First Commit** | `3937abec724a` (2026-07-14) |
 | **Repository Visibility** | PUBLIC |
@@ -37,8 +58,8 @@ The exposed Supabase Service Role Key grants **full administrative access** to:
 ### Attack Surface
 
 ```
-Token: s-a50174164e4b03ef181a29db65d2db80
-Endpoint: https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp
+Token: s-REDACTED-rotacionado-20260824
+Endpoint: https://supabase-mcp.atomicabr.com.br/s-REDACTED-rotacionado-20260824/mcp
 
 Capabilities exposed via MCP tools:
 - supabase_db_query (arbitrary SQL)
@@ -81,21 +102,11 @@ Based on database schema analysis:
 
 ### IMMEDIATE (Within 1 Hour)
 
-- [ ] **1. Generate new Supabase Service Role Key**
-  - Access: `https://supabase.atomicabr.com.br/project/default/settings/api`
-  - Click "Regenerate" in Service Role section
-  - Store securely (password manager)
+- [x] **1. Generate new Supabase Service Role Key** → equivalente executado: service_role já rotacionada em 2026-08-10 (`supabase_service_key_v3`); **token de path do MCP rotacionado em 2026-08-24** (este doc, seção RESOLUÇÃO)
 
-- [ ] **2. Update Cloudflare Worker**
-  - Access: Cloudflare Dashboard → Workers
-  - Update `SUPABASE_SERVICE_ROLE_KEY` environment variable
-  - Redeploy worker
+- [x] **2. Update Cloudflare Worker** → não se aplica: o endpoint afetado roda na VPS (stack 128), não em Worker; Workers do incidente (evolution/github) não usavam este token
 
-- [ ] **3. Verify old token is invalid**
-  ```bash
-  curl -I https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp
-  # Must return 401/403
-  ```
+- [x] **3. Verify old token is invalid** ✅ 2026-08-24: `POST /s-a501…(antigo)/mcp` → **404**; novo token → 200 + query funcional
 
 ### SHORT-TERM (Within 24 Hours)
 
@@ -189,7 +200,7 @@ These controls were DISABLED and must be ENABLED:
     "portainer": { "url": "https://portainer-mcp.atomicabr.com.br/mcp" },
     "evolution": { "url": "https://evolution-mcp.adm01.workers.dev/mcp" },
     "supabase-selfhosted": { 
-      "url": "https://supabase-mcp.atomicabr.com.br/s-a50174164e4b03ef181a29db65d2db80/mcp"
+      "url": "https://supabase-mcp.atomicabr.com.br/s-REDACTED-rotacionado-20260824/mcp"
     },
     "github": { "url": "https://github-mcp-server.adm01.workers.dev/mcp" }
   }
@@ -217,5 +228,5 @@ Date:   Tue Jul 14 18:39:58 2026 -0300
 
 ---
 
-*Document Status: ACTIVE INCIDENT*
-*Next Update: After token rotation confirmation*
+*Document Status: ✅ RESOLVED (2026-08-24 — rotação via Portainer stack 128, evidência no topo)*
+*Controles pendentes (dono): repo private + git filter-repo do histórico*

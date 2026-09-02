@@ -14,6 +14,7 @@ import { toast } from '@/hooks/use-toast';
 import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useMessageSignature } from '@/features/inbox';
 import { useChatMediaSending } from '../hooks/useChatMediaSending';
+import { useDebouncedSaveSettings } from '../hooks/useDebouncedSaveSettings';
 import { resolveContactRef, isUuidRef } from '../utils/contactRef';
 import { CRMAutoSync } from './CRMAutoSync';
 import { ChatToolPanels } from './chat/ChatToolPanels';
@@ -62,9 +63,9 @@ const log = getLogger('ChatPanel');
 
 if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
   (window as Window).requestIdleCallback(() => {
-    import('./TransferDialog');
-    import('./AIConversationAssistant');
-    import('./CloseConversationDialog');
+    import('./TransferDialog').catch(() => undefined);
+    import('./AIConversationAssistant').catch(() => undefined);
+    import('./CloseConversationDialog').catch(() => undefined);
   });
 }
 
@@ -123,9 +124,8 @@ export function ChatPanel({
   // ContactDetails: chamada direta + catch(() => undefined) p/ evitar
   // unhandled rejection (sem toast duplicado do wrapper do slash).
   const handleArchiveConversation = useCallback(() => {
-    const id = conversation.contact.id;
-    if (!id || !isValidUUID(id)) return;
-    void archiveConversation(id).catch(() => undefined);
+    if (!isValidUUID(conversation.contact.id ?? '')) return;
+    void archiveConversation(conversation.contact.id ?? '').catch(() => undefined);
   }, [archiveConversation, conversation.contact.id]);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -135,8 +135,8 @@ export function ChatPanel({
   }, []);
 
   useEffect(() => {
-    const isSearch = (activeTool as string) === 'chatSearch';
-    const isAssistant = (activeTool as string) === 'aiAssistant';
+    const isSearch = activeTool === 'chatSearch';
+    const isAssistant = activeTool === 'aiAssistant';
 
     if (isSearch) openDialog('chatSearch');
     else closeDialog('chatSearch');
@@ -173,6 +173,7 @@ export function ChatPanel({
 
   const fileUploaderRef = useRef<FileUploaderRef>(null);
   const messagesAreaRef = useRef<ChatMessagesAreaRef>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { isDraggingOver, dragHandlers } = useChatDragAndDrop(fileUploaderRef);
 
   const contactJid = useMemo(() => {
@@ -216,17 +217,11 @@ export function ChatPanel({
     instanceNameProp
   );
 
-  const saveSettingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debouncedSave = useCallback(() => {
-    if (saveSettingsTimerRef.current !== null) clearTimeout(saveSettingsTimerRef.current);
-    saveSettingsTimerRef.current = setTimeout(() => {
-      saveSettingsTimerRef.current = null;
-      void saveSettings();
-    }, 100);
-  }, [saveSettings]);
+  const debouncedSave = useDebouncedSaveSettings(saveSettings);
+
   useEffect(
     () => () => {
-      if (saveSettingsTimerRef.current !== null) clearTimeout(saveSettingsTimerRef.current);
+      if (focusTimerRef.current !== null) clearTimeout(focusTimerRef.current);
     },
     []
   );
@@ -269,14 +264,16 @@ export function ChatPanel({
     openDialog,
     closeDialog,
     handleSetActiveTool,
-    // /archive real: soft-delete do contato (a sidebar refetcha via realtime;
-    // sem onDone aqui pois ChatPanel não recebe refetch da lista).
+    // /archive real: soft-delete via useArchiveConversationActions.archive().
+    // Decisão consciente: com ID inválido faz early return silencioso (sem toast)
+    // — o guard UUID de onArchiveChat (handlers.onArchive) lança antes, então
+    // esta camada nunca é alcançada com ID inválido em condições normais.
     onArchive: handleArchiveConversation,
   });
 
   useEffect(() => {
     initResolve();
-  }, [conversation.contact.id, initResolve]);
+  }, [conversation.contact.id, initResolve, instanceNameProp]);
 
   // Avalia regras de automação para a conversa ativa
   useAutomations({
@@ -304,11 +301,14 @@ export function ChatPanel({
     },
     onNextConversation: () => {}, // Handled in Sidebar
     onPrevConversation: () => {}, // Handled in Sidebar
-    // Mod+E religado ao arquivar REAL da conversa ativa (antes era no-op
-    // "Handled in Sidebar" — a Sidebar também registra o atalho; se ambos
-    // estiverem montados, a Sidebar arquiva o contato selecionado e este
-    // handler arquiva a conversa aberta, sem silent-fail).
-    onArchive: handleArchiveConversation,
+    // Mod+E unificado: usa o mesmo caminho validado do slash /archive
+    // (handlers.onArchive = onArchiveChat, que valida UUID e rejeita sem
+    // silent-fail), evitando duplicação de lógica com a mutation crua.
+    onArchive: () => {
+      void handlers.onArchive?.()?.catch((err: unknown) => {
+        log.warn('[ChatPanel] Mod+E archive falhou', err);
+      });
+    },
     onTransfer: () => handlers.handleSlashCommand({ id: 'transfer' }),
     onRefresh: () => {}, // Handled in Sidebar
     onSearchFocusChat: () => handleSetActiveTool('chatSearch'),
@@ -320,9 +320,12 @@ export function ChatPanel({
     setFailuresOnly(false);
     resetAllDialogs();
     setHistoryOpen(false);
+    setCallDirection('outbound');
   }, [conversation.id, resetSearch, setFailuresOnly, resetAllDialogs]);
 
   // Deep-link "Ver no chat": encontra a mensagem alvo, faz scroll e aplica destaque temporário.
+  // Etapa 52: passa onLoadOlder/hasMoreOlder para que o hook pagine se a mensagem estiver
+  // em páginas anteriores (não carregadas ainda).
   useInitialHighlight({
     initialHighlightMessageId,
     messages,
@@ -330,6 +333,8 @@ export function ChatPanel({
     setHighlightedMessageIds,
     setActiveHighlightId,
     onHighlightConsumed,
+    onLoadOlder: failuresOnly ? undefined : onLoadOlder,
+    hasMoreOlder: failuresOnly ? false : hasMoreOlder,
   });
 
   const {
@@ -433,6 +438,86 @@ export function ChatPanel({
     onDone: () => closeDialog('scheduleDialog'),
   });
 
+  const stableOnToggleDetails = useCallback(() => {
+    onToggleDetails?.();
+  }, [onToggleDetails]);
+
+  const handlePollSent = useCallback(
+    async (poll: { name: string; options: string[] }) => {
+      if (!isValidUUID(conversation.contact.id)) return;
+      try {
+        const ref = resolveContactRef(conversation.contact.id);
+        if (!isUuidRef(ref)) return;
+        await dbFrom('messages').insert({
+          contact_id: ref.uuid,
+          whatsapp_connection_id: whatsappConnectionId,
+          content: `📊 *Enquete:* ${poll.name}\n${poll.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`,
+          message_type: 'text',
+          sender: 'agent',
+          status: 'pending',
+        });
+      } catch (err) {
+        log.error('Failed to insert poll message', err);
+      }
+    },
+    [conversation.contact.id, whatsappConnectionId]
+  );
+
+  const handleContactSent = useCallback(
+    async (contactName: string) => {
+      if (!isValidUUID(conversation.contact.id)) return;
+      try {
+        const ref = resolveContactRef(conversation.contact.id);
+        if (!isUuidRef(ref)) return;
+        await dbFrom('messages').insert({
+          contact_id: ref.uuid,
+          whatsapp_connection_id: whatsappConnectionId,
+          content: `📇 Cartão de contato: ${contactName}`,
+          message_type: 'text',
+          sender: 'agent',
+          status: 'pending',
+        });
+      } catch (err) {
+        log.error('Failed to insert contact card message', err);
+      }
+    },
+    [conversation.contact.id, whatsappConnectionId]
+  );
+
+  // ── Bloco 6: stable callbacks para ChatInputArea (React.memo) ────────────
+  const {
+    setIsWhisper,
+    handleSend,
+    setReplyToMessage,
+    setIsRecordingAudio,
+    handleAudioSend,
+    setInputValue,
+  } = handlers;
+  const cbToggleWhisper = useCallback(() => setIsWhisper((v) => !v), [setIsWhisper]);
+  const cbSend = useCallback((att?: File[]) => handleSend(att), [handleSend]);
+  const cbCancelReply = useCallback(() => setReplyToMessage(null), [setReplyToMessage]);
+  const cbCloseSlashCommands = useCallback(() => closeDialog('slashCommands'), [closeDialog]);
+  const cbRecordToggle = useCallback(() => setIsRecordingAudio((v) => !v), [setIsRecordingAudio]);
+  const cbAudioSend = useCallback(
+    (blob: Blob) => handleAudioSend(blob, onSendAudio),
+    [handleAudioSend, onSendAudio]
+  );
+  const cbAudioCancel = useCallback(() => setIsRecordingAudio(false), [setIsRecordingAudio]);
+  const cbOpenInteractiveBuilder = useCallback(
+    () => openDialog('interactiveBuilder'),
+    [openDialog]
+  );
+  const cbOpenScheduleDialog = useCallback(() => openDialog('scheduleDialog'), [openDialog]);
+  const cbOpenLocationPicker = useCallback(() => openDialog('locationPicker'), [openDialog]);
+  const cbOpenCatalog = useCallback(() => openDialog('catalogDirect'), [openDialog]);
+  const cbSelectSuggestion = useCallback((text: string) => setInputValue(text), [setInputValue]);
+  const cbSelectTemplate = useCallback((text: string) => setInputValue(text), [setInputValue]);
+  const cbOpenTeamFiles = useCallback(
+    () => handleSetActiveTool('teamFiles'),
+    [handleSetActiveTool]
+  );
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <div
       data-testid="chat-window"
@@ -452,7 +537,7 @@ export function ChatPanel({
             voiceId={voiceId}
             speed={speed}
             onToggleAIAssistant={() => handleSetActiveTool('aiAssistant')}
-            onToggleDetails={onToggleDetails || (() => {})}
+            onToggleDetails={stableOnToggleDetails}
             onStartCall={() => {
               setCallDirection('outbound');
               openDialog('callDialog');
@@ -470,6 +555,7 @@ export function ChatPanel({
             onCloseConversation={() => openDialog('closeDialog')}
             failuresOnly={failuresOnly}
             failuresCount={failedMessages.length}
+            hasMoreOlder={hasMoreOlder}
             onToggleFailuresOnly={() => setFailuresOnly((v) => !v)}
             activeTool={activeTool}
             whisperCount={whisperCount}
@@ -485,17 +571,19 @@ export function ChatPanel({
             onUseTemplate={(content) => {
               handlers.setInputValue(content);
               setActiveTool(null);
-              setTimeout(() => handlers.inputRef.current?.focus(), 10);
+              if (focusTimerRef.current !== null) clearTimeout(focusTimerRef.current);
+              focusTimerRef.current = setTimeout(() => handlers.inputRef.current?.focus(), 10);
             }}
           />
         )}
 
         <ChatSearchBar
           messages={messages}
-          isOpen={(activeTool as string) === 'chatSearch'}
+          isOpen={activeTool === 'chatSearch'}
           onClose={() => {
-            handleSetActiveTool('chatSearch');
-            setTimeout(() => handlers.inputRef.current?.focus(), 150);
+            setActiveTool(null);
+            if (focusTimerRef.current !== null) clearTimeout(focusTimerRef.current);
+            focusTimerRef.current = setTimeout(() => handlers.inputRef.current?.focus(), 150);
           }}
           onNavigateToMessage={(id) => messagesAreaRef.current?.scrollToMessage(id)}
           onHighlightChange={handleHighlightChange}
@@ -524,6 +612,7 @@ export function ChatPanel({
           categoryCounts={categoryCounts}
           setFailureCategory={setFailureCategory}
           setFailuresOnly={setFailuresOnly}
+          hasMoreOlder={hasMoreOlder}
         />
 
         <ChatPanelOverlays
@@ -538,7 +627,7 @@ export function ChatPanel({
           ref={messagesAreaRef}
           messages={visibleMessages}
           isContactTyping={isContactTyping}
-          typingUserName={typingUsers[0]?.name || (conversation.contact.name ?? '')}
+          typingUserName={typingUsers[0]?.name || 'Agente'}
           ttsLoading={ttsLoading}
           ttsPlaying={ttsPlaying}
           ttsMessageId={ttsMessageId}
@@ -558,6 +647,9 @@ export function ChatPanel({
           highlightedMessageIds={highlightedMessageIds}
           activeHighlightId={activeHighlightId}
           searchQuery={searchQuery}
+          // Etapa 50: paginação desabilitada no modo de falhas — carregar mensagens
+          // mais antigas que não passariam no filtro seria desperdício de rede e
+          // geraria confusão (botão "carregar mais" sem resultado visível).
           onLoadOlder={failuresOnly ? undefined : onLoadOlder}
           onCancelLoadOlder={failuresOnly ? undefined : onCancelLoadOlder}
           loadingOlder={failuresOnly ? false : loadingOlder}
@@ -602,23 +694,23 @@ export function ChatPanel({
           isSending={handlers.isSending}
           sendProgress={handlers.sendProgress}
           isWhisper={handlers.isWhisper}
-          onToggleWhisper={() => handlers.setIsWhisper((v) => !v)}
+          onToggleWhisper={cbToggleWhisper}
           onInputChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onBlur={handleTypingStop}
-          onSend={(att) => handlers.handleSend(att)}
-          onCancelReply={() => handlers.setReplyToMessage(null)}
+          onSend={cbSend}
+          onCancelReply={cbCancelReply}
           onCancelEdit={handlers.handleCancelEdit}
           onEditStart={handlers.handleEditStart}
           onSlashCommand={handlers.handleSlashCommand}
-          onCloseSlashCommands={() => closeDialog('slashCommands')}
+          onCloseSlashCommands={cbCloseSlashCommands}
           onQuickReply={handleQuickReply}
-          onRecordToggle={() => handlers.setIsRecordingAudio((v) => !v)}
-          onAudioSend={(blob) => handlers.handleAudioSend(blob, onSendAudio)}
-          onAudioCancel={() => handlers.setIsRecordingAudio(false)}
-          onOpenInteractiveBuilder={() => openDialog('interactiveBuilder')}
-          onOpenSchedule={() => openDialog('scheduleDialog')}
-          onOpenLocationPicker={() => openDialog('locationPicker')}
+          onRecordToggle={cbRecordToggle}
+          onAudioSend={cbAudioSend}
+          onAudioCancel={cbAudioCancel}
+          onOpenInteractiveBuilder={cbOpenInteractiveBuilder}
+          onOpenSchedule={cbOpenScheduleDialog}
+          onOpenLocationPicker={cbOpenLocationPicker}
           onSendProduct={handlers.handleSendProduct}
           onSendSticker={handleSendSticker}
           onSendAudioMeme={handleSendAudioMeme}
@@ -626,44 +718,12 @@ export function ChatPanel({
           signatureEnabled={signatureEnabled}
           signatureName={agentName}
           onToggleSignature={toggleSignature}
-          onPollSent={async (poll) => {
-            if (!isValidUUID(conversation.contact.id)) return;
-            try {
-              const ref = resolveContactRef(conversation.contact.id);
-              if (!isUuidRef(ref)) return; // external mode — handled by Evolution webhook
-              await dbFrom('messages').insert({
-                contact_id: ref.uuid,
-                whatsapp_connection_id: whatsappConnectionId,
-                content: `📊 *Enquete:* ${poll.name}\n${poll.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`,
-                message_type: 'text',
-                sender: 'agent',
-                status: 'sent',
-              });
-            } catch (err) {
-              log.error('Failed to insert poll message', err);
-            }
-          }}
-          onContactSent={async (contactName) => {
-            if (!isValidUUID(conversation.contact.id)) return;
-            try {
-              const ref = resolveContactRef(conversation.contact.id);
-              if (!isUuidRef(ref)) return; // external mode — handled by Evolution webhook
-              await dbFrom('messages').insert({
-                contact_id: ref.uuid,
-                whatsapp_connection_id: whatsappConnectionId,
-                content: `📇 Cartão de contato: ${contactName}`,
-                message_type: 'text',
-                sender: 'agent',
-                status: 'sent',
-              });
-            } catch (err) {
-              log.error('Failed to insert contact card message', err);
-            }
-          }}
-          onOpenCatalog={() => openDialog('catalogDirect')}
-          onSelectSuggestion={(text) => handlers.setInputValue(text)}
-          onSelectTemplate={(text) => handlers.setInputValue(text)}
-          onOpenTeamFiles={() => handleSetActiveTool('teamFiles')}
+          onPollSent={handlePollSent}
+          onContactSent={handleContactSent}
+          onOpenCatalog={cbOpenCatalog}
+          onSelectSuggestion={cbSelectSuggestion}
+          onSelectTemplate={cbSelectTemplate}
+          onOpenTeamFiles={cbOpenTeamFiles}
           fileUploaderRef={fileUploaderRef}
           inputRef={handlers.inputRef}
           queue={messageQueue?.queue}
@@ -687,13 +747,23 @@ export function ChatPanel({
           onSendProduct={handlers.handleSendProduct}
           onSetInputValue={handlers.setInputValue}
           onSelectSearchResult={(result) => {
-            // BUG-24: resultado de mensagem navega direto na conversa;
-            // demais tipos (contato, acao, crm) mostram um toast informativo.
-            if (result.type === 'message' && result.id) {
+            // Etapa 51: BUG-24 residual — navegar de verdade em vez de toast morto.
+            // 'transcription' usa o mesmo scroll de 'message' (ligado ao id da mensagem).
+            if (result.type === 'message' || result.type === 'transcription') {
+              if (!result.id) return;
+              if (failuresOnly && !failedMessages.some((m) => m.id === result.id)) {
+                toast({
+                  title: 'Mensagem oculta pelo filtro',
+                  description: 'Desative o filtro de falhas para navegar até esta mensagem.',
+                });
+                return;
+              }
               messagesAreaRef.current?.scrollToMessage(result.id);
-            } else {
-              toast({ title: 'Resultado', description: result.title });
+            } else if (result.action) {
+              // contact/action/crm: a camada de dados já embutiu a ação de navegação.
+              result.action();
             }
+            // sem ação definida e sem id navegável → silencioso (sem toast morto)
           }}
         />
       </div>

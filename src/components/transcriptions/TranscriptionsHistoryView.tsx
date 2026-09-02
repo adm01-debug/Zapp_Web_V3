@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { getLogger } from '@/lib/logger';
 import { FloatingParticles } from '@/components/dashboard/FloatingParticles';
 import { AuroraBorealis } from '@/components/effects/AuroraBorealis';
@@ -229,7 +229,14 @@ export function TranscriptionsHistoryView() {
             </Button>
           )}
         </div>
-        <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */)}>
+        <Select
+          value={dateFilter}
+          onValueChange={(v) =>
+            setDateFilter(
+              v as DateFilter /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */
+            )
+          }
+        >
           <SelectTrigger className="w-[160px]">
             <Calendar className="mr-2 h-4 w-4" />
             <SelectValue placeholder="Período" />
@@ -264,7 +271,11 @@ export function TranscriptionsHistoryView() {
                     : 'Transcrições de áudios aparecerão aqui automaticamente'
                 }
                 illustration="transcriptions"
-                secondaryAction={searchQuery ? { label: 'Limpar busca', onClick: () => setSearchQuery('') } : undefined}
+                secondaryAction={
+                  searchQuery
+                    ? { label: 'Limpar busca', onClick: () => setSearchQuery('') }
+                    : undefined
+                }
               />
             ) : (
               Object.entries(groupedByContact).map(

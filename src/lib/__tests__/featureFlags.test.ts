@@ -15,11 +15,7 @@ vi.mock('@/integrations/supabase/client', () => ({
   supabase: supabaseMock,
 }));
 
-import {
-  isFeatureEnabled,
-  getAllFlags,
-  loadFeatureFlags,
-} from '@/lib/featureFlags';
+import { isFeatureEnabled, getAllFlags, loadFeatureFlags } from '@/lib/featureFlags';
 
 // ── isFeatureEnabled — defaults (no flagCache loaded) ─────────────────────────
 //
@@ -186,5 +182,18 @@ describe('loadFeatureFlags — guard de sessão', () => {
     await loadFeatureFlags();
 
     expect(supabaseMock.from).toHaveBeenCalledWith('feature_flags');
+  });
+});
+
+// CHAT-UI-100 E04: flags de UI novas devem ser false por default
+describe('CHAT-UI-100 flags — default off', () => {
+  it('chat_bubble_v2 deve ser false por default', () => {
+    expect(isFeatureEnabled('chat_bubble_v2')).toBe(false);
+  });
+  it('chat_scroller_v2 deve ser false por default', () => {
+    expect(isFeatureEnabled('chat_scroller_v2')).toBe(false);
+  });
+  it('team_chat_tanstack deve ser false por default', () => {
+    expect(isFeatureEnabled('team_chat_tanstack')).toBe(false);
   });
 });

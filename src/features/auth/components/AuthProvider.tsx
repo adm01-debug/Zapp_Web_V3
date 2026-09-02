@@ -13,6 +13,7 @@ import {
 import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { clearCrmConfigCache } from '@/hooks/useSyncToCRM';
 import { verifyHttpOnlyCookieAuth } from '@/integrations/supabase/cookieStorage';
+import { isAbortLikeError } from '@/lib/abortError';
 
 // ---------------------------------------------------------------------------
 // Utilitário de timeout para promises — definido no escopo do módulo para
@@ -250,7 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
         if (error || !data) {
-          if ((error as { name?: string } | null)?.name === 'AbortError') return 'aborted';
+          if (isAbortLikeError(error)) return 'aborted';
           log.error('[Auth] Failed to fetch profile for user:', userId, error);
           return 'failed';
         }
@@ -258,7 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(data);
         return 'ok';
       } catch (err: unknown) {
-        if ((err as Error)?.name === 'AbortError') return 'aborted';
+        if (isAbortLikeError(err)) return 'aborted';
         log.error('[Auth] Failed to fetch profile for user:', userId, err);
         return 'failed';
       }
@@ -311,7 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             'fetchRoles'
           );
           if (error || !userRoles) {
-            if ((error as { name?: string } | null)?.name === 'AbortError') return 'aborted';
+            if (isAbortLikeError(error)) return 'aborted';
             log.error('[Auth] Failed to fetch roles for user:', userId, error);
             return 'failed';
           }
@@ -340,7 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             'fetchPermissions'
           );
           if (permError || !userPermissions) {
-            if ((permError as { name?: string } | null)?.name === 'AbortError') return 'aborted';
+            if (isAbortLikeError(permError)) return 'aborted';
             log.error('[Auth] Failed to fetch permissions for user:', userId, permError);
             return 'failed';
           }
@@ -356,7 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setPermissions(permNames);
           return 'ok';
         } catch (err: unknown) {
-          if ((err as Error)?.name === 'AbortError') return 'aborted';
+          if (isAbortLikeError(err)) return 'aborted';
           log.error('[Auth] Failed to fetch roles/permissions for user:', userId, err);
           return 'failed';
         }
@@ -551,7 +552,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBootstrapElapsedMs(elapsedMs);
       // AbortError é esperado (StrictMode remount, navegação, timeout).
       // O app continua com a sessão do cache. Não poluir o console.
-      if ((err as Error)?.name === 'AbortError') {
+      if (isAbortLikeError(err)) {
         log.debug('[Auth] getSession abortado — sessão do cache mantida.');
         return;
       }

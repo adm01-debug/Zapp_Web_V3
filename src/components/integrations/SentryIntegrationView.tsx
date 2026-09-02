@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -111,12 +111,14 @@ export function SentryIntegrationView() {
 
       const { data, error } = await supabase.functions.invoke<SentrySyncResponse>(
         'zapp-sentry-sync',
-        { body: payload },
+        { body: payload }
       );
       if (error) {
-        const status = error instanceof FunctionsHttpError ? error.context?.status ?? 0 : 0;
+        const status = error instanceof FunctionsHttpError ? (error.context?.status ?? 0) : 0;
         if (status === 403) {
-          toast.error('Sem permissão: apenas administradores podem alterar a configuração do Sentry');
+          toast.error(
+            'Sem permissão: apenas administradores podem alterar a configuração do Sentry'
+          );
         } else if (status === 400 || status === 422) {
           toast.error('Configuração inválida: verifique o DSN e os valores (0–1)');
         } else {
@@ -137,7 +139,7 @@ export function SentryIntegrationView() {
     try {
       const { data, error } = await supabase.functions.invoke<SentrySyncResponse>(
         'zapp-sentry-sync',
-        { body: { dsn: '', enabled: false } },
+        { body: { dsn: '', enabled: false } }
       );
       if (error) {
         toast.error('Falha ao desativar: edge zapp-sentry-sync indisponível');
@@ -159,7 +161,7 @@ export function SentryIntegrationView() {
     try {
       const { data, error } = await supabase.functions.invoke<SentrySyncResponse>(
         'zapp-sentry-sync',
-        { body: { action: 'test' } },
+        { body: { action: 'test' } }
       );
       if (error || !data?.ok) {
         toast.error('Falha ao enviar evento de teste (ingest inacessível ou DSN inválido)');
@@ -175,15 +177,15 @@ export function SentryIntegrationView() {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[hsl(255_35%_27%)]">
-            <Bug className="w-5 h-5 text-primary-foreground" />
+        <div className="mb-2 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(255_35%_27%)]">
+            <Bug className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground">Sentry Monitoring</h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-sm text-muted-foreground">
               Configuração real do monitoramento de erros — estado persistido no banco
             </p>
           </div>
@@ -204,8 +206,8 @@ export function SentryIntegrationView() {
 
       {loadState === 'loading' && (
         <Card className="border-secondary/30">
-          <CardContent className="py-10 flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" />
+          <CardContent className="flex items-center justify-center gap-2 py-10 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
             Lendo configuração via zapp-sentry-sync…
           </CardContent>
         </Card>
@@ -213,13 +215,13 @@ export function SentryIntegrationView() {
 
       {loadState === 'error' && (
         <Card className="border-secondary/30">
-          <CardContent className="py-10 text-center space-y-3">
-            <WifiOff className="w-8 h-8 mx-auto text-destructive" />
+          <CardContent className="space-y-3 py-10 text-center">
+            <WifiOff className="mx-auto h-8 w-8 text-destructive" />
             <p className="text-sm text-muted-foreground">
               Não foi possível ler a configuração (edge <code>zapp-sentry-sync</code> indisponível).
             </p>
             <Button variant="outline" size="sm" onClick={() => void loadConfig()}>
-              <RefreshCw className="w-3 h-3 mr-2" /> Tentar novamente
+              <RefreshCw className="mr-2 h-3 w-3" /> Tentar novamente
             </Button>
           </CardContent>
         </Card>
@@ -239,11 +241,11 @@ export function SentryIntegrationView() {
                 <span className="flex items-center gap-1 font-medium">
                   {isActive ? (
                     <>
-                      <Wifi className="w-4 h-4 text-success" /> Ativo
+                      <Wifi className="h-4 w-4 text-success" /> Ativo
                     </>
                   ) : (
                     <>
-                      <WifiOff className="w-4 h-4 text-muted-foreground" /> Desligado
+                      <WifiOff className="h-4 w-4 text-muted-foreground" /> Desligado
                     </>
                   )}
                 </span>
@@ -266,7 +268,7 @@ export function SentryIntegrationView() {
                 <span className="text-muted-foreground">Última atualização</span>
                 <span>{formatDate(config.updated_at)}</span>
               </div>
-              <p className="text-xs text-muted-foreground pt-2 border-t border-secondary/30">
+              <p className="border-t border-secondary/30 pt-2 text-xs text-muted-foreground">
                 Issues e eventos são visualizados no Sentry (sentry.io). Esta tela apenas gerencia a
                 configuração local.
               </p>
@@ -277,12 +279,14 @@ export function SentryIntegrationView() {
           <Card className="border-secondary/30">
             <CardHeader>
               <CardTitle className="text-base">Configuração</CardTitle>
-              <CardDescription>DSN e opções — salvas via zapp-sentry-sync (admin/supervisor)</CardDescription>
+              <CardDescription>
+                DSN e opções — salvas via zapp-sentry-sync (admin/supervisor)
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {!canManage && (
                 <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-                  <Lock className="w-3.5 h-3.5" />
+                  <Lock className="h-3.5 w-3.5" />
                   Somente administradores e supervisores podem alterar esta configuração.
                 </div>
               )}
@@ -291,27 +295,29 @@ export function SentryIntegrationView() {
                 <Input
                   id="sentry-dsn"
                   placeholder={
-                    config.dsn_configured ? config.dsn_masked : 'https://...@o<org>.ingest.sentry.io/<projeto>'
+                    config.dsn_configured
+                      ? config.dsn_masked
+                      : 'https://...@o<org>.ingest.sentry.io/<projeto>'
                   }
                   value={dsnInput}
                   disabled={!canManage}
-                  onChange={e => setDsnInput(e.target.value)}
+                  onChange={(e) => setDsnInput(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {config.dsn_configured
                     ? 'Deixe vazio para manter o DSN atual.'
                     : 'Preencher o DSN ativa o monitoramento.'}
                 </p>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <div>
                   <Label>Ambiente</Label>
                   <select
                     aria-label="Ambiente"
-                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
                     value={environment}
                     disabled={!canManage}
-                    onChange={e => setEnvironment(e.target.value)}
+                    onChange={(e) => setEnvironment(e.target.value)}
                   >
                     <option value="production">Production</option>
                     <option value="staging">Staging</option>
@@ -328,7 +334,7 @@ export function SentryIntegrationView() {
                     max="1"
                     value={tracesRate}
                     disabled={!canManage}
-                    onChange={e => setTracesRate(e.target.value)}
+                    onChange={(e) => setTracesRate(e.target.value)}
                   />
                 </div>
                 <div>
@@ -341,7 +347,7 @@ export function SentryIntegrationView() {
                     max="1"
                     value={replaysSessionRate}
                     disabled={!canManage}
-                    onChange={e => setReplaysSessionRate(e.target.value)}
+                    onChange={(e) => setReplaysSessionRate(e.target.value)}
                   />
                 </div>
                 <div>
@@ -354,7 +360,7 @@ export function SentryIntegrationView() {
                     max="1"
                     value={replaysOnErrorRate}
                     disabled={!canManage}
-                    onChange={e => setReplaysOnErrorRate(e.target.value)}
+                    onChange={(e) => setReplaysOnErrorRate(e.target.value)}
                   />
                 </div>
               </div>
@@ -369,7 +375,11 @@ export function SentryIntegrationView() {
               </div>
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Button onClick={() => void handleSave()} disabled={!canManage || saving}>
-                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  {saving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
                   {saving ? 'Salvando…' : 'Salvar configuração'}
                 </Button>
                 <Button
@@ -377,11 +387,20 @@ export function SentryIntegrationView() {
                   onClick={() => void handleTestEvent()}
                   disabled={!canManage || testing || !config.dsn_configured}
                 >
-                  {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  {testing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
                   {testing ? 'Enviando…' : 'Enviar evento de teste'}
                 </Button>
                 {config.dsn_configured && canManage && (
-                  <Button variant="ghost" size="sm" onClick={() => void handleClearDsn()} disabled={saving}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleClearDsn()}
+                    disabled={saving}
+                  >
                     Desativar (limpar DSN)
                   </Button>
                 )}

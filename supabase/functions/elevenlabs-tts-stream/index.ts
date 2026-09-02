@@ -1,4 +1,4 @@
-import { handleCors, errorResponse, jsonResponse, requireEnv, Logger, getCorsHeaders, checkRateLimit } from "../_shared/validation.ts";
+import { handleCors, errorResponse, errorEnvelope, jsonResponse, requireEnv, Logger, getCorsHeaders, checkRateLimit } from "../_shared/validation.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
 import { CONTRACT_SCHEMAS } from "../_shared/contract-schemas.ts";
 import { requireUser } from "../_shared/auth.ts";
@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     if (authed instanceof Response) return authed;
 
     const rl = checkRateLimit(`elevenlabs-tts:${authed.user.id}`, 20, 60_000);
-    if (!rl.allowed) return errorResponse('Rate limit exceeded. Tente novamente em instantes.', 429, req);
+    if (!rl.allowed) return errorEnvelope('rate_limit_exceeded', 'Rate limit exceeded. Tente novamente em instantes.', 429, req);
 
     // Contrato elevenlabs-tts-stream@v1 — validação unificada 422 (parseOrReject).
     const raw = await req.json().catch(() => null);
@@ -23,14 +23,16 @@ Deno.serve(async (req) => {
       extraHeaders: getCorsHeaders(req),
     });
     if (parsed.ok === false) return parsed.response;
-    const body = parsed.data as Record<string, any>;
-
-    // Guarda de compatibilidade: schema registrado é permissivo (placeholder);
-    // preserva o 400 do antigo parseBody(ElevenLabsTTSSchema).
-    const { text, voiceId, modelId, languageCode, applyTextNormalization } = body;
-    if (typeof text !== 'string' || text.length === 0 || text.length > 10000) {
-      return errorResponse('text: Required (1..10000)', 400, req);
-    }
+    // Bloco 2/3 (2026-08-21): schema agora valida text/voiceId/modelId/
+    // languageCode/applyTextNormalization de verdade — o 422 canônico já
+    // reprova payload inválido; o bloco 400 manual que existia foi removido.
+    const { text, voiceId, modelId, languageCode, applyTextNormalization } = parsed.data as {
+      text: string;
+      voiceId?: string;
+      modelId?: string;
+      languageCode?: string;
+      applyTextNormalization?: string;
+    };
     const ELEVENLABS_API_KEY = requireEnv("ELEVENLABS_API_KEY");
 
     const selectedVoiceId = voiceId || 'TY3h8ANhQUsJaa0Bga5F';
@@ -69,7 +71,7 @@ Deno.serve(async (req) => {
       const errorText = await response.text();
       log.error("Streaming API error", { status: response.status, detail: errorText.substring(0, 300) });
       if (response.status === 401) return errorResponse("Invalid ElevenLabs API key", 401, req);
-      if (response.status === 429) return errorResponse("Rate limit exceeded", 429, req);
+      if (response.status === 429) return errorEnvelope("rate_limit_exceeded", "Rate limit exceeded", 429, req);
       throw new Error(`ElevenLabs API error: ${response.status}`);
     }
 
@@ -83,6 +85,6 @@ Deno.serve(async (req) => {
     });
   } catch (error: unknown) {
     log.error("Unhandled error", { error: error instanceof Error ? error.message : String(error) });
-    return errorResponse('Internal server error', 500, req);
+    return errorEnvelope('internal_error', 'Internal server error', 500, req);
   }
 });

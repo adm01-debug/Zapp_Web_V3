@@ -4,6 +4,7 @@ import {
   getSupabaseSemaphoreState,
   retryFetch,
   withSupabaseHighPriority,
+  withSupabaseHighPrioritySignal,
 } from '../client';
 
 /**
@@ -31,8 +32,7 @@ describe('acquireSupabaseSlot — prioridade high', () => {
     // o próximo acquire (que registra seu próprio release após microtask).
     let guard = 0;
     while (
-      (getSupabaseSemaphoreState().inFlight > 0 ||
-        getSupabaseSemaphoreState().queueLength > 0) &&
+      (getSupabaseSemaphoreState().inFlight > 0 || getSupabaseSemaphoreState().queueLength > 0) &&
       guard++ < 64
     ) {
       const release = releases.shift();
@@ -155,6 +155,41 @@ describe('acquireSupabaseSlot — prioridade high', () => {
       // em microtask posterior (slot liberado pelo finally do retryFetch).
       expect(order.slice(0, 2)).toEqual(['high-fetch', 'high']);
       await expect(normal).resolves.toBe('normal');
+      expect(order[2]).toBe('normal');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('signal high prioriza somente a request critica', async () => {
+    for (let i = 0; i < 8; i++) {
+      await acquireTracked();
+    }
+
+    const order: string[] = [];
+    const normal = acquireTracked('normal').then(() => order.push('normal'));
+    const controller = new AbortController();
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      order.push('high-fetch');
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const high = withSupabaseHighPrioritySignal(controller.signal, () =>
+        retryFetch('https://supabase.atomicabr.com.br/rest/v1/critical', {
+          method: 'GET',
+          signal: controller.signal,
+        }).then(() => order.push('high'))
+      );
+      await Promise.resolve();
+      expect(getSupabaseSemaphoreState().queueLength).toBe(2);
+
+      releases.shift()!();
+      await high;
+
+      expect(order.slice(0, 2)).toEqual(['high-fetch', 'high']);
+      await normal;
       expect(order[2]).toBe('normal');
     } finally {
       globalThis.fetch = origFetch;

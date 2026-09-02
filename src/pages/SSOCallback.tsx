@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,11 +20,15 @@ export default function SSOCallback() {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
-    const addTimer = (t: ReturnType<typeof setTimeout>) => { timersRef.current.push(t); };
+    const addTimer = (t: ReturnType<typeof setTimeout>) => {
+      timersRef.current.push(t);
+    };
 
     // SEGURANCA-01: pós-SSO o usuário com 2FA verificado mas sem challenge na
     // sessão (aal1 → aal2) vai para /2fa em vez de pular direto para '/'.
@@ -50,7 +54,11 @@ export default function SSOCallback() {
           if (event === 'SIGNED_IN' && session) {
             setStatus('success');
             toast.success('Login realizado com sucesso!');
-            addTimer(setTimeout(() => { void redirectAfterAuth(); }, 1500));
+            addTimer(
+              setTimeout(() => {
+                void redirectAfterAuth();
+              }, 1500)
+            );
           } else if (event === 'SIGNED_OUT') {
             setStatus('error');
             setErrorMessage('Sessão não encontrada');
@@ -78,18 +86,24 @@ export default function SSOCallback() {
         if (data.session) {
           setStatus('success');
           toast.success('Login realizado com sucesso!');
-          addTimer(setTimeout(() => { void redirectAfterAuth(); }, 1500));
+          addTimer(
+            setTimeout(() => {
+              void redirectAfterAuth();
+            }, 1500)
+          );
         } else {
           // No session yet; auth subscription above will handle SIGNED_IN event.
-          addTimer(setTimeout(() => {
-            setStatus(prev => {
-              if (prev === 'loading') {
-                setErrorMessage('Tempo esgotado. Tente novamente.');
-                return 'error';
-              }
-              return prev;
-            });
-          }, 10000));
+          addTimer(
+            setTimeout(() => {
+              setStatus((prev) => {
+                if (prev === 'loading') {
+                  setErrorMessage('Tempo esgotado. Tente novamente.');
+                  return 'error';
+                }
+                return prev;
+              });
+            }, 10000)
+          );
         }
       } catch (err: unknown) {
         if (!mountedRef.current) return;
@@ -109,7 +123,7 @@ export default function SSOCallback() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -121,14 +135,12 @@ export default function SSOCallback() {
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                className="mx-auto mb-4 w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center"
+                className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10"
               >
-                <Loader2 className="w-8 h-8 text-primary" />
+                <Loader2 className="h-8 w-8 text-primary" />
               </motion.div>
               <CardTitle>Autenticando...</CardTitle>
-              <CardDescription>
-                Aguarde enquanto completamos seu login
-              </CardDescription>
+              <CardDescription>Aguarde enquanto completamos seu login</CardDescription>
             </CardHeader>
           </Card>
         )}
@@ -140,14 +152,12 @@ export default function SSOCallback() {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring' }}
-                className="mx-auto mb-4 w-16 h-16 bg-success/10 dark:bg-success/20/30 rounded-full flex items-center justify-center"
+                className="dark:bg-success/20/30 mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10"
               >
-                <CheckCircle className="w-8 h-8 text-success dark:text-success" />
+                <CheckCircle className="h-8 w-8 text-success dark:text-success" />
               </motion.div>
               <CardTitle>Login Realizado!</CardTitle>
-              <CardDescription>
-                Redirecionando para o dashboard...
-              </CardDescription>
+              <CardDescription>Redirecionando para o dashboard...</CardDescription>
             </CardHeader>
           </Card>
         )}
@@ -158,9 +168,9 @@ export default function SSOCallback() {
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="mx-auto mb-4 w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center"
+                className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10"
               >
-                <XCircle className="w-8 h-8 text-destructive" />
+                <XCircle className="h-8 w-8 text-destructive" />
               </motion.div>
               <CardTitle>Erro no Login</CardTitle>
               <CardDescription>

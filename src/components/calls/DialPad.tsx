@@ -1,12 +1,10 @@
 import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import {
-  Phone, PhoneOff, Mic, MicOff, Delete, Wifi, WifiOff, Loader2,
-} from 'lucide-react';
+import { Phone, PhoneOff, Mic, MicOff, Delete, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import type { SipStatus, CallStatus } from '@/features/inbox';
 
 interface DialPadProps {
@@ -31,37 +29,57 @@ const dialButtons = [
 ];
 
 const subLabels: Record<string, string> = {
-  '2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL',
-  '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ',
+  '2': 'ABC',
+  '3': 'DEF',
+  '4': 'GHI',
+  '5': 'JKL',
+  '6': 'MNO',
+  '7': 'PQRS',
+  '8': 'TUV',
+  '9': 'WXYZ',
   '0': '+',
 };
 
 function formatTime(seconds: number) {
   const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+  const m = Math.floor((seconds % 3600) / 60)
+    .toString()
+    .padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
   return h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
 }
 
 /** Dial Pad component for the calls section. */
 export function DialPad({
-  sipStatus, callStatus, callDuration, isMuted, currentNumber,
-  onConnect, onDisconnect, onCall, onHangUp, onToggleMute, onDTMF,
+  sipStatus,
+  callStatus,
+  callDuration,
+  isMuted,
+  currentNumber,
+  onConnect,
+  onDisconnect,
+  onCall,
+  onHangUp,
+  onToggleMute,
+  onDTMF,
 }: DialPadProps) {
   const [number, setNumber] = useState('');
   const isInCall = callStatus === 'calling' || callStatus === 'ringing' || callStatus === 'active';
   const isConnected = sipStatus === 'registered';
 
-  const handleDigit = useCallback((digit: string) => {
-    if (isInCall) {
-      onDTMF(digit);
-    } else {
-      setNumber(prev => prev + digit);
-    }
-  }, [isInCall, onDTMF]);
+  const handleDigit = useCallback(
+    (digit: string) => {
+      if (isInCall) {
+        onDTMF(digit);
+      } else {
+        setNumber((prev) => prev + digit);
+      }
+    },
+    [isInCall, onDTMF]
+  );
 
   const handleDelete = useCallback(() => {
-    setNumber(prev => prev.slice(0, -1));
+    setNumber((prev) => prev.slice(0, -1));
   }, []);
 
   const handleCall = useCallback(() => {
@@ -87,9 +105,13 @@ export function DialPad({
   return (
     <div className="flex flex-col items-center gap-4">
       {/* Connection Status */}
-      <div className="flex items-center gap-2 w-full justify-between">
+      <div className="flex w-full items-center justify-between gap-2">
         <Badge className={`${statusColor[sipStatus]} text-xs`}>
-          {sipStatus === 'registered' ? <Wifi className="w-3 h-3 mr-1" /> : <WifiOff className="w-3 h-3 mr-1" />}
+          {sipStatus === 'registered' ? (
+            <Wifi className="mr-1 h-3 w-3" />
+          ) : (
+            <WifiOff className="mr-1 h-3 w-3" />
+          )}
           {statusLabel[sipStatus]}
         </Badge>
         <Button
@@ -98,7 +120,7 @@ export function DialPad({
           onClick={isConnected ? onDisconnect : onConnect}
           disabled={sipStatus === 'connecting'}
         >
-          {sipStatus === 'connecting' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+          {sipStatus === 'connecting' && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
           {isConnected ? 'Desconectar' : 'Conectar SIP'}
         </Button>
       </div>
@@ -115,33 +137,39 @@ export function DialPad({
             <Card className="border-primary/30 bg-primary/5">
               <CardContent className="p-4 text-center">
                 <p className="text-lg font-bold text-foreground">{currentNumber || number}</p>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {callStatus === 'calling' && 'Chamando...'}
                   {callStatus === 'ringing' && 'Tocando...'}
                   {callStatus === 'active' && formatTime(callDuration)}
                 </p>
-                <div className="flex justify-center gap-3 mt-4">
+                <div className="mt-4 flex justify-center gap-3">
                   <Button
                     aria-label={isMuted ? 'Ativar microfone' : 'Silenciar microfone'}
                     variant="outline"
                     size="icon"
-                    className="rounded-full w-12 h-12"
+                    className="h-12 w-12 rounded-full"
                     onClick={onToggleMute}
                     disabled={callStatus !== 'active'}
                   >
-                    {isMuted ? <MicOff className="w-5 h-5 text-destructive" /> : <Mic className="w-5 h-5" />}
+                    {isMuted ? (
+                      <MicOff className="h-5 w-5 text-destructive" />
+                    ) : (
+                      <Mic className="h-5 w-5" />
+                    )}
                   </Button>
                   <Button
                     aria-label="Encerrar chamada"
                     variant="destructive"
                     size="icon"
-                    className="rounded-full w-14 h-14"
+                    className="h-14 w-14 rounded-full"
                     onClick={onHangUp}
                   >
-                    <PhoneOff className="w-6 h-6" />
+                    <PhoneOff className="h-6 w-6" />
                   </Button>
                 </div>
-                <p className="mt-3 text-[10px] text-muted-foreground/60">Legendas em tempo real não disponíveis nesta chamada.</p>
+                <p className="mt-3 text-[10px] text-muted-foreground/60">
+                  Legendas em tempo real não disponíveis nesta chamada.
+                </p>
               </CardContent>
             </Card>
           </motion.div>
@@ -155,35 +183,37 @@ export function DialPad({
             value={number}
             onChange={(e) => setNumber(e.target.value.replace(/[^0-9+*#]/g, ''))}
             placeholder="Digite o número"
-            className="text-center text-xl  tracking-widest h-14 bg-muted/50 border-border pr-10"
+            className="h-14 border-border bg-muted/50 pr-10 text-center text-xl tracking-widest"
           />
           {number && (
             <Button
               aria-label="Apagar último dígito"
               variant="ghost"
               size="icon"
-              className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8"
+              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
               onClick={handleDelete}
             >
-              <Delete className="w-4 h-4 text-muted-foreground" />
+              <Delete className="h-4 w-4 text-muted-foreground" />
             </Button>
           )}
         </div>
       )}
 
       {/* Dial Grid */}
-      <div className="grid grid-cols-3 gap-2 w-full max-w-[280px]">
+      <div className="grid w-full max-w-[280px] grid-cols-3 gap-2">
         {dialButtons.map((row) =>
           row.map((digit) => (
             <motion.button
               key={digit}
               whileTap={{ scale: 0.92 }}
               onClick={() => handleDigit(digit)}
-              className="flex flex-col items-center justify-center w-full h-16 rounded-xl bg-muted/50 hover:bg-muted border border-border/50 transition-colors"
+              className="flex h-16 w-full flex-col items-center justify-center rounded-xl border border-border/50 bg-muted/50 transition-colors hover:bg-muted"
             >
               <span className="text-xl font-semibold text-foreground">{digit}</span>
               {subLabels[digit] && (
-                <span className="text-[9px] text-muted-foreground tracking-widest">{subLabels[digit]}</span>
+                <span className="text-[9px] tracking-widest text-muted-foreground">
+                  {subLabels[digit]}
+                </span>
               )}
             </motion.button>
           ))
@@ -195,16 +225,16 @@ export function DialPad({
         <Button
           aria-label="Fazer chamada"
           size="lg"
-          className="rounded-full w-16 h-16 bg-success hover:bg-success/90"
+          className="h-16 w-16 rounded-full bg-success hover:bg-success/90"
           onClick={handleCall}
           disabled={!number.trim() || !isConnected}
         >
-          <Phone className="w-7 h-7 text-success-foreground" />
+          <Phone className="h-7 w-7 text-success-foreground" />
         </Button>
       )}
 
       {!isConnected && !isInCall && (
-        <p className="text-xs text-muted-foreground text-center">
+        <p className="text-center text-xs text-muted-foreground">
           Conecte-se ao servidor SIP para fazer chamadas
         </p>
       )}

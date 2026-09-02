@@ -47,9 +47,17 @@ export const MetaWebhookChangeSchema = z.object({
         phone_number_id: z.string().trim().min(1).optional(),
       })
       .optional(),
-    contacts: z.array(z.any()).optional(),
-    messages: z.array(z.any()).optional(),
-    statuses: z.array(z.any()).optional(),
+    // Auditoria de re-verificação (Bloco 4/etapa 48): z.array(z.any()) exigia
+    // literalmente zero estrutura (até `[1,2,3]` ou `["x"]` passava). Shape
+    // MÍNIMO — cada elemento precisa ser um objeto — sem fixar o shape
+    // detalhado por tipo de mensagem (text/image/audio/interactive/...):
+    // normalizeMetaPayload (_shared/whatsapp-cloud-normalizer.ts) já faz sua
+    // própria extração defensiva campo a campo com fallbacks, então travar o
+    // schema no shape completo hoje só arriscaria rejeitar variações válidas
+    // que a Meta envie amanhã, sem ganho real de segurança.
+    contacts: z.array(z.record(z.unknown())).optional(),
+    messages: z.array(z.record(z.unknown())).optional(),
+    statuses: z.array(z.record(z.unknown())).optional(),
   }),
 });
 
@@ -59,10 +67,23 @@ export const MetaWebhookEntrySchema = z.object({
   changes: z.array(MetaWebhookChangeSchema).min(1),
 });
 
-/** Meta Webhook Payload Schema constant. */
+/**
+ * Meta Webhook Payload Schema constant.
+ *
+ * Bloco 2 (etapa 24, 2026-08-21 — fecha D3): `entry` aceita `null` ou `[]`
+ * além do array não-vazio de entradas reais. A Meta envia notificações
+ * estruturalmente vazias (entry null/[]) que são benignas, não violação de
+ * contrato — index.ts tratava isso com uma leitura MANUAL de body.entry
+ * ANTES do gate parseOrReject pra responder 200 sem passar pelo 422 (que a
+ * Meta interpretaria como falha e faria retry-storm por até 24h). Relaxando
+ * o schema, o gate vira o único caminho: entry null/[] agora É válido pro
+ * contrato (200 direto), sem precisar de bypass manual antes da validação.
+ * `entry` AUSENTE (chave nem presente) continua rejeitado — `.nullable()`
+ * sem `.optional()` exige a chave, só aceita `null` como valor explícito.
+ */
 export const MetaWebhookPayloadSchema = z.object({
   object: z.literal('whatsapp_business_account'),
-  entry: z.array(MetaWebhookEntrySchema).min(1),
+  entry: z.array(MetaWebhookEntrySchema).nullable(),
 });
 
 /**
@@ -86,7 +107,11 @@ export const WhatsAppCloudWebhookV2Schema = MetaWebhookPayloadSchema.extend({
  * Union: chamada interna (action) OU push do Google (message).
  */
 export const GmailWebhookV1Schema = z.object({
-  action: z.string().max(100).nullish(),
+  // SEC-1 hardening (2026-08-21): único action autenticado é 'registerWatch'
+  // (index.ts:61 exige requireUser); qualquer outro POST é tratado como push
+  // do Pub/Sub e exige token (index.ts, guarda `action !== 'registerWatch'`).
+  // Enum fecha a superfície no schema — defesa em profundidade com o handler.
+  action: z.enum(['registerWatch']).nullish(),
   accountId: z.string().max(200).nullish(),
   message: z.object({
     data: z.string().max(1_000_000).nullish(),

@@ -134,30 +134,16 @@ const realtimeReconnectAfterMs = (tries: number): number =>
 // ---------------------------------------------------------------------------
 const SUPABASE_FETCH_TIMEOUT_MS = 12_000;
 
-// ---------------------------------------------------------------------------
-// Concurrency gate — evita rajadas de >6 requests simultâneos que sufocam
-// o backend self-hosted com 429 (Too Many Requests).
-//
-// Contexto: ao clicar num contato, 15+ hooks React disparam queries Supabase
-// em paralelo no mesmo microtask. Sem gate, o backend recebe 15+ requests
-// simultâneos → rate-limit (429) → retry → mais pressão → cascata de falhas.
-//
-// Estratégia: token bucket simples — até MAX_CONCURRENT requests em voo;
-// excedente espera em fila com dreno serial (1 por vez). Requests de auth
-// (/auth/v1/) nunca são enfileirados (precisam de latência mínima).
-//
-// Cleanup: beforeunload aborta todos os controllers pendentes para evitar
-// memory leak por fetches órfãos em SPAs com navegação rápida.
-// ---------------------------------------------------------------------------
-const MAX_CONCURRENT = 6; // requests simultâneos (não-auth)
-const CONCURRENT_DRAIN_DELAY_MS = 80; // ms entre cada dreno da fila
-
 // Cooldown global de rate-limit — após um 429, pausa novas aquisições de
-// slot por RATE_LIMIT_COOLDOWN_MS e reduz a concorrência máxima para
-// MAX_CONCURRENT_DEGRADED, evitando a cascata de retries que piora o 429.
+// slot por RATE_LIMIT_COOLDOWN_MS. A espera acontece ANTES do semáforo em
+// retryFetch: timers de cooldown/backoff nunca ocupam capacidade de rede.
+// Ao fim da pausa, as admissões são espaçadas para os 8 callers não acordarem
+// juntos e recriarem imediatamente a rajada que causou o 429.
 let _rateLimitCooldownUntil = 0;
 const RATE_LIMIT_COOLDOWN_MS = 2000; // 2s global pause after 429
-const MAX_CONCURRENT_DEGRADED = 4; // reduced concurrency during cooldown
+const COOLDOWN_DRAIN_INTERVAL_MS = 200; // no máximo 5 novas admissões/s após cooldown
+const COOLDOWN_GRACE_MS = 50;
+let _cooldownNextAdmissionAt = 0;
 
 // FIX 2026-08-03: Detector de DB degradado.
 // Quando queries lentas (>5s) ocorrem, ativa cooldown temporário que
@@ -180,8 +166,6 @@ export function markQueryEnd(startMs: number): void {
   }
 }
 
-let _inFlight = 0;
-let _queue: Array<() => void> = [];
 const _activeControllers = new Set<AbortController>();
 
 if (typeof window !== 'undefined') {
@@ -196,58 +180,9 @@ if (typeof window !== 'undefined') {
         }
       }
       _activeControllers.clear();
-      _queue = [];
-      _inFlight = 0;
     },
     { once: true }
   );
-}
-
-/** Concorrência máxima vigente: reduzida durante rate-limit ou slow-query cooldown. */
-function _getMaxConcurrent(): number {
-  const now = Date.now();
-  if (now < _rateLimitCooldownUntil) return MAX_CONCURRENT_DEGRADED;
-  // FIX 2026-08-03: quando DB está lento, reduz para 2 slots para dar fôlego ao pool
-  if (now < _slowQueryCooldownUntil) return 2;
-  return MAX_CONCURRENT;
-}
-
-function _acquireSlot(): Promise<void> {
-  const now = Date.now();
-  // Cooldown: rate-limit (429) ou slow-query (DB degradado)
-  const cooldownRemaining = Math.max(
-    _rateLimitCooldownUntil - now,
-    _slowQueryCooldownUntil - now,
-    0
-  );
-  if (cooldownRemaining > 0) {
-    return new Promise((resolve) => {
-      setTimeout(() => _acquireSlotInternal(resolve), cooldownRemaining + 50);
-    });
-  }
-  return new Promise((resolve) => _acquireSlotInternal(resolve));
-}
-
-function _acquireSlotInternal(resolve: () => void): void {
-  if (_inFlight < _getMaxConcurrent()) {
-    _inFlight++;
-    resolve();
-  } else {
-    _queue.push(resolve);
-  }
-}
-
-function _releaseSlot(): void {
-  _inFlight--;
-  // Drena UM item da fila por vez com atraso, para não recriar a rajada.
-  // NOTA: _acquireSlotInternal já incrementa _inFlight — NÃO incrementar aqui
-  // (double-count causava deadlock quando MAX_CONCURRENT era atingido).
-  const next = _queue.shift();
-  if (next) {
-    setTimeout(() => {
-      next();
-    }, CONCURRENT_DRAIN_DELAY_MS);
-  }
 }
 
 const makeTimeoutReason = (): unknown =>
@@ -255,15 +190,59 @@ const makeTimeoutReason = (): unknown =>
     ? new DOMException('Supabase request timed out', 'TimeoutError')
     : Object.assign(new Error('Supabase request timed out'), { name: 'TimeoutError' });
 
-const boundedFetch: typeof fetch = async (input, init) => {
-  const _requestUrl = getRequestUrl(input);
+function isSupabaseCooldownActive(): boolean {
+  const now = Date.now();
+  const active =
+    Math.max(_rateLimitCooldownUntil, _slowQueryCooldownUntil) > now ||
+    _cooldownNextAdmissionAt > now;
+  if (!active) _cooldownNextAdmissionAt = 0;
+  return active;
+}
 
-  // Auth requests nunca passam pelo concurrency gate — precisam de
-  // latência mínima para bootstrap rápido.
-  if (!isAuthRequest(input)) {
-    await _acquireSlot();
+async function waitForSupabaseCooldown(signal?: AbortSignal | null): Promise<void> {
+  while (true) {
+    const now = Date.now();
+    const cooldownUntil = Math.max(_rateLimitCooldownUntil, _slowQueryCooldownUntil);
+    const drainStillActive = _cooldownNextAdmissionAt > now;
+    if (cooldownUntil <= now && !drainStillActive) {
+      _cooldownNextAdmissionAt = 0;
+      return;
+    }
+
+    // Reserva uma posição no dreno. Callers concorrentes recebem instantes
+    // distintos (ex.: T+50, T+250, T+450), em vez de todos despertarem em T.
+    const admissionAt = Math.max(
+      now,
+      _cooldownNextAdmissionAt,
+      cooldownUntil > now ? cooldownUntil + COOLDOWN_GRACE_MS : now
+    );
+    _cooldownNextAdmissionAt = admissionAt + COOLDOWN_DRAIN_INTERVAL_MS;
+    const remaining = Math.max(0, admissionAt - now);
+
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, remaining);
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        reject(makeAbortError('Supabase cooldown wait aborted'));
+      };
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+
+    // Se outro 429 estendeu o cooldown enquanto este caller aguardava, ele
+    // volta à fila de dreno. Caso contrário, a reserva acima já foi cumprida.
+    if (Math.max(_rateLimitCooldownUntil, _slowQueryCooldownUntil) <= Date.now()) return;
   }
+}
 
+const boundedFetch: typeof fetch = async (input, init) => {
   const controller = new AbortController();
   _activeControllers.add(controller);
   const timeoutId = setTimeout(
@@ -271,42 +250,38 @@ const boundedFetch: typeof fetch = async (input, init) => {
     SUPABASE_FETCH_TIMEOUT_MS
   );
 
-  // BUG FIX (2026-08-03): caller signal chaining causes AbortError retry
-  // storms with React StrictMode + postgrest-js internal retry.
-  //
-  // When React StrictMode double-mounts components, the first render's
-  // AbortController is cancelled. The caller's signal propagates into
-  // boundedFetch via init.signal, which triggers an AbortError in the
-  // fetch. postgrest-js then retries (internal maxRetries=2), each
-  // attempt immediately aborted again — exhausting retries with:
-  //   "All 2 retries exhausted AbortError: signal is aborted without reason"
-  //
-  // Fix: strip the caller signal — boundedFetch relies ONLY on its own
-  // 12s timeout AbortController. The signal chaining was an optimization
-  // to avoid stale state on unmount, but the cost (cascading AbortError
-  // storms that kill auth bootstrap, roles fetch, and profile fetch) is
-  // far worse than a 12s timeout on abandoned requests.
+  // Cancela a request REAL quando o caller abandona o contato. O retry
+  // semantico exclui AbortError, portanto nao existe tempestade de retry.
+  // Auth continua removendo o signal no caller de retryFetch.
+  const callerSignal = init?.signal ?? null;
+  const abortFromCaller = () => {
+    const reason = callerSignal?.reason ?? makeAbortError('Supabase request aborted by caller');
+    controller.abort(reason);
+  };
+  if (callerSignal?.aborted) abortFromCaller();
+  else callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+
   const { signal: _callerSignal, ...restInit } = init ?? {};
 
-  // Track slot release on all exit paths (success, error, timeout).
-  const release = () => {
-    if (!isAuthRequest(input)) _releaseSlot();
-  };
-
   return fetch(input, { ...restInit, signal: controller.signal })
-    .then((res) => {
-      release();
-      return res;
+    .then((response) => {
+      // Alguns mocks/transports podem ignorar AbortSignal. Nesse caso a
+      // capacidade permanece ocupada ate a resposta, mas o resultado obsoleto
+      // ainda deve ser descartado.
+      if (controller.signal.aborted) {
+        throw controller.signal.reason ?? makeAbortError('Supabase request aborted by caller');
+      }
+      return response;
     })
     .catch((err: unknown) => {
       // boundedFetch não reporta ao monitor de conectividade aqui — quem
       // reporta é retryFetch (após esgotar todas as tentativas) e o path de
       // auth. Reportar em cada tentativa individual consumiria os mocks do
       // health-ping durante testes e acusaria backend-down em falhas transitórias.
-      release();
       throw err;
     })
     .finally(() => {
+      callerSignal?.removeEventListener('abort', abortFromCaller);
       clearTimeout(timeoutId);
       _activeControllers.delete(controller);
     });
@@ -593,7 +568,7 @@ function _acquireSupabaseSlot(opts?: {
 }
 
 function _releaseSupabaseSlot(): void {
-  _supabaseInFlight--;
+  _supabaseInFlight = Math.max(0, _supabaseInFlight - 1);
   const next = _supabaseQueue.shift();
   if (next) next.resume();
 }
@@ -639,6 +614,7 @@ export async function acquireSupabaseSlot(
 // (a que termina primeiro não derruba o high da outra).
 // ---------------------------------------------------------------------------
 let _highPriorityDepth = 0;
+const _highPrioritySignalDepth = new WeakMap<AbortSignal, number>();
 
 /** Executa `fn` com requests supabase (via retryFetch) priorizadas 'high' na fila do semáforo. */
 export async function withSupabaseHighPriority<T>(fn: () => Promise<T>): Promise<T> {
@@ -648,6 +624,29 @@ export async function withSupabaseHighPriority<T>(fn: () => Promise<T>): Promise
   } finally {
     _highPriorityDepth--;
   }
+}
+
+/**
+ * Prioriza somente a request que carrega este AbortSignal. Diferente do
+ * contexto global legado, requests auxiliares concorrentes nao herdam a
+ * prioridade da primeira pagina/mark-as-read.
+ */
+export async function withSupabaseHighPrioritySignal<T>(
+  signal: AbortSignal,
+  fn: () => Promise<T>
+): Promise<T> {
+  _highPrioritySignalDepth.set(signal, (_highPrioritySignalDepth.get(signal) ?? 0) + 1);
+  try {
+    return await fn();
+  } finally {
+    const remaining = (_highPrioritySignalDepth.get(signal) ?? 1) - 1;
+    if (remaining <= 0) _highPrioritySignalDepth.delete(signal);
+    else _highPrioritySignalDepth.set(signal, remaining);
+  }
+}
+
+function isHighPrioritySignal(signal?: AbortSignal | null): boolean {
+  return !!signal && (_highPrioritySignalDepth.get(signal) ?? 0) > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -696,9 +695,40 @@ if (typeof window !== 'undefined') {
   setInterval(_updateWindowPoolMetrics, 30_000);
 }
 
+function getRequestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method) return init.method.toUpperCase();
+  if (typeof Request !== 'undefined' && input instanceof Request) return input.method.toUpperCase();
+  return 'GET';
+}
+
+function hasIdempotencyKey(init?: RequestInit): boolean {
+  if (!init?.headers) return false;
+  const headers = new Headers(init.headers);
+  return headers.has('Idempotency-Key');
+}
+
+// PostgREST executa RPCs via POST mesmo quando a função é somente leitura.
+// A allowlist é deliberadamente pequena e baseada em funções SQL auditadas;
+// RPCs mutantes continuam sem retry, salvo Idempotency-Key explícita.
+const RETRY_SAFE_READ_RPC_NAMES = new Set(['get_contact_360_by_phone', 'rpc_list_messages_lite']);
+
+function getPostgrestRpcName(input: RequestInfo | URL): string | null {
+  const match = getRequestUrl(input).match(/\/rest\/v1\/rpc\/([^/?#]+)/);
+  return match?.[1] ?? null;
+}
+
+/** Somente leituras e mutacoes explicitamente idempotentes podem ter retry de transporte. */
+function isRetrySafeRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
+  const method = getRequestMethod(input, init);
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+  if (hasIdempotencyKey(init)) return true;
+  const rpcName = method === 'POST' ? getPostgrestRpcName(input) : null;
+  return rpcName !== null && RETRY_SAFE_READ_RPC_NAMES.has(rpcName);
+}
+
 /** Fetch customizado injetado no supabase-js: timeout (boundedFetch) + retry (F9-04) + semáforo de concorrência. */
 export const retryFetch: typeof fetch = async (input, init) => {
-  if (isAuthRequest(input) || hasStreamBody(init)) {
+  if (isAuthRequest(input)) {
     // Auth requests nunca devem ser abortados por unmount do React
     // (StrictMode remount abortava o getSession e o supabase-js retentava em loop)
     const { signal: _callerSignal, ...restInit } = init ?? {};
@@ -708,41 +738,51 @@ export const retryFetch: typeof fetch = async (input, init) => {
     });
   }
 
-  // Semáforo: adquire slot antes de disparar a requisição.
+  // Cada tentativa aguarda o cooldown ANTES de adquirir o semáforo e libera o
+  // slot ao terminar. Logo backoff/cooldown nunca retêm capacidade de rede.
   // Evita que 10+ RPCs simultâneas saturem o pool TCP e o Supavisor.
   // Prioridade high (contexto withSupabaseHighPriority, contador de
   // profundidade) fura a fila FIFO.
-  // O signal do caller é repassado ao acquire: se o caller abortar durante a
-  // ESPERA NA FILA, o acquire rejeita com AbortError (sem retry). O fetch em
-  // si continua sem o signal do caller (ver BUG FIX 2026-08-03 no boundedFetch).
-  // Se o acquire rejeitar (timeout de fila/abort), o try abaixo não roda e o
-  // finally não libera slot — correto, a entrada nunca teve slot.
-  await _acquireSupabaseSlot({
-    priority: _highPriorityDepth > 0 ? 'high' : 'normal',
-    signal: init?.signal,
-  });
+  // O signal do caller é repassado ao acquire e ao boundedFetch: abort durante
+  // a fila nao consome slot; abort em voo cancela a request real.
+  const priority = _highPriorityDepth > 0 || isHighPrioritySignal(init?.signal) ? 'high' : 'normal';
+  const retrySafe = !hasStreamBody(init) && isRetrySafeRequest(input, init);
+  let successfulSlotHeld = false;
   try {
     return await withRetry(
       async () => {
-        const response = await boundedFetch(input, init);
-        if (response.status === 429) {
-          // Rate-limit: ativa o cooldown global ANTES do retry para que as
-          // demais aquisições de slot esperem e não formem cascata de 429.
-          _rateLimitCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-          // Não consumimos o body: a resposta será descartada e refeita.
-          throw new RetryableHttpError(response.status);
+        // Sem cooldown, o acquire começa sincronicamente e preserva a ordem de
+        // prioridade. Com cooldown, a espera ocorre fora de qualquer slot.
+        if (isSupabaseCooldownActive()) await waitForSupabaseCooldown(init?.signal);
+        await _acquireSupabaseSlot({ priority, signal: init?.signal });
+        let releaseAfterAttempt = true;
+        try {
+          const response = await boundedFetch(input, init);
+          if (response.status === 429) {
+            // Rate-limit: ativa o cooldown global ANTES do retry para que as
+            // demais aquisições de slot esperem e não formem cascata de 429.
+            _rateLimitCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+            // Não consumimos o body: a resposta será descartada e refeita.
+            throw new RetryableHttpError(response.status);
+          }
+          if (response.status >= 500) {
+            // Não consumimos o body: a resposta será descartada e refeita.
+            throw new RetryableHttpError(response.status);
+          }
+          // No sucesso, mantém o slot até retryFetch resolver. Isso preserva a
+          // ordem de prioridade; tentativas falhas liberam antes do backoff.
+          releaseAfterAttempt = false;
+          successfulSlotHeld = true;
+          return response;
+        } finally {
+          if (releaseAfterAttempt) _releaseSupabaseSlot();
         }
-        if (response.status >= 500) {
-          // Não consumimos o body: a resposta será descartada e refeita.
-          throw new RetryableHttpError(response.status);
-        }
-        return response;
       },
       {
-        maxRetries: SUPABASE_RETRY_MAX_RETRIES,
+        maxRetries: retrySafe ? SUPABASE_RETRY_MAX_RETRIES : 0,
         baseDelayMs: SUPABASE_RETRY_BASE_DELAY_MS,
         maxDelayMs: SUPABASE_RETRY_MAX_DELAY_MS,
-        shouldRetry: shouldRetryFetchError,
+        shouldRetry: retrySafe ? shouldRetryFetchError : () => false,
         onRetry: (err, attempt) => {
           log.warn(
             `[Supabase] Tentativa ${attempt}/${SUPABASE_RETRY_MAX_RETRIES} falhou ` +
@@ -750,13 +790,15 @@ export const retryFetch: typeof fetch = async (input, init) => {
           );
         },
       }
-    ).catch((err: unknown) => {
-      // Só acusa o monitor após esgotar as tentativas.
-      reportRealFailure(err);
-      throw err;
-    });
+    );
+  } catch (err) {
+    // Só acusa o monitor após esgotar as tentativas.
+    reportRealFailure(err);
+    throw err;
   } finally {
-    _releaseSupabaseSlot();
+    // Se o transporte ignorar AbortSignal, boundedFetch só conclui após a
+    // resposta/timeout; portanto não declaramos capacidade fictícia.
+    if (successfulSlotHeld) _releaseSupabaseSlot();
   }
 };
 

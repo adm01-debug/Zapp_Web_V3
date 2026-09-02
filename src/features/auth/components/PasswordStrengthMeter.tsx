@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Check, X, AlertTriangle, Shield, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
 import { getLogger } from '@/lib/logger';
+import { isAbortLikeError } from '@/lib/retry';
 
 const log = getLogger('PasswordStrengthMeter');
 
@@ -127,7 +128,7 @@ export function PasswordStrengthMeter({ password, onStrengthChange }: PasswordSt
         setIsBreached(false);
         setBreachCount(0);
       } catch (error) {
-        if ((error as Error).name === 'AbortError') return;
+        if (isAbortLikeError(error)) return;
         log.error('Error checking password breach:', error);
         setIsBreached(null);
       } finally {

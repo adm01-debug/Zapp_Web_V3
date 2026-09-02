@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { ContactFormV3 } from '@/components/contacts/ContactFormV3';
 import { Button } from '@/components/ui/button';
 import {
@@ -130,7 +130,8 @@ export function ContactDialogs({
                   <code className="text-sm font-semibold text-foreground">
                     {showSuccess?.protocol}
                   </code>
-                  <Button aria-label="Copiar protocolo"
+                  <Button
+                    aria-label="Copiar protocolo"
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6"

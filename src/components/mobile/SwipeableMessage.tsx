@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import { motion, useMotionValue, useTransform, PanInfo } from 'framer-motion';
+import { motion, useMotionValue, useTransform, PanInfo } from '@/components/ui/motion';
 import { Reply, Forward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -27,7 +27,7 @@ export function SwipeableMessage({
   // Right swipe → reply icon opacity
   const replyOpacity = useTransform(x, [0, SWIPE_THRESHOLD], [0, 1]);
   const replyScale = useTransform(x, [0, SWIPE_THRESHOLD], [0.5, 1]);
-  
+
   // Left swipe → forward icon opacity
   const forwardOpacity = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0]);
   const forwardScale = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0.5]);
@@ -40,12 +40,16 @@ export function SwipeableMessage({
         isAnimating.current = true;
         if (navigator.vibrate) navigator.vibrate(10);
         onSwipeRight();
-        setTimeout(() => { isAnimating.current = false; }, 300);
+        setTimeout(() => {
+          isAnimating.current = false;
+        }, 300);
       } else if (info.offset.x < -SWIPE_THRESHOLD && onSwipeLeft) {
         isAnimating.current = true;
         if (navigator.vibrate) navigator.vibrate(10);
         onSwipeLeft();
-        setTimeout(() => { isAnimating.current = false; }, 300);
+        setTimeout(() => {
+          isAnimating.current = false;
+        }, 300);
       }
     },
     [onSwipeRight, onSwipeLeft]
@@ -58,20 +62,20 @@ export function SwipeableMessage({
       {/* Reply icon (left side, appears on right swipe) */}
       {onSwipeRight && (
         <motion.div
-          className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 text-primary"
+          className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-primary/15 text-primary"
           style={{ opacity: replyOpacity, scale: replyScale }}
         >
-          <Reply className="w-4 h-4" />
+          <Reply className="h-4 w-4" />
         </motion.div>
       )}
 
       {/* Forward icon (right side, appears on left swipe) */}
       {onSwipeLeft && (
         <motion.div
-          className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground"
+          className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-muted text-muted-foreground"
           style={{ opacity: forwardOpacity, scale: forwardScale }}
         >
-          <Forward className="w-4 h-4" />
+          <Forward className="h-4 w-4" />
         </motion.div>
       )}
 

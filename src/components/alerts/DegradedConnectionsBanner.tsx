@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { safeWhatsAppConnectionsQuery } from '@/integrations/supabase/safe-queries';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { AlertTriangle, ArrowRight, X } from 'lucide-react';
 
 interface DegradedInstance {

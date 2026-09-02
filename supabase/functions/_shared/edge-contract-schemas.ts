@@ -8,7 +8,6 @@ import {
   ElevenLabsWebhookV1Schema,
   ElevenLabsWebhookV2Schema,
 } from './webhook-schemas.ts';
-import { contractErrorResponse } from './validation.ts';
 import {
   AiConversationSummaryV1Schema,
   AiSuggestReplyV1Schema,
@@ -78,7 +77,6 @@ export const EDGE_FUNCTION_NAMES = [
   'elevenlabs-tts',
   'elevenlabs-tts-stream',
   'elevenlabs-voice',
-  'email-health',
   'email-imap-bridge',
   'email-track-link',
   'email-track-pixel',
@@ -159,7 +157,6 @@ export const EDGE_FUNCTION_NAMES = [
   'zapp-email-inbound-webhook',
   'zapp-email-send',
   'zapp-get-sip-credentials',
-  'zapp-google-calendar-sync',
   'zapp-n8n-sync',
   'zapp-notifications-dispatch',
   'zapp-sentry-sync',
@@ -207,10 +204,13 @@ export const CloudWebhookV1Schema = z.object({
                       phone_number_id: z.string().trim().min(1).optional(),
                     })
                     .optional(),
-                  contacts: z.array(z.any()).optional(),
-                  messages: z.array(z.any()).optional(),
-                  statuses: z.array(z.any()).optional(),
-                  errors: z.array(z.any()).optional(),
+                  // Auditoria de re-verificação (Bloco 4/etapa 48): shape
+                  // mínimo (objeto por elemento) — ver mesmo fix e racional
+                  // em _shared/webhook-schemas.ts (MetaWebhookChangeSchema).
+                  contacts: z.array(z.record(z.unknown())).optional(),
+                  messages: z.array(z.record(z.unknown())).optional(),
+                  statuses: z.array(z.record(z.unknown())).optional(),
+                  errors: z.array(z.record(z.unknown())).optional(),
                 })
                 .passthrough(),
             })
@@ -450,13 +450,6 @@ const specificEdgeFunctionSchemas: Record<string, ContractVersionMap> = {
         z.object({ action: z.literal('configure'), baseUrl: z.string().min(1).max(2048) }).strict(),
       ]),
   },
-  'zapp-google-calendar-sync': {
-    v1: z
-      .object({
-        dryRun: z.boolean().optional(),
-      })
-      .strict(),
-  },
   // invite-user — convite REAL via GoTrue admin API (ADR 2026-08-18; banco
   // vivo sem RPC invite_user/tabela de convites). Espelho inline (sem ciclo).
   'invite-user': {
@@ -512,8 +505,10 @@ Object.assign(specificEdgeFunctionSchemas, WebhookContractSchemas);
  * O drift entre os dois foi a causa-raiz do incidente P0 (ai-churn-analysis/
  * classify-emoji registrados aqui mas não no canônico) e está travado pelo
  * Invariante 8 (`EdgeFunctionContractSchemas ⊆ CONTRACT_SCHEMAS`) em
- * contract-registry-integrity.test.ts. Mantido apenas para compatibilidade de
- * chamadores legados (parseContractRequest) e testes.
+ * contract-registry-integrity.test.ts. Mantido para essa invariante e para
+ * os testes de cobertura do registro legado (edge-contract-schemas.test.ts)
+ * — o chamador `parseContractRequest` foi removido em 2026-08-21 (Bloco 2,
+ * etapas 20/21/93: 0 chamadores de produção).
  */
 export const EdgeFunctionContractSchemas: Record<string, ContractVersionMap> = Object.fromEntries(
   EDGE_FUNCTION_NAMES.map((name) => [
@@ -549,86 +544,12 @@ export function validateContractPayload(name: string, version: string, payload: 
   return schema.safeParse(payload);
 }
 
-export interface ContractParseOptions {
-  version?: string;
-  requestId?: string;
-}
-
-export type ContractParseResult<T = unknown> =
-  | { success: true; data: T; version: string; lifecycle: ContractLifecycle }
-  | { success: false; response: Response; version: string; lifecycle: ContractLifecycle };
-
-function inferContractVersion(name: string, payload: unknown, explicitVersion?: string): string {
-  if (explicitVersion) return explicitVersion;
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    !Array.isArray(payload) &&
-    'version' in payload &&
-    (payload as { version?: unknown }).version === '2.0' &&
-    getContractSchema(name, 'v2')
-  ) {
-    return 'v2';
-  }
-  return getContractSchema(name, 'v1') ? 'v1' : getContractLifecycle(name).current;
-}
-
-/**
- * Runtime contract gate for Edge Functions.
- *
- * Handlers should call this once at the HTTP boundary and return
- * `result.response` whenever `success === false`. All schema failures use the
- * same 422 payload shape: `{ error, code, message, requestId, fields, details }`.
- */
-/**
- * @deprecated — use `parseOrReject` de contract-kit.ts (envelope 422 único com
- * `contract` e `details`). Este gate legado usa `contractErrorResponse`
- * (envelope antigo com `fields[]`, sem `contract`). 0 chamadores em produção.
- * Mantido para compatibilidade de testes legados (edge-contract-schemas.test.ts).
- */
-export async function parseContractRequest<T = unknown>(
-  req: Request,
-  contractName: string,
-  options: ContractParseOptions = {}
-): Promise<ContractParseResult<T>> {
-  let payload: unknown;
-  const lifecycle = getContractLifecycle(contractName);
-
-  try {
-    payload = await req.json();
-  } catch {
-    const version = options.version ?? lifecycle.current;
-    return {
-      success: false,
-      version,
-      lifecycle,
-      response: contractErrorResponse(
-        'invalid_json',
-        `Invalid JSON body for ${contractName}@${version}`,
-        [{ path: ['body'], message: 'Request body must be valid JSON' }],
-        options.requestId,
-        req
-      ),
-    };
-  }
-
-  const version = inferContractVersion(contractName, payload, options.version);
-  const result = validateContractPayload(contractName, version, payload);
-
-  if (!result.success) {
-    return {
-      success: false,
-      version,
-      lifecycle,
-      response: contractErrorResponse(
-        'contract_violation',
-        `Payload validation failed for ${contractName}@${version}`,
-        result.error.issues,
-        options.requestId,
-        req
-      ),
-    };
-  }
-
-  return { success: true, data: result.data as T, version, lifecycle };
-}
+// Bloco 2 (etapas 20/21/93, 2026-08-21): parseContractRequest + contractErrorResponse
+// (validation.ts) removidos — 0 chamadores de produção confirmados por grep;
+// era gate legado com envelope 422 divergente (fields[] sem contract) do
+// canônico de contract-kit.ts. ContractParseOptions/ContractParseResult e
+// inferContractVersion existiam só para servir essa função — removidos junto.
+// getContractSchema/getContractLifecycle/validateContractPayload/
+// EdgeFunctionContractSchemas permanecem: usados pelo Invariante 8
+// (contract-registry-integrity.test.ts) e pelos testes de cobertura do
+// registro legado (edge-contract-schemas.test.ts).

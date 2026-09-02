@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,11 +9,16 @@ import { Calendar, Clock, Paperclip } from 'lucide-react';
 import { format, addDays, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
+import { buildScheduledLocalDate, type ScheduleMessageResult } from './ScheduleMessageDialog.utils';
 
 interface ScheduleMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSchedule: (message: string, scheduledAt: Date, attachment?: File) => void | Promise<unknown>;
+  onSchedule: (
+    message: string,
+    scheduledAt: Date,
+    attachment?: File
+  ) => ScheduleMessageResult | Promise<ScheduleMessageResult>;
 }
 
 /** Schedule Message Dialog component. */
@@ -33,6 +38,7 @@ export function ScheduleMessageDialog({
     { label: 'Em 2 dias', getDate: () => setMinutes(setHours(addDays(new Date(), 2), 9), 0) },
     { label: 'Em 1 semana', getDate: () => setMinutes(setHours(addDays(new Date(), 7), 9), 0) },
   ];
+  const previewScheduledDate = date && time ? buildScheduledLocalDate(date, time) : null;
 
   const handleSchedule = async () => {
     if (!message.trim()) {
@@ -43,11 +49,15 @@ export function ScheduleMessageDialog({
       });
       return;
     }
-    const [hours, minutes] = time.split(':').map(Number);
-    // Parse date as LOCAL midnight to avoid UTC offset shifting the day (e.g. UTC-3 turns
-    // 2026-08-01T00:00:00Z into 2026-07-31T21:00 local — one day early).
-    const [y, mo, d] = date.split('-').map(Number);
-    const scheduledDate = new Date(y, mo - 1, d, hours, minutes);
+    const scheduledDate = buildScheduledLocalDate(date, time);
+    if (!scheduledDate) {
+      toast({
+        title: 'Data inválida',
+        description: 'Revise a data e a hora escolhidas antes de agendar',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     if (scheduledDate <= new Date()) {
       toast({
@@ -60,13 +70,15 @@ export function ScheduleMessageDialog({
 
     // CAMPANHAS-09: aguarda o INSERT resolver ANTES do toast de sucesso —
     // antes, o sucesso era exibido mesmo com 403 (RLS) e o dialog fechava.
-    // Falha é sinalizada pelo hook (toast destrutivo com causa real) — aqui
-    // só impedimos que a rejeição vire unhandled rejection; o dialog fica aberto.
+    // Falha é sinalizada pelo hook (toast destrutivo com causa real) — o
+    // contrato explícito `false` mantém o dialog aberto e evita toast falso.
+    let scheduled: ScheduleMessageResult;
     try {
-      await onSchedule(message, scheduledDate, attachment || undefined);
+      scheduled = await onSchedule(message, scheduledDate, attachment || undefined);
     } catch {
       return;
     }
+    if (scheduled === false) return;
     toast({
       title: 'Mensagem agendada!',
       description: `Será enviada em ${format(scheduledDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
@@ -183,17 +195,20 @@ export function ScheduleMessageDialog({
           {date && time && (
             <div className="rounded-lg bg-muted/50 p-3">
               <p className="text-sm text-muted-foreground">
-                A mensagem será enviada em{' '}
-                <span className="font-medium text-foreground">
-                  {format(
-                    setMinutes(
-                      setHours(new Date(date), parseInt(time.split(':')[0])),
-                      parseInt(time.split(':')[1])
-                    ),
-                    "EEEE, dd 'de' MMMM 'às' HH:mm",
-                    { locale: ptBR }
-                  )}
-                </span>
+                {previewScheduledDate ? (
+                  <>
+                    A mensagem será enviada em{' '}
+                    <span className="font-medium text-foreground">
+                      {format(previewScheduledDate, "EEEE, dd 'de' MMMM 'às' HH:mm", {
+                        locale: ptBR,
+                      })}
+                    </span>
+                  </>
+                ) : (
+                  <span className="font-medium text-destructive">
+                    A data/hora informada não existe no fuso local.
+                  </span>
+                )}
               </p>
             </div>
           )}

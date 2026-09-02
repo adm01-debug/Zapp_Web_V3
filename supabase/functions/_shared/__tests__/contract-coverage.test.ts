@@ -3,14 +3,22 @@
  *
  * Para CADA edge function (supabase/functions/<fn>/index.ts):
  *   - Se o fonte LÊ BODY (`req.json()`, `req.text()`, `req.formData()` ou
- *     variantes com `request.`), então DEVE invocar o gate de contrato
- *     (`parseOrReject(` ou `parseRequestOrReject(`).
+ *     variantes com `request.`) OU lê QUERY STRING (`.searchParams`), então
+ *     DEVE invocar o gate de contrato (`parseOrReject(` ou `parseRequestOrReject(`).
  *   - Exceções documentadas (allowlist): funções que leem body mas NÃO devem
  *     usar o gate por design — cada uma precisa de comentário no fonte e
  *     entrada aqui.
  *
  * Objetivo: impedir que uma futura edge function volte a nascer sem validação
  * (gap de 52 funções corrigido na consolidação 2026-08-04).
+ *
+ * Etapa 17 (Bloco 1, 2026-08-21, PLANO-100-CONTRATOS-EDGE — fecha E2): o
+ * scanner só examinava leitura de BODY — 12 functions que só leem query
+ * string (`.searchParams`) ficavam invisíveis pro `total`/`withGate`, mesmo
+ * já tendo `parseOrReject`. Multipart já era coberto via `req.formData()`.
+ * Residual conhecido, não perseguido aqui: parsing manual de `req.url` como
+ * string (sem `.searchParams`) não é detectado — nenhuma function do repo
+ * usa esse padrão hoje (confirmado por grep em 2026-08-21).
  *
  * Rodar: deno test --allow-net --allow-env --allow-read supabase/functions/_shared/__tests__/contract-coverage.test.ts
  */
@@ -29,14 +37,9 @@ const ALLOWLIST: Record<string, string> = {
   // cobertura (validação Claude C3 2026-08-04).
   "main": "proxy — não pode consumir stream; gate só para req sem body (no-op)",
   "mcp": "proxy JSON-RPC — não pode consumir stream; gate só para req sem body (no-op)",
-  // 2026-08-18 (rodada 9): functions novas de outros workstreams leem body
-  // sem parseOrReject ainda. Gate pendente no workstream dono; allowlist
-  // temporária com justificativa (mecanismo previsto pelo teste).
-  "download-wa-status-media": "workstream alheio (18/08) — gate pendente; body opaco de status de mídia, validação mínima no handler",
-  "transcribe-audio-internal": "workstream alheio (18/08) — gate pendente; função interna com body de áudio, validação no handler",
-  // (allowlist de método + allowlist de paths + parse JSON) — o body do envelope
-  // é opaco e re-encaminhado à Evolution; adicionar parseOrReject consumiria o
-  // stream sem ganho real de segurança (paths já restritos a 6 verbos).
+  // download-wa-status-media e transcribe-audio-internal: gate ligado em
+  // 2026-08-21 (SEC-2/SEC-3, Bloco 0 do PLANO-100-CONTRATOS-EDGE) — removidas
+  // da allowlist.
 };
 
 function walkDir(dir: URL): string[] {
@@ -66,7 +69,7 @@ Deno.test("cobertura: toda função que lê body invoca o gate de contrato (ou e
     if (fnName.startsWith("_")) continue; // _shared etc.
 
     const src = Deno.readTextFileSync(filePath);
-    const readsBody = /req\.json\(\)|request\.json\(\)|req\.text\(\)|request\.text\(\)|req\.formData\(\)|request\.formData\(\)/.test(src);
+    const readsBody = /req\.json\(\)|request\.json\(\)|req\.text\(\)|request\.text\(\)|req\.formData\(\)|request\.formData\(\)|\.searchParams\b/.test(src);
     if (!readsBody) continue;
 
     total++;
@@ -93,7 +96,22 @@ Deno.test("cobertura: toda função que lê body invoca o gate de contrato (ou e
 
 Deno.test("cobertura: allowlist vazia é consistente (toda exceção tem entrada)", () => {
   // A allowlist deve estar vazia ou com entradas justificadas — nunca crescer sem revisão.
-  // Teto 4 (2026-08-18, rodada 9): +2 entradas temporárias de workstreams alheios
-  // (download-wa-status-media, transcribe-audio-internal) aguardando gate dos donos.
-  assert(Object.keys(ALLOWLIST).length <= 4, "allowlist cresceu demais — revisar antes de aceitar");
+  // Teto reduzido de 4 → 2 em 2026-08-21 (Bloco 0 do PLANO-100-CONTRATOS-EDGE):
+  // as 2 entradas temporárias (download-wa-status-media, transcribe-audio-internal)
+  // ganharam gate real e saíram da allowlist; só main/mcp restam (no-op documentado).
+  //
+  // Etapa 91 (Bloco 8, 2026-08-22): o plano original propunha reduzir de 2
+  // para 0. Investigado e NÃO recomendado sem teste em infra real: main/mcp
+  // (main/index.ts) usam `EdgeRuntime.userWorkers.create()` +
+  // `worker.fetch(req)` — um binding nativo do runtime self-hosted
+  // (`supabase/edge-runtime`), não um fetch HTTP comum. `Request.clone()`
+  // teoricamente permitiria ler o body pro gate sem consumir o original, mas
+  // não há como validar esse comportamento contra o binding real deste
+  // sandbox (sem container do edge-runtime rodando) — e main é o roteador de
+  // TODA edge function pública (evolution-webhook, whatsapp-cloud-webhook,
+  // gmail-webhook, sicoob-bridge, etc.). Um erro aqui quebraria ingestão de
+  // webhook em produção inteira, não uma função isolada. Piso mantido em 2
+  // até haver uma janela de teste em infra real (VPS/staging) para validar
+  // `.clone()` contra o worker.fetch de verdade.
+  assert(Object.keys(ALLOWLIST).length <= 2, "allowlist cresceu demais — revisar antes de aceitar");
 });

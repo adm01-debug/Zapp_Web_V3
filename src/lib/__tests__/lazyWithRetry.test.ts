@@ -173,6 +173,18 @@ describe('triggerChunkReload — cooldown elapsed (> 30 s since last reload)', (
   });
 });
 
+describe('triggerChunkReload — document navigation in progress', () => {
+  it('does not replace a requested URL when WebKit aborts an in-flight import', async () => {
+    window.dispatchEvent(new Event('beforeunload'));
+
+    expect(triggerChunkReload()).toBe(false);
+    expect(reloadSpy).not.toHaveBeenCalled();
+
+    // Release the marker as a browser would when beforeunload is cancelled.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+});
+
 describe('triggerChunkReload — invalid stored timestamps (guard table)', () => {
   it('treats "CORRUPTED" (NaN) as 0 and triggers reload', () => {
     sessionStorage.setItem(CHUNK_RELOAD_SESSION_KEY, 'CORRUPTED');

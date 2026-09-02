@@ -3,7 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, AlertTriangle, MessageSquare, RefreshCw } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ToneSelector } from './ai-tools/ToneSelector';
 import { AIResponseCard } from './ai-tools/AIResponseCard';

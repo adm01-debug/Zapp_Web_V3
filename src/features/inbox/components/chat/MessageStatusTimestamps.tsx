@@ -94,7 +94,18 @@ export const MessageStatusTimestamps = memo(function MessageStatusTimestamps({
     .map((s) => ({ stage: s, value: stages[s], label: fmt(stages[s]) }))
     .filter((e) => !!e.label);
 
-  if (entries.length === 0) return null;
+  if (entries.length === 0) {
+    // E20 A11: placeholder layout-estável em vez de null (evita reflow)
+    return (
+      <span
+        className={cn('inline-flex text-[9px] tabular-nums leading-none text-muted-foreground/40', className)}
+        data-testid="message-status-timestamps"
+        aria-hidden={true}
+      >
+        —
+      </span>
+    );
+  }
 
   return (
     <span

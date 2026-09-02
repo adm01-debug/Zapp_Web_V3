@@ -1,4 +1,4 @@
-import { handleCors, errorResponse, jsonResponse, Logger } from "../_shared/validation.ts";
+import { handleCors, errorEnvelope, jsonResponse, Logger, readJsonBodyOrEmpty } from "../_shared/validation.ts";
 import { requireServiceRoleOrCron } from "../_shared/auth.ts";
 import { createZappAdminClient } from "../_shared/db-client.ts";
 import { parseOrReject } from "../_shared/contract-kit.ts";
@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   if (denied) return denied;
 
   // Contrato cleanup-storage-orphans@v1 (G4): cron/GET sem body → {} aceito.
-  const parsed = parseOrReject('cleanup-storage-orphans', CONTRACT_SCHEMAS['cleanup-storage-orphans'], req, await req.json().catch(() => ({})), {
+  const parsed = parseOrReject('cleanup-storage-orphans', CONTRACT_SCHEMAS['cleanup-storage-orphans'], req, await readJsonBodyOrEmpty(req), {
     extraHeaders: getCorsHeaders(req),
   });
   if (parsed.ok === false) return parsed.response;
@@ -166,6 +166,6 @@ Deno.serve(async (req) => {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     log.error("Erro fatal na limpeza", { error: msg });
-    return errorResponse("Internal server error", 500, req);
+    return errorEnvelope('internal_error', "Internal server error", 500, req);
   }
 });

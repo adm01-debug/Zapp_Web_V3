@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/features/auth';
 
 const SIGNATURE_ENABLED_KEY = 'chat_signature_enabled';
 
 /** Manages the agent's outbound message signature (fetched from profiles) and a localStorage toggle that prepends it to sent messages. */
 export function useMessageSignature() {
+  const { user } = useAuth();
   const [signatureEnabled, setSignatureEnabled] = useState(() => {
     try {
       return localStorage.getItem(SIGNATURE_ENABLED_KEY) !== 'false';
@@ -17,11 +19,9 @@ export function useMessageSignature() {
   const mountedRef = useMountedRef();
 
   useEffect(() => {
+    if (!user || !mountedRef.current) return;
     const fetchName = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user || !mountedRef.current) return;
+      if (!mountedRef.current) return;
       const { data: profile } = await supabase
         .from('profiles')
         .select('name, job_title')
@@ -34,9 +34,8 @@ export function useMessageSignature() {
         setAgentSignature(sig);
       }
     };
-    fetchName();
-    // Intentionally runs once on mount — user identity does not change within a component lifetime.
-  }, [mountedRef]);
+    void fetchName();
+  }, [user, mountedRef]);
 
   const toggleSignature = useCallback(() => {
     setSignatureEnabled((prev) => {

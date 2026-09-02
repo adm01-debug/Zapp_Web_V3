@@ -1,14 +1,8 @@
-import type { Variants, Transition } from 'framer-motion';
+import type { Variants, Transition } from '@/components/ui/motion';
 
 /** Transition Variant Name component for the transitions section. */
 export type TransitionVariantName =
-  | 'fade'
-  | 'slide-x'
-  | 'slide-y'
-  | 'zoom'
-  | 'flip-x'
-  | 'flip-y'
-  | 'parallax';
+  'fade' | 'slide-x' | 'slide-y' | 'zoom' | 'flip-x' | 'flip-y' | 'parallax';
 
 /** Transition Direction component for the transitions section. */
 export type TransitionDirection = 'left' | 'right' | 'up' | 'down';
@@ -37,7 +31,7 @@ function signY(direction: TransitionDirection = 'up'): number {
 /** build Variants component for the transitions section. */
 export function buildVariants(
   name: TransitionVariantName,
-  overrides: TransitionOverrides = {},
+  overrides: TransitionOverrides = {}
 ): { variants: Variants; transition: Transition } {
   const {
     duration = DEFAULT_DURATION,

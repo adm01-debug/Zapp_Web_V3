@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, RefreshCw, AlertTriangle, Check, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { ToneSelector } from './ai-tools/ToneSelector';
 import { PeriodFilterSelector } from './ai-tools/PeriodFilterSelector';
 import { useObjectionDetector } from '@/hooks/useObjectionDetector';

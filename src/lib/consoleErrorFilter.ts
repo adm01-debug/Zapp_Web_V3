@@ -28,12 +28,18 @@ const BENIGN_MESSAGE_SUBSTRINGS: readonly string[] = [
   'chrome-extension://',
   'moz-extension://',
   'non-error promise rejection',
+  'slot acquire aborted', // semáforo interno descarta slot de unmount
+  'queue saturated', // fila cheia
+  'queue wait timed out', // timeout na fila
 ];
 
 const BENIGN_ERROR_NAMES: readonly string[] = [
   'ResizeObserver',
   'TimeoutError',
   'InvalidStateError',
+  'AbortError', // TanStack unmount abort — ruído esperado de navegação
+  'SupabaseQueueSaturatedError', // fila cheia durante pico de carga — não é bug
+  'SupabaseQueueTimeoutError', // timeout na fila — mesmo motivo
 ];
 
 function extractName(error: unknown): string {

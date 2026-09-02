@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { ListChecks, ArrowRight, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -13,7 +13,13 @@ interface KeyPointsTabProps {
 }
 
 /** Key Points Tab component for the ai tools section. */
-export function KeyPointsTab({ analysis, ttsButtonClass, isTtsLoading, isTtsPlaying, onPlayText }: KeyPointsTabProps) {
+export function KeyPointsTab({
+  analysis,
+  ttsButtonClass,
+  isTtsLoading,
+  isTtsPlaying,
+  onPlayText,
+}: KeyPointsTabProps) {
   return (
     <div className="space-y-4">
       {analysis.keyPoints.length > 0 && (
@@ -25,17 +31,39 @@ export function KeyPointsTab({ analysis, ttsButtonClass, isTtsLoading, isTtsPlay
             </h4>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className={ttsButtonClass} onClick={() => onPlayText(analysis.keyPoints.join('. '))} disabled={isTtsLoading} aria-label="Ouvir pontos-chave">
-                  {isTtsLoading ? <Loader2 className="h-3.5 w-3.5" /> : isTtsPlaying ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={ttsButtonClass}
+                  onClick={() => onPlayText(analysis.keyPoints.join('. '))}
+                  disabled={isTtsLoading}
+                  aria-label="Ouvir pontos-chave"
+                >
+                  {isTtsLoading ? (
+                    <Loader2 className="h-3.5 w-3.5" />
+                  ) : isTtsPlaying ? (
+                    <VolumeX className="h-3.5 w-3.5" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top"><p>{isTtsLoading ? 'Carregando...' : isTtsPlaying ? 'Parar' : 'Ouvir pontos-chave'}</p></TooltipContent>
+              <TooltipContent side="top">
+                <p>
+                  {isTtsLoading ? 'Carregando...' : isTtsPlaying ? 'Parar' : 'Ouvir pontos-chave'}
+                </p>
+              </TooltipContent>
             </Tooltip>
           </div>
           <ul className="space-y-2">
             {analysis.keyPoints.map((point, index) => (
-              <motion.li key={`${point}-${index}`} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }}
-                className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/30 p-2.5 text-sm">
+              <motion.li
+                key={`${point}-${index}`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/30 p-2.5 text-sm"
+              >
                 <span className="mt-0.5 shrink-0 text-xs font-bold text-primary">{index + 1}.</span>
                 <span className="leading-relaxed">{point}</span>
               </motion.li>
@@ -53,17 +81,43 @@ export function KeyPointsTab({ analysis, ttsButtonClass, isTtsLoading, isTtsPlay
             </h4>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className={ttsButtonClass} onClick={() => onPlayText(analysis.nextSteps?.join('. ') ?? '')} disabled={isTtsLoading} aria-label="Ouvir próximos passos">
-                  {isTtsLoading ? <Loader2 className="h-3.5 w-3.5" /> : isTtsPlaying ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={ttsButtonClass}
+                  onClick={() => onPlayText(analysis.nextSteps?.join('. ') ?? '')}
+                  disabled={isTtsLoading}
+                  aria-label="Ouvir próximos passos"
+                >
+                  {isTtsLoading ? (
+                    <Loader2 className="h-3.5 w-3.5" />
+                  ) : isTtsPlaying ? (
+                    <VolumeX className="h-3.5 w-3.5" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top"><p>{isTtsLoading ? 'Carregando...' : isTtsPlaying ? 'Parar' : 'Ouvir próximos passos'}</p></TooltipContent>
+              <TooltipContent side="top">
+                <p>
+                  {isTtsLoading
+                    ? 'Carregando...'
+                    : isTtsPlaying
+                      ? 'Parar'
+                      : 'Ouvir próximos passos'}
+                </p>
+              </TooltipContent>
             </Tooltip>
           </div>
           <ul className="space-y-2">
             {analysis.nextSteps.map((step, index) => (
-              <motion.li key={`${step}-${index}`} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }}
-                className="flex items-start gap-2 rounded-xl border border-primary/10 bg-primary/5 p-2.5 text-sm">
+              <motion.li
+                key={`${step}-${index}`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="flex items-start gap-2 rounded-xl border border-primary/10 bg-primary/5 p-2.5 text-sm"
+              >
                 <span className="mt-0.5 shrink-0 text-primary">→</span>
                 <span className="leading-relaxed">{step}</span>
               </motion.li>

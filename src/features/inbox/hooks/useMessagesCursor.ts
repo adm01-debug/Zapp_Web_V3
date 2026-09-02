@@ -20,12 +20,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useMountedRef } from '@/hooks/useMountedRef';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, withSupabaseHighPrioritySignal } from '@/integrations/supabase/client';
 import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import type { EvolutionMessage, EvolutionMessageLite } from '@/types/evolutionExternal';
 import { toEvolutionMessageLite } from '@/types/evolutionExternal';
 import { getLogger } from '@/lib/logger';
 import { DEFAULT_WHATSAPP_INSTANCE } from '@/lib/constants/whatsappInstances';
+import { isAbortLikeError } from '@/lib/retry';
 
 const log = getLogger('useMessagesCursor');
 
@@ -123,7 +124,11 @@ export function useMessagesCursor({
       // diretamente em todas as versoes.
       const withSignal = builder.abortSignal?.(controller.signal) ?? builder;
 
-      const { data, error: rpcError } = (await withSignal) as { data: unknown; error: unknown };
+      const execute = async () => (await withSignal) as { data: unknown; error: unknown };
+      const { data, error: rpcError } =
+        beforeDate === null
+          ? await withSupabaseHighPrioritySignal(controller.signal, execute)
+          : await execute();
       if (controller.signal.aborted) {
         const e = new Error('Aborted');
         e.name = 'AbortError';
@@ -159,7 +164,7 @@ export function useMessagesCursor({
       setHasMoreOlder(rows.length === pageSize);
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };
-      if (e?.name === 'AbortError') return;
+      if (isAbortLikeError(e)) return;
       log.error('first page fetch failed', e);
       if (mountedRef.current) setError(e?.message ?? 'Failed to load messages');
     } finally {
@@ -205,7 +210,7 @@ export function useMessagesCursor({
       setHasMoreOlder(rows.length === pageSize);
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };
-      if (e?.name === 'AbortError') return;
+      if (isAbortLikeError(e)) return;
       log.error('loadOlder failed', e);
       if (mountedRef.current) setError(e?.message ?? 'Failed to load older messages');
     } finally {
@@ -299,7 +304,12 @@ export function useMessagesCursor({
         if (status === 'SUBSCRIBED') {
           lastConnectedAtMs = Date.now();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          void logChannelError(log, '[useMessagesCursor] channel subscription status:', lastConnectedAtMs, status);
+          void logChannelError(
+            log,
+            '[useMessagesCursor] channel subscription status:',
+            lastConnectedAtMs,
+            status
+          );
         }
       });
 

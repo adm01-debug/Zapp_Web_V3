@@ -23,6 +23,20 @@ O banco de produção (Supabase self-hosted `supabase.atomicabr.com.br`) é a **
 | `20260819…_reconcile_repo_db_backfill.sql` | **Reconciliação repo×DB**: objetos órfãos VIVOS recuperados do snapshot (corpo = o que já roda; idempotente; registrada como no-op). |
 | `__tests__/` | Testes de migration (Deno: `deno test --allow-read supabase/migrations/__tests__/`). |
 
+## Guard FE↔BE (`check-fe-be-sync.sh`)
+
+O checker FE↔BE da camada de banco usa **duas** fontes locais de definição:
+
+1. `supabase/migrations/` — fila viva / histórico versionado no repo.
+2. `scripts/decouple/snapshots/zapp_schema_snapshot.sql` — snapshot canônico do
+   schema `zapp`, para objetos VIVOS cujo `CREATE` saiu da fila viva durante o
+   cleanup de migrations.
+
+Isso evita um falso positivo comum: confundir “o `CREATE` não está mais na fila
+viva” com “o objeto não existe em produção”. Arquivos em
+`docs/history/migrations-archive/` continuam sendo histórico humano; não entram
+como fonte executável do guard.
+
 **BASELINE do aplicador: `20260817000000`** — arquivos com versão menor NUNCA são reaplicados. Versionamento: `^[0-9]{14}_[A-Za-z0-9_-]+\.sql` (14 dígitos `YYYYMMDDHHMMSS` + `_` + nome). Fora desse padrão, o aplicador falha o job.
 
 ## Como o aplicador decide pendências

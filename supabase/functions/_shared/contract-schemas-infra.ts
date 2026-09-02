@@ -15,7 +15,7 @@
  *  - GET/cron sem body (17 funções): `EmptyStrictV1Schema` (body opcional).
  */
 import { z } from "https://esm.sh/zod@3.23.8";
-import { RateLimitAlertSchema } from "./schemas.ts";
+import { RateLimitAlertSchema, phoneOnlyField, VoiceChangerV1Schema } from "./schemas.ts";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -142,7 +142,10 @@ export const ContactMediaV1Schema = z.object({
  * `const phoneRaw = body?.phone;` — phone string obrigatória (dígitos).
  */
 export const FetchWhatsappAvatarV1Schema = z.object({
-  phone: z.string().min(1).max(32),
+  // Bloco 4 (2026-08-21): min(1) aceitava qualquer string; campo é
+  // documentado como "dígitos" no comentário acima — phoneOnlyField valida
+  // formato sem transformar (index.ts lê phoneRaw como veio).
+  phone: phoneOnlyField({ min: 1, max: 32 }),
 }).strict();
 
 // ─── Segurança / upload ──────────────────────────────────────────────────────
@@ -185,13 +188,20 @@ export const SecureUploadV1Schema = z.object({
 }).strict();
 
 /**
- * voice-changer@v1 — MULTIPART (ou JSON). index.ts, branch multipart:
- * `formData.get('audio')` (Blob/File), `voice_preset` (string, default
- * 'grave'), `task_id` (string|null) e `authorized` ('true'/'false' como
- * string no multipart; boolean no branch JSON). Schema multipart.
- * NOTA: edge-contract-schemas.ts registra 'voice-changer' com o schema JSON
- * (VoiceChangerV1Schema em schemas.ts: { task_id?, authorized? }) — este
- * cobre o fluxo multipart; reconciliar na consolidação.
+ * voice-changer@v1 — variante MULTIPART (canal público da UI). index.ts,
+ * branch multipart/form-data: `formData.get('audio')` (File obrigatório),
+ * `voice_preset` (string, default 'grave'), `task_id` (string|null) e
+ * `authorized` ('true'/'false' como string no multipart; boolean no JSON).
+ *
+ * Etapa 34 (PLANO-100, 2026-08-25) — reconciliação registro×handler: o
+ * contrato voice-changer@v1 tem DUAS variantes por content-type. O registro
+ * canônico (CONTRACT_SCHEMAS['voice-changer']) aponta ESTA (multipart), e a
+ * variante JSON (fila/queue) vive no VoiceChangerQueueContractMap logo
+ * abaixo — exportado DAQUI e importado pelo handler (nunca mais montado
+ * inline no index.ts). NÃO virou contrato 'voice-changer-queue' à parte:
+ * a Invariante 1b (contract-registry-integrity) exige 1 entrada em CONTRACTS
+ * para cada entrada em CONTRACT_SCHEMAS, e a variante não tem diretório de
+ * function próprio (é o mesmo handler, mesmo contrato, content-type distinto).
  */
 export const VoiceChangerMultipartV1Schema = z.object({
   audio: z.custom<File>((v) => v instanceof File, {
@@ -201,6 +211,25 @@ export const VoiceChangerMultipartV1Schema = z.object({
   task_id: z.string().max(100).optional().nullable(),
   authorized: z.union([z.boolean(), z.string()]).optional(),
 }).strict();
+
+/**
+ * voice-changer@v1 — variante JSON (fila/queue). Definição física permanece
+ * em schemas.ts (VoiceChangerV1Schema: { task_id?, authorized? }, consumido
+ * também por contract-schemas-ai.ts); este é o re-export CANÔNICO do
+ * contrato, ao lado da variante multipart (Etapa 34, 2026-08-25).
+ */
+export { VoiceChangerV1Schema };
+
+/**
+ * Version-map canônico da variante JSON de voice-changer@v1 — exerce para o
+ * ramo application/json do handler o mesmo papel que
+ * CONTRACT_SCHEMAS['voice-changer'] exerce para o ramo multipart. O handler
+ * importa ESTE map para o parseOrReject (nada de literal inline no index.ts)
+ * e o registro legado (EdgeFunctionContractSchemas['voice-changer'].v1)
+ * referencia o mesmo schema — igualdade de referências travada em
+ * voice-changer/__tests__/contract.test.ts.
+ */
+export const VoiceChangerQueueContractMap = { v1: VoiceChangerV1Schema } as const;
 
 // ─── Alertas / SLA ───────────────────────────────────────────────────────────
 
@@ -219,7 +248,8 @@ export const SendRateLimitAlertV1Schema = RateLimitAlertSchema;
  * (endpoint interno).
  */
 export const SlaAlertForwardV1Schema = z.object({
-  contact_id: z.string().min(1),
+  // Bloco 4 (2026-08-21): contact_id é FK para contacts.id (UUID).
+  contact_id: z.string().uuid("contact_id deve ser um UUID válido"),
   contact_name: z.string().min(1),
   kind: z.enum(["first_response", "resolution", "delivery_delay"]),
   severity: z.enum(["warning", "breached"]),
@@ -261,8 +291,9 @@ export const ProviderRouterV1Schema = z.object({
 
 /**
  * recover-corrupted-audios@v1 — POST interno (requireServiceRoleOrCron).
- * index.ts: `const { batch_size = 20, offset = 0, dry_run = false } =
- * await req.json().catch(() => ({}));` — body opcional.
+ * index.ts lê o body com readJsonBodyOrEmpty() (_shared/validation.ts):
+ * corpo vazio → {} aceito (todos os campos opcionais); corpo malformado
+ * não-vazio → 422 invalid_json. — body opcional.
  */
 export const RecoverCorruptedAudiosV1Schema = z.object({
   batch_size: z.number().int().min(1).optional(),
@@ -276,6 +307,11 @@ export const RecoverCorruptedAudiosV1Schema = z.object({
  * PERMISSIVO: endpoint publicado como servidor MCP HTTP (JSON-RPC 2.0 —
  * envelopes reais têm `jsonrpc`, `id`, `params`). `.strict()` rejeitaria
  * todo request legítimo com 422 (validação Claude, B1 2026-08-04).
+ *
+ * PLANO-100 etapa 50 (NO-GO documentado, 2026-08-25): NÃO aplicar .strict()
+ * — protocolo MCP/JSON-RPC de chamadores EXTERNOS evolve campos por design
+ * (grupo D do ESTADO.md); endurecer o envelope aqui quebraria
+ * clientes MCP legítimos em futuras revisões do protocolo.
  */
 export const McpServerV1Schema = z.object({
   method: z.string().max(100).optional(),
@@ -285,6 +321,11 @@ export const McpServerV1Schema = z.object({
  * mcp-query@v1 — POST interno (header x-mcp-secret). index.ts consome
  * { sql: string, limit?: number (default 100) }. Gate adicionado 2026-08-07
  * (nasceu sem contrato — quebrava o contract-coverage; ver PR #957 follow-up).
+ *
+ * PLANO-100 etapa 50 (NO-GO documentado, 2026-08-25): permanece .passthrough()
+ * pela mesma razão do mcp-server — envelopes JSON-RPC de clientes MCP
+ * externos (grupo D) carregam campos de protocolo (`jsonrpc`, `id`, `params`)
+ * que o gate não deve recusar.
  */
 export const McpQueryV1Schema = z.object({
   sql: z.string().trim().min(1, "sql é obrigatório").max(50_000),
@@ -297,8 +338,11 @@ export const McpQueryV1Schema = z.object({
  * (array não-vazio ≤1000).
  */
 export const TalkxAddRecipientsV1Schema = z.object({
-  campaignId: z.string().min(1).max(100),
-  contactIds: z.array(z.string()).min(1).max(1000),
+  // Bloco 4 (2026-08-21): campaignId/contactIds são FKs (talkx_campaigns.id,
+  // contacts.id) — confirmado via .eq("id", campaignId)/.in("id", contactIds)
+  // no handler. Até 1000 IDs sem formato antes; agora cada um validado.
+  campaignId: z.string().uuid("campaignId deve ser um UUID válido"),
+  contactIds: z.array(z.string().uuid("contactIds deve conter apenas UUIDs")).min(1).max(1000),
 }).strict();
 
 /**
@@ -317,9 +361,11 @@ export const TalkxControlV1Schema = z.object({
  * (string|null), queue_id? (string|null) e apply? (boolean).
  */
 export const TicketRouterV1Schema = z.object({
-  contact_id: z.string().min(1).max(100),
-  channel_connection_id: z.string().max(100).optional().nullable(),
-  queue_id: z.string().max(100).optional().nullable(),
+  // Bloco 4 (2026-08-21): as 3 são FKs (contacts.id, channel_connections.id,
+  // queues.id) — min/max sem formato aceitava qualquer string.
+  contact_id: z.string().uuid("contact_id deve ser um UUID válido"),
+  channel_connection_id: z.string().uuid("channel_connection_id deve ser um UUID válido").optional().nullable(),
+  queue_id: z.string().uuid("queue_id deve ser um UUID válido").optional().nullable(),
   apply: z.boolean().optional(),
 }).strict();
 

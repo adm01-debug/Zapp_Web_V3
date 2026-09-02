@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { Music, Tag, X, Check } from 'lucide-react';
 import { type PendingUpload } from '@/hooks/useAudioManagement';
 import { CATEGORY_LABELS } from './audioMemeConstants';
@@ -43,7 +43,8 @@ export function AudioMemeUploadPreview({
         <span className="shrink-0 text-[10px] text-muted-foreground">Categoria:</span>
         <AudioMemeCategorySelector value={category} onChange={setCategory} size="sm" />
         {pending.aiCategory !== 'outros' && category !== pending.aiCategory && (
-          <button type="button"
+          <button
+            type="button"
             onClick={() => setCategory(pending.aiCategory)}
             className="shrink-0 text-[9px] text-primary hover:underline"
           >

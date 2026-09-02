@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { Loader2, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +27,7 @@ export function MobilePullToRefreshIndicator({
           className="flex items-center justify-center overflow-hidden bg-background/50"
         >
           {isRefreshing ? (
-            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
           ) : (
             <motion.div
               animate={{ rotate: pullProgress >= 1 ? 180 : 0 }}
@@ -35,7 +35,7 @@ export function MobilePullToRefreshIndicator({
             >
               <ArrowDown
                 className={cn(
-                  'w-5 h-5 transition-colors',
+                  'h-5 w-5 transition-colors',
                   pullProgress >= 1 ? 'text-primary' : 'text-muted-foreground'
                 )}
               />

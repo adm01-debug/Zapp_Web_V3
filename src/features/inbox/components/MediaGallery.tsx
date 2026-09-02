@@ -24,7 +24,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { MediaItem, getMediaType, getFilename } from './media-gallery/mediaUtils';
 import { MediaCard } from './media-gallery/MediaCard';
 import { MediaPreviewDialog } from './media-gallery/MediaPreviewDialog';
@@ -121,16 +121,27 @@ export function MediaGallery({ contactId, open, onOpenChange }: MediaGalleryProp
   // ADR-004: batch signing para buckets privados (whatsapp-media)
   const itemsForBatch = useMemo(
     () =>
-      (messages || []).map((m: { id: string; media_bucket: string | null; media_path: string | null; media_url: string | null; media_status: string | null }) => ({
-        id: m.id,
-        media_bucket: m.media_bucket ?? null,
-        media_path: m.media_path ?? null,
-        media_url: m.media_url ?? null,
-        media_status: m.media_status ?? null,
-      })),
+      (messages || []).map(
+        (m: {
+          id: string;
+          media_bucket: string | null;
+          media_path: string | null;
+          media_url: string | null;
+          media_status: string | null;
+        }) => ({
+          id: m.id,
+          media_bucket: m.media_bucket ?? null,
+          media_path: m.media_path ?? null,
+          media_url: m.media_url ?? null,
+          media_status: m.media_status ?? null,
+        })
+      ),
     [messages]
   );
-  const { signedUrls } = useSignedMediaUrlBatch(itemsForBatch, supabase as unknown as Parameters<typeof useSignedMediaUrlBatch>[1]);
+  const { signedUrls } = useSignedMediaUrlBatch(
+    itemsForBatch,
+    supabase as unknown as Parameters<typeof useSignedMediaUrlBatch>[1]
+  );
 
   const mediaItems = useMemo((): MediaItem[] => {
     if (!messages) return [];

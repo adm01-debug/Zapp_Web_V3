@@ -1,0 +1,118 @@
+name: DB Guard
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - ".github/workflows/db-guard.yml"
+      - "scripts/generate-schema-catalog.mjs"
+      - "scripts/compare-schema-catalog.mjs"
+      - "scripts/lib/__tests__/compare-schema-catalog.test.mjs"
+      - "scripts/check-mcp-exec-acl.mjs"
+      - "src/integrations/supabase/types.ts"
+      - "supabase/schema-catalog.json"
+      - "supabase/schema-catalog-external-objects.json"
+      - "supabase/rls-catalog.json"
+      - "scripts/audit-rls-coverage.mjs"
+      - "supabase/migrations/**"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - ".github/workflows/db-guard.yml"
+      - "scripts/generate-schema-catalog.mjs"
+      - "scripts/compare-schema-catalog.mjs"
+      - "scripts/lib/__tests__/compare-schema-catalog.test.mjs"
+      - "scripts/check-mcp-exec-acl.mjs"
+      - "src/integrations/supabase/types.ts"
+      - "supabase/schema-catalog.json"
+      - "supabase/schema-catalog-external-objects.json"
+      - "supabase/rls-catalog.json"
+      - "scripts/audit-rls-coverage.mjs"
+      - "supabase/migrations/**"
+  workflow_dispatch:
+
+concurrency:
+  group: db-guard-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event.pull_request.number == '' }}
+
+jobs:
+  catalog-fresh:
+    name: Catalog fresh + ACL RPC MCP
+    runs-on: [Linux, X64, vps-zapp]
+    env:
+      SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
+      META_URL: ${{ secrets.ZAPP_META_URL }}
+      META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Testar comparação e escopo dos objetos externos
+        run: node --test scripts/lib/__tests__/compare-schema-catalog.test.mjs
+
+      - name: Catálogo local está determinístico
+        run: node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --check
+
+      - name: Contrato RLS canônico + deltas pendentes
+        run: node scripts/audit-rls-coverage.mjs --check --require-canonical
+
+      - name: Gerar catálogo vivo via postgres-meta
+        if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
+        run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json
+
+      - name: Comparar contrato do catálogo commitado com o catálogo vivo
+        if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
+        run: >-
+          node scripts/compare-schema-catalog.mjs
+          --left supabase/schema-catalog.json
+          --right reports/schema-catalog.live.json
+          --ignore-source
+          --external-objects-file supabase/schema-catalog-external-objects.json
+
+      - name: Avisar quando a checagem viva não executar
+        if: ${{ env.META_URL == '' || env.META_TOKEN == '' }}
+        run: |
+          echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. Só a consistência local do schema-catalog foi validada nesta run."
+
+      - name: Assertion ACL RPC MCP
+        run: |
+          # Mesmo contrato dos outros guards DB do repositório: sem secret,
+          # sem psql ou sem conectividade -> avisa e passa. Com conexão de pé,
+          # a assertion ACL é bloqueante de verdade.
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::notice title=ACL RPC MCP nao verificada::secret SUPABASE_DB_URL ausente. A assertion foi pulada nesta run."
+            exit 0
+          fi
+
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client || true
+          fi
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "::warning title=ACL RPC MCP nao verificada::psql indisponivel no runner. Assertion nao verificada."
+            exit 0
+          fi
+
+          if ! psql "$SUPABASE_DB_URL" -Atc 'SELECT 1' >/dev/null 2>&1; then
+            echo "::warning title=ACL RPC MCP nao verificada::sem conectividade com o banco a partir do runner. Assertion nao verificada."
+            exit 0
+          fi
+
+          echo "Conectividade OK — rodando a assertion ACL em modo bloqueante."
+          node scripts/check-mcp-exec-acl.mjs
+
+      - name: Publicar catálogo vivo
+        if: always() && env.META_URL != '' && env.META_TOKEN != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: schema-catalog-live
+          path: reports/schema-catalog.live.json
+          if-no-files-found: ignore
+          retention-days: 14

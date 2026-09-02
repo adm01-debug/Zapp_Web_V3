@@ -24,7 +24,7 @@ import {
   ExternalLink,
   RefreshCw,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from '@/components/ui/motion';
 import { useExternalCatalog, ExternalProduct } from '@/hooks/useExternalApiManagement';
 import { ExternalProductCard } from './ExternalProductCard';
 import { SendProductDialog } from './SendProductDialog';

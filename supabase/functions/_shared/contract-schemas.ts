@@ -35,6 +35,10 @@ import {
   AiProxyV1Schema,
   AiTranscribeAudioV1Schema,
   AiAutoTagSchema,
+  isSafeHttpsUrl,
+  isSafeHost,
+  phoneOrJidField,
+  phoneOnlyField,
 } from "./schemas.ts";
 /** ai-auto-tag@v1 — schema REAL (era placeholder). Proxy que injeta action:'auto_tag'
  * e repassa ao ai-router; validação do payload do cliente = AiAutoTagSchema estrito. */
@@ -170,10 +174,22 @@ export const InstancePauseControlV1Schema = z.object({
   minutes: z.number().int().min(1).max(1440).optional(),
 }).passthrough();
 
-/** contacts-import@v1 — rows[] obrigatório; workspace_id default 'wpp2'. */
+/**
+ * contacts-import@v1 — rows[] obrigatório; workspace_id default 'wpp2'.
+ * Bloco 4 (2026-08-21): apesar do nome, workspace_id é o NOME DA INSTÂNCIA
+ * WhatsApp (confirmado: index.ts usa como `rawInstanceName`), não um UUID.
+ * O regex `/^[a-zA-Z0-9_-]{1,64}$/` vivia num bloco 400 manual pós-gate
+ * ("Validate instance name to prevent URL path injection") — movido para
+ * o schema; o bloco manual foi removido.
+ * max(10_000) → max(50_000): o schema era mais restritivo que o handler,
+ * que sempre documentou/checou manualmente até 50k ("Bulk CSV import — 50k
+ * rows" no cabeçalho do index.ts) — como o gate roda ANTES do check manual,
+ * o limite de 50k nunca era alcançado (10.001-50.000 linhas eram rejeitadas
+ * cedo demais pelo próprio contrato).
+ */
 export const ContactsImportV1Schema = z.object({
-  rows: z.array(z.record(z.unknown())).min(1, "rows vazio").max(10_000),
-  workspace_id: z.string().min(1).max(100).optional(),
+  rows: z.array(z.record(z.unknown())).min(1, "rows vazio").max(50_000),
+  workspace_id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, "workspace_id inválido").optional(),
 }).passthrough();
 
 /** voice-copilot-action@v1 — { action, params }. */
@@ -253,8 +269,11 @@ export const WhatsappCloudApiV1Schema = z.object({
   action: z.string().max(50).nullish(),
   instanceName: z.string().max(100).nullish(),
   instance: z.string().max(100).nullish(),
-  number: z.string().max(30).nullish(),
-  to: z.string().max(30).nullish(),
+  // Bloco 4 (2026-08-21): aceitava qualquer string ≤30 chars; number/to
+  // (aliases) recebem telefone OU JID — phoneOrJidField reprova lixo sem
+  // transformar o valor (mantém nullish: ausente em ações que não enviam).
+  number: phoneOrJidField({ max: 30 }).nullish(),
+  to: phoneOrJidField({ max: 30 }).nullish(),
   text: z.string().max(100_000).nullish(),
   linkPreview: z.boolean().nullish(),
   mediatype: z.string().max(50).nullish(),
@@ -282,10 +301,6 @@ export const GmailTokenRefreshV1Schema = z.object({
   action: z.string().max(50).nullish(),
   accountId: z.string().max(200).nullish(),
 }).passthrough();
-
-
-/** email-health@v1 — GET health status (JWT required); no request body. */
-export const EmailHealthV1Schema = z.object({}).strict();
 
 // ─── Business/infra endpoints (v1 — estritos, derivados do consumo real) ────
 
@@ -326,13 +341,18 @@ export const GmailOauthV1Schema = z.object({
 
 /** Config IMAP/SMTP aninhada (saveCredentials/testConnection). */
 const ImapSmtpConfigV1Schema = z.object({
-  email: z.string().min(1).max(320).optional(),
+  // Bloco 4 (2026-08-21): endereço de login IMAP/SMTP (não header de e-mail
+  // "Nome <endereço>" como zapp-email-inbound-webhook) — .email() é seguro aqui.
+  email: z.string().max(320).email("email inválido").optional(),
   password: z.string().min(1).max(2000).optional(),
   provider: z.enum(["outlook", "yahoo", "gmail", "custom"]).optional(),
-  imap_host: z.string().min(1).max(253).optional(),
+  // SEC-4 (Bloco 0, 2026-08-21): host de rede interna/privada bloqueado —
+  // conecta via socket TCP direto (Deno.connect), risco de SSRF idêntico ao
+  // de uma URL, só que sem scheme pra validar com isSafeHttpsUrl.
+  imap_host: z.string().min(1).max(253).refine(isSafeHost, "imap_host não pode apontar para rede interna/privada").optional(),
   imap_port: z.number().int().min(1).max(65535).optional(),
   imap_use_ssl: z.boolean().optional(),
-  smtp_host: z.string().min(1).max(253).optional(),
+  smtp_host: z.string().min(1).max(253).refine(isSafeHost, "smtp_host não pode apontar para rede interna/privada").optional(),
   smtp_port: z.number().int().min(1).max(65535).optional(),
   smtp_use_tls: z.boolean().optional(),
   username: z.string().max(320).optional(),
@@ -391,9 +411,34 @@ export const ZappEmailInboundWebhookV1Schema = z.object({
   text: z.string().max(2_000_000).optional(),
   html: z.string().max(5_000_000).optional(),
   attachments: z.array(EmailAttachmentV1Schema).max(20).optional(),
-  headers: z.unknown().optional(),
+  // Auditoria de re-verificação (Bloco 4/etapa 49): último z.unknown() bruto
+  // do arquivo. headers de e-mail (Resend) são sempre um objeto — tighten
+  // pra z.record(z.unknown()) rejeita string/number/array óbvios sem exigir
+  // shape fixo (o provider pode adicionar headers novos a qualquer momento).
+  headers: z.record(z.unknown()).optional(),
   date: z.string().max(100).optional(),
-}).passthrough();
+}).passthrough().superRefine((val, ctx) => {
+  // Bloco 2 (etapa 23, 2026-08-21 — fecha D2): regras portadas de
+  // validateMinimalPayload (index.ts), que rodava ANTES do gate — o 422
+  // canônico nunca era atingido, sempre caía num 400 artesanal
+  // {error,details:string[]}. id/from já eram obrigatórios aqui (min(1));
+  // to/subject/text-ou-html só existiam no check manual — consolidados
+  // nesta única fonte de validação.
+  if (
+    !Array.isArray(val.to) || val.to.length === 0 ||
+    !val.to.every((t) => typeof t === "string" && t.trim().length > 0)
+  ) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["to"], message: "to: obrigatório (array de destinatários, não vazio)" });
+  }
+  if (typeof val.subject !== "string" || val.subject.trim().length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["subject"], message: "subject: obrigatório (assunto, string não vazia)" });
+  }
+  const text = typeof val.text === "string" ? val.text.trim() : "";
+  const html = typeof val.html === "string" ? val.html.trim() : "";
+  if (text.length === 0 && html.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["text"], message: "text/html: pelo menos um dos dois é obrigatório (corpo do email)" });
+  }
+});
 
 /** Cron sem body — aceita somente {} (ou nada). Base dos schedulers internos. */
 const EmptyStrictV1Schema = z.object({}).strict();
@@ -420,7 +465,10 @@ export const EvolutionCredentialsWriteV1Schema = z.discriminatedUnion("action", 
   z.object({
     action: z.literal("save"),
     instance_name: z.string().min(1).max(100),
-    api_url: z.string().min(1).max(500),
+    // SEC-4 (Bloco 0, 2026-08-21): api_url persistida e usada em chamadas
+    // futuras — exige https público, bloqueia SSRF pra rede interna/privada.
+    api_url: z.string().url("api_url deve ser uma URL válida").max(500)
+      .refine(isSafeHttpsUrl, "api_url não pode apontar para rede interna/privada"),
     api_key: z.string().min(1).max(500),
     display_name: z.string().max(200).optional().nullable(),
     department: z.string().max(200).optional().nullable(),
@@ -428,7 +476,9 @@ export const EvolutionCredentialsWriteV1Schema = z.discriminatedUnion("action", 
   }).passthrough(),
   z.object({
     action: z.literal("delete"),
-    id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "invalid uuid"),
+    // Bloco 4 (2026-08-21): regex manual equivalente a .uuid() — padronizado
+    // com o resto do arquivo (ex.: zapp-auto-export) para consistência.
+    id: z.string().uuid("id deve ser um UUID válido"),
   }).passthrough(),
 ]);
 
@@ -460,16 +510,45 @@ export const ConnectionHealthCheckV1Schema = z.object({
 }).strict();
 
 /**
+ * SEC-4 em 2 camadas (decisão simulada 2026-08-25; direção ajustada pela
+ * coordenação na execução) — divisão de responsabilidades do baseUrl:
+ *   - SINTAXE (esta camada, no schema): duas formas aceitas —
+ *     (a) URL COM esquema (`\w+://`): delega ao z.string().url() do Zod;
+ *     (b) bare hostname SEM esquema: `/^[a-z0-9.-]+(:\d+)?$/i` apenas —
+ *         sem espaços, sem path, sem query (o handler prefixa https://).
+ *     Texto livre sem estrutura de URL ("not a url at all", "foo bar") cai
+ *     no gate 422. Whitespace-only passa: o handler responde 400
+ *     "baseUrl is required" (mensagem melhor que 422 genérico — behavioral B5).
+ *     Nota Zod 3.23.8: z.string().url() usa new URL() e REJEITA host sem
+ *     esquema — por isso o refine de 2 formas em vez de .url() direto.
+ *   - SEGURANÇA (handler): isSafeHttpsUrl (https-only + RFC-1918/SSRF) roda
+ *     no handleConfigure PÓS-normalização — mover para o schema quebraria
+ *     URLs normalizáveis ("n8n.example.com" viraria 422 antes do https://).
+ */
+const n8nBaseUrlSintaxe = (raw: string): boolean => {
+  const t = raw.trim();
+  if (t === "") return true; // behavioral B5: 400 "baseUrl is required" no handler
+  if (/^\w+:\/\//.test(t)) return z.string().url().safeParse(t).success;
+  return /^[a-z0-9.-]+(:\d+)?$/i.test(t);
+};
+
+/**
  * zapp-n8n-sync@v1 — POST interno (requireAdminOrSupervisor). Actions:
  *   - { action: 'status' } → estado real da integração n8n (not_configured
  *     honesto quando não há config em zapp.n8n_config);
  *   - { action: 'configure', baseUrl } → persiste a URL base (enabled
  *     permanece false — contrato desligado; ativação é passo futuro).
  * Estrito: endpoint interno da UI — falhar cedo em payload fora do contrato.
+ * baseUrl: min/max mantidos + gate sintático SEC-4 (ver n8nBaseUrlSintaxe).
  */
 export const ZappN8nSyncV1Schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status") }).strict(),
-  z.object({ action: z.literal("configure"), baseUrl: z.string().min(1).max(2048) }).strict(),
+  z.object({
+    action: z.literal("configure"),
+    baseUrl: z.string().min(1).max(2048).refine(n8nBaseUrlSintaxe, {
+      message: "baseUrl deve ser uma URL http(s) válida ou host sem esquema (host[:porta] — o handler prefixa https://)",
+    }),
+  }).strict(),
 ]);
 
 /** health-check@v1 — probe GET; sem body. */
@@ -561,8 +640,11 @@ export const ElevenLabsTtsV1Schema = z.object({
    action: z.literal("new_message"),
    message_id: z.string().max(200),
    sender_name: z.string().max(200).optional().nullable(),
-   sender_email: z.string().max(320).optional().nullable(),
-   sender_phone: z.string().max(50).optional().nullable(),
+   // Bloco 4 (2026-08-21): campos metadados do webhook externo Sicoob —
+   // formato validado (email/telefone) sem ficar tão estrito a ponto de
+   // dropar payloads reais por variação de formatação de terceiro.
+   sender_email: z.string().max(320).email().optional().nullable(),
+   sender_phone: phoneOnlyField({ min: 1, max: 50 }).optional().nullable(),
    singular_name: z.string().max(200).optional().nullable(),
    singular_id: z.string().max(200).optional().nullable(),
    content: z.string().max(10000),
@@ -600,18 +682,29 @@ export const ElevenLabsTtsV1Schema = z.object({
    }),
  ]);
 
- /** sicoob-bridge-reply@v1 — valida no index.ts. Schema de registro. */
- /**
- * sicoob-bridge-reply@v1 — real. Consumo (SicoobBridgeReplySchema):
- * { contact_id, content, message_id, created_at?, agent_id? }.
- * Ponte externa (dual-mode) → permissivo.
+/**
+ * sicoob-bridge-reply@v1 — Bloco 2/3 (2026-08-21): contact_id/content
+ * eram `.optional()`, mas o handler sempre exigiu os dois (bloco 400
+ * manual: "typeof contact_id !== 'string' || ... || typeof content !==
+ * 'string' || ..."). Agora obrigatórios no schema — o 422 canônico já
+ * reprova; o bloco 400 manual foi removido. message_id/created_at/
+ * agent_id continuam opcionais (agent_id vem do JWT quando ausente).
+ *
+ * Auditoria de re-verificação (Bloco 4/etapa 44): contact_id/agent_id
+ * endurecidos pra .uuid() — confirmado no handler (index.ts) que ambos
+ * são usados em `.eq('id', ...)` contra tabelas com PK UUID (`contacts`,
+ * `profiles`), e agent_id também é atribuído direto de `authed.user.id`
+ * (UUID do Supabase Auth). message_id NÃO virou .uuid(): é só repassado
+ * ao payload Sicoob sem lookup no handler, sem evidência de que seja
+ * sempre um UUID (pode ser um id de mensagem de outro sistema) — min/max
+ * aplicado por precaução, sem apertar o formato sem prova.
  */
 export const SicoobBridgeReplyV1Schema = z.object({
-  contact_id: z.string().optional(),
-  content: z.string().optional(),
-  message_id: z.string().optional(),
+  contact_id: z.string().uuid("contact_id inválido"),
+  content: z.string().min(1, "content é obrigatório"),
+  message_id: z.string().min(1).max(200).optional(),
   created_at: z.string().optional(),
-  agent_id: z.string().optional(),
+  agent_id: z.string().uuid("agent_id inválido").optional(),
 }).passthrough();
 
 /**
@@ -649,7 +742,8 @@ export const SicoobBridgeReplyV2Schema = SicoobBridgeReplyV1Schema.extend({
  export const ZappCrmSyncV1Schema = z.object({
    entity_id: z.string().uuid().optional(),
    entity_data: z.object({
-     phone: z.string().min(1),
+     // Bloco 4 (2026-08-21): min(1) aceitava qualquer string não-vazia.
+     phone: phoneOnlyField({ min: 1, max: 50 }),
      channel: z.string().min(1),
      direction: z.enum(["inbound", "outbound"]),
      assunto: z.string().nullable().optional(),
@@ -670,7 +764,10 @@ export const SicoobBridgeReplyV2Schema = SicoobBridgeReplyV1Schema.extend({
   * campos opcionais. Permissivo (extras passam) — igual ao schema local.
   */
  export const WhatsappCloudSendV1Schema = z.object({
-   to: z.string().min(5),
+   // Bloco 4 (2026-08-21): min(5) aceitava qualquer string curta; `to`
+   // recebe telefone OU JID (handler faz `to.includes('@')`, index.ts:133)
+   // — phoneOrJidField reprova lixo sem quebrar o caminho JID (não transforma).
+   to: phoneOrJidField(),
    type: z.enum([
      "text", "image", "video", "audio", "document", "sticker", "template",
      "reaction", "location", "contacts", "read", "interactive",
@@ -740,52 +837,63 @@ export const SicoobBridgeReplyV2Schema = SicoobBridgeReplyV1Schema.extend({
 
  /** ai-auto-tag@v1 — schema em _shared/schemas.ts. Schema de registro. */
  
- /** elevenlabs-tts-stream@v1 — streaming; body validado no handler. Schema de registro. */
- /**
- * elevenlabs-tts-stream@v1 — real. Consumo: { action?, text, voice_id?,
- * model_id?, speed?, stability?, similarity? }. Externo → permissivo.
+/**
+ * elevenlabs-tts-stream@v1 — Bloco 2/3 (2026-08-21): schema antigo validava
+ * voice_id/model_id (snake_case) e speed/stability/similarity (campos que
+ * o handler nunca leu — voice_settings é hardcoded). O consumo real é
+ * `{ text, voiceId?, modelId?, languageCode?, applyTextNormalization? }`
+ * (camelCase, ver index.ts). A validação de verdade vivia num bloco 400
+ * manual, removido junto com este fix.
  */
 export const ElevenLabsTtsStreamV1Schema = z.object({
-  action: z.string().optional(),
-  text: z.string().optional(),
-  voice_id: z.string().optional(),
-  model_id: z.string().optional(),
-  speed: z.number().optional(),
-  stability: z.number().optional(),
-  similarity: z.number().optional(),
-}).passthrough();
+  text: z.string().min(1, "text é obrigatório").max(10000),
+  voiceId: z.string().min(1).optional(),
+  modelId: z.string().min(1).optional(),
+  languageCode: z.string().max(10).optional(),
+  applyTextNormalization: z.string().max(20).optional(),
+}).strict();
 
- /** elevenlabs-sfx@v1 — valida no index.ts. Schema de registro. */
- /**
- * elevenlabs-sfx@v1 — real. Consumo: { action?, text, duration_seconds?,
- * prompt_influence? }. Externo → permissivo.
+/**
+ * elevenlabs-sfx@v1 — Bloco 2/3 (2026-08-21): schema antigo validava
+ * text/duration_seconds/prompt_influence — esses são campos do body de
+ * SAÍDA (para a API da ElevenLabs), não do body de ENTRADA do cliente. O
+ * consumo real é `{ prompt, duration?, mode? }` (ver index.ts e o único
+ * chamador, src/components/settings/media-library/AIGenerateDialog.tsx).
+ * A validação de verdade vivia num bloco 400 manual, removido junto.
  */
 export const ElevenLabsSfxV1Schema = z.object({
-  action: z.string().optional(),
-  text: z.string().optional(),
-  duration_seconds: z.number().optional(),
-  prompt_influence: z.number().optional(),
-}).passthrough();
+  prompt: z.string().min(1, "prompt é obrigatório").max(2000),
+  duration: z.number().positive().max(300).optional(),
+  mode: z.enum(["sfx", "music"]).optional(),
+}).strict();
 
- /** elevenlabs-dialogue@v1 — valida no index.ts. Schema de registro. */
- /**
- * elevenlabs-dialogue@v1 — real. Consumo: roteado por action (dialogue/tts).
- * Externo (ElevenLabs) → permissivo; campos conhecidos tipados opcionais.
+/**
+ * elevenlabs-dialogue@v1 — Bloco 2/3 (2026-08-21): schema antigo validava
+ * action/text/voice_id/model_id/dialogue (nenhum lido pelo index.ts) — o
+ * consumo real é `{ script: [{voice_id, text}], languageCode? }` (ver
+ * index.ts e o único chamador, src/components/voice/ElevenLabsDialogue.tsx).
+ * A validação de verdade vivia num bloco 400 manual, removido junto com
+ * este fix.
  */
 export const ElevenLabsDialogueV1Schema = z.object({
-  action: z.string().optional(),
-  text: z.string().optional(),
-  voice_id: z.string().optional(),
-  model_id: z.string().optional(),
-  voice_settings: z.unknown().optional(),
-  dialogue: z.unknown().optional(),
-}).passthrough();
+  script: z.array(z.object({
+    voice_id: z.string().min(1),
+    text: z.string().min(1),
+  })).min(1, "script precisa de ao menos 1 fala").max(100, "script aceita no máximo 100 falas"),
+  languageCode: z.string().max(10).optional(),
+}).strict();
 
  /**
   * create-user@v1 — schema REAL (espelha o antigo bodySchema local, agora
   * validado pelo gate). email/password/name obrigatórios com limites;
-  * role default 'agent'; google_services default []. Endpoint interno
-  * (admin) → permissivo em extras, igual ao schema local.
+  * role default 'agent'; google_services default [].
+  *
+  * Auditoria de re-verificação (Bloco 4/etapa 50): endpoint INTERNO (admin)
+  * — endurecido de .passthrough() pra .strict(). Único caller real
+  * (useAdminData.ts handleCreateUser) auditado campo a campo antes da troca;
+  * achado e removido em conjunto um campo morto (`email_email`, duplicata
+  * acidental de `email` que o backend nunca lia — silenciosamente
+  * descartado sob passthrough, teria virado 422 sob strict).
   */
  export const CreateUserV1Schema = z.object({
    email: z.string().email("Email inválido").max(255),
@@ -799,21 +907,21 @@ export const ElevenLabsDialogueV1Schema = z.object({
    gmail_email: z.string().email("Email Gmail inválido").max(255).optional(),
    google_services: z.array(z.enum(["google_sheets", "google_docs", "google_calendar", "google_drive"])).optional().default([]),
    dropbox_email: z.string().email("Email Dropbox inválido").max(255).optional(),
-   }).passthrough();
+   }).strict();
 
-   /** approve-password-reset@v1 — valida no index.ts. Schema de registro. */
- /**
- * approve-password-reset@v1 — real. Consumo: { action (default 'approve'),
- * reset_id?/request_id?, approved?/decision? }. Endpoint interno →
- * permissivo (handler valida os campos).
+/**
+ * approve-password-reset@v1 — Bloco 2/3 (2026-08-21): schema antigo validava
+ * reset_id/request_id (snake_case) e approved/decision — campos que o
+ * handler NUNCA leu; o campo real é `requestId` (camelCase), e a validação
+ * de verdade vivia num bloco 400 manual logo após o gate (`index.ts`,
+ * "Guarda de compatibilidade: schema registrado é permissivo"). Reescrito
+ * para refletir o consumo real do index.ts — o bloco manual foi removido.
  */
 export const ApprovePasswordResetV1Schema = z.object({
-  action: z.string().optional(),
-  reset_id: z.string().optional(),
-  request_id: z.string().optional(),
-  approved: z.boolean().optional(),
-  decision: z.string().optional(),
-}).passthrough();
+  requestId: z.string().min(1, "requestId é obrigatório"),
+  action: z.enum(["approve", "reject"]),
+  rejectionReason: z.string().max(1000).optional(),
+}).strict();
 
 /**
  * request-password-reset@v1 — solicitação PÚBLICA de reset (Etapa 55).
@@ -834,12 +942,19 @@ export const RequestPasswordResetV1Schema = z
   * interno (frontend autenticado). action obrigatório; userId só para
   * admin/supervisor (alvo de outro usuário); sessionIds obrigatório para
   * action=revoke. UUIDs validados no gate.
+  *
+  * Auditoria de re-verificação (Bloco 4/etapa 50): CONTRATO ÓRFÃO — grep
+  * confirma zero handler (`supabase/functions/zapp-auth-sessions/` não
+  * existe) e zero chamador no frontend. Endurecido de .passthrough() pra
+  * .strict() por consistência com os demais endpoints internos (sem risco,
+  * já que não há tráfego real usando este nome hoje — ver ESTADO.md grupo F
+  * / etapa 96 do plano pra decisão de arquivar vs. implementar de fato).
   */
 export const ZappAuthSessionsV1Schema = z.object({
   action: z.enum(["list", "revoke", "revoke_all"]),
   userId: z.string().uuid("userId inválido").optional(),
   sessionIds: z.array(z.string().uuid("sessionId inválido")).min(1).max(100).optional(),
-}).passthrough();
+}).strict();
 
 /**
  * revoke-session@v1 — revogação de sessão ativa (Etapa 56, PR #1179). Endpoint
@@ -852,29 +967,34 @@ export const RevokeSessionV1Schema = z.object({
 }).strict();
 
 /**
- * zapp-auth-invite@v1 — convite de usuário por email (Etapa 57). Endpoint
- * interno admin-only. action default 'invite'; resend regenera link sem
- * recriar usuário. role whitelist explícita (dev fora do convite).
+ * download-wa-status-media@v1 — chamado por pg_cron (30min) p/ baixar mídia
+ * de status antes da URL expirar. Body fiel ao index.ts.
+ * SEC-3 (2026-08-21): status_id compõe o path do storage
+ * (`status/<data>/${status_id}.${ext}`) sem sanitização — path traversal /
+ * poluição de bucket se `status_id` contiver `/` ou `..`. Regex restringe a
+ * caracteres seguros de nome de arquivo (o formato real é um WhatsApp msg id,
+ * alfanumérico).
  */
-export const ZappAuthInviteV1Schema = z.object({
-  action: z.enum(["invite", "resend"]).optional().default("invite"),
-  email: z.string().email("Email inválido").max(255),
-  name: z.string().min(1, "Nome é obrigatório").max(255).optional(),
-  role: z.enum(["admin", "supervisor", "manager", "agent"]).optional(),
-}).passthrough();
-
-/** download-wa-status-media@v1 — chamado por pg_cron (30min) p/ baixar mídia de status antes da URL expirar. Body fiel ao index.ts. */
 export const DownloadWaStatusMediaV1Schema = z.object({
-  status_id: z.string().min(1, "status_id é obrigatório"),
-  participant_jid: z.string().min(1, "participant_jid é obrigatório"),
-  message_id: z.string().min(1, "message_id é obrigatório"),
+  status_id: z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/, "status_id contém caracteres inválidos"),
+  participant_jid: z.string().min(1, "participant_jid é obrigatório").max(200),
+  message_id: z.string().min(1, "message_id é obrigatório").max(200),
   message_type: z.string().optional(),
 }).passthrough();
 
-/** transcribe-audio-internal@v1 — transcrição interna (invocada por outras edges). Body fiel ao index.ts. */
+/**
+ * transcribe-audio-internal@v1 — transcrição interna (invocada por outras edges).
+ * Body fiel ao index.ts. SEC-2 (2026-08-21): audioUrl ia direto a `fetch()`
+ * sem validação de host — SSRF para a rede interna (ex.: metadata endpoint,
+ * RFC-1918) a partir de qualquer caller com HEALTH_SECRET. isSafeHttpsUrl
+ * bloqueia localhost/RFC-1918/link-local/IPv6 interno (mesmo guard usado nos
+ * schemas de IA para image_url).
+ */
 export const TranscribeAudioInternalV1Schema = z.object({
   messageId: z.string().min(1, "messageId é obrigatório"),
-  audioUrl: z.string().url("audioUrl inválida"),
+  audioUrl: z.string().url("audioUrl inválida").refine(isSafeHttpsUrl, {
+    message: "audioUrl deve ser uma URL HTTPS pública (SSRF bloqueado)",
+  }),
 }).passthrough();
 
 /**
@@ -901,7 +1021,9 @@ export const TranscribeAudioInternalV1Schema = z.object({
      "verify-authentication",
    ]),
    userId: z.string().max(200).optional().nullable(),
-   userEmail: z.string().max(320).optional().nullable(),
+   // Bloco 4 (2026-08-21): max(320) aceitava qualquer string; .email() valida
+   // formato de verdade (max mantido — limite RFC 5321 de endereço de e-mail).
+   userEmail: z.string().max(320).email().optional().nullable(),
    userName: z.string().max(200).optional().nullable(),
    credential: z.record(z.unknown()).optional().nullable(),
    friendlyName: z.string().max(200).optional().nullable(),
@@ -909,20 +1031,58 @@ export const TranscribeAudioInternalV1Schema = z.object({
 
  /** evolution-api@v1 — valida no index.ts via edge-contract-schemas.ts. Schema de registro. */
  /**
+ * Ações reconhecidas pelo router de evolution-api/index.ts (extraídas por
+ * grep de todo `action === '...'` no handler — auditoria de re-verificação,
+ * Bloco 3/etapa 31-32). Qualquer action fora desta lista já não tem rota:
+ * o handler cai no fallback `unknown_action` (404) de qualquer forma, então
+ * exigir o enum no gate só move essa rejeição pra 422 antes do handshake
+ * com a Evolution API, sem mudar nenhum caminho válido existente.
+ */
+const EVOLUTION_API_ACTIONS = [
+  'archive-chat', 'check-numbers', 'connect', 'create-instance', 'delete-message',
+  'fetch-profile', 'find-chats', 'find-contacts', 'find-labels', 'find-messages',
+  'find-status-messages', 'get-media-base64', 'get-settings', 'get-webhook',
+  'handle-label', 'instance-info', 'list-instances', 'mark-read', 'mark-unread',
+  'pairing-code', 'read-messages', 'send-audio', 'send-buttons', 'send-chat-presence',
+  'send-contact', 'send-list', 'send-location', 'send-media', 'send-poll', 'send-ptv',
+  'send-reaction', 'send-status', 'send-sticker', 'send-template', 'send-text',
+  'set-settings', 'set-webhook', 'status', 'update-block-status',
+  'update-profile-name', 'update-profile-status',
+] as const;
+
+/**
  * evolution-api@v1 — real. Consumo: proxy roteado por action (fallback
- * pathAction); instanceName|instance, number, remoteJid|chat, readMessages,
- * key, message etc. (JSON ou multipart). Permissivo — validação real no endpoint.
+ * pathAction, resolvido e injetado no body ANTES do gate pelo handler —
+ * ver evolution-api/index.ts); instanceName|instance, number, remoteJid|chat,
+ * readMessages, key, message etc. (JSON ou multipart).
+ *
+ * Auditoria de re-verificação (Bloco 3/etapa 31, CONFIRMED): `action` era
+ * `z.string().optional()` e `key`/`message` eram `z.unknown()` — payload `{}`
+ * passava no gate sem reprovar (o "furo grave" da function de maior tráfego
+ * do sistema). `action` agora é enum OBRIGATÓRIO (fecha `{}` → 422); `key`/
+ * `message`, quando presentes, precisam ser objeto (rejeita string/número/
+ * array/boolean óbvios sem exigir um shape fixo — o shape real varia por
+ * action e já é validado dentro do handler onde importa, ex. get-media-base64).
  */
 export const EvolutionApiV1Schema = z.object({
-  action: z.string().optional(),
+  action: z.enum(EVOLUTION_API_ACTIONS),
   instanceName: z.string().optional(),
   instance: z.string().optional(),
-  number: z.string().optional(),
+  // Bloco 4 (2026-08-21): aceitava qualquer string; number recebe telefone
+  // OU JID (mesmo domínio de whatsapp-cloud-api/whatsapp-cloud-send) —
+  // phoneOrJidField reprova lixo sem transformar o valor.
+  number: phoneOrJidField({ min: 1, max: 100 }).optional(),
   remoteJid: z.string().optional(),
   chat: z.string().optional(),
   readMessages: z.boolean().optional(),
-  key: z.unknown().optional(),
-  message: z.unknown().optional(),
+  // PLANO-100 etapa 49 (NO-GO documentado, 2026-08-25): validação efetiva de
+  // key/message é por-action no handler com 422 canônico superior (ex.:
+  // get-media-base64 em evolution-api/index.ts reprovando INVALID_MESSAGE_KEY
+  // com path detalhado); o schema permanece no mínimo "objeto" por design
+  // multi-action — o shape real varia por action e apertar aqui duplicaria
+  // regra por action no lugar errado.
+  key: z.record(z.unknown()).optional(),
+  message: z.record(z.unknown()).optional(),
 }).passthrough();
 
  // ─── Alias local para schema importado de schemas.ts ────────────────────────
@@ -1079,17 +1239,6 @@ export const SentrySyncV1Schema = z.object({
 }).strict();
 
 /**
- * zapp-google-calendar-sync@v1 — status do contrato Google Calendar (G1).
- * GET (status) ou POST com body opcional { dryRun }. Resposta SEMPRE 200:
- * { synced:false, reason:'not_configured'|'disabled'|'error' } — nunca 500 e
- * nunca 'not_implemented' (ADR 2026-08-18: chamador de front removido; ver
- * supabase/functions/zapp-google-calendar-sync/ADR.md).
- */
-export const ZappGoogleCalendarSyncV1Schema = z.object({
-  dryRun: z.boolean().optional(),
-}).strict();
-
-/**
  /** warroom-monthly-test@v1 — teste mensal do pipeline de alerta Warroom.
   * Sem parâmetros de entrada: o handler IGNORA o body (saída fixa).
   */
@@ -1149,7 +1298,6 @@ export const InviteUserV1Schema = z.object({
   "whatsapp-cloud-secrets-status":  { v1: WhatsappCloudSecretsStatusV1Schema },
   "whatsapp-cloud-api":         { v1: WhatsappCloudApiV1Schema },
   "gmail-token-refresh":        { v1: GmailTokenRefreshV1Schema },
-  "email-health":               { v1: EmailHealthV1Schema },
   "email-track-link":           { v1: EmailTrackLinkV1Schema },
   "email-track-pixel":          { v1: EmailTrackPixelV1Schema },
   "zapp-sentry-sync":           { v1: SentrySyncV1Schema },
@@ -1205,7 +1353,10 @@ export const InviteUserV1Schema = z.object({
   "webauthn":                      { v1: WebauthnV1Schema },
   "evolution-api":                 { v1: EvolutionApiV1Schema },
   "zapp-auth-sessions":            { v1: ZappAuthSessionsV1Schema },
-  "zapp-auth-invite":             { v1: ZappAuthInviteV1Schema },
+  // zapp-auth-invite: registro fantasma removido em 2026-08-21 (a edge virou
+  // invite-user, já registrado acima com InviteUserV1Schema; era o único
+  // motivo do teste contract-kit.test.ts:206 estar vermelho — ver
+  // contract-versions.ts, comentário equivalente já existente lá).
   "zapp-n8n-sync":                 { v1: ZappN8nSyncV1Schema },
 
   // ─── Onda 1 (2026-08-04): cobertura 100% — schemas reais dos workers ───
@@ -1259,9 +1410,6 @@ export const InviteUserV1Schema = z.object({
   "transcribe-audio-internal":     { v1: TranscribeAudioInternalV1Schema },
   "csat-dispatch":   { v1: CsatDispatchV1Schema },
 
-  // ─── GOOGLE CALENDAR (contrato honesto, ADR 2026-08-18) ───────────────────
-  "zapp-google-calendar-sync": { v1: ZappGoogleCalendarSyncV1Schema },
-
   // ─── OUTROS ────────────────────────────────────────────────────────────────
   // ─── CRM plugável (Etapa 66) ──────────────────────────────────────────────
   "zapp-crm-sync":   { v1: ZappCrmSyncV1Schema },
@@ -1279,14 +1427,12 @@ export {
   getContractSchema,
   getContractLifecycle,
   validateContractPayload,
-  parseContractRequest,
   EDGE_FUNCTION_NAMES,
   WebhookContractSchemas,
   ContractLifecycles,
 } from './edge-contract-schemas.ts';
 export { CloudWebhookV1Schema, CloudSendV1Schema } from './edge-contract-schemas.ts';
-/** Re-exported module members. */
-export type {
-  ContractParseOptions,
-  ContractParseResult,
-} from './edge-contract-schemas.ts';
+// Etapa 34 (PLANO-100, 2026-08-25): version-map canônico da variante JSON
+// (fila/queue) de voice-changer@v1 — definido em contract-schemas-infra.ts ao
+// lado da variante multipart; handlers importam daqui (ponto unificado).
+export { VoiceChangerQueueContractMap } from './contract-schemas-infra.ts';

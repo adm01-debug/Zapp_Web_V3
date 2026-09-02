@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import { getLogger } from '@/lib/logger';
 
 const log = getLogger('ConversationSummary');

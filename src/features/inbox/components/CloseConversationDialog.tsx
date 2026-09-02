@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { invokeEdge } from '@/lib/invokeEdge';
 import { ticketStore } from '@/lib/inbox/ticketStore';
 import {
   Dialog,
@@ -82,20 +83,25 @@ export function CloseConversationDialog({
   async function triggerCsatIfEnabled(
     cId: string,
     agentId: string | null | undefined,
-    convId: string | null | undefined,
+    convId: string | null | undefined
   ): Promise<void> {
     if (!connectionId) return;
-    try {
-      await supabase.functions.invoke('csat-auto-send', {
-        body: {
-          contact_id: cId,
-          agent_id: agentId ?? null,
-          connection_id: connectionId,
-          conversation_id: convId ?? null,
-        },
-      });
-    } catch (e) {
-      console.warn('[CloseConversationDialog] CSAT auto-send failed (non-fatal):', e);
+    // Bloco 7 (etapa 77, F4): antes lia só `await invoke(...)` sem
+    // desestruturar `{error}` — supabase-js v2 NÃO lança em erro HTTP
+    // (FunctionsHttpError vem no campo `error`, não como exceção), então um
+    // 422/500 do csat-auto-send era 100% invisível (nem toast, nem log). O
+    // `catch` só pegava falha de rede real. invokeEdge normaliza os dois
+    // caminhos — segue não-fatal (sem toast: CSAT é best-effort ao encerrar).
+    const result = await invokeEdge('csat-auto-send', {
+      body: {
+        contact_id: cId,
+        agent_id: agentId ?? null,
+        connection_id: connectionId,
+        conversation_id: convId ?? null,
+      },
+    });
+    if (!result.ok) {
+      console.warn('[CloseConversationDialog] CSAT auto-send failed (non-fatal):', result.message);
     }
   }
 
@@ -111,16 +117,14 @@ export function CloseConversationDialog({
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from('conversation_closures')
-      .insert({
-        contact_id: contactId,
-        closed_by: profileId,
-        close_reason: reason,
-        outcome: outcome || null,
-        classification: classification || null,
-        notes: notes || null,
-      });
+    const { error } = await supabase.from('conversation_closures').insert({
+      contact_id: contactId,
+      closed_by: profileId,
+      close_reason: reason,
+      outcome: outcome || null,
+      classification: classification || null,
+      notes: notes || null,
+    });
     if (!error) {
       // INBOX-08: persistir status real. Não existe RPC/edge de fechamento no
       // Evolution DB (só rpc_list_conversations, read-only), então grava-se no
@@ -128,10 +132,7 @@ export function CloseConversationDialog({
       // sincroniza o overlay de tickets para a UI refletir imediatamente.
       // Escritas não-fatais: o registro canônico é a conversation_closures.
       const [convUpdate, eventInsert] = await Promise.all([
-        supabase
-          .from('conversations')
-          .update({ status: 'resolved' })
-          .eq('contact_id', contactId),
+        supabase.from('conversations').update({ status: 'resolved' }).eq('contact_id', contactId),
         supabase.from('conversation_events').insert({
           contact_id: contactId,
           event_type: 'close',
@@ -144,10 +145,16 @@ export function CloseConversationDialog({
         }),
       ]);
       if (convUpdate.error) {
-        console.warn('[CloseConversationDialog] falha ao persistir status em conversations:', convUpdate.error.message);
+        console.warn(
+          '[CloseConversationDialog] falha ao persistir status em conversations:',
+          convUpdate.error.message
+        );
       }
       if (eventInsert.error) {
-        console.warn('[CloseConversationDialog] falha ao registrar conversation_events:', eventInsert.error.message);
+        console.warn(
+          '[CloseConversationDialog] falha ao registrar conversation_events:',
+          eventInsert.error.message
+        );
       }
       ticketStore.setStatus(contactId, 'resolved', profileId ?? null);
       // INBOX-09: CSAT automation — non-fatal, runs in background
@@ -170,56 +177,70 @@ export function CloseConversationDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-success" />
+            <CheckCircle2 className="h-5 w-5 text-success" />
             Encerrar Conversa
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="close-reason" className="text-sm font-medium">Motivo do encerramento *</Label>
+            <Label htmlFor="close-reason" className="text-sm font-medium">
+              Motivo do encerramento *
+            </Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger id="close-reason">
                 <SelectValue placeholder="Selecione o motivo" />
               </SelectTrigger>
               <SelectContent>
-                {CLOSE_REASONS.map(r => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                {CLOSE_REASONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="close-outcome" className="text-sm font-medium">Resultado</Label>
+            <Label htmlFor="close-outcome" className="text-sm font-medium">
+              Resultado
+            </Label>
             <Select value={outcome} onValueChange={setOutcome}>
               <SelectTrigger id="close-outcome">
                 <SelectValue placeholder="Resultado do atendimento" />
               </SelectTrigger>
               <SelectContent>
-                {OUTCOMES.map(o => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                {OUTCOMES.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="close-classification" className="text-sm font-medium">Classificação</Label>
+            <Label htmlFor="close-classification" className="text-sm font-medium">
+              Classificação
+            </Label>
             <Select value={classification} onValueChange={setClassification}>
               <SelectTrigger id="close-classification">
                 <SelectValue placeholder="Tipo de atendimento" />
               </SelectTrigger>
               <SelectContent>
-                {CLASSIFICATIONS.map(c => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                {CLASSIFICATIONS.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="close-notes" className="text-sm font-medium">Observações</Label>
+            <Label htmlFor="close-notes" className="text-sm font-medium">
+              Observações
+            </Label>
             <Textarea
               id="close-notes"
               value={notes}
@@ -231,7 +252,9 @@ export function CloseConversationDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
           <Button onClick={handleClose} disabled={saving || !reason}>
             {saving ? 'Salvando...' : 'Encerrar'}
           </Button>

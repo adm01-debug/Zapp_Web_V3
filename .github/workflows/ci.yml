@@ -31,9 +31,20 @@ env:
 
 jobs:
   lockfile:
-    name: Verify Lockfile
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun git jq
-    runs-on: [Linux, X64, vps-zapp]
+    name: Lockfile e proteções da camada de dados
+    # Piloto de migração pra ubuntu-latest (auditoria 2026-08-21): o repo está
+    # PÚBLICO hoje (confirmado via `gh repo view --json visibility` — a
+    # premissa "repo privado + cota billing esgotada" de 2026-08-18 não se
+    # aplica mais; repos públicos têm minutos ubuntu-latest gratuitos e
+    # ilimitados). Este job foi escolhido como piloto por ser o mais seguro:
+    # só git/jq/cat/base64 (nada de bun de fato, apesar do comentário antigo),
+    # sem secrets, sem rede além de `git fetch origin` (remoto público).
+    # Motivação: os ~48 workflows deste repo competem TODOS pelo mesmo pool
+    # de 6 runners self-hosted (vps-zapp) — pushes próximos no tempo (comum
+    # neste repo) enfileiram por dezenas de minutos. Se este piloto se provar
+    # estável, migrar os demais candidatos sem dependência de rede interna da
+    # VPS libera o pool pros jobs que realmente precisam dela (DB live, deploy).
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -54,31 +65,32 @@ jobs:
             git fetch origin ${{ github.base_ref }}
             BASE="origin/${{ github.base_ref }}"
             LOCK_DIFF=$(git diff "$BASE"...HEAD --name-only -- bun.lock)
-            OLD_RAW=$(git show "$BASE:package.json" 2>/dev/null || echo '{}')
-            if echo "$OLD_RAW" | jq '.' >/dev/null 2>&1; then
-              OLD_PKG="$OLD_RAW"
-            else
-              OLD_PKG=$(echo "$OLD_RAW" | base64 -d 2>/dev/null || echo '{}')
+            if ! OLD_RAW=$(git show "$BASE:package.json" 2>/dev/null); then
+              echo "::error::Base package.json could not be read from $BASE."
+              exit 1
             fi
             NEW_PKG=$(cat package.json)
           else
             LOCK_DIFF=$(git diff HEAD^ HEAD --name-only -- bun.lock 2>/dev/null || true)
-            OLD_RAW=$(git show "HEAD^:package.json" 2>/dev/null || echo '{}')
-            if echo "$OLD_RAW" | jq '.' >/dev/null 2>&1; then
-              OLD_PKG="$OLD_RAW"
-            else
-              OLD_PKG=$(echo "$OLD_RAW" | base64 -d 2>/dev/null || echo '{}')
+            if ! OLD_RAW=$(git show "HEAD^:package.json" 2>/dev/null); then
+              echo "::error::Base package.json could not be read from HEAD^."
+              exit 1
             fi
             NEW_PKG=$(cat package.json)
           fi
+          if ! OLD_PKG=$(printf '%s' "$OLD_RAW" | node scripts/normalize-package-json-input.mjs); then
+            echo "::error::Base package.json is neither valid JSON nor a valid legacy base64-encoded JSON object."
+            exit 1
+          fi
           # Compare only the dependency fields — scripts/version changes are irrelevant.
-          # If OLD_PKG is not valid JSON (e.g. base branch has corrupted content), skip the
-          # comparison entirely rather than comparing against a synthetic empty object, which
-          # would always appear as a "dep change" and produce a false-positive failure.
+          # Defense in depth: both the trusted base and the candidate must be JSON objects.
           if ! echo "$OLD_PKG" | jq empty 2>/dev/null; then
-            echo "::warning::Base package.json could not be parsed as JSON — lockfile diff skipped."
-            echo "Lockfile consistency check skipped (base package.json unreadable)."
-            exit 0
+            echo "::error::Base package.json could not be parsed as JSON — lockfile consistency cannot be proven."
+            exit 1
+          fi
+          if ! echo "$NEW_PKG" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "::error::Candidate package.json is not a valid JSON object."
+            exit 1
           fi
           OLD_DEPS=$(echo "$OLD_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
           NEW_DEPS=$(echo "$NEW_PKG" | jq -Sc '{d: (.dependencies // {}), dd: (.devDependencies // {}), pd: (.peerDependencies // {}), od: (.optionalDependencies // {})}')
@@ -89,6 +101,96 @@ jobs:
             exit 1
           fi
           echo "Lockfile consistency check passed."
+
+      - name: Testes de regressão dos gates de lockfile e camada de dados
+        run: >-
+          node --test
+          scripts/lib/__tests__/check-data-layer-baseline-monotonic.test.mjs
+          scripts/lib/__tests__/normalize-package-json-input.test.mjs
+          scripts/lib/__tests__/ratchet-tighten-workflow.test.mjs
+
+      - name: Monotonicidade do baseline da camada de dados (bloqueante)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_BRANCH"
+          node scripts/check-data-layer-baseline-monotonic.mjs --base-ref "origin/$BASE_BRANCH"
+
+      - name: Contagens do código dentro do baseline candidato (bloqueante)
+        run: node scripts/check-data-layer.mjs
+
+  typescript-gates:
+    name: Gates TypeScript (hospedado, bloqueante)
+    # Os gates são herméticos e não recebem secrets. Dois runners diferentes
+    # do pool vps-zapp abortaram o tsc com SIGABRT após ~60 s. Para um dos SHAs
+    # afetados, o mesmo gate passou no ubuntu-latest; no outro incidente, o
+    # rerun passou em um terceiro runner self-hosted. Isolar estes passos no
+    # runner hospedado remove a fonte observada de falso vermelho sem retry e
+    # sem relaxar o comportamento fail-closed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lockfile
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Preparar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Preparar Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Restaurar cache de dependências Bun
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Instalar dependências sem scripts de ciclo de vida
+        run: bun install --ignore-scripts
+
+      - name: Testes de regressão do gate TypeScript (bloqueante)
+        run: node --test scripts/lib/__tests__/run-local-tsc.test.mjs
+
+      - name: Verificação TypeScript por ratchet (bloqueante)
+        run: node scripts/check-tsc-ratchet.mjs
+
+      - name: Verificação TypeScript dos componentes de chat (estrita e bloqueante)
+        run: node scripts/check-cluster-typecheck.mjs --cluster chat-components
+
+      - name: Gate contra deriva de ts-nocheck (bloqueante)
+        run: node scripts/check-ts-nocheck.mjs
+
+  required-merge-gate:
+    # A proteção de main exige este contexto nominal. O fan-in preserva o
+    # contrato existente e torna tanto o lockfile/ratchet monotônico quanto os
+    # gates TypeScript hospedados obrigatórios para merge.
+    name: Verify Lockfile
+    runs-on: ubuntu-latest
+    needs: [lockfile, typescript-gates]
+    if: always()
+    steps:
+      - name: Confirmar proteções obrigatórias
+        env:
+          LOCKFILE_RESULT: ${{ needs.lockfile.result }}
+          TYPESCRIPT_RESULT: ${{ needs.typescript-gates.result }}
+        run: |
+          set -euo pipefail
+          if [ "$LOCKFILE_RESULT" != "success" ] || [ "$TYPESCRIPT_RESULT" != "success" ]; then
+            echo "::error title=Required merge guards::lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
+            exit 1
+          fi
+          echo "Required merge guards passed: lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
 
   quality:
     name: Quality diagnostics
@@ -200,29 +302,14 @@ jobs:
           META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
         run: node scripts/check-types-schemas.mjs
 
-      - name: TypeScript check (ratchet, blocking)
-        run: node scripts/check-tsc-ratchet.mjs
-
-      - name: TypeScript check — chat components (blocking, strict)
-        run: |
-          set +e
-          OUT=$(bunx tsgo --noEmit -p tsconfig.app.json 2>&1)
-          echo "$OUT" | grep -E "src/(features/inbox/components/chat|lib/react-refs)" | grep -E "error TS" && {
-            echo "::error title=Chat components typecheck::TypeScript errors detected in chat components (baseline is zero).";
-            exit 1;
-          }
-          exit 0
-
-      - name: ts-nocheck drift gate (blocking)
-        run: node scripts/check-ts-nocheck.mjs
-
   # audit-contract-scan: SEMPRE corre (inclusive em PRs de fork sem secrets).
   # Valida: edge function invoke() tem diretório correspondente + script roda sem
   # erro de sintaxe. Gate bloqueante: test e build dependem deste job.
   audit-contract-scan:
     name: Audit contract (scan-only, always runs)
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=node
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): scan-only, sem DB — só node
+    # local sobre edge functions/estrutura do repo, sem secrets.
+    runs-on: ubuntu-latest
     needs: lockfile
     steps:
       - name: Checkout code
@@ -337,8 +424,9 @@ jobs:
   # achado A, campanhas_nps_cron.sql, foi CORRIGIDA em AG-EX-13 com RAISE EXCEPTION).
   migration-gates:
     name: Migration gates (antipadrão + timestamp)
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=node
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): regex local sobre migrations
+    # commitadas, sem secrets/DB.
+    runs-on: ubuntu-latest
     needs: lockfile
     steps:
       - name: Checkout code
@@ -356,8 +444,10 @@ jobs:
 
   test:
     name: Unit tests
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun node
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): bun run test usa só as envs
+    # fake do topo do arquivo (VITE_SUPABASE_URL: https://example.supabase.co),
+    # sem DB real.
+    runs-on: ubuntu-latest
     needs: [lockfile, quality, audit-contract-scan, contract-gate, migration-gates]
     steps:
       - name: Checkout code
@@ -385,6 +475,12 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Chat UI unit tests (feat/chat-ui-100 gate)
+        # E94 — subset rápido dos testes do chat para feedback rápido no PR
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: bun run test:chat
 
       - name: Unit tests (blocking)
         # Stable after quarantining the infinite-loop useMessages test and fixing
@@ -427,8 +523,11 @@ jobs:
 
   build:
     name: Build
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun node
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): bun run build puro, sem
+    # DB/VPS. O histórico de OOM abaixo é RAM real do HOST self-hosted (6144MB
+    # não sustentou — "6144 pediu mais do que o disponivel"); ubuntu-latest tem
+    # ~7GB dedicados, folga real sobre o que o self-hosted já não aguentava.
+    runs-on: ubuntu-latest
     needs: [lockfile, quality, audit-contract-scan, contract-gate, migration-gates]
     steps:
       - name: Checkout code
@@ -458,6 +557,17 @@ jobs:
         run: bun install
 
       - name: Build for production
+        # Historico de OOM neste job (2026-08-21):
+        #   run 32443579939 sem NODE_OPTIONS: V8 "JavaScript heap out of
+        #     memory" aos ~100s de transform (heap default ~1GB nesse runner).
+        #   run 32455497422 com 6144: passou do transform (6403 modulos) e
+        #     morreu SIGKILL durante "rendering chunks" — nao e mais o soft
+        #     limit do V8, e o OOM-killer do kernel matando por falta de RAM
+        #     real do container/host. 6144 pediu mais do que o disponivel.
+        # 4096 fica entre os dois pontos medidos: acima do que sozinho ja
+        # nao bastava, com folga abaixo do que o host nao sustentou.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: bun run build
 
       - name: Upload build artifacts
@@ -481,12 +591,27 @@ jobs:
 
   e2e:
     name: E2E tests
-    # [2026-08-18] Migrado p/ runner self-hosted: repo virou privado (jobs
-    # ubuntu-latest passam a consumir a cota de 2000 min/mes) e o runner
-    # vps-zapp ja tem chromium do Playwright cacheado (label playwright).
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): playwright.config.ts sobe
+    # SEU PRÓPRIO `vite --port 5173` local (baseURL http://localhost:5173,
+    # Supabase fake) — nunca toca a VPS real. O passo "Install Playwright
+    # Browsers" já reinstala chromium do zero, então não depende do cache do
+    # runner self-hosted. A premissa "repo privado + cota esgotada" de
+    # 2026-08-18 não vale mais (repo público, ubuntu-latest gratuito). O
+    # timeout de 60min abaixo já documenta que o vps-zapp estava sob
+    # "contencao" do pool compartilhado — migrar remove essa causa raiz.
+    runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 15
+    # 15 nao bastou (run 32466586329, 2026-08-21): job ficou 20min (09:19:06
+    # -> 09:39:07) e foi cancelado pelo proprio timeout. Subi p/ 30 — TAMBEM
+    # nao bastou: run 32471127022 (commit a7b6360, mesmo dia) rodou o step
+    # "Run E2E tests" por 29min sem terminar a suite e foi cancelado exatamente
+    # aos 30min de job (10:43:15 -> 11:13:26). Duas tentativas, dois valores
+    # insuficientes — o pool de runners compartilhado (contencao documentada
+    # na nota 11/12 do PR #1354) tem variancia alta demais pra cravar um
+    # numero justo. 60min da 2x de folga sobre o pior caso ja observado (29min)
+    # sem mascarar um hang real (a suite tem 13 specs, historico pre-contencao
+    # e bem mais rapido que isso).
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -530,10 +655,15 @@ jobs:
 
   a11y:
     name: Accessibility regression (axe)
-    # [2026-08-18] Self-hosted pelo mesmo motivo do e2e (cota de minutes).
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): mesmo motivo do job `e2e`
+    # acima — playwright.a11y.config.ts também sobe seu próprio vite local
+    # (sem E2E_BASE_URL/credenciais, cai no branch de Supabase fake, só o
+    # project `public` roda), sem tocar a VPS real.
+    runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 15
+    # 15 nao bastou (run 32466586329, 2026-08-21) — mesmo timeout/mesma causa
+    # do job `e2e` acima (pool de runners sob contencao); ver comentario la.
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -578,8 +708,9 @@ jobs:
 
   security:
     name: Security audit
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun node
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): bun audit (registro npm
+    # público) + grep local por padrões de secret em src/, sem DB/VPS.
+    runs-on: ubuntu-latest
     needs: lockfile
     steps:
       - name: Checkout code
@@ -642,13 +773,15 @@ jobs:
   # em runtime via EdgeRuntime.userWorkers.create) — por isso o gate tem 2
   # camadas: (1) boot-check do edge-runtime com o main service (cobre o closure
   # do boot, incluindo _shared/contract-schemas.ts — a causa do incidente);
-  # (2) parse de TODAS as functions via `deno cache` (parse + download de
-  # imports, sem type-check — type errors de libs remotas nao bloqueiam).
+  # (2) boot isolado de CADA entrypoint no mesmo edge-runtime de produção.
   # Sem secrets — seguro em PRs de fork. Sem path filters (politica do ci.yml).
   edge-functions-parse-check:
     name: Gate 6 — edge functions parse-check (edge-runtime v1.74.0)
-    # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=docker
-    runs-on: [Linux, X64, vps-zapp]
+    # ubuntu-latest (auditoria 2026-08-21, batch 3): usa Docker, mas só
+    # LOCALMENTE no próprio runner (docker run com SUPABASE_URL=http://localhost:8000
+    # e credenciais dummy, boot-checks isolados) — zero acesso real
+    # à VPS. ubuntu-latest já vem com Docker Engine pré-instalado.
+    runs-on: ubuntu-latest
     needs: lockfile
     timeout-minutes: 15
     steps:
@@ -699,36 +832,13 @@ jobs:
           echo "Gate 6 OK: boot-check do main (closure do boot) sem erros de parse."
           docker volume rm "$VOL" >/dev/null 2>&1 || true
 
-      - name: Parse-check de TODAS as functions (fora do grafo do main)
+      - name: Boot-check de TODAS as functions (runtime exato de produção)
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          COUNT=$(find supabase/functions -name '*.ts' -not -path '*/__tests__/*' -not -name '*.spec.ts' -not -name '*.test.ts' | wc -l)
-          echo "Parse de $COUNT arquivos .ts (deno cache, sem type-check)"
-          VOL="evo-deno-$GITHUB_RUN_ID"
-          docker volume create "$VOL" >/dev/null
-          trap 'docker volume rm "$VOL" >/dev/null 2>&1 || true' EXIT
-          tar -C "$GITHUB_WORKSPACE/supabase/functions" -cf - . | docker run --rm -i -v "$VOL:/data" alpine:3.19 sh -c 'rm -rf /data/* /data/.* 2>/dev/null || true; tar -xf - -C /data'
-          for attempt in 1 2; do
-            set +e
-            timeout 240 docker run --rm \
-              -v "$VOL:/home/deno/functions:ro" \
-              denoland/deno:2.2.8 cache --no-config --no-lock \
-              $(find supabase/functions -name '*.ts' -not -path '*/__tests__/*' -not -name '*.spec.ts' -not -name '*.test.ts' | sed 's|^supabase/functions/|/home/deno/functions/|') \
-              >"$RUNNER_TEMP/deno-cache.log" 2>&1
-            rc=$?
-            set -e
-            if [ "$rc" -eq 0 ]; then
-              echo "Gate 6 OK: todas as functions parsearam."
-              exit 0
-            fi
-            if grep -qE 'file:///home/deno/functions/' "$RUNNER_TEMP/deno-cache.log"; then
-              echo "::error title=Gate 6 (parse-check)::Parse error em edge function:"
-              grep -E 'file:///home/deno/functions/' "$RUNNER_TEMP/deno-cache.log" | head -20
-              exit 1
-            fi
-            echo "Tentativa $attempt falhou (rc=$rc) — provável flake de rede; log:"
-            tail -20 "$RUNNER_TEMP/deno-cache.log"
-          done
-          echo "::error title=Gate 6 (parse-check)::deno cache falhou 2x (rede/resolução) — investigar antes de mergear."
-          exit 1
+          COUNT=$(find supabase/functions -mindepth 2 -maxdepth 2 -name index.ts | wc -l)
+          echo "Boot isolado de $COUNT entrypoints no supabase/edge-runtime:v1.74.0"
+          EDGE_RUNTIME_IMAGE=supabase/edge-runtime:v1.74.0 \
+          EDGE_BOOT_TIMEOUT_SECONDS=12 \
+          EDGE_BOOT_PARALLELISM=4 \
+            scripts/check-edge-runtime-functions.sh "$GITHUB_WORKSPACE/supabase/functions"

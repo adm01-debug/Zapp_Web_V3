@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from '@/components/ui/motion';
 import {
   MessageSquare,
   Instagram,
@@ -80,17 +80,26 @@ export function OmnichannelInbox() {
 
       if (error) throw error;
 
-      const unified: UnifiedMessage[] = (contacts || []).map((contact: { id: string; name: string; phone: string; channel_type: string | null; updated_at: string; assigned_to: string | null }) => ({
-        id: contact.id,
-        contactName: contact.name,
-        contactPhone: contact.phone,
-        channelType: (contact.channel_type as ChannelType) || 'whatsapp',
-        lastMessage: '',
-        timestamp: contact.updated_at,
-        unread: false,
-        status: 'open',
-        assignedTo: contact.assigned_to,
-      }));
+      const unified: UnifiedMessage[] = (contacts || []).map(
+        (contact: {
+          id: string;
+          name: string;
+          phone: string;
+          channel_type: string | null;
+          updated_at: string;
+          assigned_to: string | null;
+        }) => ({
+          id: contact.id,
+          contactName: contact.name,
+          contactPhone: contact.phone,
+          channelType: (contact.channel_type as ChannelType) || 'whatsapp',
+          lastMessage: '',
+          timestamp: contact.updated_at,
+          unread: false,
+          status: 'open',
+          assignedTo: contact.assigned_to,
+        })
+      );
 
       setMessages(unified);
 
@@ -130,7 +139,13 @@ export function OmnichannelInbox() {
       {/* Main Tabs: Channels | Email Chat */}
       <Tabs
         value={activeMainTab}
-        onValueChange={(v) => setActiveMainTab(v as 'channels' | 'email' /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */)}
+        onValueChange={(v) =>
+          setActiveMainTab(
+            v as
+              | 'channels'
+              | 'email' /* ignore-audit: Select/Tabs value string narrowed to union; developer controls option values */
+          )
+        }
         className="flex h-full flex-col"
       >
         <div className="border-b px-4">

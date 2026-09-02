@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
       return json({ error: `Falha de rede ao enviar: ${msg}` }, 504, req);
     }
 
+    // Resposta OUTBOUND do Resend — {} é fallback inofensivo (message lida com typeof check); não é o antipadrão de body de request (D1/etapa 27).
     const resendData = (await resendRes.json().catch(() => ({}))) as Record<string, unknown>;
     if (!resendRes.ok) {
       const message =

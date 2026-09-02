@@ -1,6 +1,12 @@
 import { getLogger, generateCorrelationId } from '@/lib/logger';
+import { isIntentionalAbort, isAbortLikeError } from '@/lib/abortError';
 
 const log = getLogger('RetryUtil');
+
+// Re-exportado de @/lib/abortError (módulo puro, sem dependência de logger)
+// para não quebrar os callers existentes que importam daqui — ver RCA
+// 2026-08-22 no módulo de origem.
+export { isIntentionalAbort, isAbortLikeError };
 
 interface RetryOptions {
   maxRetries?: number;
@@ -8,19 +14,6 @@ interface RetryOptions {
   maxDelayMs?: number;
   shouldRetry?: (error: unknown, attempt: number) => boolean;
   onRetry?: (error: unknown, attempt: number) => void;
-}
-
-/**
- * True when the error is an intentional abort (AbortController.abort(),
- * page unload / navigation).
- *
- * Matches by `err.name` — NEVER by `message.includes(...)`: the real browser
- * message behind an AbortError during page unload is "Page unload", and
- * matching on message text is fragile across environments.
- */
-export function isIntentionalAbort(err: unknown): boolean {
-  if (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError') return true;
-  return err instanceof Error && err.name === 'AbortError';
 }
 
 /**
