@@ -664,7 +664,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // boot → também silencioso, senão pisca o spinner logo após o first paint.
         // SIGNED_IN, USER_UPDATED etc. implicam mudança de identidade → loading.
         const showLoading = event !== 'TOKEN_REFRESHED' && event !== 'INITIAL_SESSION';
-        refreshAll(session.user.id, { showLoading });
+        void refreshAll(session.user.id, { showLoading });
       } else {
         setProfile(null);
         setRoles([]);
