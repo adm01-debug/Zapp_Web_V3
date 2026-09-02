@@ -19420,6 +19420,48 @@
           "overload_count": 0,
           "overloads": []
         },
+        "has_role": {
+          "definition_sha1": "222e07d03280f6b9507e3bbc5f54274a9a98da75",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [
+                {
+                  "name": "_role",
+                  "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
+                },
+                {
+                  "name": "_user_id",
+                  "type": "string"
+                }
+              ],
+              "returns": "boolean"
+            }
+          ]
+        },
+        "has_role_in_empresa": {
+          "definition_sha1": "c11d7523beac6331a018b9946742ae63b9928a31",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [
+                {
+                  "name": "_empresa",
+                  "type": "string"
+                },
+                {
+                  "name": "_role",
+                  "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
+                },
+                {
+                  "name": "_user",
+                  "type": "string"
+                }
+              ],
+              "returns": "boolean"
+            }
+          ]
+        },
         "increment_webhook_rate_limit": {
           "definition_sha1": "bcda8aaa4c147294163cfac63e34e63a96920826",
           "overload_count": 1,
@@ -19788,6 +19830,436 @@
             {
               "name": "table_schema",
               "type": "unknown"
+            }
+          ]
+        },
+        "empresas": {
+          "definition_sha1": "072d7b272db146c4fa3a8aeba3d779c0318a42cd",
+          "insert_columns": [
+            {
+              "name": "aliquota_rat",
+              "type": "number | null"
+            },
+            {
+              "name": "aliquota_terceiros",
+              "type": "number | null"
+            },
+            {
+              "name": "ativo",
+              "type": "boolean"
+            },
+            {
+              "name": "bairro",
+              "type": "string | null"
+            },
+            {
+              "name": "cep",
+              "type": "string | null"
+            },
+            {
+              "name": "cidade",
+              "type": "string | null"
+            },
+            {
+              "name": "cnae_principal",
+              "type": "string | null"
+            },
+            {
+              "name": "cnpj",
+              "type": "string | null"
+            },
+            {
+              "name": "codigo_fpas",
+              "type": "string | null"
+            },
+            {
+              "name": "cor_hex",
+              "type": "string | null"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "string | null"
+            },
+            {
+              "name": "endereco",
+              "type": "string | null"
+            },
+            {
+              "name": "estado",
+              "type": "string | null"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "inscricao_estadual",
+              "type": "string | null"
+            },
+            {
+              "name": "is_padrao",
+              "type": "boolean"
+            },
+            {
+              "name": "logo_url",
+              "type": "string | null"
+            },
+            {
+              "name": "nome_fantasia",
+              "type": "string | null"
+            },
+            {
+              "name": "razao_social",
+              "type": "string"
+            },
+            {
+              "name": "regime_tributario",
+              "type": "string | null"
+            },
+            {
+              "name": "sigla",
+              "type": "string | null"
+            },
+            {
+              "name": "telefone",
+              "type": "string | null"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "aliquota_rat",
+              "type": "number | null"
+            },
+            {
+              "name": "aliquota_terceiros",
+              "type": "number | null"
+            },
+            {
+              "name": "ativo",
+              "type": "boolean"
+            },
+            {
+              "name": "bairro",
+              "type": "string | null"
+            },
+            {
+              "name": "cep",
+              "type": "string | null"
+            },
+            {
+              "name": "cidade",
+              "type": "string | null"
+            },
+            {
+              "name": "cnae_principal",
+              "type": "string | null"
+            },
+            {
+              "name": "cnpj",
+              "type": "string | null"
+            },
+            {
+              "name": "codigo_fpas",
+              "type": "string | null"
+            },
+            {
+              "name": "cor_hex",
+              "type": "string | null"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "string | null"
+            },
+            {
+              "name": "endereco",
+              "type": "string | null"
+            },
+            {
+              "name": "estado",
+              "type": "string | null"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "inscricao_estadual",
+              "type": "string | null"
+            },
+            {
+              "name": "is_padrao",
+              "type": "boolean"
+            },
+            {
+              "name": "logo_url",
+              "type": "string | null"
+            },
+            {
+              "name": "nome_fantasia",
+              "type": "string | null"
+            },
+            {
+              "name": "razao_social",
+              "type": "string"
+            },
+            {
+              "name": "regime_tributario",
+              "type": "string | null"
+            },
+            {
+              "name": "sigla",
+              "type": "string | null"
+            },
+            {
+              "name": "telefone",
+              "type": "string | null"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "aliquota_rat",
+              "type": "number | null"
+            },
+            {
+              "name": "aliquota_terceiros",
+              "type": "number | null"
+            },
+            {
+              "name": "ativo",
+              "type": "boolean"
+            },
+            {
+              "name": "bairro",
+              "type": "string | null"
+            },
+            {
+              "name": "cep",
+              "type": "string | null"
+            },
+            {
+              "name": "cidade",
+              "type": "string | null"
+            },
+            {
+              "name": "cnae_principal",
+              "type": "string | null"
+            },
+            {
+              "name": "cnpj",
+              "type": "string | null"
+            },
+            {
+              "name": "codigo_fpas",
+              "type": "string | null"
+            },
+            {
+              "name": "cor_hex",
+              "type": "string | null"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "string | null"
+            },
+            {
+              "name": "endereco",
+              "type": "string | null"
+            },
+            {
+              "name": "estado",
+              "type": "string | null"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "inscricao_estadual",
+              "type": "string | null"
+            },
+            {
+              "name": "is_padrao",
+              "type": "boolean"
+            },
+            {
+              "name": "logo_url",
+              "type": "string | null"
+            },
+            {
+              "name": "nome_fantasia",
+              "type": "string | null"
+            },
+            {
+              "name": "razao_social",
+              "type": "string"
+            },
+            {
+              "name": "regime_tributario",
+              "type": "string | null"
+            },
+            {
+              "name": "sigla",
+              "type": "string | null"
+            },
+            {
+              "name": "telefone",
+              "type": "string | null"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            }
+          ]
+        },
+        "user_empresas": {
+          "definition_sha1": "d498b8b7fdfb0f140c7624e12a35ca7c0615cf71",
+          "insert_columns": [
+            {
+              "name": "ativo",
+              "type": "boolean"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "empresa_id",
+              "type": "string"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "is_default",
+              "type": "boolean"
+            },
+            {
+              "name": "provisioned_via",
+              "type": "string"
+            },
+            {
+              "name": "role",
+              "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
+            },
+            {
+              "name": "scim_external_id",
+              "type": "string | null"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 1,
+          "row_columns": [
+            {
+              "name": "ativo",
+              "type": "boolean"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "empresa_id",
+              "type": "string"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "is_default",
+              "type": "boolean"
+            },
+            {
+              "name": "provisioned_via",
+              "type": "string"
+            },
+            {
+              "name": "role",
+              "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
+            },
+            {
+              "name": "scim_external_id",
+              "type": "string | null"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "ativo",
+              "type": "boolean"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "empresa_id",
+              "type": "string"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "is_default",
+              "type": "boolean"
+            },
+            {
+              "name": "provisioned_via",
+              "type": "string"
+            },
+            {
+              "name": "role",
+              "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
+            },
+            {
+              "name": "scim_external_id",
+              "type": "string | null"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
             }
           ]
         }
@@ -39777,8 +40249,8 @@
             }
           ]
         },
-        "empresas": {
-          "definition_sha1": "44f4623e494ce1a3e03b801ffc022780cbad1ef6",
+        "empresas_zapp_legacy": {
+          "definition_sha1": "192829066ee0fd928bb3e52ffc00d0728c061948",
           "insert_columns": [
             {
               "name": "bitrix_empresa_id",
@@ -93771,6 +94243,73 @@
           "definition_sha1": "9f628baa26c4768ceba97651e77ece2f2320bf15",
           "overload_count": 0,
           "overloads": []
+        },
+        "fn_sicoob_bridge_ingest_message": {
+          "definition_sha1": "6f1aa0d9aa271bb2024c7ca79b0b9b44a5b7e942",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [
+                {
+                  "name": "p_content",
+                  "type": "string"
+                },
+                {
+                  "name": "p_created_at",
+                  "type": "string"
+                },
+                {
+                  "name": "p_message_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_email",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_name",
+                  "type": "string"
+                },
+                {
+                  "name": "p_sender_phone",
+                  "type": "string"
+                },
+                {
+                  "name": "p_singular_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_singular_name",
+                  "type": "string"
+                },
+                {
+                  "name": "p_vendedor_user_id",
+                  "type": "string"
+                }
+              ],
+              "returns": {
+                "fields": [
+                  {
+                    "name": "contact_id",
+                    "type": "string"
+                  },
+                  {
+                    "name": "idempotent",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "message_id",
+                    "type": "string"
+                  }
+                ],
+                "kind": "object[]"
+              }
+            }
+          ]
         },
         "fn_snapshot_constraints_reference": {
           "definition_sha1": "7c7857a1e75b0cce14b51ff9d992b6561ae025a2",
@@ -189216,14 +189755,14 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "1b8df069b5d516ae8dbc8f4697c18f504f0b8d07"
+    "types_sha1": "39a49d1b271925ef8be63ccd7262dfdc95b85f44"
   },
   "summary": {
     "composite_types": 0,
     "enums": 22,
-    "functions": 914,
+    "functions": 917,
     "schemas": 3,
-    "tables": 467,
+    "tables": 469,
     "views": 738
   }
 }
