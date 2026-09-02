@@ -320,28 +320,31 @@ describe('checkVersion (via startBuildVersionWatcher + fake timers)', () => {
       // 'zapp-update-required' (grace:true) e agenda o reload; o reload ocorre
       // ao fim da janela de cortesia UPDATE_GRACE_MS — não mais imediatamente.
       // Com o poll consolidado de 60s, o tick de t=90s coincide com a janela
-      // de cortesia: 2 checks de version.json + 6 prefetches (js/css por
-      // mismatch agendado ×2 + js/css no forceBundleRefresh) = 8 fetches.
+      // de cortesia.
       await vi.advanceTimersByTimeAsync(30_000 + __TEST__.UPDATE_GRACE_MS);
       // Poll e cortesia andam em lockstep (ambos 60s a partir do mismatch):
       // o poll do mesmo tick NÃO cancela o timer pendente (guard same-target);
       // o poll seguinte re-agenda. Fetch calls: 2× version.json (t=30 kickoff +
-      // t=90 poll) + 5 assets (js/css do schedule + HEAD CDN + js/css do force).
-      expect(fetchMock).toHaveBeenCalledTimes(7);
+      // t=90 poll) + 3 assets (js do schedule + HEAD CDN + js do force).
+      expect(fetchMock).toHaveBeenCalledTimes(5);
       expect(String(fetchMock.mock.calls[0][0])).toMatch(/^\/version\.json\?ts=\d+$/);
-      // Assets do novo bundle: 2 prefetch no schedule, 1 HEAD CDN check,
-      // 2 prefetch no forceBundleRefresh (total 5 chamadas de /assets/).
+      // Assets do novo bundle: 1 prefetch no schedule, 1 HEAD CDN check,
+      // 1 prefetch no forceBundleRefresh.
+      //
+      // REGRESSÃO (2026-09-02): antes o prefetch também pedia
+      // '/assets/index-buildB.css', derivado do nome do JS. O CSS tem hash
+      // PRÓPRIO no Vite, então esse caminho 404ava em todo deploy. Sem
+      // `entryCss` no version.json o CSS não é mais adivinhado.
       const assetCalls = fetchMock.mock.calls.filter((c) => String(c[0]).startsWith('/assets/'));
       const prefetchUrls = assetCalls.map((c) => String(c[0]));
       expect(prefetchUrls).toEqual([
         '/assets/index-buildB.js',   // prefetch (schedule)
-        '/assets/index-buildB.css',  // prefetch (schedule)
         '/assets/index-buildB.js',   // HEAD CDN check (isBundleReachable)
         '/assets/index-buildB.js',   // prefetch (forceBundleRefresh)
-        '/assets/index-buildB.css',  // prefetch (forceBundleRefresh)
       ]);
-      // Verificar que o CDN check é mesmo HEAD (3ª chamada de /assets/)
-      expect(assetCalls[2][1]).toMatchObject({ method: 'HEAD' });
+      expect(prefetchUrls.some((u) => u.endsWith('.css'))).toBe(false);
+      // Verificar que o CDN check é mesmo HEAD (2ª chamada de /assets/)
+      expect(assetCalls[1][1]).toMatchObject({ method: 'HEAD' });
       expect(replaceSpy).toHaveBeenCalledTimes(1);
       expect(String(replaceSpy.mock.calls[0][0])).toContain('_bv=');
       expect(__TEST__.readReloadState()).toEqual(
@@ -647,7 +650,16 @@ describe('GAP-1 (QA-06): version.json com entry real → reload NÃO aborta', ()
   it('entry no payload faz o HEAD check/prefetch usarem o asset real (index-<hash>.js)', async () => {
     fetchMock.mockImplementation(() =>
       Promise.resolve(
-        jsonResponse({ buildId: 'buildB', entry: 'assets/index-abc123.js' }, 'application/json')
+        jsonResponse(
+          {
+            buildId: 'buildB',
+            entry: 'assets/index-abc123.js',
+            // Hash do CSS é INDEPENDENTE do hash do JS (comportamento real do
+            // Vite) — por isso o nome vem publicado em version.json.
+            entryCss: 'assets/index-zzz999.css',
+          },
+          'application/json'
+        )
       )
     );
 
@@ -664,12 +676,14 @@ describe('GAP-1 (QA-06): version.json com entry real → reload NÃO aborta', ()
       );
       expect(headCall).toBeDefined();
       expect(String(headCall![0])).toBe('/assets/index-abc123.js');
-      // Prefetch usa o entry real (js + css companion)
+      // Prefetch usa o entry real (js) e o CSS publicado em entryCss — nunca
+      // o nome derivado do JS (que 404ava: ver regressão 2026-09-02).
       const assetCalls = fetchMock.mock.calls
         .filter((c) => String(c[0]).startsWith('/assets/'))
         .map((c) => String(c[0]));
       expect(assetCalls).toContain('/assets/index-abc123.js');
-      expect(assetCalls).toContain('/assets/index-abc123.css');
+      expect(assetCalls).toContain('/assets/index-zzz999.css');
+      expect(assetCalls).not.toContain('/assets/index-abc123.css');
       // Reload APLICA (não aborta pelo HEAD 404)
       expect(replaceSpy).toHaveBeenCalledTimes(1);
     } finally {
