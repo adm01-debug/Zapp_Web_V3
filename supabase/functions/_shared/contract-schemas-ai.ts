@@ -24,7 +24,7 @@ import {
   ChatbotL1V1Schema,
   ClassifyAudioMemeV1Schema,
   AiChurnAnalysisV1Schema,
-  ClassifyEmojiV1Schema,
+
   ClassifyStickerV1Schema,
   SentimentAlertV1Schema,
   VoiceChangerV1Schema,
@@ -53,8 +53,7 @@ export { ChatbotL1V1Schema };
 export { ClassifyAudioMemeV1Schema };
 /** ai-churn-analysis@v1 — re-export de schemas.ts:337 (strict). */
 export { AiChurnAnalysisV1Schema };
-/** classify-emoji@v1 — re-export de schemas.ts:350 (strict). */
-export { ClassifyEmojiV1Schema };
+
 /** classify-sticker@v1 — re-export de schemas.ts:355 (strict). */
 export { ClassifyStickerV1Schema };
 /** sentiment-alert@v1 — re-export de schemas.ts:369 (= SentimentAlertSchema.strict()). */
