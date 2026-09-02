@@ -316,6 +316,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         backoffRef.current = INITIAL_BACKOFF_MS;
         reconnectAttemptCountRef.current = 0;
         reconnectExhaustedRef.current = false;
+        credentialErrorRef.current = false;
         setIsReconnecting(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.evolutionConversations.all() });
         eventBus.emit('connection:recovered', { instanceName });
@@ -466,6 +467,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     backoffRef.current = INITIAL_BACKOFF_MS;
     consecutiveFailsRef.current = 0;
     circuitOpenUntilRef.current = 0;
+    credentialErrorRef.current = false;
     void attemptSpecificReconnectRef.current?.();
   }, []);
 
