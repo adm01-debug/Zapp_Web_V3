@@ -156,3 +156,102 @@ padrão geral encontrado: os agentes de varredura estática marcaram corretament
 "NÃO AUDITÁVEL" tudo que dependia de acesso a produção, e neste caso específico a
 verificação ao vivo confirmou que o código de aplicação está mais permissivo que o
 banco — não o contrário, que seria o cenário perigoso.
+
+---
+
+## Rodada 2 (2026-09-02) — validação exaustiva ao vivo + correções aplicadas
+
+Com o MCP correto localizado (`SUPABASE_SELF_HOSTED_-_MCP`), 5 agentes especializados
+validaram (somente leitura) contra o Postgres de produção real todos os achados desta
+auditoria que dependiam de acesso ao banco. O quadro real é **mais sério** do que a
+varredura estática original estimou em várias dimensões. Resumo por veredito:
+
+### Confirmados SEGUROS (a varredura estática superestimou o risco)
+- `zapp.user_has_permission`, `zapp.is_admin_or_supervisor` e as demais 811 funções
+  `SECURITY DEFINER` do schema `zapp`: todas com `search_path` fixo, todas fail-closed
+  em `auth.uid()`/parâmetro NULL.
+- Cobertura de RLS em `zapp`: 387/387 tabelas base com RLS habilitada (não 323 — o
+  schema cresceu desde 2026-08-06, não é regressão).
+- `zapp.role_permissions`: RLS + policies corretas (ver nota acima).
+
+### RISCO REAL CONFIRMADO e CORRIGIDO nesta sessão
+1. **Bypass de RLS em `zapp.messages`** — a policy RLS de UPDATE/DELETE na raiz
+   `evo.evolution_messages` (restrita a admin/supervisor) era contornada pelos
+   triggers `INSTEAD OF` da view `zapp.messages` (`SECURITY DEFINER`, owner
+   `postgres`, `rolbypassrls=true`), que é o caminho real usado pelo frontend
+   (`MessageHoverToolbar.tsx`). Qualquer agente autenticado podia apagar/editar
+   qualquer mensagem, inclusive recebidas do cliente. **Corrigido**:
+   `supabase/migrations/20260902010000_fix_messages_view_role_bypass.sql`.
+2. **3 pontos adicionais de PII em log** (telefone/JID em texto puro), além dos 3 já
+   catalogados na Rodada 1, no mesmo arquivo (`evolution-webhook-messages.ts`).
+   **Corrigido** no mesmo commit da correção de RLS.
+3. **`sicoob-bridge` sem transação atômica** — confirmado; tabela de mapeamento tem
+   0 linhas em produção hoje (sem dado corrompido a reparar). **Corrigido**: nova RPC
+   `zapp.fn_sicoob_bridge_ingest_message`
+   (`supabase/migrations/20260902020000_fn_sicoob_bridge_ingest_message.sql`).
+4. **FK sem índice** em `zapp.sicoob_contact_mapping.zappweb_agent_id` — regressão
+   pontual de `20260821005000_recreate_sicoob_contact_mapping.sql`. **Corrigido**:
+   `supabase/migrations/20260902030000_fix_sicoob_contact_mapping_missing_fk_index.sql`.
+5. **Validação de e-mail e CNPJ nunca conectadas** — `contactEmailSchema` (Zod) já
+   existia mas não era usado; CNPJ não tinha validação de dígito verificador em
+   lugar nenhum do app (51.688 empresas). **Corrigido** com testes de regressão
+   (`src/lib/cnpjUtils.ts`, `src/shared/__tests__/contactEmailSchema.test.ts`,
+   `src/lib/__tests__/cnpjUtils.test.ts`).
+
+Todas as correções acima foram commitadas como migrations/código versionado no PR
+[#1482](https://github.com/adm01-debug/Zapp_Web_V3/pull/1482) — **nenhuma foi aplicada
+diretamente em produção via MCP**, por decisão deliberada: aplicar direto repetiria o
+mesmo padrão de drift que o item abaixo expõe como problema sistêmico do banco.
+
+### RISCO REAL CONFIRMADO — pendente de decisão (não corrigido nesta sessão)
+1. **CHECK constraints conflitantes em `financeiro.notas_fiscais`**: 2 pares de CHECK
+   (`chk_status_v2`/`notas_fiscais_status_check` e `chk_tipo_nota_v2`/
+   `notas_fiscais_tipo_nota_check`) se combinam por AND e bloqueiam silenciosamente
+   os valores `DENEGADA`, `FATURAMENTO` e `REMESSA` mesmo a constraint mais nova
+   permitindo — decisão de negócio sobre quais status/tipos são válidos hoje, não
+   decidível por auditoria de código.
+2. **64 FKs em `NO ACTION`** no schema `zapp` (não 2, como a varredura estática
+   achou por grep textual) — `zapp.evolution_whatsapp_status.contact_id` tem
+   **14.780 linhas órfãs reais** (94,8% da tabela) apontando para contatos já
+   apagados/mesclados. Requer decisão de política (SET NULL? CASCADE? limpar
+   histórico?), não uma migration unilateral.
+3. **`empresas` (51.688 linhas reais) classificada como "vazia"** por `n_live_tup`
+   desatualizado no coletor de estatísticas do Postgres — junto com outras 98
+   tabelas. Isso não é um bug de aplicação, mas é um risco real de **processo**: se
+   `docs/MODULOS-INATIVOS.md` foi construído consultando essa mesma fonte, ele pode
+   estar classificando a tabela de clientes mais importante do sistema como
+   candidata a arquivamento. Recomendação registrada: nunca usar `n_live_tup` para
+   decisão de arquivamento/DROP — usar `COUNT(*)` real.
+4. **Drift de versionamento em escala muito maior que o estimado**: 798 migrations
+   no ledger de produção vs. 117 arquivos no repo; 162 delas (pós-squash) sem
+   nenhum arquivo em `supabase/migrations/` nem em `docs/history/migrations-archive/`
+   — incluindo ~120 migrations de um incidente de dados real de 09–12/08/2026
+   (reversão de 24.500 mensagens e 2.753 conversas corrompidas por JIDs "LID"
+   fake) sem nenhum rastro versionado. Amostra de policies RLS em tabelas críticas
+   (`contatos`, `empresas`, `profiles`, `workspace_members`): 42% (11/26) sem
+   migration correspondente. Funções centrais do RBAC (`has_role`,
+   `check_user_permission`, `user_has_permission`) sem `CREATE FUNCTION` em
+   nenhum lugar do repo — não é possível reconstruir a lógica de autorização em
+   produção só lendo o código-fonte.
+5. **`secure-upload` fail-closed sem `VIRUSTOTAL_API_KEY`**: não aplicado — a chave
+   não está confirmada como ativa em produção (ausente do `SECRETS_INVENTORY.md`),
+   e fail-closed às cegas bloquearia todo upload de mídia do WhatsApp se a chave
+   estiver de fato ausente. Trade-off de negócio, não decisão unilateral.
+6. **522 índices com `idx_scan=0`** em `zapp`+`evo` (~27 MB) e ~7 duplicatas
+   genuínas confirmadas (a ferramenta bruta de detecção de duplicatas reporta 120
+   grupos, mas ~113 são falso-positivo por ignorar índices parciais/de expressão).
+   Candidatos a poda, não removidos nesta sessão (baixo ganho, exige confirmação
+   individual de cada índice antes de dropar em produção).
+7. **7 entradas malformadas no ledger de migrations** (`20260809E12` … `E44B`, sem
+   o padrão de 14 dígitos) — quebra o próprio contrato de nomenclatura que o CI
+   (`migration-uniqueness.yml`) impõe.
+
+### Nota geral atualizada
+Considerando os achados reais da Rodada 2 (muito mais dado órfão e drift de
+versionamento do que a Rodada 1 estimou, mas o bypass de segurança mais grave já
+corrigido), a nota geral ponderada permanece em torno de **6,8-6,9/10** — o ganho de
+corrigir o bypass de RLS é compensado pela descoberta de que Documentação/Banco de
+Dados tinham problemas de rastreabilidade maiores do que o estimado. Dimensões que
+devem ser rebaixadas na próxima revisão formal do scorecard: **Documentação** (drift
+de versionamento em escala muito maior) e **Banco de Dados** (FKs órfãs em volume,
+CHECK constraints conflitantes).
