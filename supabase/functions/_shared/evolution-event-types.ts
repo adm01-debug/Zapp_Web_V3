@@ -38,7 +38,7 @@ export const EVO_EVENT_TYPES_SET: ReadonlySet<string> = new Set<string>(EVO_EVEN
 export const EVO_PROTOBUF_MESSAGE_TYPE_MAP: Readonly<Record<string, string>> = {
   conversation: 'text',
   extendedTextMessage: 'text',
-  templateMessage: 'text',
+  templateMessage: 'template',
   imageMessage: 'image',
   videoMessage: 'video',
   audioMessage: 'audio',

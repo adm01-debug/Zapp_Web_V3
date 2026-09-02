@@ -404,6 +404,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
           reconnectExhaustedRef.current = false;
           reconnectAttemptCountRef.current = 0;
           backoffRef.current = INITIAL_BACKOFF_MS;
+          timerRef.current = null; // descarta ref de timer expirado — sem isso o guard abaixo bloqueia novo ciclo
         }
         return;
       }

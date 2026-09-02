@@ -68,6 +68,10 @@ BEGIN
   v_cov := CASE WHEN v_src > 0 THEN round(100.0 * (v_src - v_missing) / v_src, 2) END;
   SELECT max(created_at) INTO v_last FROM evo.evolution_messages_wpp2;
 
+  -- Garante que as colunas existem (migration original 20260820093000 tem 8 colunas base)
+  ALTER TABLE evo.recon_coverage_daily ADD COLUMN IF NOT EXISTS missing_lid_24h      bigint;
+  ALTER TABLE evo.recon_coverage_daily ADD COLUMN IF NOT EXISTS missing_bydesign_24h bigint;
+
   INSERT INTO evo.recon_coverage_daily AS d
     (snapshot_date, coverage_pct, msgs_source_24h, msgs_mirror_24h, missing_real_24h,
      missing_lid_24h, missing_bydesign_24h, last_ingest_at, source, captured_at)
@@ -84,8 +88,10 @@ BEGIN
         source               = EXCLUDED.source,
         captured_at          = now();
 
-  -- FIX: alerta explícito quando fonte FDW está vazia
-  IF v_src = 0 THEN
+  -- FIX: alerta explícito quando fonte FDW está vazia E não há mensagens bydesign
+  -- (v_src=0 com v_bydesign>0 = todas as mensagens são classificadas como bydesign,
+  --  não significa que o FDW está vazio)
+  IF v_src = 0 AND v_bydesign = 0 THEN
     PERFORM zapp.rpc_boundary_raise_alert(
       'recon_coverage',
       'critical',
@@ -136,8 +142,20 @@ ALTER FOREIGN TABLE evo.fdw_evolution_message
 -- AG-1/FIX-3: FDW server evolution_postgres — adicionar query_timeout 30s
 -- Previne que queries FDW lentas bloquem slot de conexão indefinidamente.
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER SERVER evolution_postgres
-  OPTIONS (ADD query_timeout '30000');
+-- Idempotente: usa SET se a opção já existir, ADD caso contrário.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_options_to_table(
+      (SELECT srvoptions FROM pg_foreign_server WHERE srvname = 'evolution_postgres')
+    ) WHERE option_name = 'query_timeout'
+  ) THEN
+    ALTER SERVER evolution_postgres OPTIONS (SET query_timeout '30000');
+  ELSE
+    ALTER SERVER evolution_postgres OPTIONS (ADD query_timeout '30000');
+  END IF;
+END;
+$$;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -275,5 +293,7 @@ CROSS JOIN dlq q;
 -- ROLLBACK:
 --   ALTER SERVER evolution_postgres OPTIONS (DROP query_timeout);
 --   ALTER FOREIGN TABLE evo.fdw_evolution_message ALTER COLUMN "messageTimestamp" TYPE integer;
+--   ALTER TABLE evo.recon_coverage_daily DROP COLUMN IF EXISTS missing_lid_24h;
+--   ALTER TABLE evo.recon_coverage_daily DROP COLUMN IF EXISTS missing_bydesign_24h;
 --   -- Restaurar versões anteriores das funções/views via evolution-stack.
 -- ─────────────────────────────────────────────────────────────────────────────

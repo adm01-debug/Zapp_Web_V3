@@ -10,7 +10,7 @@
  * ramo de "giving up", gerando um evento Sentry ate o tunnel responder 429.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 
 // vi.mock é içado acima das declarações do módulo — as refs precisam vir de
 // vi.hoisted para existirem quando a factory do mock roda.
@@ -59,11 +59,11 @@ vi.mock('@/lib/eventBus', () => ({ eventBus: { emit } }));
 
 import { useEvolutionAutoReconnect } from '@/hooks/useEvolutionAutoReconnect';
 
-/** Avanca timers fake resolvendo microtasks entre cada passo. */
-async function advance(ms: number, step = 1_000): Promise<void> {
-  for (let elapsed = 0; elapsed < ms; elapsed += step) {
-    await vi.advanceTimersByTimeAsync(step);
-  }
+/** Avanca timers fake drenando toda a cadeia de microtasks em um unico passo. */
+async function advance(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 }
 
 describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
