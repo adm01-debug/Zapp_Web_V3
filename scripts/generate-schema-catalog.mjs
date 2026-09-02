@@ -80,6 +80,17 @@ function sha1(input) {
 // de novo, só que sem nenhum sinal de que a causa é a allowlist quebrada, não
 // o catálogo em si. Passar explicitamente string vazia continua sendo a forma
 // de desligar o filtro de propósito.
+// Mesmas regras de validação de scripts/compare-schema-catalog.mjs (mantidas
+// em sincronia manualmente — os dois scripts não compartilham um módulo).
+// Achado do cubic (review do PR #1484, confidence 10): sem essa validação,
+// uma entrada com campo faltando/typo (ex.: "expected_presense" em vez de
+// "expected_presence") seria silenciosamente ignorada por
+// stripRightOnlyExternalObjects (que só filtra `expected_presence ===
+// 'right-only'`), reintroduzindo o objeto externo no catálogo sem nenhum erro.
+const EXTERNAL_OBJECT_PATH =
+  /^schemas\.public\.(Tables|Views|Functions|Enums|CompositeTypes)\.([A-Za-z_][A-Za-z0-9_]*)$/;
+const EXPECTED_PRESENCES = new Set(['left-only', 'right-only']);
+
 function loadExternalObjectsAllowlist(file) {
   if (!file) return [];
   if (!existsSync(file)) {
@@ -93,9 +104,38 @@ function loadExternalObjectsAllowlist(file) {
       `Allowlist de objetos externos inválida em ${file}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  if (!Array.isArray(config?.objects)) {
-    throw new Error(`Allowlist de objetos externos inválida em ${file}: campo "objects" ausente ou não é array.`);
+  if (config?.version !== 1 || !Array.isArray(config?.objects)) {
+    throw new Error(`Allowlist de objetos externos inválida em ${file}: exige version=1 e um array "objects".`);
   }
+
+  const seenPaths = new Set();
+  for (const [index, entry] of config.objects.entries()) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: objects[${index}] deve ser um objeto.`);
+    }
+    const { path, owner, reason, expected_presence: expectedPresence } = entry;
+    if (typeof path !== 'string' || !EXTERNAL_OBJECT_PATH.test(path)) {
+      throw new Error(
+        `Escopo externo inválido em ${file}: objects[${index}].path deve apontar para um objeto inteiro em schemas.public.`,
+      );
+    }
+    if (seenPaths.has(path)) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: caminho duplicado: ${path}.`);
+    }
+    if (typeof owner !== 'string' || !owner.startsWith('external-')) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: ${path} exige owner iniciado por external-.`);
+    }
+    if (typeof reason !== 'string' || !reason.trim()) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: ${path} exige reason não vazio.`);
+    }
+    if (!EXPECTED_PRESENCES.has(expectedPresence)) {
+      throw new Error(
+        `Allowlist de objetos externos inválida em ${file}: ${path} exige expected_presence igual a left-only ou right-only.`,
+      );
+    }
+    seenPaths.add(path);
+  }
+
   return config.objects;
 }
 

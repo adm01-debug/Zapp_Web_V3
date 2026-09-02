@@ -192,3 +192,79 @@ test('generate-schema-catalog falha alto se a allowlist de objetos externos esti
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr + invalid.stdout, /Allowlist de objetos externos inválida/);
 });
+
+test('generate-schema-catalog falha alto se uma entrada da allowlist tiver campo invalido/faltando', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'schema-catalog-external-objects-badentry-'));
+  const outFile = join(outDir, 'schema-catalog.json');
+
+  // Achado do cubic (P1, confidence 10): uma entrada com expected_presence
+  // com typo/ausente antes passava batido (stripRightOnlyExternalObjects só
+  // filtra expected_presence === 'right-only', então qualquer outro valor —
+  // inclusive undefined — era silenciosamente ignorado, reintroduzindo o
+  // objeto externo no catálogo sem erro nenhum).
+  const badPresenceFile = join(outDir, 'bad-presence.json');
+  writeFileSync(
+    badPresenceFile,
+    JSON.stringify({
+      version: 1,
+      objects: [
+        {
+          path: 'schemas.public.Functions.has_role',
+          owner: 'external-finance-system',
+          reason: 'Função de outro sistema que compartilha o schema public.',
+          expected_presence: 'rigth-only', // typo proposital
+        },
+      ],
+    }) + '\n',
+  );
+  const badPresence = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      badPresenceFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(badPresence.status, 0);
+  assert.match(badPresence.stderr + badPresence.stdout, /exige expected_presence igual a left-only ou right-only/);
+
+  const badPathFile = join(outDir, 'bad-path.json');
+  writeFileSync(
+    badPathFile,
+    JSON.stringify({
+      version: 1,
+      objects: [
+        {
+          path: 'schemas.zapp.Functions.current_user_role',
+          owner: 'external-finance-system',
+          reason: 'Fora de schemas.public de propósito.',
+          expected_presence: 'right-only',
+        },
+      ],
+    }) + '\n',
+  );
+  const badPath = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--types-file',
+      externalObjectsFixturePath,
+      '--schemas',
+      'public,zapp',
+      '--external-objects-file',
+      badPathFile,
+      '--out',
+      outFile,
+    ],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  assert.notEqual(badPath.status, 0);
+  assert.match(badPath.stderr + badPath.stdout, /Escopo externo inválido/);
+});
