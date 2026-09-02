@@ -5,7 +5,7 @@ import { evolutionClient } from "./providers/evolution/index.ts";
 import {
   isRecord, normalizePhone, resolveEventJid,
   getConnectionByInstance, getContactByPhone, fetchProfilePicFromApi, persistProfilePicture,
-  generatePhoneVariants, logLedgerRejection,
+  generatePhoneVariants, logLedgerRejection, redactJid,
 } from "./evolution-helpers.ts";
 import { persistMediaToStorage, persistMediaViaApi, parseMessageContent, isSafeMediaCdnUrl } from "./evolution-media.ts";
 import { getStoragePublicUrl } from "./storage-url.ts";
@@ -258,12 +258,12 @@ export async function handleIncomingMessage(
         // erro ≠ 23505 era engolido silenciosamente -> contact=null -> mensagem descartada.
         // Agora logado para diagnóstico imediato de qualquer nova violação.
         console.error('[CONTACT] Insert FAILED (non-23505) — message WILL NOT be mirrored', {
-          messageId: key.id, phone, instance, remoteJid: bestJid,
+          messageId: key.id, phone: redactJid(phone), instance, remoteJid: redactJid(bestJid),
           code: insertErr.code, message: insertErr.message, details: insertErr.details, hint: insertErr.hint,
         });
       } else if (!newContact) {
         console.warn('[CONTACT] Insert returned no row without error (0 rows? unexpected)', {
-          messageId: key.id, phone, instance, remoteJid: bestJid,
+          messageId: key.id, phone: redactJid(phone), instance, remoteJid: redactJid(bestJid),
         });
       }
       contact = newContact;
@@ -325,7 +325,10 @@ export async function handleIncomingMessage(
     caption: captionText ?? undefined,
   });
   if (!inResult.ok) {
-    console.error('Error inserting message:', { error: inResult.error, externalId: key.id, bestJid, phone, messageType, content });
+    console.error('Error inserting message:', {
+      error: inResult.error, externalId: key.id, bestJid: redactJid(bestJid), phone: redactJid(phone),
+      messageType, contentLength: typeof content === 'string' ? content.length : undefined,
+    });
     return;
   }
   if (!inResult.rowId) return; // ON CONFLICT DO NOTHING: concurrent writer won the race
