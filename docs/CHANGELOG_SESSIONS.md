@@ -644,6 +644,14 @@ Testado ao vivo: replay adversarial (mesmo `message_id`, payload NULL) agora ret
 
 Testado ao vivo: mensagem soft-deletada + replay agora retorna `idempotent=true` sem tocar no contato (`updated_at` inalterado); cenário de replay normal (sem soft-delete) continua funcionando sem regressão.
 
+### Rodada 3 (continuação) — review cubic sobre o fix anterior: colisão cross-instância
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| Checagem de idempotência sem filtro de `instance_name` | `20260902200000` | A checagem de `20260902190000` filtrava só por `message_id`, mas a chave física real de `evo.evolution_messages` é composta (`message_id`, `instance_name`) — `message_id` sozinho não é único entre canais/instâncias diferentes (wpp2, comercial_01-08, financeiro, etc). Um `message_id` do Sicoob (string arbitrária do sistema deles) que coincidisse por acaso com o de uma mensagem real de OUTRO canal seria marcado como duplicata e devolveria o contato ALHEIO daquela mensagem, nunca criando o contato Sicoob correto. Confirmado via `pg_get_functiondef` que o INSERT desta função sempre grava `instance_name='wpp2'` (fallback do handler da view). Fix: checagem agora filtra também por `instance_name='wpp2'`, batendo exatamente com o que a função grava | ✅ |
+
+Testado ao vivo: inserida mensagem fake em outra instância (`financeiro`) com o mesmo `message_id` de um teste Sicoob — antes do fix teria colidido; depois do fix, a função corretamente ignora a mensagem de outro canal e cria/atualiza o contato Sicoob certo.
+
 ### Metodologia das rodadas 2 e 3
 
 Por pedido explícito e repetido do dono ("SEJA EXAUSTIVO E MINUCIOSO"), cada rodada rodou 5 agentes especializados em paralelo, cada um focado num ângulo diferente (idempotência do lote completo, varredura ampla de RPCs sem guarda, teste E2E dos callers reais, matriz combinatória adversarial, consolidação de catálogo/CI). Cada achado real foi reproduzido ao vivo (erro real antes do fix) e reconfirmado corrigido depois, sem deixar dado de teste residual em produção. As rodadas 2 e 3 encontraram, cada uma, pelo menos 1 bug real que a rodada anterior não tinha pego — inclusive 2 regressões autoinfligidas pelos próprios fixes da rodada 1 (`fn_require_app_user` bloqueando `service_role`; `rpc_upsert_contact` quebrando automação real do frontend).
