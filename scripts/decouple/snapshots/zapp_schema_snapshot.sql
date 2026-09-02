@@ -1539,7 +1539,9 @@ $$;
 CREATE OR REPLACE FUNCTION zapp.bulk_update_lead_status(p_contact_ids uuid[], p_status text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
-    AS $$ DECLARE v_updated int; BEGIN IF p_contact_ids IS NULL OR array_length(p_contact_ids,1) IS NULL OR coalesce(length(trim(p_status)),0)=0 THEN RETURN jsonb_build_object('success',false,'message','p_contact_ids e p_status sao obrigatorios'); END IF; UPDATE zapp.evolution_contacts SET lead_status=p_status, version=coalesce(version,0)+1, updated_at=now() WHERE id = ANY(p_contact_ids) AND deleted_at IS NULL; GET DIAGNOSTICS v_updated = ROW_COUNT; INSERT INTO zapp.evolution_audit_log (action, entity_type, performed_by, performed_by_type, metadata, created_at) VALUES ('bulk_update_lead_status','contact', coalesce(auth.uid()::text,'system'),'user', jsonb_build_object('status',p_status,'requested',array_length(p_contact_ids,1),'updated',v_updated), now()); RETURN jsonb_build_object('success',true,'updated',v_updated); END $$;
+    AS $$ DECLARE v_updated int; BEGIN
+  PERFORM zapp.fn_require_app_user();
+  IF p_contact_ids IS NULL OR array_length(p_contact_ids,1) IS NULL OR coalesce(length(trim(p_status)),0)=0 THEN RETURN jsonb_build_object('success',false,'message','p_contact_ids e p_status sao obrigatorios'); END IF; UPDATE zapp.evolution_contacts SET lead_status=p_status, version=coalesce(version,0)+1, updated_at=now() WHERE id = ANY(p_contact_ids) AND deleted_at IS NULL; GET DIAGNOSTICS v_updated = ROW_COUNT; INSERT INTO zapp.evolution_audit_log (action, entity_type, performed_by, performed_by_type, metadata, created_at) VALUES ('bulk_update_lead_status','contact', coalesce(auth.uid()::text,'system'),'user', jsonb_build_object('status',p_status,'requested',array_length(p_contact_ids,1),'updated',v_updated), now()); RETURN jsonb_build_object('success',true,'updated',v_updated); END $$;
 
 
 
@@ -15077,13 +15079,24 @@ DECLARE
   v_sicoob_user_id text := COALESCE(p_sender_id, 'sender-' || p_message_id);
   v_phone          text;
 BEGIN
+  SELECT m.contact_id, m.id INTO v_contact_id, v_message_id
+  FROM zapp.messages m
+  WHERE m.external_id = p_message_id;
+
+  IF v_message_id IS NOT NULL THEN
+    RETURN QUERY SELECT v_contact_id, v_message_id, true;
+    RETURN;
+  END IF;
+
   SELECT m.contact_id, m.zappweb_agent_id INTO v_contact_id, v_agent_id
   FROM zapp.sicoob_contact_mapping m
   WHERE m.sicoob_user_id = v_sicoob_user_id
     AND m.sicoob_singular_id IS NOT DISTINCT FROM p_singular_id;
 
   IF v_contact_id IS NOT NULL THEN
-    UPDATE zapp.contacts SET name = p_sender_name, company = p_singular_name, updated_at = now()
+    UPDATE zapp.contacts SET name = COALESCE(p_sender_name, name),
+                              company = COALESCE(p_singular_name, company),
+                              updated_at = now()
     WHERE id = v_contact_id;
   ELSE
     SELECT id INTO v_agent_id FROM zapp.profiles LIMIT 1;
@@ -18883,7 +18896,9 @@ COMMENT ON FUNCTION zapp.get_visible_agent_ids(_user_id uuid) IS 'FIX SEC-3 (202
 CREATE OR REPLACE FUNCTION zapp.grant_lgpd_consent(p_contact_id uuid, p_channel text, p_marketing_consent boolean DEFAULT true, p_data_sharing boolean DEFAULT false, p_profiling boolean DEFAULT false) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
-    AS $$ DECLARE v_ok int; BEGIN UPDATE zapp.evolution_contacts SET lgpd_consent_at=now(), lgpd_consent_channel=p_channel, lgpd_marketing_consent=coalesce(p_marketing_consent,true), lgpd_data_sharing=coalesce(p_data_sharing,false), lgpd_profiling=coalesce(p_profiling,false), lgpd_opt_out_at=NULL, lgpd_last_updated_at=now(), version=coalesce(version,0)+1, updated_at=now() WHERE id=p_contact_id AND deleted_at IS NULL; GET DIAGNOSTICS v_ok = ROW_COUNT; IF v_ok=0 THEN RETURN jsonb_build_object('success',false,'message','contato nao encontrado'); END IF; INSERT INTO zapp.evolution_audit_log (action, entity_type, entity_id, performed_by, performed_by_type, metadata, created_at) VALUES ('lgpd_consent_granted','contact',p_contact_id, coalesce(auth.uid()::text,'system'),'user', jsonb_build_object('channel',p_channel,'marketing',p_marketing_consent,'data_sharing',p_data_sharing,'profiling',p_profiling), now()); RETURN jsonb_build_object('success',true,'contact_id',p_contact_id); END $$;
+    AS $$ DECLARE v_ok int; BEGIN
+  PERFORM zapp.fn_require_app_user();
+  UPDATE zapp.evolution_contacts SET lgpd_consent_at=now(), lgpd_consent_channel=p_channel, lgpd_marketing_consent=coalesce(p_marketing_consent,true), lgpd_data_sharing=coalesce(p_data_sharing,false), lgpd_profiling=coalesce(p_profiling,false), lgpd_opt_out_at=NULL, lgpd_last_updated_at=now(), version=coalesce(version,0)+1, updated_at=now() WHERE id=p_contact_id AND deleted_at IS NULL; GET DIAGNOSTICS v_ok = ROW_COUNT; IF v_ok=0 THEN RETURN jsonb_build_object('success',false,'message','contato nao encontrado'); END IF; INSERT INTO zapp.evolution_audit_log (action, entity_type, entity_id, performed_by, performed_by_type, metadata, created_at) VALUES ('lgpd_consent_granted','contact',p_contact_id, coalesce(auth.uid()::text,'system'),'user', jsonb_build_object('channel',p_channel,'marketing',p_marketing_consent,'data_sharing',p_data_sharing,'profiling',p_profiling), now()); RETURN jsonb_build_object('success',true,'contact_id',p_contact_id); END $$;
 
 
 
@@ -19597,32 +19612,23 @@ CREATE OR REPLACE FUNCTION zapp.manage_department_member(_admin_user_id uuid, _t
     SET search_path TO 'zapp', 'auth', 'extensions'
     AS $$
 DECLARE
-  v_admin_role text;
   v_dept_name  text;
   v_profile    record;
 BEGIN
-  -- Verificar permissão do admin
-  SELECT role INTO v_admin_role
-  FROM zapp.user_roles
-  WHERE user_id = _admin_user_id
-  LIMIT 1;
-
-  IF v_admin_role NOT IN ('admin','manager','supervisor') THEN
+  PERFORM zapp.fn_require_app_user();
+  IF NOT zapp.is_admin_or_supervisor() THEN
     RETURN jsonb_build_object(
       'success', false,
       'error', 'Permissão insuficiente',
-      'required_role', 'admin/manager/supervisor',
-      'current_role', v_admin_role
+      'required_role', 'admin/manager/supervisor'
     );
   END IF;
 
-  -- Verificar se dept existe
   SELECT name INTO v_dept_name FROM zapp.departments WHERE id = _department_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Departamento não encontrado');
   END IF;
 
-  -- Verificar target profile
   SELECT * INTO v_profile FROM zapp.profiles WHERE id = _target_profile_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Perfil não encontrado');
@@ -19665,8 +19671,13 @@ CREATE OR REPLACE FUNCTION zapp.manage_department_member(p_profile_id uuid DEFAU
 DECLARE
     v_target_id UUID;
 BEGIN
+    PERFORM zapp.fn_require_app_user();
+    IF NOT zapp.is_admin_or_supervisor() THEN
+        RETURN FALSE;
+    END IF;
+
     v_target_id := COALESCE(p_profile_id, _target_profile_id);
-    
+
     IF v_target_id IS NULL THEN
         RETURN FALSE;
     END IF;
@@ -20982,7 +20993,9 @@ $$;
 CREATE OR REPLACE FUNCTION zapp.revoke_lgpd_consent(p_contact_id uuid, p_reason text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
-    AS $$ DECLARE v_ok int; BEGIN UPDATE zapp.evolution_contacts SET lgpd_opt_out_at=now(), lgpd_marketing_consent=false, lgpd_data_sharing=false, lgpd_profiling=false, lgpd_last_updated_at=now(), version=coalesce(version,0)+1, updated_at=now() WHERE id=p_contact_id AND deleted_at IS NULL; GET DIAGNOSTICS v_ok = ROW_COUNT; IF v_ok=0 THEN RETURN jsonb_build_object('success',false,'message','contato nao encontrado'); END IF; INSERT INTO zapp.evolution_audit_log (action, entity_type, entity_id, performed_by, performed_by_type, metadata, created_at) VALUES ('lgpd_consent_revoked','contact',p_contact_id, coalesce(auth.uid()::text,'system'),'user', jsonb_build_object('reason',p_reason), now()); RETURN jsonb_build_object('success',true,'contact_id',p_contact_id); END $$;
+    AS $$ DECLARE v_ok int; BEGIN
+  PERFORM zapp.fn_require_app_user();
+  UPDATE zapp.evolution_contacts SET lgpd_opt_out_at=now(), lgpd_marketing_consent=false, lgpd_data_sharing=false, lgpd_profiling=false, lgpd_last_updated_at=now(), version=coalesce(version,0)+1, updated_at=now() WHERE id=p_contact_id AND deleted_at IS NULL; GET DIAGNOSTICS v_ok = ROW_COUNT; IF v_ok=0 THEN RETURN jsonb_build_object('success',false,'message','contato nao encontrado'); END IF; INSERT INTO zapp.evolution_audit_log (action, entity_type, entity_id, performed_by, performed_by_type, metadata, created_at) VALUES ('lgpd_consent_revoked','contact',p_contact_id, coalesce(auth.uid()::text,'system'),'user', jsonb_build_object('reason',p_reason), now()); RETURN jsonb_build_object('success',true,'contact_id',p_contact_id); END $$;
 
 
 
@@ -22323,7 +22336,9 @@ COMMENT ON COLUMN zapp.evolution_tasks.deleted_at IS 'Soft delete. NULL = ativa.
 CREATE OR REPLACE FUNCTION zapp.rpc_complete_task(p_id uuid, p_completed_by text DEFAULT NULL::text, p_notes text DEFAULT NULL::text) RETURNS zapp.evolution_tasks
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
-    AS $$ DECLARE v_row evolution_tasks; BEGIN UPDATE evolution_tasks SET status='completed', completed_at=now(), completed_by=p_completed_by, notes=COALESCE(p_notes,notes), updated_at=now() WHERE id=p_id RETURNING * INTO v_row; RETURN v_row; END; $$;
+    AS $$ DECLARE v_row evolution_tasks; BEGIN
+  PERFORM zapp.fn_require_app_user();
+  UPDATE evolution_tasks SET status='completed', completed_at=now(), completed_by=COALESCE(auth.uid()::text, p_completed_by), notes=COALESCE(p_notes,notes), updated_at=now() WHERE id=p_id RETURNING * INTO v_row; RETURN v_row; END; $$;
 
 
 
