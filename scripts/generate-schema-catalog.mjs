@@ -34,6 +34,7 @@ import { mkdirSync } from 'node:fs';
 
 const DEFAULT_TYPES_FILE = 'src/integrations/supabase/types.ts';
 const DEFAULT_OUT_FILE = 'supabase/schema-catalog.json';
+const DEFAULT_EXTERNAL_OBJECTS_FILE = 'supabase/schema-catalog-external-objects.json';
 
 function readFlag(name, fallback = undefined) {
   const prefix = `--${name}=`;
@@ -57,9 +58,127 @@ const SCHEMAS_FILTER = (readFlag('schemas', '') || '')
 const FROM_META = process.argv.includes('--from-meta');
 const CHECK_ONLY = process.argv.includes('--check');
 const IGNORE_SOURCE = process.argv.includes('--ignore-source');
+const EXTERNAL_OBJECTS_FILE = readFlag('external-objects-file', DEFAULT_EXTERNAL_OBJECTS_FILE);
 
 function sha1(input) {
   return createHash('sha1').update(input).digest('hex');
+}
+
+// O catálogo canônico (gerado a partir do types.ts commitado, nunca via
+// --from-meta) não pode conter objetos que schema-catalog-external-objects.json
+// declara "right-only" (pertencem a outro sistema que compartilha o schema
+// `public` — ex.: o financeiro externo). O postgres-meta não distingue "dono"
+// ao introspectar `public`, então tanto o types.ts quanto um catálogo gerado
+// ao vivo (--from-meta) sempre os incluem; sem este filtro, o gate "Catalog
+// fresh" (db-guard.yml) trava porque compare-schema-catalog.mjs espera esses
+// objetos ausentes do lado esquerdo (o catálogo commitado) e presentes só no
+// lado direito (o catálogo ao vivo, que continua sem filtro nenhum aqui).
+// Falha alto (em vez de degradar para []) quando o arquivo foi explicitamente
+// apontado (o default já é sempre setado) mas está ausente ou malformado —
+// achado do cubic (review do PR #1484): um catálogo que "passa" silenciosamente
+// sem aplicar o filtro reintroduziria os objetos externos e travaria o gate
+// de novo, só que sem nenhum sinal de que a causa é a allowlist quebrada, não
+// o catálogo em si. Passar explicitamente string vazia continua sendo a forma
+// de desligar o filtro de propósito.
+// Mesmas regras de validação de scripts/compare-schema-catalog.mjs (mantidas
+// em sincronia manualmente — os dois scripts não compartilham um módulo).
+// Achado do cubic (review do PR #1484, confidence 10): sem essa validação,
+// uma entrada com campo faltando/typo (ex.: "expected_presense" em vez de
+// "expected_presence") seria silenciosamente ignorada por
+// stripRightOnlyExternalObjects (que só filtra `expected_presence ===
+// 'right-only'`), reintroduzindo o objeto externo no catálogo sem nenhum erro.
+const EXTERNAL_OBJECT_PATH =
+  /^schemas\.public\.(Tables|Views|Functions|Enums|CompositeTypes)\.([A-Za-z_][A-Za-z0-9_]*)$/;
+const EXPECTED_PRESENCES = new Set(['left-only', 'right-only']);
+
+function loadExternalObjectsAllowlist(file) {
+  if (!file) return [];
+  if (!existsSync(file)) {
+    throw new Error(`Allowlist de objetos externos ausente: ${file}`);
+  }
+  let config;
+  try {
+    config = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(
+      `Allowlist de objetos externos inválida em ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (config?.version !== 1 || !Array.isArray(config?.objects)) {
+    throw new Error(`Allowlist de objetos externos inválida em ${file}: exige version=1 e um array "objects".`);
+  }
+
+  const seenPaths = new Set();
+  for (const [index, entry] of config.objects.entries()) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: objects[${index}] deve ser um objeto.`);
+    }
+    const { path, owner, reason, expected_presence: expectedPresence } = entry;
+    if (typeof path !== 'string' || !EXTERNAL_OBJECT_PATH.test(path)) {
+      throw new Error(
+        `Escopo externo inválido em ${file}: objects[${index}].path deve apontar para um objeto inteiro em schemas.public.`,
+      );
+    }
+    if (seenPaths.has(path)) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: caminho duplicado: ${path}.`);
+    }
+    if (typeof owner !== 'string' || !owner.startsWith('external-')) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: ${path} exige owner iniciado por external-.`);
+    }
+    if (typeof reason !== 'string' || !reason.trim()) {
+      throw new Error(`Allowlist de objetos externos inválida em ${file}: ${path} exige reason não vazio.`);
+    }
+    if (!EXPECTED_PRESENCES.has(expectedPresence)) {
+      throw new Error(
+        `Allowlist de objetos externos inválida em ${file}: ${path} exige expected_presence igual a left-only ou right-only.`,
+      );
+    }
+    seenPaths.add(path);
+  }
+
+  return config.objects;
+}
+
+function stripRightOnlyExternalObjects(catalog, entries) {
+  let removed = 0;
+  for (const entry of entries) {
+    if (entry.expected_presence !== 'right-only') continue;
+    const parts = entry.path.split('.');
+    let cursor = catalog;
+    let reachable = true;
+    for (const part of parts.slice(0, -1)) {
+      if (!cursor || typeof cursor !== 'object' || !(part in cursor)) {
+        reachable = false;
+        break;
+      }
+      cursor = cursor[part];
+    }
+    const leafKey = parts.at(-1);
+    if (reachable && cursor && typeof cursor === 'object' && leafKey in cursor) {
+      delete cursor[leafKey];
+      removed++;
+    }
+  }
+  return removed;
+}
+
+function recomputeSummary(catalog) {
+  const schemas = catalog.schemas || {};
+  catalog.summary = {
+    schemas: Object.keys(schemas).length,
+    tables: 0,
+    views: 0,
+    functions: 0,
+    enums: 0,
+    composite_types: 0,
+  };
+  for (const schema of Object.values(schemas)) {
+    catalog.summary.tables += Object.keys(schema.Tables || {}).length;
+    catalog.summary.views += Object.keys(schema.Views || {}).length;
+    catalog.summary.functions += Object.keys(schema.Functions || {}).length;
+    catalog.summary.enums += Object.keys(schema.Enums || {}).length;
+    catalog.summary.composite_types += Object.keys(schema.CompositeTypes || {}).length;
+  }
 }
 
 function stripQuotes(value) {
@@ -510,6 +629,13 @@ async function main() {
   const { source, text } = await loadTypesSource();
   const parsed = parseDatabaseTypes(text);
   const catalog = buildCatalog(parsed, source, text);
+
+  if (!FROM_META) {
+    const externalObjects = loadExternalObjectsAllowlist(EXTERNAL_OBJECTS_FILE);
+    const removed = stripRightOnlyExternalObjects(catalog, externalObjects);
+    if (removed > 0) recomputeSummary(catalog);
+  }
+
   const output = stableStringify(catalog);
 
   if (CHECK_ONLY) {
