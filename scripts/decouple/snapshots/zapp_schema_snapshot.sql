@@ -13367,12 +13367,13 @@ CREATE OR REPLACE FUNCTION zapp.fn_require_app_user() RETURNS void
     SET search_path TO 'zapp', 'pg_temp'
     AS $$
 BEGIN
-  IF auth.uid() IS NOT NULL THEN
-    IF NOT EXISTS (SELECT 1 FROM zapp.profiles WHERE user_id = auth.uid())
-       OR NOT EXISTS (SELECT 1 FROM zapp.user_roles WHERE user_id = auth.uid())
-       AND NOT EXISTS (SELECT 1 FROM zapp.workspace_members WHERE user_id = auth.uid()) THEN
-      RAISE EXCEPTION 'forbidden: app member required' USING ERRCODE = '42501';
-    END IF;
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'forbidden: app member required' USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM zapp.profiles WHERE user_id = auth.uid())
+     OR NOT EXISTS (SELECT 1 FROM zapp.user_roles WHERE user_id = auth.uid())
+     AND NOT EXISTS (SELECT 1 FROM zapp.workspace_members WHERE user_id = auth.uid()) THEN
+    RAISE EXCEPTION 'forbidden: app member required' USING ERRCODE = '42501';
   END IF;
 END;
 $$;
@@ -15076,14 +15077,22 @@ DECLARE
 BEGIN
   SELECT m.contact_id, m.zappweb_agent_id INTO v_contact_id, v_agent_id
   FROM zapp.sicoob_contact_mapping m
-  WHERE m.sicoob_user_id = v_sicoob_user_id AND m.sicoob_singular_id = p_singular_id;
+  WHERE m.sicoob_user_id = v_sicoob_user_id
+    AND m.sicoob_singular_id IS NOT DISTINCT FROM p_singular_id;
 
   IF v_contact_id IS NOT NULL THEN
     UPDATE zapp.contacts SET name = p_sender_name, company = p_singular_name, updated_at = now()
     WHERE id = v_contact_id;
   ELSE
     SELECT id INTO v_agent_id FROM zapp.profiles LIMIT 1;
-    v_phone := COALESCE(p_sender_phone, 'sicoob-' || p_singular_id || '-' || (extract(epoch from now()) * 1000)::bigint::text);
+    -- Fallback sintetico de tamanho fixo: remote_jid (evo.evolution_contacts) e varchar(50)
+    -- e o handler de INSERT da view concatena '@s.whatsapp.net' (16 chars) ao phone,
+    -- entao concatenar sicoob_user_id/singular_id crus (tamanho variavel do Sicoob)
+    -- podia estourar o limite. md5 garante 32 chars fixos.
+    v_phone := COALESCE(
+      p_sender_phone,
+      'sic' || substr(md5(v_sicoob_user_id || '|' || COALESCE(p_singular_id, '')), 1, 30)
+    );
 
     INSERT INTO zapp.contacts (
       name, phone, email, company, contact_type, channel_type, assigned_to, tags, notes
@@ -15106,8 +15115,6 @@ BEGIN
       v_contact_id, p_content, 'contact', 'text', p_message_id, 'internal_chat', false, 'delivered', COALESCE(p_created_at, now())
     ) RETURNING id INTO v_message_id;
   EXCEPTION WHEN unique_violation THEN
-    -- Retry concorrente ja inseriu esta message_id — mesma semantica de
-    -- idempotencia do handler original (23505 = sucesso idempotente).
     RETURN QUERY SELECT v_contact_id, NULL::uuid, true;
     RETURN;
   END;
