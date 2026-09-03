@@ -41,23 +41,27 @@ export type CanonicalMessageType =
   | 'reaction'
   | 'interactive'
   | 'template'
+  | 'poll'
   | 'unknown';
 
 /** Mapeamento Baileys (Evolution) → canônico */
 export const BAILEYS_TO_CANONICAL: Record<string, CanonicalMessageType> = {
-  conversation:         'text',
-  extendedTextMessage:  'text',
-  imageMessage:         'image',
-  videoMessage:         'video',
-  audioMessage:         'audio',
-  documentMessage:      'document',
-  stickerMessage:       'sticker',
-  locationMessage:      'location',
-  contactMessage:       'contact',
-  reactionMessage:      'reaction',
-  buttonsMessage:       'interactive',
-  listMessage:          'interactive',
-  templateMessage:      'template',
+  conversation:              'text',
+  extendedTextMessage:       'text',
+  imageMessage:              'image',
+  videoMessage:              'video',
+  audioMessage:              'audio',
+  documentMessage:           'document',
+  documentWithCaptionMessage: 'document',
+  stickerMessage:            'sticker',
+  locationMessage:           'location',
+  contactMessage:            'contact',
+  contactsArrayMessage:      'contact',
+  reactionMessage:           'reaction',
+  buttonsMessage:            'interactive',
+  listMessage:               'interactive',
+  templateMessage:           'template',
+  pollCreationMessage:       'poll',
 };
 
 /** Mapeamento Meta Cloud API → canônico */

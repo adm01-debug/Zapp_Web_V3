@@ -4,19 +4,49 @@
 --
 -- AG-1/FIX-1  fn_recon_coverage_snapshot: alerta quando v_src=0
 -- AG-1/FIX-2  fdw_evolution_message: messageTimestamp integer → bigint (Y2038)
--- AG-1/FIX-3  evolution_postgres FDW server: query_timeout 30s
+-- AG-1/FIX-3  evolution_postgres FDW server: verificação de opções (sem query_timeout — não suportado pelo PG17)
 -- AG-2/FIX-1  fn_kpi_rollup_refresh: pg_try_advisory_xact_lock
 -- AG-2/FIX-2  v_kpi_overview: qualificar _consumer_dlq com schema zapp
 --
 -- Auditado em 2026-09-02 pelos Agentes AG-1 e AG-2 (PLANO-100 exaustivo).
+-- Corrigido em 2026-09-02 pela auditoria P100-SQL-QUALITY:
+--   F-01 CRÍTICO: ALTER TABLE movido para fora do corpo PL/pgSQL (evita ACCESS EXCLUSIVE
+--                 no meio da transação da função).
+--   F-02 ALTO:    Guard de existência do servidor antes do DO block (evita falha em
+--                 pg_options_to_table(NULL) quando evolution_postgres não existe).
+--   F-03 ALTO:    ALTER FOREIGN TABLE com IF EXISTS (idempotência).
+--   F-04 ALTO:    Bloco BEGIN/EXCEPTION ao redor da query FDW (garante alerta mesmo
+--                 quando o pipeline está completamente down).
+--   F-07 BAIXO:   Rollback completo para todas as DDL e funções.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 SET search_path TO evo, zapp, pg_catalog;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- F-01 FIX: Garantir colunas ANTES de criar a função.
+-- ALTER TABLE dentro de PL/pgSQL adquire ACCESS EXCLUSIVE por toda a transação;
+-- executar aqui, fora, limita o lock à DDL pura (instantânea).
+-- (migration original 20260820093000 tem 8 colunas base; estas são adicionais)
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE evo.recon_coverage_daily ADD COLUMN IF NOT EXISTS missing_lid_24h      bigint;
+ALTER TABLE evo.recon_coverage_daily ADD COLUMN IF NOT EXISTS missing_bydesign_24h bigint;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- AG-1/FIX-2: fdw_evolution_message — messageTimestamp integer → bigint
+-- Risco Y2038: int4 satura em 2038-01-19 (max 2147483647).
+-- F-03 FIX: IF EXISTS para idempotência (não falha se FDW table não existir).
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER FOREIGN TABLE IF EXISTS evo.fdw_evolution_message
+  ALTER COLUMN "messageTimestamp" TYPE bigint;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- AG-1/FIX-1: fn_recon_coverage_snapshot — alerta quando v_src=0
--- Bug: quando FDW retorna 0 mensagens, v_cov=NULL e o IF final nunca dispara.
--- O pipeline pode ficar parado indefinidamente sem nenhum alerta gerado.
+-- Bug original: quando FDW retorna 0 mensagens, v_cov=NULL e o IF final
+-- nunca dispara — pipeline pode ficar parado sem nenhum alerta.
+-- F-04 FIX: bloco BEGIN/EXCEPTION ao redor das queries FDW para capturar
+-- fdw_error / connection_exception e emitir alerta mesmo com pipeline down.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION evo.fn_recon_coverage_snapshot()
   RETURNS void
@@ -25,7 +55,7 @@ CREATE OR REPLACE FUNCTION evo.fn_recon_coverage_snapshot()
   SET search_path TO 'evo', 'zapp', 'pg_catalog'
 AS $function$
 DECLARE
-  v_src     bigint;
+  v_src      bigint;
   v_bydesign bigint;
   v_missing  bigint;
   v_lid      bigint;
@@ -33,41 +63,63 @@ DECLARE
   v_cov      numeric;
   v_last     timestamptz;
 BEGIN
-  WITH src AS (
-    SELECT f.key->>'id' AS mid, f.key->>'remoteJid' AS rjid,
-           CASE WHEN jsonb_typeof(f.message)='object'
-                THEN (SELECT k FROM jsonb_object_keys(f.message) k LIMIT 1)
-           END AS fkey
-    FROM evo.fdw_evolution_message f
-    WHERE to_timestamp(f."messageTimestamp") > now() - interval '24 hours'
-      AND f.key->>'fromMe' = 'false'
-      AND f.key->>'remoteJid' NOT LIKE '%@g.us'
-      AND f.key->>'remoteJid' <> 'status@broadcast'
-  ), cls AS (
-    SELECT s.mid, s.rjid,
-           (s.fkey IS NULL OR s.fkey IN (
-             'reactionMessage','protocolMessage','messageContextInfo',
-             'pollUpdateMessage','mediaUrl','senderKeyDistributionMessage','editedMessage'
-           )) AS bydesign,
-           (m.message_id IS NOT NULL) AS no_espelho
-    FROM src s
-    LEFT JOIN evo.evolution_messages_wpp2 m
-           ON m.message_id = s.mid AND m.instance_name = 'wpp2'
-  )
-  SELECT count(*) FILTER (WHERE NOT bydesign),
-         count(*) FILTER (WHERE bydesign),
-         count(*) FILTER (WHERE NOT bydesign AND NOT no_espelho),
-         count(*) FILTER (WHERE NOT bydesign AND NOT no_espelho AND rjid LIKE '%@lid')
-    INTO v_src, v_bydesign, v_missing, v_lid
-  FROM cls;
+  -- F-04: bloco protegido — captura falha de conexão FDW
+  BEGIN
+    WITH src AS (
+      SELECT f.key->>'id' AS mid, f.key->>'remoteJid' AS rjid,
+             CASE WHEN jsonb_typeof(f.message)='object'
+                  THEN (SELECT k FROM jsonb_object_keys(f.message) k LIMIT 1)
+             END AS fkey
+      FROM evo.fdw_evolution_message f
+      WHERE to_timestamp(f."messageTimestamp") > now() - interval '24 hours'
+        AND f.key->>'fromMe' = 'false'
+        AND f.key->>'remoteJid' NOT LIKE '%@g.us'
+        AND f.key->>'remoteJid' <> 'status@broadcast'
+    ), cls AS (
+      SELECT s.mid, s.rjid,
+             (s.fkey IS NULL OR s.fkey IN (
+               'reactionMessage','protocolMessage','messageContextInfo',
+               'pollUpdateMessage','mediaUrl','senderKeyDistributionMessage','editedMessage'
+             )) AS bydesign,
+             (m.message_id IS NOT NULL) AS no_espelho
+      FROM src s
+      LEFT JOIN evo.evolution_messages_wpp2 m
+             ON m.message_id = s.mid AND m.instance_name = 'wpp2'
+    )
+    SELECT count(*) FILTER (WHERE NOT bydesign),
+           count(*) FILTER (WHERE bydesign),
+           count(*) FILTER (WHERE NOT bydesign AND NOT no_espelho),
+           count(*) FILTER (WHERE NOT bydesign AND NOT no_espelho AND rjid LIKE '%@lid')
+      INTO v_src, v_bydesign, v_missing, v_lid
+    FROM cls;
 
-  SELECT count(DISTINCT m.message_id) INTO v_mir
-  FROM evo.evolution_messages_wpp2 m
-  WHERE m.wa_timestamp > now() - interval '24 hours';
+    SELECT count(DISTINCT m.message_id) INTO v_mir
+    FROM evo.evolution_messages_wpp2 m
+    WHERE m.wa_timestamp > now() - interval '24 hours';
+
+  EXCEPTION
+    WHEN fdw_error OR connection_exception OR query_canceled OR undefined_table THEN
+      -- Pipeline completamente down: FDW inacessível — emite alerta crítico e sai.
+      PERFORM zapp.rpc_boundary_raise_alert(
+        'recon_coverage',
+        'critical',
+        'Falha de conexão FDW — pipeline WhatsApp inacessível.',
+        'exception=' || SQLERRM,
+        jsonb_build_object(
+          'sqlerrm',  SQLERRM,
+          'sqlstate', SQLSTATE,
+          'etapa',    'p100-audit-fix04-fdw-exception'
+        ),
+        '01:00:00'::interval
+      );
+      RAISE WARNING 'recon-coverage-fdw-exception sqlerrm=% sqlstate=%', SQLERRM, SQLSTATE;
+      RETURN;
+  END;
 
   v_cov := CASE WHEN v_src > 0 THEN round(100.0 * (v_src - v_missing) / v_src, 2) END;
   SELECT max(created_at) INTO v_last FROM evo.evolution_messages_wpp2;
 
+  -- Nota F-01: INSERT direto — ALTER TABLE já foi feito acima, fora da função.
   INSERT INTO evo.recon_coverage_daily AS d
     (snapshot_date, coverage_pct, msgs_source_24h, msgs_mirror_24h, missing_real_24h,
      missing_lid_24h, missing_bydesign_24h, last_ingest_at, source, captured_at)
@@ -84,8 +136,9 @@ BEGIN
         source               = EXCLUDED.source,
         captured_at          = now();
 
-  -- FIX: alerta explícito quando fonte FDW está vazia
-  IF v_src = 0 THEN
+  -- Alerta explícito quando fonte FDW está vazia E não há mensagens bydesign
+  -- (v_src=0 com v_bydesign>0 = todas as mensagens são bydesign, FDW está ok)
+  IF v_src = 0 AND v_bydesign = 0 THEN
     PERFORM zapp.rpc_boundary_raise_alert(
       'recon_coverage',
       'critical',
@@ -93,10 +146,10 @@ BEGIN
       'source_24h=0 mirror_24h=' || v_mir ||
         ' last_ingest=' || coalesce(v_last::text, 'NUNCA'),
       jsonb_build_object(
-        'source_24h', 0,
-        'mirror_24h', v_mir,
+        'source_24h',    0,
+        'mirror_24h',    v_mir,
         'last_ingest_at', v_last,
-        'etapa', 'p100-audit-fix01-v-src-zero'
+        'etapa',         'p100-audit-fix01-v-src-zero'
       ),
       '01:00:00'::interval
     );
@@ -121,23 +174,44 @@ $function$;
 
 COMMENT ON FUNCTION evo.fn_recon_coverage_snapshot() IS
   '[P100-e19-v2] Snapshot de cobertura FDW↔espelho — cron recon-coverage-daily (30 4 * * *). '
-  'FIX P100-AUDIT-FIX01 (2026-09-02): alerta crítico quando v_src=0 (fonte FDW vazia).';
-
-
--- ─────────────────────────────────────────────────────────────────────────────
--- AG-1/FIX-2: fdw_evolution_message — messageTimestamp integer → bigint
--- Risco Y2038: int4 satura em 2038-01-19 (max 2147483647).
--- ─────────────────────────────────────────────────────────────────────────────
-ALTER FOREIGN TABLE evo.fdw_evolution_message
-  ALTER COLUMN "messageTimestamp" TYPE bigint;
+  'FIX P100-AUDIT-FIX01 (2026-09-02): alerta crítico quando v_src=0 (fonte FDW vazia). '
+  'FIX P100-AUDIT-FIX04 (2026-09-02): bloco EXCEPTION captura fdw_error/connection_exception.';
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- AG-1/FIX-3: FDW server evolution_postgres — adicionar query_timeout 30s
--- Previne que queries FDW lentas bloquem slot de conexão indefinidamente.
+-- Previne que queries FDW lentas bloqueem slot de conexão indefinidamente.
+-- F-02 FIX: guard de existência do servidor antes de qualquer operação
+-- NOTA: postgres_fdw (PG17) NÃO suporta query_timeout como opção de servidor.
+-- O bloco abaixo foi preservado apenas para documentar o connect_timeout já
+-- configurado. Para limitar tempo de query, use SET LOCAL statement_timeout
+-- dentro de cada transação FDW, não em ALTER SERVER.
+-- (pg_options_to_table(NULL) lançaria NullValueNotAllowed sem o COALESCE guard).
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER SERVER evolution_postgres
-  OPTIONS (ADD query_timeout '30000');
+DO $$
+BEGIN
+  -- F-02: verifica existência antes de acessar srvoptions
+  IF NOT EXISTS (SELECT 1 FROM pg_foreign_server WHERE srvname = 'evolution_postgres') THEN
+    RAISE WARNING 'FDW server evolution_postgres não encontrado — pulando verificação de opções FDW. '
+                  'Verifique se o FDW está instalado no ambiente alvo.';
+    RETURN;
+  END IF;
+
+  -- Apenas loga as opções atuais — sem alterar query_timeout (não suportado pelo postgres_fdw).
+  -- Para ajustar connect_timeout (opção válida), use:
+  --   ALTER SERVER evolution_postgres OPTIONS (SET connect_timeout '10');
+  RAISE NOTICE 'Opções atuais do servidor evolution_postgres: %',
+    (
+      SELECT string_agg(option_name || '=' || option_value, ', ')
+      FROM pg_options_to_table(
+        COALESCE(
+          (SELECT srvoptions FROM pg_foreign_server WHERE srvname = 'evolution_postgres'),
+          ARRAY[]::text[]
+        )
+      )
+    );
+END;
+$$;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -272,8 +346,26 @@ CROSS JOIN dlq q;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- ROLLBACK:
---   ALTER SERVER evolution_postgres OPTIONS (DROP query_timeout);
---   ALTER FOREIGN TABLE evo.fdw_evolution_message ALTER COLUMN "messageTimestamp" TYPE integer;
---   -- Restaurar versões anteriores das funções/views via evolution-stack.
+-- ROLLBACK COMPLETO (F-07 FIX: inclui reversão de funções e view)
+--
+-- Executar na ordem inversa das operações acima:
+--
+-- 1. Restaurar view e funções (versões anteriores via evolution-stack git):
+--    -- git checkout <commit-anterior> -- supabase/functions/_shared/...
+--    -- ou restaurar via psql com o corpo das funções antes deste patch
+--
+-- 2. (passo removido — query_timeout nunca foi adicionado ao servidor FDW,
+--     postgres_fdw PG17 não suporta essa opção; não há nada a reverter aqui)
+--
+-- 3. Reverter tipo de coluna FDW (bigint → integer):
+--    ALTER FOREIGN TABLE IF EXISTS evo.fdw_evolution_message
+--      ALTER COLUMN "messageTimestamp" TYPE integer;
+--
+-- 4. Reverter colunas adicionadas (somente se vazias / sem dados críticos):
+--    ALTER TABLE evo.recon_coverage_daily DROP COLUMN IF EXISTS missing_lid_24h;
+--    ALTER TABLE evo.recon_coverage_daily DROP COLUMN IF EXISTS missing_bydesign_24h;
+--
+-- ATENÇÃO: passos 2–4 são DDL reversíveis. O passo 1 (funções/view) requer
+-- o corpo original em mãos — não há DROP seguro pois as funções existiam antes
+-- deste patch. Sempre restaurar via código-fonte versionado.
 -- ─────────────────────────────────────────────────────────────────────────────
