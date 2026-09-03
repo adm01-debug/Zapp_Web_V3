@@ -310,14 +310,19 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     if (reconnectExhaustedRef.current) return;
     if (!mountedRef?.current) return;
 
+    const capturedInstance = instanceName; // snapshot antes dos awaits assíncronos
     setIsReconnecting(true);
     log.info(`Attempting to reconnect specific instance ${instanceName}...`);
 
     try {
       await connectInstance(instanceName);
+      // Guarda de staleness: instanceName pode ter mudado durante o await de connectInstance.
+      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
       await new Promise<void>((r) => setTimeout(r, 5_000));
       // HOOK-004: componente pode ter desmontado durante os 5s de espera
       if (!mountedRef?.current) return;
+      // Guarda de staleness pós-espera de 5s.
+      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
 
       const currentStatus = (await getInstanceStatus(instanceName)) as {
         instance?: { state?: string };
@@ -325,6 +330,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       } | null;
       // HOOK-004: componente pode ter desmontado durante a chamada à API
       if (!mountedRef?.current) return;
+      // Guarda de staleness pós-getInstanceStatus.
+      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
 
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
@@ -345,6 +352,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     } catch (err: unknown) {
       // HOOK-004: não agendar timer nem atualizar estado em componente desmontado
       if (!mountedRef?.current) return;
+      // Guarda de staleness: se instanceName mudou durante o await que lançou, descarta.
+      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
       const httpStatus = extractHttpStatus(err);
 
       if (httpStatus === 401 || httpStatus === 403) {

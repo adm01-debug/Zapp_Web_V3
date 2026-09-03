@@ -87,6 +87,9 @@ export const BAILEYS_TO_CANONICAL: Record<string, CanonicalMessageType> = {
   buttonsMessage: 'interactive',
   listMessage: 'interactive',
   templateMessage: 'template',
+  pollCreationMessage: 'poll',
+  documentWithCaptionMessage: 'document',
+  contactsArrayMessage: 'contact',
 };
 
 // ─── Mapeamentos Meta Cloud → canônico ───────────────────────────────────────

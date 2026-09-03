@@ -4,7 +4,7 @@
 --
 -- AG-1/FIX-1  fn_recon_coverage_snapshot: alerta quando v_src=0
 -- AG-1/FIX-2  fdw_evolution_message: messageTimestamp integer → bigint (Y2038)
--- AG-1/FIX-3  evolution_postgres FDW server: query_timeout 30s
+-- AG-1/FIX-3  evolution_postgres FDW server: verificação de opções (sem query_timeout — não suportado pelo PG17)
 -- AG-2/FIX-1  fn_kpi_rollup_refresh: pg_try_advisory_xact_lock
 -- AG-2/FIX-2  v_kpi_overview: qualificar _consumer_dlq com schema zapp
 --
@@ -354,8 +354,8 @@ CROSS JOIN dlq q;
 --    -- git checkout <commit-anterior> -- supabase/functions/_shared/...
 --    -- ou restaurar via psql com o corpo das funções antes deste patch
 --
--- 2. Reverter ALTER SERVER (query_timeout):
---    ALTER SERVER evolution_postgres OPTIONS (DROP query_timeout);
+-- 2. (passo removido — query_timeout nunca foi adicionado ao servidor FDW,
+--     postgres_fdw PG17 não suporta essa opção; não há nada a reverter aqui)
 --
 -- 3. Reverter tipo de coluna FDW (bigint → integer):
 --    ALTER FOREIGN TABLE IF EXISTS evo.fdw_evolution_message
