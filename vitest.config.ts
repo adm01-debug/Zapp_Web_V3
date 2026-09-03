@@ -97,6 +97,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Stub para pacotes externos indisponíveis no ambiente de testes (CDN bloqueada).
+      // vi.mock() nos arquivos de teste sobrescreve estes stubs quando necessário.
+      'xlsx': path.resolve(__dirname, './src/test/stubs/xlsx.stub.ts'),
     },
   },
 });
