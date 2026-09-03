@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { supabase } from '@/integrations/supabase/client';
 import { safeClient } from '@/integrations/supabase/safeClient';
@@ -138,19 +138,25 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     _setIsReconnecting(v);
   }, []);
 
-  // Atualização síncrona do ref — sem janela de timing entre render e useEffect.
-  // (instanceNameRef.current pode ser lido por closures assíncronas antes do efeito rodar)
-  instanceNameRef.current = instanceName;
+  // useLayoutEffect: atualiza o ref após commit confirmado pelo React.
+  // Evita que renders concorrentes descartados deixem o ref com um valor não-commitado,
+  // o que faria os guards descartar respostas válidas de instâncias já confirmadas.
+  useLayoutEffect(() => {
+    instanceNameRef.current = instanceName;
+  }, [instanceName]);
 
-  // Reset circuit-breaker when instanceName changes (new connection context)
+  // Reset circuit-breaker e latch de reconexão quando instanceName muda.
+  // Libera isReconnecting para a nova instância antes que qualquer guard de staleness
+  // da instância anterior possa tentar zerrá-lo indevidamente.
   useEffect(() => {
+    setIsReconnecting(false);
     credentialErrorRef.current = false;
     consecutiveFailsRef.current = 0;
     circuitOpenUntilRef.current = 0;
     reconnectAttemptCountRef.current = 0;
     reconnectExhaustedRef.current = false;
     backoffRef.current = INITIAL_BACKOFF_MS;
-  }, [instanceName]);
+  }, [instanceName, setIsReconnecting]);
 
   // ── 1. Global Realtime Monitoring ──────────────────────────────────────────────────
   const performReconnect = useCallback(
@@ -316,12 +322,12 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     try {
       await connectInstance(instanceName);
       // Guarda de staleness: instanceName pode ter mudado durante o await de connectInstance.
-      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
+      if (instanceNameRef.current !== capturedInstance) return;
       await new Promise<void>((r) => setTimeout(r, 5_000));
       // HOOK-004: componente pode ter desmontado durante os 5s de espera
       if (!mountedRef?.current) return;
       // Guarda de staleness pós-espera de 5s.
-      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
+      if (instanceNameRef.current !== capturedInstance) return;
 
       const currentStatus = (await getInstanceStatus(instanceName)) as {
         instance?: { state?: string };
@@ -330,7 +336,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // HOOK-004: componente pode ter desmontado durante a chamada à API
       if (!mountedRef?.current) return;
       // Guarda de staleness pós-getInstanceStatus.
-      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
+      if (instanceNameRef.current !== capturedInstance) return;
 
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
@@ -352,7 +358,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // HOOK-004: não agendar timer nem atualizar estado em componente desmontado
       if (!mountedRef?.current) return;
       // Guarda de staleness: se instanceName mudou durante o await que lançou, descarta.
-      if (instanceNameRef.current !== capturedInstance) { setIsReconnecting(false); return; }
+      if (instanceNameRef.current !== capturedInstance) return;
       const httpStatus = extractHttpStatus(err);
 
       if (httpStatus === 401 || httpStatus === 403) {
