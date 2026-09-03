@@ -285,7 +285,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
     backoffRef.current = nextDelay;
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void attemptSpecificReconnectRef.current?.(), nextDelay);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      void attemptSpecificReconnectRef.current?.();
+    }, nextDelay);
   }, [setIsReconnecting, instanceName]);
 
   // Populate ref AFTER definition — breaks circular deps without stale closures
@@ -316,6 +319,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         backoffRef.current = INITIAL_BACKOFF_MS;
         reconnectAttemptCountRef.current = 0;
         reconnectExhaustedRef.current = false;
+        credentialErrorRef.current = false;
         setIsReconnecting(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.evolutionConversations.all() });
         eventBus.emit('connection:recovered', { instanceName });
@@ -329,6 +333,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         log.error(
           `Credential error (HTTP ${httpStatus}) for ${instanceName} — stopping retry cycle`
         );
+        credentialErrorRef.current = true;
         setIsReconnecting(false);
         eventBus.emit('connection:credential-error', {
           instanceName,
@@ -407,7 +412,9 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       }
 
       // Desconexao conclusiva: so tenta reconectar enquanto o latch nao estourou.
-      if (reconnectExhaustedRef.current || isReconnectingRef.current) return;
+      // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
+      // com backoff — nao interromper esse timer com uma chamada direta.
+      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
       void attemptSpecificReconnect();
     } catch (err: unknown) {
       log.error(`Error checking status for ${instanceName}:`, err);
@@ -451,7 +458,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const interval = setInterval(() => void checkStatus(), 30_000);
     return () => {
       clearInterval(interval);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [checkStatus, instanceName]);
 
@@ -466,6 +476,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     backoffRef.current = INITIAL_BACKOFF_MS;
     consecutiveFailsRef.current = 0;
     circuitOpenUntilRef.current = 0;
+    credentialErrorRef.current = false;
     void attemptSpecificReconnectRef.current?.();
   }, []);
 

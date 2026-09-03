@@ -12,6 +12,7 @@ export async function fetchStickers(): Promise<StickerItem[]> {
   const { data, error } = await supabase
     .from('stickers')
     .select('*')
+    .eq('is_active', true)
     .order('use_count', { ascending: false });
 
   if (error) throw error;

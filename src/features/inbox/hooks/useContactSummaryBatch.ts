@@ -16,7 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { queryKeys } from '@/services/api/queryKeys';
 import { getLogger } from '@/lib/logger';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 
 const log = getLogger('useContactSummaryBatch');
 

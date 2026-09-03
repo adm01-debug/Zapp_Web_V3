@@ -1,8 +1,8 @@
 # AVATAR-MIGRATION-PLAN — Lovable Cloud → Self-Hosted (AtomicaBR)
 
-> **GAP-V05** · Status: **PLANEJADO — NÃO EXECUTADO** · Data: 2026-08-03
+> **GAP-V05** · Status: **EXECUTADO — CONCLUÍDO** (constatado ao vivo em 2026-09-02) · Data do plano: 2026-08-03
 > Alvo: `docs/playbooks/AVATAR-MIGRATION-PLAN.md` · Relacionados: [`supabase/migrations/20260803170100_storage_migration_plan.sql`](../../supabase/migrations/20260803170100_storage_migration_plan.sql), [`docs/_archive/simulation/2026-08-03_storage_migration_500_simulation.json`](../simulation/2026-08-03_storage_migration_500_simulation.json)
-> ⚠️ **Este documento é um PLANO. Nada aqui deve ser executado sem aprovação explícita.**
+> ✅ **Verificação 2026-09-02 (auditoria 22 dimensões):** `evo.evolution_contacts.profile_picture_url LIKE '%allrjhkpuscmgbsnmjlv%'` = **0** (incluindo deletados); backup `zapp._backup_avatar_urls_20260803` já removido (fase 7/cleanup concluída). O band-aid de CSP foi retirado em 2026-09-02 (CSP v12 — ver `docs/csp.md`). Este documento permanece como registro histórico do plano.
 
 ---
 
@@ -170,6 +170,11 @@ WHERE profile_picture_url LIKE '%allrjhkpuscmgbsnmjlv%';
 ```
 
 ---
+
+> ⚠️ **Seções 4–7 abaixo são registro histórico do plano.** A migração já foi
+> executada e validada (ver cabeçalho). Instruções imperativas e checkboxes
+> vazios NÃO são trabalho pendente — não reexecutar. O band-aid de CSP citado
+> como "no ar" foi removido em 2026-09-02 (CSP v12).
 
 ## 4. Estratégia de Migração — Execução
 
