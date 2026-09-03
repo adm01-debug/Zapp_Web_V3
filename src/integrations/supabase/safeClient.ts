@@ -42,7 +42,8 @@ interface DynamicSupabaseClient {
 type DynamicRpcClient = {
   rpc(
     name: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
+    opts?: { signal?: AbortSignal | null }
   ): Promise<{ data: unknown; error: PostgrestError | null }>;
 };
 
@@ -143,6 +144,10 @@ export const safeClient = {
     signal?: AbortSignal
   ): Promise<SafeResponse<T[]>> {
     const requestId = crypto.randomUUID();
+    // Early-exit se o caller já cancelou antes de entrar na fila do semáforo.
+    if (signal?.aborted) {
+      return { data: [] as T[], error: null, requestId };
+    }
     telemetry.stats.totalCalls++;
     try {
       const builder = withAbortSignal(queryBuilder(_dynamicClient.from(table)), signal);
@@ -160,14 +165,18 @@ export const safeClient = {
       }
       return { data: (Array.isArray(data) ? data : []) as T[], error: null, requestId };
     } catch (err) {
-      this.log(requestId, 'error', `Erro crítico ao consultar tabela ${table}`, err);
-      await this.recordFailure(
-        requestId,
-        'from',
-        table,
-        err instanceof Error ? err.message : String(err)
-      );
-      telemetry.stats.failedCalls++;
+      // Aborts (unmount, cancelRefetch, page unload) são ruído esperado — rebaixar a WARN.
+      const level = isClientSideTransientError(err) ? 'warn' : 'error';
+      this.log(requestId, level, `Erro crítico ao consultar tabela ${table}`, err);
+      if (level === 'error') {
+        await this.recordFailure(
+          requestId,
+          'from',
+          table,
+          err instanceof Error ? err.message : String(err)
+        );
+        telemetry.stats.failedCalls++;
+      }
       return {
         data: [] as T[],
         error: err instanceof Error ? err : new Error(String(err)),
@@ -220,6 +229,10 @@ export const safeClient = {
     signal?: AbortSignal
   ): Promise<SafeResponse<T>> {
     const requestId = crypto.randomUUID();
+    // Early-exit se o caller já cancelou antes de entrar na fila do semáforo.
+    if (signal?.aborted) {
+      return { data: null, error: null, requestId };
+    }
     telemetry.stats.totalCalls++;
     try {
       // ignore-audit — dynamic RPC name not in generated union
@@ -234,14 +247,18 @@ export const safeClient = {
       if (data === undefined || data === null) return { data: null, error: null, requestId };
       return { data: data as T, error: null, requestId }; // ignore-audit: narrows Supabase query result to local interface
     } catch (err) {
-      this.log(requestId, 'error', `Erro crítico RPC ${name}`, err);
-      await this.recordFailure(
-        requestId,
-        'rpc',
-        name,
-        err instanceof Error ? err.message : String(err)
-      );
-      telemetry.stats.failedCalls++;
+      // Aborts (unmount, cancelRefetch, page unload) são ruído esperado — rebaixar a WARN.
+      const level = isClientSideTransientError(err) ? 'warn' : 'error';
+      this.log(requestId, level, `Erro crítico RPC ${name}`, err);
+      if (level === 'error') {
+        await this.recordFailure(
+          requestId,
+          'rpc',
+          name,
+          err instanceof Error ? err.message : String(err)
+        );
+        telemetry.stats.failedCalls++;
+      }
       return { data: null, error: err instanceof Error ? err : new Error(String(err)), requestId };
     }
   },

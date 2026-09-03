@@ -153,19 +153,64 @@ CREATE INDEX IF NOT EXISTS idx_rt_fanout_mirrored ON zapp.realtime_message_fanou
 | Nunca usar a fila do browser para health logging | ✅ Removido |
 | CI guard: `.abortSignal(signal)` obrigatório em `queryFn` com `signal` | Pendente (lint rule) |
 
+### 7. `safeClient.ts` — AbortSignal em `from()` e `rpc()` (sessions 2026-08-20 a 2026-09-02)
+
+- **Adicionado:** `signal?: AbortSignal` como 3º arg em `safeClient.from()` e 4º em `safeClient.rpc()`
+- **Adicionado:** early-exit em ambos: se `signal?.aborted` antes de entrar na fila do semáforo, retorna imediatamente sem consumir slot
+- **Corrigido:** catch de AbortError rebaixado para WARN (não ERROR) em `from()`, alinhado com `rpc()`
+
+### 8. Propagação de AbortSignal em queries adicionais (sessão 2026-09-02)
+
+- **`useConversationEventsData.ts`:** `queryFn({ signal })` + `signal` como 3º arg de `safeClient.from()`
+- **`useInboxDataQueries.ts`:** `queryFn({ signal })` em ambas as queries; loop de chunks com `if (signal?.aborted) break`; `.abortSignal(signal)` em cada request
+
+### 9. Regressão fanout `contact_id` (migration `20260821000000`)
+
+Ao reescrever `fn_rt_fanout_insert` na migration `20260820230000`, `contact_id` e `id` foram omitidos. Resultado: todos os eventos Realtime chegavam com `contact_id = null` → `scheduleConversationCacheInvalidation(null)` era no-op → debounce nunca disparava.
+
+**Fix:** `20260821000000_fix_fanout_insert_contact_id.sql` restaura `id = NEW.id` e `contact_id = COALESCE(NEW.contact_id, evo.rpc_boundary_lookup_contact_id(...))`.
+
+
 ---
 
 ## Arquivos Modificados
 
 ```
+# Sessão 2026-08-20 (commit f9f4c90 / b47280b)
 src/features/auth/components/AuthProvider.tsx
 src/features/inbox/hooks/useConversationMessagesData.ts
 src/features/inbox/hooks/useRealtimeMessages.ts
 src/integrations/supabase/client.ts
 src/integrations/supabase/safeClient.ts
 supabase/migrations/20260820230000_fix_fanout_replica_identity_and_ttl.sql
+
+# Regressão fanout (commit 82e52b7)
+supabase/migrations/20260821000000_fix_fanout_insert_contact_id.sql
+
+# AbortSignal propagation (commits 031738e + safeClient em b47280b)
+src/features/inbox/hooks/useConversationEventsData.ts
+src/features/inbox/hooks/useInboxDataQueries.ts
 ```
 
 ---
 
-*RCA produzido em 2026-08-20. Referência de incidente: log `c526e2c9-zapp.atomicabr.com.br1787265020243.log`.*
+## Status Final das Correções
+
+| Correção | Commit | Status |
+|----------|--------|--------|
+| REPLICA IDENTITY DEFAULT + mirrored_at | `f9f4c90` | ✅ Em produção |
+| Debounce invalidação + remoção DELETE handler | `f9f4c90` | ✅ Em produção |
+| AbortSignal em `useConversationMessagesData` | `f9f4c90` | ✅ Em produção |
+| `safeClient.recordFailure()` in-memory | `f9f4c90` | ✅ Em produção |
+| `MAX_CONCURRENT` alinhado (6→8) | `f9f4c90` | ✅ Em produção |
+| `isAbortLikeError()` unificada | `82e52b7` + `b47280b` | ✅ Em produção |
+| Regressão `contact_id` no fanout | `82e52b7` | ✅ Em produção |
+| `safeClient.from()` com AbortSignal + early-exit | `031738e` | ✅ PR #1494 (draft) |
+| `safeClient.rpc()` com AbortSignal + early-exit | `031738e` | ✅ PR #1494 (draft) |
+| `useConversationEventsData` AbortSignal | `031738e` | ✅ PR #1494 (draft) |
+| `useInboxDataQueries` AbortSignal | `031738e` | ✅ PR #1494 (draft) |
+
+---
+
+*RCA produzido em 2026-08-20. Atualizado em 2026-09-02 com correções das sessões seguintes.*
+*Referência de incidente: log `c526e2c9-zapp.atomicabr.com.br1787265020243.log`.*

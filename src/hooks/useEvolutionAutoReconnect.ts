@@ -412,7 +412,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       }
 
       // Desconexao conclusiva: so tenta reconectar enquanto o latch nao estourou.
-      if (reconnectExhaustedRef.current || isReconnectingRef.current) return;
+      // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
+      // com backoff — nao interromper esse timer com uma chamada direta. O handle e
+      // zerado no callback do setTimeout, entao o guard nao trava apos o disparo.
+      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
       void attemptSpecificReconnect();
     } catch (err: unknown) {
       log.error(`Error checking status for ${instanceName}:`, err);
@@ -456,7 +459,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const interval = setInterval(() => void checkStatus(), 30_000);
     return () => {
       clearInterval(interval);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [checkStatus, instanceName]);
 
