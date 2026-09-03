@@ -103,7 +103,7 @@ Confirmado ao vivo: **exatamente 6** jobs `VACUUM ANALYZE` em tabelas `evo.*` ag
 | 231 | `disk-tables-vacuum-weekly` | `0 2 * * 0` (dom 02:00) | `VACUUM ANALYZE ops.disk_actions_queue, ops.paused_services, ops.alert_cooldown, ops.docker_prune_log, ops.disk_orphans` |
 | 186 | `vacuum-messages-2h` | `25 */2 * * *` | `VACUUM ANALYZE evo.evolution_messages` (a cada 2h) |
 | 169 | `vacuum-contacts-2h` | `35 */2 * * *` | `VACUUM ANALYZE evo.evolution_contacts` (a cada 2h) |
-| 117 | `analyze_critical_tables` | `30 3 * * *` | `SELECT zapp.fn_force_autovacuum(...)` top-10 por dead tuples |
+| 117 | `analyze_critical_tables` | `31 3 * * *` | `SELECT zapp.fn_force_autovacuum(...)` top-10 por dead tuples |
 | 139 | `cache-warmup-after-vacuum` | `35 2 * * *` | `SELECT evo.fn_cache_warmup_after_vacuum()` (logo após a janela) |
 
 **Evidência de execução (02/08 e 03/08):** os 6 VACUUMs rodaram com sucesso, todos com duração < 100 ms (tabelas pequenas) — o risco do achado é de **concorrência/overlap futuro** (6 `VACUUM ANALYZE` simultâneos na mesma janela de 15 min + warmup às 02:35), não de falha atual.
