@@ -94,6 +94,7 @@ export function ChatTextarea({
       <textarea
         ref={asRef(safeRef)}
         id={inputId}
+        data-testid="chat-textarea"
         value={inputValue}
         onChange={(e) => {
           onInputChange(e);

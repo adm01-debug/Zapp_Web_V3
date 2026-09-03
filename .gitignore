@@ -119,6 +119,7 @@ test-results/
 playwright-report/
 playwright-report-a11y/
 playwright/.cache/
+pw-output/
 
 # ====================
 # EDITOR E IDE

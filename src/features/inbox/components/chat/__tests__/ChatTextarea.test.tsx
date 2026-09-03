@@ -94,6 +94,22 @@ describe('ChatTextarea', () => {
       );
       expect(screen.getByRole('textbox')).toBeTruthy();
     });
+
+    it('expõe data-testid="chat-textarea" (usado por e2e/inbox/chat-drag-drop.spec.ts)', () => {
+      const inputRef = React.createRef<HTMLTextAreaElement | null>();
+      render(
+        <ChatTextarea
+          logic={makeMockLogic() as never}
+          inputRef={inputRef as React.RefObject<HTMLTextAreaElement | null>}
+          inputValue=""
+          messages={[]}
+          replyToMessage={null}
+          onInputChange={vi.fn()}
+          onKeyDown={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId('chat-textarea')).toBeTruthy();
+    });
   });
 
   describe('B1b — useMentions recebe RefObject', () => {
