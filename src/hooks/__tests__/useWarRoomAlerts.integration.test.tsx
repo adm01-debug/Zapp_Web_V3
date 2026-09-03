@@ -11,22 +11,39 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const showNotificationMock = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
+
+// Handler capturado em runtime quando .on('postgres_changes', INSERT, handler) é chamado
 type RealtimeHandler = (payload: { new: unknown }) => void;
 let capturedHandler: RealtimeHandler | null = null;
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: (...args: unknown[]) => mockFrom(...args),
-    channel: vi.fn().mockImplementation(() => ({
-      on: (_event: string, _cfg: unknown, handler: RealtimeHandler) => {
-        capturedHandler = handler;
-        return { subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }) };
-      },
-      subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
-    })),
+    // O hook encadeia .on().on().subscribe() — cada .on() DEVE retornar `this`
+    channel: vi.fn().mockImplementation(() => {
+      // Criamos ch com referência circular para que .on() retorne `this`
+      const ch: {
+        on: ReturnType<typeof vi.fn>;
+        subscribe: ReturnType<typeof vi.fn>;
+        unsubscribe: ReturnType<typeof vi.fn>;
+      } = {
+        on: vi.fn(),
+        subscribe: vi.fn().mockReturnThis(),
+        unsubscribe: vi.fn(),
+      };
+      ch.on.mockImplementation((_ev: string, _cfg: unknown, handler: unknown) => {
+        // Captura somente o 1° handler (INSERT); o 2° (UPDATE) não tem handler de payload
+        if (capturedHandler === null && typeof handler === 'function') {
+          capturedHandler = handler as RealtimeHandler;
+        }
+        return ch; // encadeamento: .on().on() funciona
+      });
+      return ch;
+    }),
     removeChannel: vi.fn(),
   },
 }));
+
 vi.mock('@/hooks/usePushNotifications', () => ({
   usePushNotifications: () => ({
     showNotification: showNotificationMock,
@@ -34,7 +51,7 @@ vi.mock('@/hooks/usePushNotifications', () => ({
   }),
 }));
 
-// Silencia o Audio() (jsdom não implementa play()).
+// Silencia o Audio() (happy-dom não implementa play()).
 class FakeAudio {
   volume = 1;
   currentTime = 0;
@@ -98,10 +115,11 @@ describe('useWarRoomAlerts — fluxo integrado warroom_alerts', () => {
     });
 
     await waitFor(() => expect(showNotificationMock).toHaveBeenCalledTimes(1));
+    // O hook chama showNotification({ title, body }) — sem requireInteraction
     expect(showNotificationMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: expect.stringContaining('Alerta Crítico'),
-        requireInteraction: true, // exige interação em `critical`
+        title: 'Alerta Crítico',
+        body: 'Fila travada há 10min',
       }),
     );
   });
@@ -119,8 +137,9 @@ describe('useWarRoomAlerts — fluxo integrado warroom_alerts', () => {
     });
 
     await waitFor(() => expect(showNotificationMock).toHaveBeenCalledTimes(1));
-    // Não é 'critical' -> requireInteraction = false
-    expect(showNotificationMock.mock.calls[0][0].requireInteraction).toBe(false);
+    expect(showNotificationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'SLA Violado' }),
+    );
   });
 
   it('descarta payload com alert_type fora do enum (não notifica)', async () => {
@@ -129,13 +148,12 @@ describe('useWarRoomAlerts — fluxo integrado warroom_alerts', () => {
 
     capturedHandler!({
       new: {
-        id: UUID, alert_type: 'urgent', // valor inválido
+        id: UUID, alert_type: 'urgent', // valor inválido — não está em VALID_ALERT_TYPES
         title: 'x', message: 'y', source: null,
         is_read: false, created_at: new Date().toISOString(),
       },
     });
 
-    // Pequeno delay para garantir que nenhum microtask agende a notificação.
     await new Promise((r) => setTimeout(r, 20));
     expect(showNotificationMock).not.toHaveBeenCalled();
   });

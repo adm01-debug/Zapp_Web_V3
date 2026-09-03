@@ -18,6 +18,7 @@ vi.mock('@/integrations/supabase/client', () => ({
       })),
     })),
   },
+  SUPABASE_RESOLVED_URL: 'http://localhost:54321',
 }));
 
 vi.mock('xlsx', () => ({

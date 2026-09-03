@@ -20,6 +20,10 @@ import { useContactCustomFields } from '@/hooks/useContactCustomFields';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
+// UUID válido necessário: hook usa isValidUUID() para enabled flag
+const VALID_CONTACT_ID = '550e8400-e29b-41d4-a716-446655440000';
+const VALID_CF_ID = '550e8400-e29b-41d4-a716-446655440001';
+
 function createWrapper() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
@@ -37,8 +41,8 @@ describe('useContactCustomFields', () => {
           order: vi.fn().mockResolvedValue({
             data: [
               {
-                id: 'cf1',
-                contact_id: 'c1',
+                id: VALID_CF_ID,
+                contact_id: VALID_CONTACT_ID,
                 field_name: 'CPF',
                 field_value: '123',
                 field_type: 'text',
@@ -56,7 +60,9 @@ describe('useContactCustomFields', () => {
   });
 
   it('fetches custom fields for a contact', async () => {
-    const { result } = renderHook(() => useContactCustomFields('c1'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useContactCustomFields(VALID_CONTACT_ID), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(mockFrom).toHaveBeenCalledWith('contact_custom_fields');
   });
@@ -69,12 +75,16 @@ describe('useContactCustomFields', () => {
   });
 
   it('exposes addField function', () => {
-    const { result } = renderHook(() => useContactCustomFields('c1'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useContactCustomFields(VALID_CONTACT_ID), {
+      wrapper: createWrapper(),
+    });
     expect(typeof result.current.addField).toBe('function');
   });
 
   it('exposes removeField function', () => {
-    const { result } = renderHook(() => useContactCustomFields('c1'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useContactCustomFields(VALID_CONTACT_ID), {
+      wrapper: createWrapper(),
+    });
     expect(typeof result.current.removeField).toBe('function');
   });
 

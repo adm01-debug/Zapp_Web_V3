@@ -52,7 +52,11 @@ export const contactEmailSchema = z
   .nullable();
 
 export const createContactSchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório').max(200, 'Nome muito longo'),
+  name: z
+    .string()
+    .min(1, 'Nome é obrigatório')
+    .max(200, 'Nome muito longo')
+    .refine((v) => v.trim().length > 0, 'Nome não pode ser só espaços'),
   phone: contactPhoneSchema,
   email: contactEmailSchema,
   company: z.string().max(200).optional().nullable(),
