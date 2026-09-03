@@ -69,13 +69,12 @@ export default defineConfig({
       // DENO — use https://deno.land/ imports incompatíveis com Node/vitest.
       // Rodam apenas com `deno test` (suíte separada).
       // (useAudioRecorder.cleanup.test.ts removido da quarentena em 2026-08-17:
-      //  reescrito em vitest puro testando o cleanup real.)
+      //  reescrito em vitest puro testando o cleanup real — REMOVIDO DA EXCLUDE EM 2026-09-03.)
       // (clientRateLimiter/healthCheck/queryTimeout/sanitize-extra convertidos
       // para vitest em 2026-08-17 — removidos da quarentena.)
       // DENO — imports https://deno.land/ incompatíveis com Node/vitest.
       // QUARENTENADOS: não rodam no vitest nem em suíte Deno ativa (CI deno-contract-tests
       // cobre apenas supabase/functions). Reescrita p/ vitest é o caminho para reativá-los.
-      'src/hooks/__tests__/useAudioRecorder.cleanup.test.ts',
       'src/shared/__tests__/validation.test.ts',
       // NEEDS-ENV — requer VITE_EXTERNAL_SUPABASE_URL/ANON_KEY (Supabase self-hosted).
       // Rodados separadamente via script de integração.
