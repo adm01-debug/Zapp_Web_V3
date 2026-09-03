@@ -33,10 +33,12 @@ export const EVO_EVENT_TYPES_SET: ReadonlySet<string> = new Set<string>(EVO_EVEN
 /**
  * [PATCH 28] Map chave protobuf → message_type canônico (evolution_messages /
  * ingest_ledger). Espelha parseMessageContent (evolution-media.ts:284-337).
+ * [P100-AUDIT-FIX01 AG-3] templateMessage adicionado (mensagem interativa WhatsApp Business).
  */
 export const EVO_PROTOBUF_MESSAGE_TYPE_MAP: Readonly<Record<string, string>> = {
   conversation: 'text',
   extendedTextMessage: 'text',
+  templateMessage: 'text',
   imageMessage: 'image',
   videoMessage: 'video',
   audioMessage: 'audio',

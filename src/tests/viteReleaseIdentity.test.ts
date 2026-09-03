@@ -19,6 +19,7 @@ describe('version.json release identity', () => {
       buildId: 'build-123',
       gitSha,
       builtAt: '2026-08-25T12:00:00.000Z',
+      entryCss: 'assets/index-release.css',
     });
 
     expect(payload).toEqual({
@@ -27,6 +28,7 @@ describe('version.json release identity', () => {
       releaseId: gitSha,
       builtAt: '2026-08-25T12:00:00.000Z',
       entry: 'assets/index-release.js',
+      entryCss: 'assets/index-release.css',
     });
   });
 
@@ -38,6 +40,7 @@ describe('version.json release identity', () => {
     });
 
     expect(payload.entry).toBeNull();
+    expect(payload.entryCss).toBeNull();
     expect(payload.releaseId).toBe(payload.gitSha);
     expect(payload.buildId).toBe('build-without-entry');
   });

@@ -47,6 +47,7 @@ import type { WhatsAppConnection } from '@/features/connections/hooks/useConnect
 import { useEvolutionAutoSync } from '@/hooks/useEvolutionAutoSync';
 import { useEvolutionAutoReconnect } from '@/hooks/useEvolutionAutoReconnect';
 import { evolutionSync } from '@/lib/adapters/evolutionOps';
+import { eventBus } from '@/lib/eventBus';
 
 /** F6-01: formata o pairing code em grupos de 4 (ex.: ABCD-EFGH-IJKL). */
 function formatPairingCode(code: string): string {
@@ -164,6 +165,17 @@ export function ConnectionsView() {
       .then(() => toast({ title: 'Código copiado!' }))
       .catch(() => toast({ title: 'Não foi possível copiar', variant: 'destructive' }));
   };
+
+  // Notifica operador quando auto-reconnect esgota tentativas para uma instância.
+  useEffect(() => {
+    return eventBus.on('connection:reconnect-exhausted', ({ instanceName, attempts }) => {
+      toast({
+        title: `WhatsApp "${instanceName}" desconectado`,
+        description: `${attempts} tentativas automáticas falharam. Use "Reconectar" no painel de conexões.`,
+        variant: 'destructive',
+      });
+    });
+  }, []);
 
   // Deep-link: ?qr=<instance_id> auto-opens the QR dialog for that instance.
   const deepLinkHandledRef = useRef(false);

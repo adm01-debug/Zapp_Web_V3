@@ -1,7 +1,24 @@
 # ESTADO.md — Registro do que esta LIGADO
 
-**Última verificação:** 2026-08-25 (pós-sprint feat/chat-ui-100 P01–P50)
+**Última verificação:** 2026-09-02 (auditoria técnica 22 dimensões — sessão remota; anterior: 2026-08-25, pós-sprint feat/chat-ui-100 P01–P50)
 → Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
+
+## ⚠️ INGESTÃO WHATSAPP PARADA — detectado 2026-09-02 (decisão do dono pendente)
+
+Fatos verificados ao vivo (Evolution API + banco V3):
+
+- `wpp2` é a **única instância** na Evolution. `connectionStatus=connecting`,
+  `isHealthy=false` desde **2026-08-25T17:22:43Z** (reason 408, `ETIMEDOUT` WebSocket).
+- Última mensagem gravada em `evo.evolution_messages`: **2026-08-25T17:19:16Z**
+  (63.654 msgs nos 30 dias anteriores ao corte — o fluxo era alto até parar).
+- **RabbitMQ publisher da instância: `enabled=false` desde 2026-08-27T19:46** —
+  mesmo reconectando o WhatsApp, eventos NÃO voltam a fluir sem reabilitar.
+- Consumer (2 réplicas) healthy, 18/18 filas, zero erros — ocioso por falta de eventos.
+- O app segue vivo por outras fontes (logins, sicoob-bridge, conversas novas em 02/09).
+
+Religar depende de dois atos, ambos decisão do dono (pode ser desligamento
+deliberado): reconectar a instância `wpp2` (possível re-pareamento QR após 8
+dias) e reabilitar o publisher RabbitMQ da instância.
 
 
 > **Nota pós-desacoplamento (2026-08-12):** A infraestrutura da Evolution API (servidor, consumer, stacks Swarm)
@@ -14,7 +31,7 @@
 > Uma pergunta por componente: **esta ligado? quem chama?**
 > Nao adicione secao de arquitetura, plano ou roadmap aqui. Isso morre em `docs/`.
 
-Ultima verificacao: **2026-08-20** (pos-auditoria RELATORIO-AUDITORIA-ZAPP-20260820 + plano de correcao 100 etapas) | F-001..F-012 fechados | ver secao "Plano de correcao 100 etapas" abaixo
+Verificacao 2026-08-20 (pos-auditoria RELATORIO-AUDITORIA-ZAPP-20260820 + plano de correcao 100 etapas) | F-001..F-012 fechados | ver secao "Plano de correcao 100 etapas" abaixo
 Verificacao anterior: 2026-08-08 | COMPLETO: P1/P2/P4/P6/P7 | 3 funcoes arquivadas | Storage 28->16 GB (-43%)
 Baseline desacoplamento T0: **2026-08-15** | Score 3/9 (33%) — Nota D | Medicao 2026-08-20: **I2 = 0** (ultima funcao fora do padrao, evo.fn_filter_canary_messages, movida para zapp) | ver seção Desacoplamento abaixo
 
@@ -530,6 +547,10 @@ Auditoria em `zapp.media_cleanup_log`. Falhas: 0.
 - Catalogo de stickers: 213 quebrados (causados por mim: **0**)
   Os 213 apontam para `allrjhkpuscmgbsnmjlv.supabase.co` — projeto Supabase Cloud antigo.
   Arquivos que nunca existiram no self-hosted. Estado pre-existente.
+  → **Atualizacao 2026-09-02:** os 213 foram marcados `is_active=false` (400 na
+  origem, irrecuperaveis) e 10 `lovecell_*` foram migrados para o bucket
+  `stickers` self-hosted com URLs reescritas; picker e manager filtram
+  `is_active`. Detalhes em `docs/csp.md` (CSP v12).
 
 ### Estado final do bucket `whatsapp-media`
 
