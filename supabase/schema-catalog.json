@@ -144976,7 +144976,7 @@
           ]
         },
         "sicoob_contact_mapping": {
-          "definition_sha1": "89f9329fa8c2042632573623cc45ae68a0b8faec",
+          "definition_sha1": "d6337b2f08a8d2ffb77c6a435583dfda90e8db27",
           "insert_columns": [
             {
               "name": "contact_id",
@@ -144992,7 +144992,7 @@
             },
             {
               "name": "sicoob_singular_id",
-              "type": "string"
+              "type": "string | null"
             },
             {
               "name": "sicoob_user_id",
@@ -145000,7 +145000,7 @@
             },
             {
               "name": "sicoob_vendedor_id",
-              "type": "string"
+              "type": "string | null"
             },
             {
               "name": "zappweb_agent_id",
@@ -145024,7 +145024,7 @@
             },
             {
               "name": "sicoob_singular_id",
-              "type": "string"
+              "type": "string | null"
             },
             {
               "name": "sicoob_user_id",
@@ -145032,7 +145032,7 @@
             },
             {
               "name": "sicoob_vendedor_id",
-              "type": "string"
+              "type": "string | null"
             },
             {
               "name": "zappweb_agent_id",
@@ -145054,7 +145054,7 @@
             },
             {
               "name": "sicoob_singular_id",
-              "type": "string"
+              "type": "string | null"
             },
             {
               "name": "sicoob_user_id",
@@ -145062,7 +145062,7 @@
             },
             {
               "name": "sicoob_vendedor_id",
-              "type": "string"
+              "type": "string | null"
             },
             {
               "name": "zappweb_agent_id",
@@ -189200,7 +189200,7 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "39a49d1b271925ef8be63ccd7262dfdc95b85f44"
+    "types_sha1": "aee8381a85b1b272870c1200c3362e2bbdbe0972"
   },
   "summary": {
     "schemas": 3,

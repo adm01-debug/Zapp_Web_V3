@@ -80,4 +80,20 @@ describe('ChatAttachmentPreview', () => {
     expect(screen.getByLabelText('Remover anexo a.png')).toBeTruthy();
     expect(screen.getByLabelText('Remover anexo b.pdf')).toBeTruthy();
   });
+
+  it('expõe data-testid="attachment-preview" no wrapper (usado por e2e/inbox/chat-drag-drop.spec.ts)', () => {
+    const att = makeAtt();
+    render(<ChatAttachmentPreview attachments={[att]} onRemove={vi.fn()} />);
+    expect(screen.getByTestId('attachment-preview')).toBeTruthy();
+  });
+
+  it('expõe data-testid="queue-file-name" no nome do arquivo sem preview (usado por e2e/inbox/chat-drag-drop.spec.ts)', () => {
+    const att = makeAtt({
+      preview: undefined,
+      category: 'document',
+      file: new File([''], 'documento.pdf', { type: 'application/pdf' }),
+    });
+    render(<ChatAttachmentPreview attachments={[att]} onRemove={vi.fn()} />);
+    expect(screen.getByTestId('queue-file-name')).toHaveTextContent('documento.pdf');
+  });
 });

@@ -1,7 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEmail } from './useEmailManagement';
 import { safeClient } from '@/integrations/supabase/safeClient';
+
+function createWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return ({ children }: { children: React.ReactNode }) => (
+    React.createElement(QueryClientProvider, { client: qc }, children)
+  );
+}
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -37,7 +46,7 @@ describe('useEmail - Labels and RPC Actions', () => {
 
   describe('markAsRead', () => {
     it('should call rpc_email_mark_thread_read', async () => {
-      const { result } = renderHook(() => useEmail());
+      const { result } = renderHook(() => useEmail(), { wrapper: createWrapper() });
 
       await act(async () => {
         await result.current.markAsRead('t1', true);
@@ -55,7 +64,7 @@ describe('useEmail - Labels and RPC Actions', () => {
 
   describe('starThread', () => {
     it('should call rpc_email_star_thread', async () => {
-      const { result } = renderHook(() => useEmail());
+      const { result } = renderHook(() => useEmail(), { wrapper: createWrapper() });
 
       await act(async () => {
         await result.current.starThread('t1', true);
@@ -70,7 +79,7 @@ describe('useEmail - Labels and RPC Actions', () => {
 
   describe('archiveThread', () => {
     it('should call rpc_email_archive_thread', async () => {
-      const { result } = renderHook(() => useEmail());
+      const { result } = renderHook(() => useEmail(), { wrapper: createWrapper() });
 
       await act(async () => {
         await result.current.archiveThread('t1');
@@ -85,7 +94,7 @@ describe('useEmail - Labels and RPC Actions', () => {
 
   describe('assignThread', () => {
     it('should call rpc_email_assign_thread', async () => {
-      const { result } = renderHook(() => useEmail());
+      const { result } = renderHook(() => useEmail(), { wrapper: createWrapper() });
 
       await act(async () => {
         await result.current.assignThread('t1', 'agent_456');
@@ -100,7 +109,7 @@ describe('useEmail - Labels and RPC Actions', () => {
     it('should handle RPC errors', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const { result } = renderHook(() => useEmail());
+      const { result } = renderHook(() => useEmail(), { wrapper: createWrapper() });
 
       // Persistente (não Once): chamadas de inicialização não devem "consumir"
       // o mock antes do assignThread sob teste.

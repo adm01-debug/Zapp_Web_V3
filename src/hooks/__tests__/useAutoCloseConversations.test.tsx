@@ -12,10 +12,6 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: vi.fn() }),
-}));
-
-vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn(),
   useToast: () => ({ toast: vi.fn() }),
 }));
@@ -48,12 +44,10 @@ describe('useAutoCloseConversations', () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         limit: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({ data: mockConfig, error: null }),
+          maybeSingle: vi.fn().mockResolvedValue({ data: mockConfig, error: null }),
         }),
       }),
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     });
 
     const { result } = renderHook(() => useAutoCloseConversations(), { wrapper: createWrapper() });
@@ -69,7 +63,7 @@ describe('useAutoCloseConversations', () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         limit: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({ data: null, error: new Error('DB error') }),
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: new Error('DB error') }),
         }),
       }),
     });
@@ -87,7 +81,7 @@ describe('useAutoCloseConversations', () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         limit: vi.fn().mockReturnValue({
-          single: vi.fn().mockReturnValue(new Promise(() => {})),
+          maybeSingle: vi.fn().mockReturnValue(new Promise(() => {})),
         }),
       }),
     });
@@ -100,15 +94,13 @@ describe('useAutoCloseConversations', () => {
     mockFrom.mockReturnValue({
       select: vi.fn().mockReturnValue({
         limit: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({
+          maybeSingle: vi.fn().mockResolvedValue({
             data: { ...mockConfig, inactivity_hours: 0 },
             error: null,
           }),
         }),
       }),
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     });
 
     const { result } = renderHook(() => useAutoCloseConversations(), { wrapper: createWrapper() });

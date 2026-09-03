@@ -18,6 +18,7 @@ export function ChatAttachmentPreview({ attachments, onRemove }: ChatAttachmentP
     <AnimatePresence>
       <motion.div
         key="attachments-preview"
+        data-testid="attachment-preview"
         initial={{ opacity: 0, height: 0 }}
         animate={{ opacity: 1, height: 'auto' }}
         exit={{ opacity: 0, height: 0 }}
@@ -52,7 +53,10 @@ export function ChatAttachmentPreview({ attachments, onRemove }: ChatAttachmentP
                   ) : (
                     <FileText className="h-6 w-6" />
                   )}
-                  <span className="max-w-full truncate text-center text-[8px]">
+                  <span
+                    data-testid="queue-file-name"
+                    className="max-w-full truncate text-center text-[8px]"
+                  >
                     {att.file.name}
                   </span>
                 </div>

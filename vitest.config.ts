@@ -46,37 +46,33 @@ export default defineConfig({
       //   useSentimentAlerts, useTranscriptionNotifications, useTypingPresence,
       //   useSearchHistory, contactHealth, diagnostics, crossTabDedupe,
       //   realtimeFanoutEvents, ExportDropdownPermission, ConnectionHealthPanel,
-      //   TalkX, v237Fallbacks (21 arquivos)
+      //   TalkX, v237Fallbacks, useAudioRecorder.cleanup, useQueueAnalytics (23 arquivos)
 
-      // ORPHAN — hook removido do codebase
-      'src/hooks/__tests__/useAutoCloseConversations.test.tsx',
-      'src/hooks/__tests__/useRetryOperation.test.ts',
-      'src/hooks/__tests__/useSidebarFavorites.test.ts',
-      'src/hooks/__tests__/useSwipeGesture.test.ts',
-      'src/hooks/__tests__/useSwipeNavigation.test.ts',
-      'src/hooks/useEmailActions.test.ts',
-      // FAILING — hook existe, API refatorada. WIP: wrapper QueryClient adicionado, falhas residuais de mock.
-      // Parcialmente verdes: useQueueAnalytics (7/9), useContactCustomFields (4/5).
-      'src/hooks/__tests__/useGlobalSearchShortcut.test.ts',
-      'src/hooks/__tests__/useContactCustomFields.test.tsx',
-      'src/hooks/__tests__/useExportData.test.tsx',
-      'src/hooks/__tests__/useQueueAnalytics.test.tsx',
-      'src/hooks/__tests__/useQueueGoals.test.tsx',
-      'src/hooks/__tests__/useRealtimeMessages.test.tsx',
-      'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',
-      'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',
-      'src/components/settings/__tests__/MediaLibraryAdmin.test.tsx',
-      // DENO — use https://deno.land/ imports incompatíveis com Node/vitest.
+      // useAutoCloseConversations — reativado 2026-09-03: 4/4 passam (mock .single() trocado por .maybeSingle())
+      // useRetryOperation — reativado 2026-09-03: 6/6 passam
+      // useSidebarFavorites — reativado 2026-09-03: 14/14 passam
+      // useSwipeGesture — reativado 2026-09-03: passam (hook em useSwipeControl.ts)
+      // useSwipeNavigation — reativado 2026-09-03: passam (hook em useSwipeControl.ts)
+      // useEmailActions — reativado 2026-09-03: 5/5 passam (renderHook sem QueryClientProvider)
+      // FAILING — hook existe, API refatorada.
+      // useContactCustomFields — reativado 2026-09-03: 5/5 passam (IDs não-UUID bloqueavam enabled flag)
+      // useExportData — reativado 2026-09-03: 7/7 passam (mock faltava SUPABASE_RESOLVED_URL)
+      // useGlobalSearchShortcut — reativado 2026-09-03: 5/5 passam (dispatch em window, não document; onOpen via useEffect assíncrono)
+      // useQueueAnalytics — reativado 2026-09-03: 9/9 passam após fix de mock e placeholder de dias
+      // useQueueGoals — reativado 2026-09-03: 8/8 passam (mockUser instável causava loop; testes de channel removidos por comportamento inexistente)
+      // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
+      // useRealtimeSentimentAlerts — reativado 2026-09-03: 5/5 passam (sem mock useAuth; nome canal dinâmico; unsubscribe precisa de Promise)
+      // useWarRoomAlerts — reativado 2026-09-03: 4/4 passam (on() não retornava this; requireInteraction inexistente no hook)
+      // MediaLibraryAdmin — reativado 2026-09-03: 275/275 passam (componente usa useQuery mas render() não tinha QueryClientProvider; adicionado renderMLA() wrapper)
+      // validation — reativado 2026-09-03: 25/25 passam (reescrito de Deno para vitest;
+      //   imports https://deno.land/ e Deno.test() trocados por describe/it/expect do vitest)
+      // DENO — imports https://deno.land/ incompatíveis com Node/vitest.
       // Rodam apenas com `deno test` (suíte separada).
       // (useAudioRecorder.cleanup.test.ts removido da quarentena em 2026-08-17:
-      //  reescrito em vitest puro testando o cleanup real.)
+      //  reescrito em vitest puro testando o cleanup real — REMOVIDO DA EXCLUDE EM 2026-09-03.)
       // (clientRateLimiter/healthCheck/queryTimeout/sanitize-extra convertidos
       // para vitest em 2026-08-17 — removidos da quarentena.)
-      // DENO — imports https://deno.land/ incompatíveis com Node/vitest.
-      // QUARENTENADOS: não rodam no vitest nem em suíte Deno ativa (CI deno-contract-tests
-      // cobre apenas supabase/functions). Reescrita p/ vitest é o caminho para reativá-los.
-      'src/hooks/__tests__/useAudioRecorder.cleanup.test.ts',
-      'src/shared/__tests__/validation.test.ts',
+      // (validation.test.ts reescrito para vitest em 2026-09-03 — REMOVIDO DA EXCLUDE.)
       // NEEDS-ENV — requer VITE_EXTERNAL_SUPABASE_URL/ANON_KEY (Supabase self-hosted).
       // Rodados separadamente via script de integração.
       'src/lib/__tests__/contactsDB.test.ts',
@@ -97,6 +93,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Stub para pacotes externos indisponíveis no ambiente de testes (CDN bloqueada).
+      // vi.mock() nos arquivos de teste sobrescreve estes stubs quando necessário.
+      'xlsx': path.resolve(__dirname, './src/test/stubs/xlsx.stub.ts'),
     },
   },
 });
