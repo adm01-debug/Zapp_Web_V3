@@ -341,6 +341,15 @@ export function useFileUploadLogic(opts: {
   const handleExternalFile = useCallback(
     (file: File) => {
       const validation = validateFile(file);
+      // Sem diálogo interno: o consumidor externo (composer) decide o que
+      // fazer com o arquivo — normalmente anexá-lo inline para envio junto
+      // com a mensagem. Sem isto, o arquivo ficava preso em filePreview sem
+      // nenhuma UI para confirmá-lo (bug: clipe de papel / drop no painel
+      // não enviavam nada quando onFileSelect estava definido).
+      if (!showDialog) {
+        onFileSelect?.(file, validation.category || 'document');
+        return;
+      }
       let preview: string | undefined;
       if (validation.valid && (validation.category === 'image' || file.type === 'application/pdf'))
         preview = URL.createObjectURL(file);
@@ -350,12 +359,20 @@ export function useFileUploadLogic(opts: {
       setCaption('');
       setIsDialogOpen(showDialog);
     },
-    [showDialog]
+    [showDialog, onFileSelect]
   );
 
   const handleExternalFiles = useCallback(
     (files: File[]) => {
       if (files.length > MAX_FILES) toast.warning(`Limite de ${MAX_FILES} arquivos por vez.`);
+      const limited = files.slice(0, MAX_FILES);
+      if (!showDialog) {
+        limited.forEach((file) => {
+          const validation = validateFile(file);
+          onFileSelect?.(file, validation.category || 'document');
+        });
+        return;
+      }
       if (files.length === 1) {
         handleExternalFile(files[0]);
       } else {
@@ -367,13 +384,23 @@ export function useFileUploadLogic(opts: {
       setCurrentQueueIndex(0);
       setIsDialogOpen(showDialog);
     },
-    [handleExternalFile, processFilesToQueue, showDialog]
+    [handleExternalFile, processFilesToQueue, showDialog, onFileSelect]
   );
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      if (!showDialog) {
+        // Sem diálogo interno: o input aceita `multiple`, então delega para
+        // handleExternalFiles (MAX_FILES + onFileSelect por arquivo) em vez
+        // de olhar só files[0] — antes disso, selecionar mais de um arquivo
+        // pelo clipe de papel descartava todos menos o primeiro em silêncio.
+        handleExternalFiles(Array.from(files));
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      const file = files[0];
       const validation = validateFile(file);
       let preview: string | undefined;
       if (validation.valid && (validation.category === 'image' || file.type === 'application/pdf'))
@@ -383,7 +410,7 @@ export function useFileUploadLogic(opts: {
       setIsDialogOpen(showDialog);
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [showDialog]
+    [showDialog, handleExternalFiles]
   );
 
   const removeFromQueue = useCallback((id: string) => {
