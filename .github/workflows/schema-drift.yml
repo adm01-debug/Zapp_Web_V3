@@ -39,7 +39,7 @@ jobs:
               grep -v '^scripts/' | \
               grep -v '^supabase/functions/' | \
               grep -v '^supabase/ci/' | \
-              grep -v '^docs/runbooks/' || true)
+              grep -v '^docs/runbooks/P100_EVO_FIXES_MANUAL\.sql' || true)
           else
             changed_sql=""
           fi

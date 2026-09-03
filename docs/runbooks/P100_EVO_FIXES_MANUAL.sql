@@ -98,7 +98,7 @@ BEGIN
     WHERE m.wa_timestamp > now() - interval '24 hours';
 
   EXCEPTION
-    WHEN fdw_error OR connection_exception OR query_canceled THEN
+    WHEN fdw_error OR connection_exception OR query_canceled OR undefined_table THEN
       -- Pipeline completamente down: FDW inacessível — emite alerta crítico e sai.
       PERFORM zapp.rpc_boundary_raise_alert(
         'recon_coverage',

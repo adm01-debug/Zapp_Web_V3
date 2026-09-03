@@ -130,11 +130,18 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
   const scheduleNextAttemptRef = useRef<(() => void) | null>(null);
   /** Ref espelho de attemptSpecificReconnect — evita deps circulares (preenchido após a definição do callback). */
   const attemptSpecificReconnectRef = useRef<(() => Promise<void>) | null>(null);
+  /** Ref do instanceName atual — permite detectar mudança de instância durante awaits assíncronos. */
+  const instanceNameRef = useRef(instanceName);
 
   const setIsReconnecting = useCallback((v: boolean) => {
     isReconnectingRef.current = v;
     _setIsReconnecting(v);
   }, []);
+
+  // Mantém o ref sincronizado com o valor atual de instanceName.
+  useEffect(() => {
+    instanceNameRef.current = instanceName;
+  }, [instanceName]);
 
   // Reset circuit-breaker when instanceName changes (new connection context)
   useEffect(() => {
@@ -285,8 +292,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
     backoffRef.current = nextDelay;
     if (timerRef.current) clearTimeout(timerRef.current);
+    const capturedInstance = instanceName;
     timerRef.current = setTimeout(() => {
       timerRef.current = null; // descarta handle expirado antes de qualquer guard de re-entrada
+      // Guarda de staleness: se instanceName mudou enquanto o timer aguardava, descarta.
+      if (instanceNameRef.current !== capturedInstance) return;
       void attemptSpecificReconnectRef.current?.();
     }, nextDelay);
   }, [setIsReconnecting, instanceName]);
@@ -396,11 +406,15 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       return;
     }
 
+    const capturedInstance = instanceName; // snapshot antes do await
     try {
       const currentStatus = (await getInstanceStatus(instanceName)) as {
         instance?: { state?: string };
         state?: string;
       } | null;
+      // Guarda de staleness: instanceName pode ter mudado enquanto aguardávamos a API.
+      // Sem esse guard, uma resposta 'close' de A poderia acionar reconexão de B.
+      if (instanceNameRef.current !== capturedInstance) return;
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
 

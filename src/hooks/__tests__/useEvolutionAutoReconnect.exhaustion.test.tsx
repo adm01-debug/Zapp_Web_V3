@@ -141,32 +141,35 @@ describe('useEvolutionAutoReconnect — regressao timerRef no success path', () 
   });
 
   it('reinicia ciclo de reconexao apos sucesso seguido de nova queda (regressao HOOK-001)', async () => {
-    // Sequencia de retornos:
-    // checkStatus #1: 'close' → dispara attemptSpecificReconnect
-    // attemptSpecificReconnect call 1: 'open' → sucesso, zera refs (incluindo timerRef)
-    // checkStatus #2 (30s depois): 'close' → deve disparar nova tentativa SEM bloqueio de guard
+    // Sequencia de retornos que reproduz o bug HOOK-001:
+    //   #1  checkStatus → 'close' → dispara 1ª tentativa
+    //   #2  (dentro da 1ª tentativa, pós-connectInstance+5s) → 'close'
+    //       → scheduleNextAttempt (backoff=4s) → timerRef.current ≠ null   ← ponto crítico
+    //   #3  (dentro da 2ª tentativa, disparada pelo backoff timer) → 'open'
+    //       → sucesso, timerRef.current = null (fix HOOK-001)
+    //   #4+ checkStatus (30s) → 'close' → SEM fix: timerRef!=null bloqueia
+    //                                      COM fix: timerRef==null → nova tentativa
     let callCount = 0;
     getInstanceStatus.mockImplementation(async () => {
       callCount += 1;
-      // 1a call: checkStatus detecta desconexao
-      // 2a call: dentro do attemptSpecificReconnect (apos connectInstance + 5s)
-      if (callCount === 2) return { instance: { state: 'open' } };
+      if (callCount === 3) return { instance: { state: 'open' } };
       return { instance: { state: 'close' } };
     });
 
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
 
-    // 10s cobre checkStatus inicial + connectInstance + 5s de espera + getInstanceStatus
-    await advance(10_000);
-    const afterFirstReconnect = connectInstance.mock.calls.length;
-    expect(afterFirstReconnect).toBeGreaterThanOrEqual(1);
+    // ~20s: checkStatus(t=0) + 1ª tentativa (t=0→5s, backoff 4s) + 2ª tentativa (t=9s→14s) → sucesso
+    await advance(20_000);
+    expect(connectInstance.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(logInfo.mock.calls.some((c) => String(c[0]).includes('Successfully reconnected'))).toBe(true);
 
-    // Mais 40s: checkStatus dispara novamente (30s), detecta 'close' de novo
-    // SEM o fix: timerRef.current != null → guard bloqueia, connectInstance NAO e chamado
-    // COM o fix: timerRef.current == null → nova tentativa dispara normalmente
-    await advance(40_000);
-    expect(connectInstance.mock.calls.length).toBeGreaterThan(afterFirstReconnect);
+    const afterFirstSuccess = connectInstance.mock.calls.length;
+
+    // Mais 35s: checkStatus em t=30s detecta 'close' de novo.
+    // SEM o fix HOOK-001: timerRef.current !== null → guard bloqueia, connectInstance NÃO é chamado.
+    // COM o fix HOOK-001: timerRef.current === null → nova tentativa dispara normalmente.
+    await advance(35_000);
+    expect(connectInstance.mock.calls.length).toBeGreaterThan(afterFirstSuccess);
   });
 
   it('resetReconnect apos latch dispara nova tentativa sem timer fantasma', async () => {
