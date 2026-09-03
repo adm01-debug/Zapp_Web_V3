@@ -26,7 +26,7 @@ import type { EvolutionMessage, EvolutionMessageLite } from '@/types/evolutionEx
 import { toEvolutionMessageLite } from '@/types/evolutionExternal';
 import { getLogger } from '@/lib/logger';
 import { DEFAULT_WHATSAPP_INSTANCE } from '@/lib/constants/whatsappInstances';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 
 const log = getLogger('useMessagesCursor');
 

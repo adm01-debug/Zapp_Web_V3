@@ -51,9 +51,14 @@ vi.mock('@/integrations/supabase/safeClient', () => ({
   safeClient: { rpc: vi.fn(async () => ({ data: null, error: null })) },
 }));
 
-vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-}));
+vi.mock('@tanstack/react-query', () => {
+  // Objeto estável: se fosse recriado a cada render, queryClient mudaria de
+  // referência, invalidando o useCallback que depende dele e re-disparando
+  // useEffect([checkStatus]) — o que limparia o timer de backoff e quebraria
+  // o loop de tentativas antes de atingir MAX_CONSECUTIVE_RECONNECT_ATTEMPTS.
+  const qc = { invalidateQueries: vi.fn() };
+  return { useQueryClient: () => qc };
+});
 
 vi.mock('@/lib/eventBus', () => ({ eventBus: { emit } }));
 
@@ -81,11 +86,12 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     vi.useRealTimers();
   });
 
-  it('para de tentar (e loga "Giving up" UMA vez) depois do limite de tentativas', async () => {
+  it('para de tentar (e loga "Giving up" UMA vez) depois do limite de tentativas', { timeout: 60_000 }, async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
 
-    // ~15min: muito alem das 20 tentativas com backoff no teto de 60s.
-    await advance(15 * 60_000);
+    // ~22min: backoff cresce 4s→8s→16s→32s→60s (teto) + 5s de execucao por
+    // tentativa. As 20 tentativas levam ~19min; 22min garante margem.
+    await advance(22 * 60_000);
 
     const givingUp = logError.mock.calls.filter((c) => String(c[0]).includes('Giving up on wpp2'));
     expect(givingUp).toHaveLength(1);
@@ -99,9 +105,9 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     expect(connectInstance.mock.calls.length).toBe(attemptsAfterLatch);
   });
 
-  it('rearma o ciclo quando a instancia volta a um estado nao-desconectado', async () => {
+  it('rearma o ciclo quando a instancia volta a um estado nao-desconectado', { timeout: 60_000 }, async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
-    await advance(15 * 60_000);
+    await advance(22 * 60_000);
     expect(
       logError.mock.calls.filter((c) => String(c[0]).includes('Giving up on wpp2'))
     ).toHaveLength(1);
