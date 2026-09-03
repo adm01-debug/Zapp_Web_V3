@@ -85,13 +85,6 @@ function extractHttpStatus(err: unknown): number | undefined {
  *     Fix: circuit-breaker permanente em 401/403 + exponencial em 5xx >=3.
  *  9. isRetriableStatus (useEvolutionApiCore) nao excluia explicitamente 401/403.
  *     Corrigido no arquivo irmao useEvolutionApiCore.ts.
- *
- * BUGS CORRIGIDOS (2026-09-02):
- * 10. timerRef.current nao era zerado ao disparar o callback do timer. Apos
- *     esgotamento (20 tentativas), scheduleNextAttempt ativava o latch e
- *     retornava SEM limpar timerRef — deixando um ID expirado. Apos re-armar,
- *     checkStatus via `timerRef.current !== null` pulava attemptSpecificReconnect.
- *     Fix: first statement de attemptSpecificReconnect = timerRef.current = null.
  */
 export function useEvolutionAutoReconnect(instanceName?: string) {
   const { restartInstance, getInstanceStatus, connectInstance } = useEvolutionApi();
@@ -292,17 +285,16 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
     backoffRef.current = nextDelay;
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void attemptSpecificReconnectRef.current?.(), nextDelay);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      void attemptSpecificReconnectRef.current?.();
+    }, nextDelay);
   }, [setIsReconnecting, instanceName]);
 
   // Populate ref AFTER definition — breaks circular deps without stale closures
   scheduleNextAttemptRef.current = scheduleNextAttempt;
 
   const attemptSpecificReconnect = useCallback(async () => {
-    // BUG FIX (2026-09-02): o timer ja disparou — zera o ref imediatamente para
-    // que checkStatus nao interprete o ID expirado como "timer pendente" e
-    // bloqueie a proxima tentativa apos re-armacao do ciclo.
-    timerRef.current = null;
     if (!instanceName || isReconnectingRef.current) return;
     // Latch de esgotamento — bloqueia o re-disparo vindo do polling de 30s.
     if (reconnectExhaustedRef.current) return;
@@ -415,7 +407,6 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
           reconnectExhaustedRef.current = false;
           reconnectAttemptCountRef.current = 0;
           backoffRef.current = INITIAL_BACKOFF_MS;
-          timerRef.current = null; // descarta ID de timer expirado da ultima exaustao
         }
         return;
       }
@@ -467,7 +458,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const interval = setInterval(() => void checkStatus(), 30_000);
     return () => {
       clearInterval(interval);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [checkStatus, instanceName]);
 

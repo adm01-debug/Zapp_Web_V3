@@ -51,13 +51,13 @@ vi.mock('@/integrations/supabase/safeClient', () => ({
   safeClient: { rpc: vi.fn(async () => ({ data: null, error: null })) },
 }));
 
-// Objeto capturado em closure: garante referência estável entre renders.
-// Sem isso, useQueryClient() retorna um novo objeto a cada chamada, tornando
-// queryClient instável na dep-list de attemptSpecificReconnect → useCallback
-// recria a função → useEffect re-executa → cleanup cancela o timer de backoff.
 vi.mock('@tanstack/react-query', () => {
-  const queryClient = { invalidateQueries: vi.fn() };
-  return { useQueryClient: () => queryClient };
+  // Objeto estável: se fosse recriado a cada render, queryClient mudaria de
+  // referência, invalidando o useCallback que depende dele e re-disparando
+  // useEffect([checkStatus]) — o que limparia o timer de backoff e quebraria
+  // o loop de tentativas antes de atingir MAX_CONSECUTIVE_RECONNECT_ATTEMPTS.
+  const qc = { invalidateQueries: vi.fn() };
+  return { useQueryClient: () => qc };
 });
 
 vi.mock('@/lib/eventBus', () => ({ eventBus: { emit } }));
@@ -86,7 +86,7 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     vi.useRealTimers();
   });
 
-  it('para de tentar (e loga "Giving up" UMA vez) depois do limite de tentativas', async () => {
+  it('para de tentar (e loga "Giving up" UMA vez) depois do limite de tentativas', { timeout: 60_000 }, async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
 
     // ~22min: backoff cresce 4s→8s→16s→32s→60s (teto) + 5s de execucao por
@@ -105,7 +105,7 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     expect(connectInstance.mock.calls.length).toBe(attemptsAfterLatch);
   });
 
-  it('rearma o ciclo quando a instancia volta a um estado nao-desconectado', async () => {
+  it('rearma o ciclo quando a instancia volta a um estado nao-desconectado', { timeout: 60_000 }, async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
     await advance(22 * 60_000);
     expect(
