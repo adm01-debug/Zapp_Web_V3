@@ -8,7 +8,7 @@ import { getLogger } from '@/lib/logger';
 const log = getLogger('ErrorBoundary');
 import { recordQueryEvent, type Severity } from '@/lib/clientTelemetry';
 import { isChunkLoadError, triggerChunkReload } from '@/lib/lazyWithRetry';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 
 /**
  * Returns true and triggers a hard reload when `error` is a chunk-load failure

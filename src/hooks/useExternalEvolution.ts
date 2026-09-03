@@ -19,7 +19,7 @@ import {
 import type { EvolutionMessage } from '@/types/evolutionExternal';
 import type { RealtimeMessage } from '@/features/inbox';
 import { getLogger } from '@/lib/logger';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 import { DEFAULT_WHATSAPP_INSTANCE } from '@/lib/constants/whatsappInstances';
 import { dedupedFetch, subscribeDedupe } from '@/lib/realtime/crossTabDedupe';
 import { playerStateStore } from '@/features/inbox';
