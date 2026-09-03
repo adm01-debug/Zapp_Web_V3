@@ -48,12 +48,11 @@ export default defineConfig({
       //   realtimeFanoutEvents, ExportDropdownPermission, ConnectionHealthPanel,
       //   TalkX, v237Fallbacks, useAudioRecorder.cleanup, useQueueAnalytics (23 arquivos)
 
-      // ORPHAN — hook removido do codebase
-      'src/hooks/__tests__/useAutoCloseConversations.test.tsx',
-      'src/hooks/__tests__/useRetryOperation.test.ts',
-      'src/hooks/__tests__/useSidebarFavorites.test.ts',
-      'src/hooks/__tests__/useSwipeGesture.test.ts',
-      'src/hooks/__tests__/useSwipeNavigation.test.ts',
+      // useAutoCloseConversations — reativado 2026-09-03: 4/4 passam (mock .single() trocado por .maybeSingle())
+      // useRetryOperation — reativado 2026-09-03: 6/6 passam
+      // useSidebarFavorites — reativado 2026-09-03: 14/14 passam
+      // useSwipeGesture — reativado 2026-09-03: passam (hook em useSwipeControl.ts)
+      // useSwipeNavigation — reativado 2026-09-03: passam (hook em useSwipeControl.ts)
       // useEmailActions — reativado 2026-09-03: 5/5 passam (renderHook sem QueryClientProvider)
       // FAILING — hook existe, API refatorada.
       // useContactCustomFields — reativado 2026-09-03: 5/5 passam (IDs não-UUID bloqueavam enabled flag)
