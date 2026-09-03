@@ -182,27 +182,34 @@ COMMENT ON FUNCTION evo.fn_recon_coverage_snapshot() IS
 -- AG-1/FIX-3: FDW server evolution_postgres — adicionar query_timeout 30s
 -- Previne que queries FDW lentas bloqueem slot de conexão indefinidamente.
 -- F-02 FIX: guard de existência do servidor antes de qualquer operação
--- (pg_options_to_table(NULL) lançaria NullValueNotAllowed sem esse guard).
+-- NOTA: postgres_fdw (PG17) NÃO suporta query_timeout como opção de servidor.
+-- O bloco abaixo foi preservado apenas para documentar o connect_timeout já
+-- configurado. Para limitar tempo de query, use SET LOCAL statement_timeout
+-- dentro de cada transação FDW, não em ALTER SERVER.
+-- (pg_options_to_table(NULL) lançaria NullValueNotAllowed sem o COALESCE guard).
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$
 BEGIN
   -- F-02: verifica existência antes de acessar srvoptions
   IF NOT EXISTS (SELECT 1 FROM pg_foreign_server WHERE srvname = 'evolution_postgres') THEN
-    RAISE WARNING 'FDW server evolution_postgres não encontrado — pulando configuração de query_timeout. '
+    RAISE WARNING 'FDW server evolution_postgres não encontrado — pulando verificação de opções FDW. '
                   'Verifique se o FDW está instalado no ambiente alvo.';
     RETURN;
   END IF;
 
-  -- Idempotente: SET se a opção já existir, ADD caso contrário.
-  IF EXISTS (
-    SELECT 1 FROM pg_options_to_table(
-      (SELECT srvoptions FROM pg_foreign_server WHERE srvname = 'evolution_postgres')
-    ) WHERE option_name = 'query_timeout'
-  ) THEN
-    ALTER SERVER evolution_postgres OPTIONS (SET query_timeout '30000');
-  ELSE
-    ALTER SERVER evolution_postgres OPTIONS (ADD query_timeout '30000');
-  END IF;
+  -- Apenas loga as opções atuais — sem alterar query_timeout (não suportado pelo postgres_fdw).
+  -- Para ajustar connect_timeout (opção válida), use:
+  --   ALTER SERVER evolution_postgres OPTIONS (SET connect_timeout '10');
+  RAISE NOTICE 'Opções atuais do servidor evolution_postgres: %',
+    (
+      SELECT string_agg(option_name || '=' || option_value, ', ')
+      FROM pg_options_to_table(
+        COALESCE(
+          (SELECT srvoptions FROM pg_foreign_server WHERE srvname = 'evolution_postgres'),
+          ARRAY[]::text[]
+        )
+      )
+    );
 END;
 $$;
 

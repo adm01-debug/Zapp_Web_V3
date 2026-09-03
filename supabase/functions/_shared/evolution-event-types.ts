@@ -5,6 +5,7 @@
  * Paridade: evolution-webhook/__tests__/contract.test.ts (18 entradas) +
  * artifact JSON evolution-event-types.json (mesma lista, p/ leitura no Python).
  */
+import type { CanonicalMessageType } from './domain/messaging.ts';
 export const EVO_EVENT_TYPES = [
   'messages.upsert',
   'messages.update',
@@ -37,7 +38,7 @@ export const EVO_EVENT_TYPES_SET: ReadonlySet<string> = new Set<string>(EVO_EVEN
  * [P100-AUDIT-FIX02 AG-2] buttonsMessage + listMessage → 'interactive'; pollCreationMessage → 'poll'.
  * 'poll' adicionado a CanonicalMessageType (domain/messaging.ts) para manter paridade de tipos.
  */
-export const EVO_PROTOBUF_MESSAGE_TYPE_MAP: Readonly<Record<string, string>> = {
+export const EVO_PROTOBUF_MESSAGE_TYPE_MAP: Readonly<Record<string, CanonicalMessageType>> = {
   conversation: 'text',
   extendedTextMessage: 'text',
   templateMessage: 'template',
