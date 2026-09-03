@@ -162,11 +162,36 @@ describe('useQueueAnalytics', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
-  it('initializes with loading true', () => {
+  it('initializes with loading true', async () => {
+    // Precisa de Promise controlada: com mockResolvedValue o mock resolve em
+    // microtasks e o happy-dom pode executar effects síncronamente durante
+    // renderHook(), zerando loading antes de qualquer leitura.
+    let resolveQuery!: () => void;
+    const pendingPromise = new Promise<{ data: unknown[]; error: null }>((res) => {
+      resolveQuery = () => res({ data: [], error: null });
+    });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'queue_analytics') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockReturnValue(pendingPromise),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
+    });
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
     expect(result.current.loading).toBe(true);
+    resolveQuery();
+    await waitFor(() => expect(result.current.loading).toBe(false), { timeout: 5000 });
   });
 
   it('status data uses semantic HSL colors', async () => {

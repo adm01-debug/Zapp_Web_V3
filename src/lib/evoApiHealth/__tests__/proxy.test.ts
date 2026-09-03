@@ -351,6 +351,9 @@ describe('call() — catch block retries', () => {
 });
 
 // ── 6. getAuthHeader() — caching ──────────────────────────────────────────────
+// SKIP JUSTIFICATIVA: proxy.ts foi refatorado para usar o supabase client
+// diretamente (sem fetch HTTP). O conceito de getAuthHeader()/cachedSession
+// foi eliminado — a autenticação é gerenciada pelo SDK do Supabase.
 
 describe.skip('getAuthHeader() — session token caching', () => {
   it('uses Bearer token from session and caches it', async () => {
@@ -494,6 +497,9 @@ describe('update() wrapper', () => {
 });
 
 // ── 8. Request shape ───────────────────────────────────────────────────────────
+// SKIP JUSTIFICATIVA: mesma razão de 6 — proxy.ts não usa fetch HTTP nem
+// o edge function external-db-proxy. Testes de headers HTTP deixaram de
+// ser aplicáveis após a consolidação no Supabase client.
 
 describe.skip('call() — request headers', () => {
   it('sends apikey, Authorization, Content-Type, and correlation header', async () => {

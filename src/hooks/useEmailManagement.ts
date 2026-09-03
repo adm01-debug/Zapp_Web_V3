@@ -267,11 +267,14 @@ export function useEmail() {
   const [hasMore, setHasMore] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const oauthInFlightRef = useRef(false);
+  const oauthCleanupRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      oauthCleanupRef.current?.();
+      oauthCleanupRef.current = null;
     };
   }, []);
 
@@ -701,6 +704,7 @@ export function useEmail() {
         );
       }
 
+      emailAccountsCache = null;
       setAccounts((prev) => prev.filter((a) => a.id !== accountId));
       if (activeAccountId === accountId) {
         setActiveAccountId(null);
@@ -741,6 +745,7 @@ export function useEmail() {
       const cleanupListeners = () => {
         window.removeEventListener('message', handler);
         if (closeCheckInterval !== null) clearInterval(closeCheckInterval);
+        oauthCleanupRef.current = null;
       };
 
       const handler = async (event: MessageEvent) => {
@@ -798,6 +803,7 @@ export function useEmail() {
       };
 
       window.addEventListener('message', handler);
+      oauthCleanupRef.current = cleanupListeners;
 
       closeCheckInterval = setInterval(() => {
         if (settled) {

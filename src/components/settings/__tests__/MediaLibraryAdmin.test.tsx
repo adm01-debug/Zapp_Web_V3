@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+function renderMLA() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MediaLibraryAdmin />
+    </QueryClientProvider>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════
 // Mock Setup
@@ -113,41 +124,41 @@ describe('MediaLibraryAdmin', () => {
 
   describe('Main Component Rendering', () => {
     it('renders the main title', async () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       expect(screen.getByText('Biblioteca de Mídia')).toBeInTheDocument();
     });
 
     it('renders the description', async () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       expect(screen.getByText(/Gerencie figurinhas/)).toBeInTheDocument();
     });
 
     it('renders three tab triggers', async () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       expect(screen.getByText('Figurinhas')).toBeInTheDocument();
       expect(screen.getByText('Áudios Meme')).toBeInTheDocument();
       expect(screen.getByText('Emojis')).toBeInTheDocument();
     });
 
     it('defaults to stickers tab', async () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       const stickersTab = screen.getByRole('tab', { name: /Figurinhas/ });
       expect(stickersTab).toHaveAttribute('data-state', 'active');
     });
 
     it('renders the icon header container', async () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       expect(screen.getByText('Biblioteca de Mídia').closest('div')).toBeInTheDocument();
     });
 
     it('has correct tab count', () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       const tabs = screen.getAllByRole('tab');
       expect(tabs.length).toBe(3);
     });
 
     it('has tablist role', () => {
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       expect(screen.getByRole('tablist')).toBeInTheDocument();
     });
   });
@@ -157,7 +168,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Data Loading', () => {
     it('fetches stickers table on mount', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(mockFrom).toHaveBeenCalledWith('stickers');
       });
@@ -165,13 +176,13 @@ describe('MediaLibraryAdmin', () => {
 
     it('fetches with limit 1000', async () => {
       const chain = setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(chain.limit).toHaveBeenCalledWith(1000));
     });
 
     it('orders by created_at descending', async () => {
       const chain = setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() =>
         expect(chain.order).toHaveBeenCalledWith('created_at', { ascending: false })
       );
@@ -179,7 +190,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('handles empty data gracefully', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Nenhum item encontrado')).toBeInTheDocument();
       });
@@ -188,7 +199,7 @@ describe('MediaLibraryAdmin', () => {
     it('handles null data without crash', async () => {
       const chain = setupSupabaseQuery();
       chain.limit = vi.fn().mockResolvedValue({ data: null, error: null });
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Nenhum item encontrado')).toBeInTheDocument();
       });
@@ -197,7 +208,7 @@ describe('MediaLibraryAdmin', () => {
     it('handles fetch error without crash', async () => {
       const chain = setupSupabaseQuery();
       chain.limit = vi.fn().mockResolvedValue({ data: null, error: { message: 'Network error' } });
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Nenhum item encontrado')).toBeInTheDocument();
       });
@@ -205,7 +216,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('displays correct item count in footer', async () => {
       setupSupabaseQuery([makeSticker(), makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText(/Exibindo 2 de 2 itens/)).toBeInTheDocument();
       });
@@ -213,7 +224,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('uses select all columns', async () => {
       const chain = setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(chain.select).toHaveBeenCalledWith('*'));
     });
   });
@@ -223,7 +234,7 @@ describe('MediaLibraryAdmin', () => {
   describe('StatsCards', () => {
     it('displays Total de itens label', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Total de itens')).toBeInTheDocument();
       });
@@ -231,7 +242,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('displays Usos totais label', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Usos totais')).toBeInTheDocument();
       });
@@ -239,7 +250,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('displays Favoritos label', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Favoritos')).toBeInTheDocument();
       });
@@ -247,7 +258,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('displays Categorias label', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Categorias')).toBeInTheDocument();
       });
@@ -255,7 +266,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('shows correct total for 3 items', async () => {
       setupSupabaseQuery([makeSticker(), makeSticker(), makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('3')).toBeInTheDocument();
       });
@@ -263,7 +274,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('shows correct total uses sum', async () => {
       setupSupabaseQuery([makeSticker({ use_count: 10 }), makeSticker({ use_count: 5 })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('15')).toBeInTheDocument();
       });
@@ -271,7 +282,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('handles null use_count safely', async () => {
       setupSupabaseQuery([makeSticker({ use_count: null })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Total de itens')).toBeInTheDocument();
       });
@@ -279,7 +290,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('shows top used section when items exist', async () => {
       setupSupabaseQuery([makeSticker({ use_count: 50 })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('🏆 Mais usados')).toBeInTheDocument();
       });
@@ -287,7 +298,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('does not show top used when empty', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.queryByText('🏆 Mais usados')).not.toBeInTheDocument();
       });
@@ -295,7 +306,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('shows zero stats for empty dataset', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const zeros = screen.getAllByText('0');
         expect(zeros.length).toBeGreaterThanOrEqual(3);
@@ -308,7 +319,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Search', () => {
     it('renders search input', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Buscar por nome ou categoria...')).toBeInTheDocument();
       });
@@ -316,7 +327,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('search input is accessible', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const input = screen.getByPlaceholderText('Buscar por nome ou categoria...');
         expect(input.tagName).toBe('INPUT');
@@ -329,7 +340,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Toolbar', () => {
     it('renders upload button', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Upload em massa')).toBeInTheDocument();
       });
@@ -337,7 +348,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('renders refresh button', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Atualizar')).toBeInTheDocument();
       });
@@ -345,7 +356,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('does not show AI generate on stickers tab', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.queryByText('Gerar com IA')).not.toBeInTheDocument();
       });
@@ -353,7 +364,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('refresh button triggers re-fetch', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('Atualizar')).toBeInTheDocument());
 
       mockFrom.mockClear();
@@ -364,7 +375,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('file input has multiple attribute', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
         expect(fileInput?.multiple).toBe(true);
@@ -373,7 +384,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('stickers tab accepts image files', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
         expect(fileInput?.accept).toBe('image/webp,image/png,image/gif,image/jpeg');
@@ -386,37 +397,37 @@ describe('MediaLibraryAdmin', () => {
   describe('Table Header', () => {
     it('shows Preview column', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('Preview')).toBeInTheDocument());
     });
 
     it('shows Nome column', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('Nome')).toBeInTheDocument());
     });
 
     it('shows Categoria column', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('Categoria')).toBeInTheDocument());
     });
 
     it('shows Usos column', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('Usos')).toBeInTheDocument());
     });
 
     it('shows star column', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('⭐')).toBeInTheDocument());
     });
 
     it('shows Ações column', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText('Ações')).toBeInTheDocument());
     });
   });
@@ -426,7 +437,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Item Rendering', () => {
     it('renders correct footer count for 1 item', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Exibindo 1 de 1 itens')).toBeInTheDocument();
       });
@@ -434,7 +445,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('renders correct footer count for 5 items', async () => {
       setupSupabaseQuery(Array.from({ length: 5 }, () => makeSticker()));
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Exibindo 5 de 5 itens')).toBeInTheDocument();
       });
@@ -442,7 +453,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('renders checkboxes for items', async () => {
       setupSupabaseQuery([makeSticker(), makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const checkboxes = screen.getAllByRole('checkbox');
         expect(checkboxes.length).toBeGreaterThanOrEqual(3); // header + 2 items
@@ -451,7 +462,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('renders images for stickers', async () => {
       setupSupabaseQuery([makeSticker({ image_url: 'https://example.com/stk.webp' })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const imgs = screen.getAllByRole('img');
         expect(imgs.length).toBeGreaterThanOrEqual(1);
@@ -460,7 +471,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('images use lazy loading', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const img = screen.getByRole('img');
         expect(img).toHaveAttribute('loading', 'lazy');
@@ -469,7 +480,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('images have alt attribute', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const img = screen.getByRole('img');
         expect(img).toHaveAttribute('alt');
@@ -482,7 +493,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Empty States', () => {
     it('shows empty message when no items', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Nenhum item encontrado')).toBeInTheDocument();
       });
@@ -490,7 +501,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('shows zero in footer for empty state', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText('Exibindo 0 de 0 itens')).toBeInTheDocument();
       });
@@ -502,7 +513,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Edge Cases', () => {
     it('handles item with empty string name', async () => {
       setupSupabaseQuery([makeSticker({ name: '' })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText(/Exibindo 1/)).toBeInTheDocument();
       });
@@ -510,7 +521,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('handles item with negative use_count', async () => {
       setupSupabaseQuery([makeSticker({ use_count: -1 })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText(/Exibindo 1/)).toBeInTheDocument();
       });
@@ -518,7 +529,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('handles item with undefined image_url', async () => {
       setupSupabaseQuery([makeSticker({ image_url: undefined })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText(/Exibindo 1/)).toBeInTheDocument();
       });
@@ -527,7 +538,7 @@ describe('MediaLibraryAdmin', () => {
     it('handles 100 items without crash', async () => {
       const items = Array.from({ length: 100 }, () => makeSticker());
       setupSupabaseQuery(items);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText(/Exibindo 100 de 100/)).toBeInTheDocument();
       });
@@ -539,7 +550,7 @@ describe('MediaLibraryAdmin', () => {
         makeSticker({ category: 'riso' }),
         makeSticker({ category: 'riso' }),
       ]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         expect(screen.getByText(/Exibindo 3/)).toBeInTheDocument();
       });
@@ -551,7 +562,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Render Stability', () => {
     it('does not crash with rapid tab switching', async () => {
       setupSupabaseQuery([]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       for (let i = 0; i < 10; i++) {
         fireEvent.click(screen.getByRole('tab', { name: /Áudios Meme/ }));
         fireEvent.click(screen.getByRole('tab', { name: /Figurinhas/ }));
@@ -562,7 +573,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('does not crash with rapid search changes', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => expect(screen.getByText(/Exibindo 1/)).toBeInTheDocument());
 
       const input = screen.getByPlaceholderText('Buscar por nome ou categoria...');
@@ -574,7 +585,7 @@ describe('MediaLibraryAdmin', () => {
 
     it('does not crash with rapid checkbox clicks', async () => {
       setupSupabaseQuery([makeSticker()]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         const checkboxes = screen.getAllByRole('checkbox');
         for (let i = 0; i < 20; i++) {
@@ -590,7 +601,7 @@ describe('MediaLibraryAdmin', () => {
   describe('Component Integration', () => {
     it('renders all major sections together', async () => {
       setupSupabaseQuery([makeSticker({ use_count: 5, is_favorite: true })]);
-      render(<MediaLibraryAdmin />);
+      renderMLA();
       await waitFor(() => {
         // Title
         expect(screen.getByText('Biblioteca de Mídia')).toBeInTheDocument();
