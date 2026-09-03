@@ -105,6 +105,20 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     expect(connectInstance.mock.calls.length).toBe(attemptsAfterLatch);
   });
 
+  it('checkStatus continua acionando tentativas apos o backoff timer disparar (regressao B-2)', { timeout: 60_000 }, async () => {
+    // Garante que timerRef.current e zerado dentro do callback do setTimeout,
+    // evitando que o guard "isReconnectingRef || reconnectExhaustedRef" (sem
+    // timerRef) bloqueie o checkStatus de re-entrar apos cada backoff disparar.
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+
+    // Avanca 90s: tempo suficiente para 1 tentativa inicial (checkStatus ~30s)
+    // + backoff inicial (5s) disparar + checkStatus acionar 2a tentativa.
+    await advance(90_000);
+    // Se B-2 regredisse, checkStatus ficaria mudo apos o 1o backoff timer
+    // e connectInstance seria chamado apenas 1x. Com o fix, deve haver >= 2.
+    expect(connectInstance.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('rearma o ciclo quando a instancia volta a um estado nao-desconectado', { timeout: 60_000 }, async () => {
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
     await advance(22 * 60_000);

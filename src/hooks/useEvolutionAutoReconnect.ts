@@ -464,7 +464,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
 
       // Desconexao conclusiva: so tenta reconectar enquanto o latch nao estourou.
       // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
-      // com backoff — nao interromper esse timer com uma chamada direta.
+      // com backoff — nao interromper esse timer com uma chamada direta. O handle e
+      // zerado no callback do setTimeout, entao o guard nao trava apos o disparo.
       if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
       void attemptSpecificReconnectRef.current?.();
     } catch (err: unknown) {
