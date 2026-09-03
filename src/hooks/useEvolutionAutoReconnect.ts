@@ -444,6 +444,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // não pode disparar reconexão no ciclo atual.
       if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
+      if (!mountedRef.current) return;
       setStatus(state);
 
       // Reset failure counter on any success
@@ -481,7 +482,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
             `halting status polling permanently for this session`
         );
         credentialErrorRef.current = true;
-        setIsReconnecting(false);
+        if (mountedRef.current) setIsReconnecting(false);
         eventBus.emit('connection:credential-error', {
           instanceName,
           connectionName: instanceName,
