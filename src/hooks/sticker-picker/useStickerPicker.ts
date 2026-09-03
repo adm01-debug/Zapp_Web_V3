@@ -65,8 +65,9 @@ export function useStickerPicker(onSendSticker: (url: string) => void) {
       const { data, error } = await supabase
         .from('stickers')
         .select('*')
+        .eq('is_active', true)
         .order('use_count', { ascending: false })
-        .limit(1000);
+        .limit(2000);
 
       if (!mountedRef.current) return;
       if (error) {
