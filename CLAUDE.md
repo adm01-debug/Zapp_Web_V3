@@ -97,7 +97,7 @@ ou de ligar algo intencionalmente desligado.
 
 3. **PostgREST**: sem o header `Accept-Profile: zapp`, queries falham com `PGRST205`.
 
-4. **Realtime — IMPORTANTE**: a publicação `supabase_realtime` tem `publish_via_partition_root = true`. Eventos CDC saem pela **tabela raiz física** — nunca pela partição, nunca por view. Conteúdo da publication **verificado ao vivo em 2026-08-20** (`pg_publication_tables`): `evo.evolution_messages`, `evo.evolution_conversations`, `evo.evolution_contacts`, `zapp.profiles`, `zapp.app_notifications` (+ `zapp.failed_messages` e `zapp.dispatch_error_logs` reincorporadas pela migration `20260821001000`). Use nos listeners:
+4. **Realtime — IMPORTANTE**: a publicação `supabase_realtime` tem `publish_via_partition_root = true`. Eventos CDC saem pela **tabela raiz física** — nunca pela partição, nunca por view. Conteúdo da publication **reverificado ao vivo em 2026-09-02** (`pg_publication_tables`): **22 tabelas** — `evo.evolution_messages`, `evo.evolution_conversations`, `evo.evolution_contacts` + em `zapp`: `profiles`, `app_notifications`, `failed_messages`, `dispatch_error_logs`, `agent_stats`, `audit_logs`, `calls`, `conversation_transfers`, `evolution_alerts`, `evolution_realtime_events`, `message_reactions`, `password_reset_requests`, `realtime_message_fanout`, `transfer_comments`, `user_roles`, `user_settings`, `warroom_alerts`, `whatsapp_connections`, `whisper_messages`. Use nos listeners:
    - Mensagens do WhatsApp → `schema: 'evo'`, tabela **`evolution_messages`** (raiz física em `evo`), NÃO `evolution_messages_wpp2`. **Subscription em `schema: 'zapp'` recebe ZERO eventos** — `zapp.evolution_messages` é view, e view nunca emite CDC. (O código de produção já faz isso: `useZappMessages.ts`, `useZappConversations.ts`, `useRealtimeContacts.ts` assinam `schema: 'evo'`.)
    - Conversas → `schema: 'evo'`, tabela **`evolution_conversations`**; Contatos → `schema: 'evo'`, **`evolution_contacts`**.
    - Perfis/notificações → `schema: 'zapp'` (`profiles`, `app_notifications` — físicas em `zapp` e presentes na publication).
@@ -197,8 +197,8 @@ ou de ligar algo intencionalmente desligado.
 > tentar "materializar" arquivo espelho para as 3 migrations estrangeiras** —
 > isso recriaria a contaminação na forma de código versionado do zapp.
 >
-> **Pendência real remanescente:** só 2 migrations aplicadas em 30/08 seguem
-> sem arquivo espelho no repo — `e2e_fix_extend_app_role_enum` (estende
+> **Resolvido (2026-09-02):** as 2 migrations de 30/08 que estavam sem arquivo
+> espelho no repo eram — `e2e_fix_extend_app_role_enum` (estende
 > `public.app_role` com `financeiro/operacional/visualizador/contador/
 > operator/viewer`, usado por `public.user_empresas.role`) e
 > `e2e_fix_finance_core_empresas_user_empresas` (tabelas `public.empresas`/
@@ -206,12 +206,16 @@ ou de ligar algo intencionalmente desligado.
 > que é a base de 51.688 clientes/leads). Ambas são trabalho legítimo do zapp
 > (não contaminação) — materializadas em
 > `supabase/migrations/20260830180000_e2e_fix_extend_app_role_enum.sql` e
-> `supabase/migrations/20260830180300_e2e_fix_finance_core_empresas_user_empresas.sql`,
-> **ainda não mergeadas em `main`** no momento em que este parágrafo foi
-> escrito — ver PR #1478 (branch `fix/materializa-migrations-drift-30-31ago-v2`).
-> Se você está lendo isto em `main` e esses 2 arquivos não existem em
-> `supabase/migrations/`, o PR #1478 ainda não foi mergeado — confira o
-> estado dele antes de tentar recriar essas migrations do zero.
+> `supabase/migrations/20260830180300_e2e_fix_finance_core_empresas_user_empresas.sql`
+> — **PR #1478 MERGEADO** (verificado em 2026-09-02: os 2 arquivos existem na `main`).
+
+> **Armadilha de sessão (2026-09-02):** sessões de chat podem carregar MCPs
+> Supabase de OUTROS projetos (ex.: "SUPABASE - ZAPP WEB V2" → banco PG 17.6 com
+> tabelas de app em `public`, sem schemas `zapp`/`evo` — e com service_role + DDL).
+> Antes de usar QUALQUER MCP de banco, confirme a identidade:
+> `SELECT current_setting('server_version')` deve ser **15.8** e
+> `zapp`/`evo` devem existir. Banco errado = risco de contaminação cross-tenant
+> (mesma classe do incidente de 2026-08-30).
 
 > **Cron jobs ativos:** 239 jobs em `cron.job` (pg_cron — auditado ao vivo 2026-08-20; anteriores: 218 em 2026-08-15, 151 em 2026-08-06)
 > **Vault:** 37 secrets em `vault.secrets` (faxina concluída — zero `minio_*`/DEPRECATED; inventário canônico em `docs/SECRETS_INVENTORY.md`)
