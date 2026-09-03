@@ -1,3 +1,4 @@
+_archive/
 _test/
 tests/
 *.test.ts

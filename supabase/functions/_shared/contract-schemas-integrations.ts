@@ -84,7 +84,7 @@ const OutlookOauthGetMessageBodyV1Schema = z.object({
 }).strict();
 
 /** outlook-oauth@v1 — union discriminada por `action` com as rotas reais. */
-export const OutlookOauthV1Schema = z.discriminatedUnion("action", [
+const OutlookOauthV1Schema = z.discriminatedUnion("action", [
   OutlookOauthGetAuthUrlV1Schema,
   OutlookOauthListProviderSupportV1Schema,
   OutlookOauthExchangeCodeV1Schema,
