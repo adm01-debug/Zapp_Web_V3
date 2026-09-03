@@ -257,9 +257,13 @@ describe('useEvolutionAutoReconnect — staleness de geração A→B→A', () =>
     await act(async () => {
       resolveFirstConnect();
     });
-    await advance(200);
+    // Avança 6s (> 5s do setTimeout interno do hook) para que uma op obsoleta
+    // que escapasse do dual guard tivesse tempo de chamar getInstanceStatus e
+    // emitir 'connection:recovered'. Com o guard ativo, o stale op retorna
+    // imediatamente após connectInstance resolver — nada é emitido.
+    await advance(6_000);
 
-    // NÃO deve emitir connection:recovered (op antiga bloqueada antes do setTimeout(5s))
+    // NÃO deve emitir connection:recovered (op antiga descartada pelo dual guard)
     expect(emit.mock.calls.filter((c) => c[0] === 'connection:recovered')).toHaveLength(0);
 
     // NÃO deve logar "Successfully reconnected" pela op antiga
