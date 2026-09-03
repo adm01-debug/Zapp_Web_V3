@@ -46,7 +46,7 @@ export default defineConfig({
       //   useSentimentAlerts, useTranscriptionNotifications, useTypingPresence,
       //   useSearchHistory, contactHealth, diagnostics, crossTabDedupe,
       //   realtimeFanoutEvents, ExportDropdownPermission, ConnectionHealthPanel,
-      //   TalkX, v237Fallbacks (21 arquivos)
+      //   TalkX, v237Fallbacks, useAudioRecorder.cleanup, useQueueAnalytics (23 arquivos)
 
       // ORPHAN — hook removido do codebase
       'src/hooks/__tests__/useAutoCloseConversations.test.tsx',
@@ -60,7 +60,7 @@ export default defineConfig({
       'src/hooks/__tests__/useGlobalSearchShortcut.test.ts',
       'src/hooks/__tests__/useContactCustomFields.test.tsx',
       'src/hooks/__tests__/useExportData.test.tsx',
-      'src/hooks/__tests__/useQueueAnalytics.test.tsx',
+      // useQueueAnalytics — reativado 2026-09-03: 9/9 passam após fix de mock e placeholder de dias
       'src/hooks/__tests__/useQueueGoals.test.tsx',
       // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
       'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',

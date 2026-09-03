@@ -10,6 +10,26 @@ interface LegacyDateRange {
   endDate: Date;
 }
 
+function buildDailyPlaceholders(startDate: Date, endDate: Date) {
+  const days = [];
+  const cur = new Date(startDate);
+  cur.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  while (cur <= end) {
+    days.push({
+      date: cur.toISOString(),
+      day: cur.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      messages: 0,
+      mensagens: 0,
+      resolvidos: 0,
+      novos: 0,
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
 /** Hook: use Queue Analytics. */
 export function useQueueAnalytics(queueId: string, dateRange: DateRange | LegacyDateRange) {
   const normalizedRange =
@@ -38,7 +58,7 @@ export function useQueueAnalytics(queueId: string, dateRange: DateRange | Legacy
             ),
           },
         ]
-      : [],
+      : buildDailyPlaceholders(normalizedRange.startDate, normalizedRange.endDate),
     hourlyData: analytics
       ? [
           {
