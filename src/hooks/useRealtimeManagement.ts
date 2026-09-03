@@ -40,12 +40,22 @@ export function useRealtimeDashboardManagement(dashboardId: string) {
           new?: Record<string, unknown>;
           old?: Record<string, unknown>;
         }) => {
+          // Em DELETE o Realtime envia new = {} (objeto vazio, portanto truthy):
+          // `new ?? old` nunca cai no fallback e o update chegava sem dado algum.
+          // Seleciona pelo eventType e trata {} como ausente.
+          const nonEmpty = (r?: Record<string, unknown>) =>
+            r && Object.keys(r).length > 0 ? r : undefined;
+          const row =
+            payload.eventType === 'DELETE'
+              ? (nonEmpty(payload.old) ?? nonEmpty(payload.new))
+              : (nonEmpty(payload.new) ?? nonEmpty(payload.old));
+
           setUpdates((prev) => [
             ...prev,
             {
-              id: String(payload.new?.id ?? Date.now()),
+              id: String(row?.id ?? Date.now()),
               type: payload.eventType,
-              data: payload.new ?? payload.old ?? {},
+              data: row ?? {},
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -59,7 +69,12 @@ export function useRealtimeDashboardManagement(dashboardId: string) {
           // FIX validação v2: catch-all logava warn cru para qualquer status !=
           // SUBSCRIBED (CLOSED no unmount inclusive). Só CHANNEL_ERROR/TIMED_OUT
           // são classificados; CLOSED é silencioso (unsubscribe intencional).
-          void logChannelError(log, '[useRealtimeManagement] channel subscription status:', lastConnectedAtMs, status);
+          void logChannelError(
+            log,
+            '[useRealtimeManagement] channel subscription status:',
+            lastConnectedAtMs,
+            status
+          );
         }
       });
 
