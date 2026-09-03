@@ -242,7 +242,7 @@ describe('useEvolutionAutoReconnect — staleness de geração A→B→A', () =>
     // checkStatus(t=0) → 'close' → attemptSpecificReconnect → connectInstance PENDENTE
     await advance(200);
     expect(connectInstance).toHaveBeenCalledTimes(1);
-    expect(connectInstance.mock.calls[0][0]).toBe('instA');
+    expect(connectInstance).toHaveBeenCalledWith('instA');
 
     // A→B: instanceGenerationRef sobe para 1; B→A: sobe para 2.
     await act(async () => {
