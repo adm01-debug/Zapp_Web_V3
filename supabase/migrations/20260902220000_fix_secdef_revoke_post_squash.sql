@@ -5,7 +5,7 @@
 -- não foram revogados:
 --
 --   1. zapp.fn_sicoob_bridge_ingest_message(...)
---      — criada em 20260902020000 (mesmo dia que 20260902040000);
+--      — criada em 20260902020000 (mesmo dia que 20260902210000);
 --        ausente da lista explícita do REVOKE anterior. Função atômica de
 --        ingress para sicoob-bridge — acesso via RPC direto por anon/authenticated
 --        contornaria a validação do Bearer token que o handler implementa.
