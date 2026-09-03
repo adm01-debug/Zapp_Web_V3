@@ -55,10 +55,10 @@ export default defineConfig({
       'src/hooks/__tests__/useSwipeGesture.test.ts',
       'src/hooks/__tests__/useSwipeNavigation.test.ts',
       'src/hooks/useEmailActions.test.ts',
-      // FAILING — hook existe, API refatorada. WIP: wrapper QueryClient adicionado, falhas residuais de mock.
-      // Parcialmente verdes: useQueueAnalytics (7/9), useContactCustomFields (4/5).
-      'src/hooks/__tests__/useGlobalSearchShortcut.test.ts',
-      'src/hooks/__tests__/useContactCustomFields.test.tsx',
+      // FAILING — hook existe, API refatorada.
+      // useContactCustomFields — reativado 2026-09-03: 5/5 passam (IDs não-UUID bloqueavam enabled flag)
+      // useExportData — reativado 2026-09-03: 7/7 passam (mock faltava SUPABASE_RESOLVED_URL)
+      // useGlobalSearchShortcut — reativado 2026-09-03: 5/5 passam (dispatch em window, não document; onOpen via useEffect assíncrono)
       'src/hooks/__tests__/useExportData.test.tsx',
       // useQueueAnalytics — reativado 2026-09-03: 9/9 passam após fix de mock e placeholder de dias
       'src/hooks/__tests__/useQueueGoals.test.tsx',
