@@ -195,6 +195,83 @@ describe('useEvolutionAutoReconnect — regressao timerRef no success path', () 
   });
 });
 
+describe('useEvolutionAutoReconnect — staleness de geração A→B→A', () => {
+  /**
+   * Regressão do bug A→B→A (2026-09-03):
+   * O guard de nome sozinho ficava cego quando a instância voltava ao valor
+   * original: capturedInstance === instanceNameRef.current === 'A', mas
+   * capturedGeneration havia sido capturado no ciclo 1 enquanto
+   * instanceGenerationRef já estava no ciclo 3. O contador de geração
+   * (instanceGenerationRef) distingue os dois ciclos de 'A'.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers();
+    logError.mockClear();
+    logInfo.mockClear();
+    emit.mockClear();
+    connectInstance.mockClear();
+    getInstanceStatus.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('descarta resultado de connectInstance pendente após troca A→B→A (dual guard)', async () => {
+    // 1ª chamada a getInstanceStatus retorna 'close' → dispara reconnect do ciclo 1 de A.
+    // Demais retornam 'open' → ciclo B e novo ciclo de A não iniciam reconexão.
+    getInstanceStatus
+      .mockResolvedValueOnce({ instance: { state: 'close' } })
+      .mockResolvedValue({ instance: { state: 'open' } });
+
+    // 1ª chamada a connectInstance fica pendente até resolvermos manualmente.
+    let resolveFirstConnect!: () => void;
+    connectInstance.mockImplementationOnce(
+      () =>
+        new Promise<Record<string, never>>((resolve) => {
+          resolveFirstConnect = () => resolve({});
+        })
+    );
+    connectInstance.mockResolvedValue({});
+
+    const { result, rerender } = renderHook(
+      ({ name }: { name: string }) => useEvolutionAutoReconnect(name),
+      { initialProps: { name: 'instA' } }
+    );
+
+    // checkStatus(t=0) → 'close' → attemptSpecificReconnect → connectInstance PENDENTE
+    await advance(200);
+    expect(connectInstance).toHaveBeenCalledTimes(1);
+    expect(connectInstance.mock.calls[0][0]).toBe('instA');
+
+    // A→B: instanceGenerationRef sobe para 1; B→A: sobe para 2.
+    await act(async () => {
+      rerender({ name: 'instB' });
+    });
+    await act(async () => {
+      rerender({ name: 'instA' });
+    });
+
+    // Resolve connectInstance do ciclo 1 de 'instA'.
+    // Dual guard: capturedGeneration(0) !== instanceGenerationRef.current(2) → return.
+    await act(async () => {
+      resolveFirstConnect();
+    });
+    await advance(200);
+
+    // NÃO deve emitir connection:recovered (op antiga bloqueada antes do setTimeout(5s))
+    expect(emit.mock.calls.filter((c) => c[0] === 'connection:recovered')).toHaveLength(0);
+
+    // NÃO deve logar "Successfully reconnected" pela op antiga
+    expect(
+      logInfo.mock.calls.some((c) => String(c[0]).includes('Successfully reconnected'))
+    ).toBe(false);
+
+    // isReconnecting deve ser false (resetado pelos switches de instância)
+    expect(result.current.isReconnecting).toBe(false);
+  });
+});
+
 describe('useEvolutionAutoReconnect — proteção de circuito', () => {
   /**
    * TEST-004: credentialErrorRef — halt permanente em 401/403.
