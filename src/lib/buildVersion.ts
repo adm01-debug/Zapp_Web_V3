@@ -65,6 +65,16 @@ let graceTimer: ReturnType<typeof setTimeout> | undefined;
 // Reason/remote do refresh pendente — usado pelo listener de 'zapp-update-apply'
 // para executar forceBundleRefresh(reason, remote) imediatamente.
 let pendingGraceRefresh: { reason: string; remote: string; entry?: string } | undefined;
+/**
+ * Nome REAL do CSS do entry, publicado em version.json como `entryCss`.
+ *
+ * BUG FIX (2026-09-02): o prefetch derivava o CSS do nome do JS
+ * (index-<hash>.js -> index-<hash>.css). O Vite gera hashes independentes por
+ * arquivo, entao esse caminho NUNCA existiu — 404 garantido em todo deploy
+ * (confirmado em prod: entry=index-CJ5bStv8.js, css real=index-y1dDjU6P.css).
+ * Guardado em modulo para nao propagar mais um parametro por 5 assinaturas.
+ */
+let remoteEntryCss: string | undefined;
 
 interface ReloadState {
   targetBuildId: string;
@@ -390,15 +400,17 @@ function prefetchNewBundle(remoteBuildId: string, entry?: string): void {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), PREFETCH_TIMEOUT_MS);
-    // GAP-1 (QA-06): com o entry real (version.json), prefetcha o asset correto;
-    // o CSS companion deriva do mesmo nome (index-<hash>.css). Fallback antigo
-    // para compatibilidade (deploys sem entry no version.json).
+    // GAP-1 (QA-06): com o entry real (version.json), prefetcha o asset correto.
+    // Fallback antigo para compatibilidade (deploys sem entry no version.json).
     const normalized = entry?.startsWith('assets/') ? entry.slice('assets/'.length) : entry;
     const jsPath = normalized ? `/assets/${normalized}` : `/assets/index-${remoteBuildId}.js`;
-    const cssPath = normalized
-      ? `/assets/${normalized.replace(/\.js$/, '.css')}`
-      : `/assets/index-${remoteBuildId}.css`;
-    const urls = [jsPath, cssPath];
+    // O CSS só é pré-carregado quando o version.json publica o nome real
+    // (entryCss). Derivar do nome do JS dava 404 em 100% dos deploys — ver
+    // o comentário de `remoteEntryCss`.
+    const normalizedCss = remoteEntryCss?.startsWith('assets/')
+      ? remoteEntryCss.slice('assets/'.length)
+      : remoteEntryCss;
+    const urls = normalizedCss ? [jsPath, `/assets/${normalizedCss}`] : [jsPath];
     void Promise.allSettled(
       urls.map((url) =>
         fetch(url, {
@@ -550,9 +562,10 @@ async function checkVersion(): Promise<void> {
       return;
     }
     const payload = (await res.json()) as
-      | { buildId?: string; entry?: string | null }
+      | { buildId?: string; entry?: string | null; entryCss?: string | null }
       | null;
     const remote = payload?.buildId;
+    remoteEntryCss = payload?.entryCss ?? undefined;
     if (!remote || remote === CURRENT_BUILD_ID) {
       if (remote === CURRENT_BUILD_ID) {
         // Build atual bate com o servidor — limpa TODAS as flags de guarda para
@@ -755,4 +768,7 @@ export const __TEST__ = {
   readReloadState,
   prefetchNewBundle,
   isBundleReachable,
+  setRemoteEntryCss: (value: string | undefined) => {
+    remoteEntryCss = value;
+  },
 };

@@ -102,6 +102,22 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Consecutive attemptSpecificReconnect failures (resets on success or instanceName change). */
   const reconnectAttemptCountRef = useRef(0);
+  /**
+   * BUG FIX (2026-09-02): latch de esgotamento.
+   *
+   * Antes, ao bater MAX_CONSECUTIVE_RECONNECT_ATTEMPTS o scheduleNextAttempt
+   * apenas parava de agendar o proprio timer de backoff — mas o setInterval de
+   * 30s do checkStatus continuava vendo o state 'close' e re-disparando
+   * attemptSpecificReconnect. Resultado observado em producao (console de
+   * 2026-09-02, instancia wpp2 caida desde 25/08): o log
+   * "Giving up ... manual intervention required" saia a cada ~60s com o
+   * contador subindo indefinidamente (20 -> 57), cada linha virando um evento
+   * Sentry ate o tunnel responder 429.
+   *
+   * Com o latch, o ciclo para de verdade e o aviso e emitido UMA vez.
+   * Reset: troca de instanceName, reconexao bem-sucedida ou resetReconnect().
+   */
+  const reconnectExhaustedRef = useRef(false);
 
   // ── Circuit-breaker state (§2 status polling) ──────────────────────────────────────
   /** Permanent flag: halts polling forever on 401/403 for this session. */
@@ -126,6 +142,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     consecutiveFailsRef.current = 0;
     circuitOpenUntilRef.current = 0;
     reconnectAttemptCountRef.current = 0;
+    reconnectExhaustedRef.current = false;
     backoffRef.current = INITIAL_BACKOFF_MS;
   }, [instanceName]);
 
@@ -249,15 +266,20 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
 
     reconnectAttemptCountRef.current += 1;
     if (reconnectAttemptCountRef.current >= MAX_CONSECUTIVE_RECONNECT_ATTEMPTS) {
-      log.error(
-        `Giving up on ${instanceName}: ${reconnectAttemptCountRef.current} consecutive ` +
-          `reconnect attempts failed — manual intervention required`
-      );
-      eventBus.emit('connection:reconnect-exhausted', {
-        instanceName: instanceName ?? '',
-        attempts: reconnectAttemptCountRef.current,
-      });
-      return; // stop scheduling — caller must manually retry (e.g. via UI button)
+      // Latch: so loga/emite na transicao para esgotado. Sem isso o polling de
+      // 30s re-entrava aqui para sempre (ver comentario em reconnectExhaustedRef).
+      if (!reconnectExhaustedRef.current) {
+        reconnectExhaustedRef.current = true;
+        log.error(
+          `Giving up on ${instanceName}: ${reconnectAttemptCountRef.current} consecutive ` +
+            `reconnect attempts failed — manual intervention required`
+        );
+        eventBus.emit('connection:reconnect-exhausted', {
+          instanceName: instanceName ?? '',
+          attempts: reconnectAttemptCountRef.current,
+        });
+      }
+      return; // stop scheduling — caller must manually retry (resetReconnect)
     }
 
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
@@ -271,6 +293,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
 
   const attemptSpecificReconnect = useCallback(async () => {
     if (!instanceName || isReconnectingRef.current) return;
+    // Latch de esgotamento — bloqueia o re-disparo vindo do polling de 30s.
+    if (reconnectExhaustedRef.current) return;
     if (!mountedRef?.current) return;
 
     setIsReconnecting(true);
@@ -291,6 +315,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         log.info(`Successfully reconnected instance ${instanceName}`);
         backoffRef.current = INITIAL_BACKOFF_MS;
         reconnectAttemptCountRef.current = 0;
+        reconnectExhaustedRef.current = false;
+        credentialErrorRef.current = false;
         setIsReconnecting(false);
         queryClient.invalidateQueries({ queryKey: queryKeys.evolutionConversations.all() });
         eventBus.emit('connection:recovered', { instanceName });
@@ -304,6 +330,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         log.error(
           `Credential error (HTTP ${httpStatus}) for ${instanceName} — stopping retry cycle`
         );
+        credentialErrorRef.current = true;
         setIsReconnecting(false);
         eventBus.emit('connection:credential-error', {
           instanceName,
@@ -369,9 +396,23 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // Reset failure counter on any success
       consecutiveFailsRef.current = 0;
 
-      if (isConclusiveEvolutionDisconnect(state) && !isReconnectingRef.current) {
-        void attemptSpecificReconnect();
+      if (!isConclusiveEvolutionDisconnect(state)) {
+        // Instancia saiu do estado desconectado (por conta propria ou por
+        // re-pareamento manual). Rearma o auto-reconnect para a proxima queda.
+        if (reconnectExhaustedRef.current) {
+          log.info(`Reconnect re-armado para ${instanceName}: state=${state}`);
+          reconnectExhaustedRef.current = false;
+          reconnectAttemptCountRef.current = 0;
+          backoffRef.current = INITIAL_BACKOFF_MS;
+        }
+        return;
       }
+
+      // Desconexao conclusiva: so tenta reconectar enquanto o latch nao estourou.
+      // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
+      // com backoff — nao interromper esse timer com uma chamada direta.
+      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
+      void attemptSpecificReconnect();
     } catch (err: unknown) {
       log.error(`Error checking status for ${instanceName}:`, err);
       const httpStatus = extractHttpStatus(err);
@@ -418,5 +459,20 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     };
   }, [checkStatus, instanceName]);
 
-  return { status, isReconnecting };
+  /**
+   * Rearma o ciclo de auto-reconnect apos o latch de esgotamento — ponto de
+   * entrada para o "manual intervention required" citado no log de erro
+   * (ex.: botao "Tentar novamente" na tela de conexoes).
+   */
+  const resetReconnect = useCallback(() => {
+    reconnectExhaustedRef.current = false;
+    reconnectAttemptCountRef.current = 0;
+    backoffRef.current = INITIAL_BACKOFF_MS;
+    consecutiveFailsRef.current = 0;
+    circuitOpenUntilRef.current = 0;
+    credentialErrorRef.current = false;
+    void attemptSpecificReconnectRef.current?.();
+  }, []);
+
+  return { status, isReconnecting, resetReconnect };
 }
