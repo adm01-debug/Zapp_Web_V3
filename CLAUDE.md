@@ -224,11 +224,10 @@ ou de ligar algo intencionalmente desligado.
 
 ## Bugs Abertos
 
-| ID | Componente | Problema | Severidade | Próximo Passo |
-|----|-----------|----------|-----------|---------------|
-| BUG-C | n8n | FK constraint violada em `workflow_history` | 🟠 Alto | Investigar DB n8n + FK cascades |
+Nenhum bug aberto no momento.
 
 > Histórico completo de bugs resolvidos em `docs/CHANGELOG_SESSIONS.md`.
+> **BUG-C (fechado 2026-09-03):** FK `workflow_history.workflowId → workflow_entity.id` tem `ON DELETE CASCADE` — orphans impossíveis por design. Verificado ao vivo: 0 linhas órfãs. Backup `bkp_workflow_history_20260809` (13 linhas) contém linhas válidas (workflow_exists=true), não órfãs. Falso positivo encerrado.
 
 ---
 
