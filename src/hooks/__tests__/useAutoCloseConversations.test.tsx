@@ -12,10 +12,6 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: vi.fn() }),
-}));
-
-vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn(),
   useToast: () => ({ toast: vi.fn() }),
 }));
@@ -51,9 +47,7 @@ describe('useAutoCloseConversations', () => {
           maybeSingle: vi.fn().mockResolvedValue({ data: mockConfig, error: null }),
         }),
       }),
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     });
 
     const { result } = renderHook(() => useAutoCloseConversations(), { wrapper: createWrapper() });
@@ -106,9 +100,7 @@ describe('useAutoCloseConversations', () => {
           }),
         }),
       }),
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     });
 
     const { result } = renderHook(() => useAutoCloseConversations(), { wrapper: createWrapper() });
