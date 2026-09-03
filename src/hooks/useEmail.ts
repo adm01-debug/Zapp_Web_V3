@@ -132,10 +132,13 @@ export function useEmail() {
   const [hasMore, setHasMore] = useState(false);
   const oauthInFlightRef = useRef(false);
   const mountedRef = useRef(true);
+  const oauthCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      oauthCleanupRef.current?.();
+      oauthCleanupRef.current = null;
     };
   }, []);
 
@@ -668,6 +671,7 @@ export function useEmail() {
       };
 
       window.addEventListener('message', handler);
+      oauthCleanupRef.current = cleanupListeners;
 
       // Detecta o usuário fechando o popup MANUALMENTE (sem completar o
       // fluxo) — sem isto, a guarda de concorrência acima travaria o botão

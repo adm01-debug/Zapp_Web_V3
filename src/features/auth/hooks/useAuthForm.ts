@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { useWebAuthn } from '@/hooks/useWebAuthn';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
+import { INVISIBLE_CHARS } from '@/shared/validation';
 import { supabase } from '@/integrations/supabase/client';
 import { getLogger } from '@/lib/logger';
 import {
@@ -31,7 +32,13 @@ const loginSchema = z.object({
 });
 
 const signupSchema = z.object({
-  name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100, 'Nome muito longo'),
+  name: z
+    .string()
+    .trim()
+    .min(2, 'Nome deve ter no mínimo 2 caracteres')
+    .max(100, 'Nome muito longo')
+    .refine((v) => v.trim().length > 0, 'Nome não pode ser só espaços')
+    .refine((v) => !INVISIBLE_CHARS.test(v), 'Nome contém caracteres inválidos'),
   email: z.string().email('Email inválido').max(255, 'Email muito longo'),
   password: passwordSchema,
 });
