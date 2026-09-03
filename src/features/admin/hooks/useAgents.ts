@@ -84,7 +84,7 @@ export function useAgents() {
         'postgres_changes',
         { event: '*', schema: 'zapp', table: 'agent_presence' },
         (payload) => {
-          const row = (payload.new ?? payload.old) as AgentPresenceRow | undefined;
+          const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as AgentPresenceRow | undefined;
           if (!row?.user_id) return;
           if (payload.eventType === 'DELETE') {
             setPresenceMap((prev) => {
