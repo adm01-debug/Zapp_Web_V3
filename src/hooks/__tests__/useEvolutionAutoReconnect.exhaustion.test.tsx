@@ -191,3 +191,121 @@ describe('useEvolutionAutoReconnect — regressao timerRef no success path', () 
     expect(connectInstance.mock.calls.length).toBeGreaterThan(afterExhaustion);
   });
 });
+
+describe('useEvolutionAutoReconnect — proteção de circuito', () => {
+  /**
+   * TEST-004: credentialErrorRef — halt permanente em 401/403.
+   * TEST-005: circuit breaker — backoff exponencial após CIRCUIT_THRESHOLD falhas
+   *           consecutivas no loop de polling (checkStatus).
+   *
+   * Constantes do hook (verificadas em 2026-09-03):
+   *   CIRCUIT_THRESHOLD = 3
+   *   CIRCUIT_BASE_MS   = 120_000  (2 min — primeira janela de cooldown)
+   *   CIRCUIT_MAX_MS    = 600_000  (10 min — teto)
+   */
+  beforeEach(() => {
+    vi.useFakeTimers();
+    logError.mockClear();
+    logInfo.mockClear();
+    emit.mockClear();
+    connectInstance.mockClear();
+    connectInstance.mockImplementation(async () => ({}));
+    getInstanceStatus.mockClear();
+    getInstanceStatus.mockImplementation(async () => ({ instance: { state: 'close' } }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('para o ciclo permanentemente quando connectInstance retorna HTTP 401 (credential error)', async () => {
+    // Primeira chamada a connectInstance lança credencial inválida;
+    // chamadas subsequentes resolveriam normalmente — mas não devem ocorrer.
+    connectInstance.mockRejectedValueOnce({ status: 401 });
+
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+
+    // checkStatus (imediato) detecta 'close' → despacha attemptSpecificReconnect
+    // (fire-and-forget) → connectInstance lança 401 → credentialErrorRef = true
+    // + eventBus.emit('connection:credential-error')
+    await advance(2_000);
+
+    const credErrors = emit.mock.calls.filter((c) => c[0] === 'connection:credential-error');
+    expect(credErrors).toHaveLength(1);
+    expect(credErrors[0][1]).toMatchObject({ instanceName: 'wpp2', status: 401 });
+
+    // Pelo menos uma tentativa (a que falhou) deve ter sido feita.
+    const callsAfterCred = connectInstance.mock.calls.length;
+    expect(callsAfterCred).toBeGreaterThanOrEqual(1);
+
+    // Guard 1 em checkStatus bloqueia toda execução subsequente —
+    // nem getInstanceStatus é chamado novamente, nem connectInstance.
+    await advance(5 * 60_000);
+    expect(connectInstance.mock.calls.length).toBe(callsAfterCred);
+
+    // O halt é permanente: nenhum novo evento de credential-error fica enfileirado.
+    expect(emit.mock.calls.filter((c) => c[0] === 'connection:credential-error')).toHaveLength(1);
+  });
+
+  it('para o ciclo permanentemente quando connectInstance retorna HTTP 403', async () => {
+    connectInstance.mockRejectedValueOnce({ status: 403 });
+
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+    await advance(2_000);
+
+    const credErrors = emit.mock.calls.filter((c) => c[0] === 'connection:credential-error');
+    expect(credErrors).toHaveLength(1);
+    expect(credErrors[0][1]).toMatchObject({ instanceName: 'wpp2', status: 403 });
+
+    const callsAfterCred = connectInstance.mock.calls.length;
+    await advance(5 * 60_000);
+    expect(connectInstance.mock.calls.length).toBe(callsAfterCred);
+  });
+
+  it('abre o circuit breaker apos CIRCUIT_THRESHOLD falhas consecutivas no checkStatus', async () => {
+    // getInstanceStatus lança erro transitório (503) em todas as chamadas.
+    // Isso faz o loop de polling (checkStatus) acumular falhas sem jamais
+    // chamar attemptSpecificReconnect.
+    getInstanceStatus.mockRejectedValue({ status: 503 });
+
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+
+    // Três ciclos de polling: t=0 (imediato), t=30s, t=60s.
+    // Na 3ª falha (t=60s): consecutiveFailsRef >= CIRCUIT_THRESHOLD(3) →
+    // circuitOpenUntilRef = t + CIRCUIT_BASE_MS = 60_000 + 120_000 = 180_000.
+    await advance(65_000);
+    expect(getInstanceStatus.mock.calls.length).toBe(3);
+
+    // Dentro da janela de cooldown: intervalo em t=90s bloqueado pelo Guard 2.
+    await advance(30_000); // t=95s
+    expect(getInstanceStatus.mock.calls.length).toBe(3);
+
+    // Após o cooldown (circuito fecha em t=180s):
+    // intervalo em t=180s passa pelo Guard 2 → nova chamada a getInstanceStatus.
+    // Cobre t=120s (bloqueado), t=150s (bloqueado), t=180s (passa).
+    await advance(100_000); // t=195s
+    expect(getInstanceStatus.mock.calls.length).toBeGreaterThan(3);
+  });
+
+  it('resetReconnect zera circuitOpenUntilRef e credentialErrorRef — retomada imediata', async () => {
+    // Aciona credentialErrorRef via connectInstance 401.
+    connectInstance.mockRejectedValueOnce({ status: 401 });
+
+    const { result } = renderHook(() => useEvolutionAutoReconnect('wpp2'));
+    await advance(2_000);
+
+    // Credential error ativado — polling bloqueado.
+    const callsAfterCred = connectInstance.mock.calls.length;
+    await advance(60_000);
+    expect(connectInstance.mock.calls.length).toBe(callsAfterCred);
+
+    // resetReconnect zera credentialErrorRef (e circuitOpenUntilRef) →
+    // attemptSpecificReconnect disparado imediatamente.
+    // Desta vez connectInstance não rejeita → chamada extra acontece.
+    await act(async () => {
+      result.current.resetReconnect();
+    });
+    await advance(2_000);
+    expect(connectInstance.mock.calls.length).toBeGreaterThan(callsAfterCred);
+  });
+});
