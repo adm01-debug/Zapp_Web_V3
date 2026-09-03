@@ -64,16 +64,15 @@ export default defineConfig({
       // useRealtimeSentimentAlerts — reativado 2026-09-03: 5/5 passam (sem mock useAuth; nome canal dinâmico; unsubscribe precisa de Promise)
       // useWarRoomAlerts — reativado 2026-09-03: 4/4 passam (on() não retornava this; requireInteraction inexistente no hook)
       // MediaLibraryAdmin — reativado 2026-09-03: 275/275 passam (componente usa useQuery mas render() não tinha QueryClientProvider; adicionado renderMLA() wrapper)
-      // DENO — use https://deno.land/ imports incompatíveis com Node/vitest.
+      // validation — reativado 2026-09-03: 25/25 passam (reescrito de Deno para vitest;
+      //   imports https://deno.land/ e Deno.test() trocados por describe/it/expect do vitest)
+      // DENO — imports https://deno.land/ incompatíveis com Node/vitest.
       // Rodam apenas com `deno test` (suíte separada).
       // (useAudioRecorder.cleanup.test.ts removido da quarentena em 2026-08-17:
       //  reescrito em vitest puro testando o cleanup real — REMOVIDO DA EXCLUDE EM 2026-09-03.)
       // (clientRateLimiter/healthCheck/queryTimeout/sanitize-extra convertidos
       // para vitest em 2026-08-17 — removidos da quarentena.)
-      // DENO — imports https://deno.land/ incompatíveis com Node/vitest.
-      // QUARENTENADOS: não rodam no vitest nem em suíte Deno ativa (CI deno-contract-tests
-      // cobre apenas supabase/functions). Reescrita p/ vitest é o caminho para reativá-los.
-      'src/shared/__tests__/validation.test.ts',
+      // (validation.test.ts reescrito para vitest em 2026-09-03 — REMOVIDO DA EXCLUDE.)
       // NEEDS-ENV — requer VITE_EXTERNAL_SUPABASE_URL/ANON_KEY (Supabase self-hosted).
       // Rodados separadamente via script de integração.
       'src/lib/__tests__/contactsDB.test.ts',
