@@ -138,10 +138,9 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     _setIsReconnecting(v);
   }, []);
 
-  // Mantém o ref sincronizado com o valor atual de instanceName.
-  useEffect(() => {
-    instanceNameRef.current = instanceName;
-  }, [instanceName]);
+  // Atualização síncrona do ref — sem janela de timing entre render e useEffect.
+  // (instanceNameRef.current pode ser lido por closures assíncronas antes do efeito rodar)
+  instanceNameRef.current = instanceName;
 
   // Reset circuit-breaker when instanceName changes (new connection context)
   useEffect(() => {
@@ -449,6 +448,8 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
       void attemptSpecificReconnectRef.current?.();
     } catch (err: unknown) {
+      // Guarda de staleness: se instanceName mudou durante o await que lançou, descarta.
+      if (instanceNameRef.current !== capturedInstance) return;
       log.error(`Error checking status for ${instanceName}:`, err);
       const httpStatus = extractHttpStatus(err);
 
