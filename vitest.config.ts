@@ -63,7 +63,7 @@ export default defineConfig({
       // useQueueAnalytics — reativado 2026-09-03: 9/9 passam após fix de mock e placeholder de dias
       // useQueueGoals — reativado 2026-09-03: 8/8 passam (mockUser instável causava loop; testes de channel removidos por comportamento inexistente)
       // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
-      'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',
+      // useRealtimeSentimentAlerts — reativado 2026-09-03: 5/5 passam (sem mock useAuth; nome canal dinâmico; unsubscribe precisa de Promise)
       'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',
       'src/components/settings/__tests__/MediaLibraryAdmin.test.tsx',
       // DENO — use https://deno.land/ imports incompatíveis com Node/vitest.
