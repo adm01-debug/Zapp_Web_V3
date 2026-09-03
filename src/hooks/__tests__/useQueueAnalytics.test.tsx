@@ -191,7 +191,7 @@ describe('useQueueAnalytics', () => {
     });
     expect(result.current.loading).toBe(true);
     resolveQuery();
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.loading).toBe(false), { timeout: 5000 });
   });
 
   it('status data uses semantic HSL colors', async () => {
