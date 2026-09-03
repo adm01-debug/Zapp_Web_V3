@@ -64,8 +64,8 @@ export default defineConfig({
       // useQueueGoals — reativado 2026-09-03: 8/8 passam (mockUser instável causava loop; testes de channel removidos por comportamento inexistente)
       // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
       // useRealtimeSentimentAlerts — reativado 2026-09-03: 5/5 passam (sem mock useAuth; nome canal dinâmico; unsubscribe precisa de Promise)
-      'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',
-      'src/components/settings/__tests__/MediaLibraryAdmin.test.tsx',
+      // useWarRoomAlerts — reativado 2026-09-03: 4/4 passam (on() não retornava this; requireInteraction inexistente no hook)
+      // MediaLibraryAdmin — reativado 2026-09-03: 275/275 passam (componente usa useQuery mas render() não tinha QueryClientProvider; adicionado renderMLA() wrapper)
       // DENO — use https://deno.land/ imports incompatíveis com Node/vitest.
       // Rodam apenas com `deno test` (suíte separada).
       // (useAudioRecorder.cleanup.test.ts removido da quarentena em 2026-08-17:
