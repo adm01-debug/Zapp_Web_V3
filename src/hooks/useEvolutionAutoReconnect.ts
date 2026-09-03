@@ -285,7 +285,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const nextDelay = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
     backoffRef.current = nextDelay;
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void attemptSpecificReconnectRef.current?.(), nextDelay);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      void attemptSpecificReconnectRef.current?.();
+    }, nextDelay);
   }, [setIsReconnecting, instanceName]);
 
   // Populate ref AFTER definition — breaks circular deps without stale closures
@@ -455,7 +458,10 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     const interval = setInterval(() => void checkStatus(), 30_000);
     return () => {
       clearInterval(interval);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [checkStatus, instanceName]);
 
