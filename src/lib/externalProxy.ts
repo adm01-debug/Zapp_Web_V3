@@ -17,7 +17,7 @@ import { recordQueryEvent, classifySeverity, type QueryOperation } from '@/lib/c
 import { generateCorrelationId } from '@/lib/correlationId';
 import { getLogger } from '@/lib/logger';
 import { getExternalSupabase } from '@/integrations/supabase/externalClient';
-import { isAbortLikeError } from '@/lib/retry';
+import { isAbortLikeError } from '@/lib/abortError';
 
 const proxyLog = getLogger('externalProxy');
 
