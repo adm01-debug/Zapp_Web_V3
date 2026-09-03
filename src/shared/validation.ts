@@ -11,7 +11,8 @@
 import { z } from 'zod';
 
 // Caracteres invisíveis que bypassam .trim() (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+FEFF BOM)
-export const INVISIBLE_CHARS = /[​-‍﻿]/;
+// eslint-disable-next-line no-misleading-character-class -- intencional: detecta ZWJ isolado em inputs de usuário
+export const INVISIBLE_CHARS = /[\u200b\u200c\u200d\ufeff]/u;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mensagens
