@@ -68,7 +68,15 @@ describe('Sprint 1 · HIGH-1 · RPC SECURITY DEFINER guards', () => {
     // Guards reais de produção (2026-08-03) — validam auth antes de ação privilegiada
     ['pause_instance', /is_admin_or_supervisor\(auth\.uid\(\)\)/],
     ['unpause_instance', /is_admin_or_supervisor\(auth\.uid\(\)\)/],
-    ['manage_department_member', /v_admin_role\s+NOT\s+IN\s*\(/],
+    // Guard endurecido em 20260902170000 (PR #1483): a versao antiga lia o papel
+    // de zapp.user_roles usando o _admin_user_id RECEBIDO POR PARAMETRO, o que
+    // permitia a qualquer authenticated passar o uuid de um admin e furar a
+    // checagem. A nova valida o usuario da SESSAO. Exigimos os dois guards, na
+    // ordem — asercao mais forte que a anterior, nao mais fraca.
+    [
+      'manage_department_member',
+      /PERFORM\s+zapp\.fn_require_app_user\(\)[\s\S]*?is_admin_or_supervisor\(/,
+    ],
     // rpc_migrate_whatsapp_integration: sem guard na produção — technical debt
     // documentado como GAP de hardening pendente. Validar que ao menos EXISTE.
     ['rpc_migrate_whatsapp_integration', /RETURNS\s+jsonb/],
