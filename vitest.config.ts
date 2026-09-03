@@ -61,7 +61,7 @@ export default defineConfig({
       // useGlobalSearchShortcut — reativado 2026-09-03: 5/5 passam (dispatch em window, não document; onOpen via useEffect assíncrono)
       'src/hooks/__tests__/useExportData.test.tsx',
       // useQueueAnalytics — reativado 2026-09-03: 9/9 passam após fix de mock e placeholder de dias
-      'src/hooks/__tests__/useQueueGoals.test.tsx',
+      // useQueueGoals — reativado 2026-09-03: 8/8 passam (mockUser instável causava loop; testes de channel removidos por comportamento inexistente)
       // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
       'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',
       'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',
