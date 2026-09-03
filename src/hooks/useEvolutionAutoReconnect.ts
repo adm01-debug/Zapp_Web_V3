@@ -297,6 +297,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     if (reconnectExhaustedRef.current) return;
     if (!mountedRef?.current) return;
 
+    // O timer de backoff que disparou esta funcao ja foi consumido pelo runtime.
+    // Zerar a ref evita que timerRef.current != null bloqueie checkStatus depois
+    // do re-arm (caso a instancia volte e caia novamente).
+    timerRef.current = null;
+
     setIsReconnecting(true);
     log.info(`Attempting to reconnect specific instance ${instanceName}...`);
 

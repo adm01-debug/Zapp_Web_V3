@@ -14,7 +14,11 @@ import { renderHook } from '@testing-library/react';
 
 // vi.mock é içado acima das declarações do módulo — as refs precisam vir de
 // vi.hoisted para existirem quando a factory do mock roda.
-const { logError, logInfo, connectInstance, getInstanceStatus, restartInstance, emit } = vi.hoisted(
+// mockQueryClient é um objeto ESTÁVEL (mesma referência a cada render) para
+// evitar que queryClient instável cause nova identidade em attemptSpecificReconnect
+// → nova identidade em checkStatus → re-execução do useEffect com clearTimeout
+// que destroi o timer de backoff antes da tentativa 3.
+const { logError, logInfo, connectInstance, getInstanceStatus, restartInstance, emit, mockQueryClient } = vi.hoisted(
   () => ({
     logError: vi.fn(),
     logInfo: vi.fn(),
@@ -22,6 +26,7 @@ const { logError, logInfo, connectInstance, getInstanceStatus, restartInstance, 
     getInstanceStatus: vi.fn(async () => ({ instance: { state: 'close' } })),
     restartInstance: vi.fn(async () => ({})),
     emit: vi.fn(),
+    mockQueryClient: { invalidateQueries: vi.fn() },
   })
 );
 
@@ -52,7 +57,7 @@ vi.mock('@/integrations/supabase/safeClient', () => ({
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => mockQueryClient,
 }));
 
 vi.mock('@/lib/eventBus', () => ({ eventBus: { emit } }));
