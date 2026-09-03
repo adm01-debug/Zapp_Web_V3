@@ -181,6 +181,7 @@
     "happy-dom": "^20.10.6",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
+    "pg": "^8.13.0",
     "playwright": "^1.59.1",
     "postcss": "^8.5.16",
     "prettier": "^3.9.5",

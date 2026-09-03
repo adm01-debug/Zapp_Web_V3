@@ -14,8 +14,8 @@ import { renderHook, act } from '@testing-library/react';
 
 // vi.mock é içado acima das declarações do módulo — as refs precisam vir de
 // vi.hoisted para existirem quando a factory do mock roda.
-const { logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartInstance, emit } = vi.hoisted(
-  () => ({
+const { logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartInstance, emit } =
+  vi.hoisted(() => ({
     logError: vi.fn(),
     logInfo: vi.fn(),
     logWarn: vi.fn(),
@@ -23,8 +23,7 @@ const { logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartI
     getInstanceStatus: vi.fn(async () => ({ instance: { state: 'close' } })),
     restartInstance: vi.fn(async () => ({})),
     emit: vi.fn(),
-  })
-);
+  }));
 
 vi.mock('@/lib/logger', () => ({
   getLogger: () => ({
@@ -387,7 +386,9 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
     // circuitOpenUntilRef = t + CIRCUIT_BASE_MS = 60_000 + 120_000 = 180_000.
     await advance(65_000);
     expect(getInstanceStatus.mock.calls.length).toBe(3);
-    expect(logWarn.mock.calls.some((c) => String(c[0]).includes('Circuit breaker opened'))).toBe(true);
+    expect(logWarn.mock.calls.some((c) => String(c[0]).includes('Circuit breaker opened'))).toBe(
+      true
+    );
 
     // Dentro da janela de cooldown: intervalo em t=90s bloqueado pelo Guard 2.
     await advance(30_000); // t=95s
@@ -481,32 +482,28 @@ describe('useEvolutionAutoReconnect — timerRef.current = null no callback (mut
     await advance(1_000);
     expect(connectInstance.mock.calls.length).toBeGreaterThanOrEqual(1);
 
-    // Conecta mas mantém pendente → scheduleNextAttempt criará o backoff timer (4s)
-    // Precisamos avançar tempo suficiente para connectInstance completar e o backoff iniciar
+    // Avança além do ATTEMPT_WAIT (5 s) para scheduleNextAttempt criar o timer de backoff (4 s).
+    // Apenas assim timerRef.current é não-nulo ANTES da mudança de instância.
     resolveFirst();
-    await advance(3_000); // timer de backoff (4s) ainda está pendente
+    await advance(6_000); // ATTEMPT_WAIT (5 s) + getInstanceStatus → timerRef.current = handle 4 s
 
-    // Muda para instB ANTES do backoff timer de instA disparar
+    // Muda para instB COM o backoff timer de instA já pendente em timerRef.current
     rerender({ name: 'instB' });
     await advance(500);
 
-    // Agora o backoff timer de instA dispara — capturedInstance='instA' ≠ 'instB'
-    // O callback faz early-return. COM o fix: timerRef.current = null antes do return.
-    // SEM o fix: timerRef.current permanece o handle do timer disparado.
-    await advance(2_000); // zera o backoff de 4s que faltava
+    // O backoff timer de instA dispara — capturedInstance='instA' ≠ instanceNameRef='instB'
+    // COM fix (M4): timerRef.current = null antes do early-return → guard de checkStatus passa.
+    // SEM fix: timerRef.current permanece handle expirado → guard bloqueia checkStatus de 'instB'.
+    await advance(4_500); // dispara o backoff de 4 s
 
-    // Captura contagem antes do próximo checkStatus
     const callsBeforeCheckStatus = connectInstance.mock.calls.length;
 
-    // Avança 30s: checkStatus de 'instB' detecta 'close'.
-    // COM fix: timerRef.current === null → guard passa → nova tentativa de 'instB' dispara.
-    // SEM fix: timerRef.current !== null (stale) → guard bloqueia → NENHUMA nova tentativa.
+    // checkStatus de 'instB' detecta 'close'; COM fix → nova tentativa para 'instB'.
     await advance(30_000);
 
     expect(connectInstance.mock.calls.length).toBeGreaterThan(callsBeforeCheckStatus);
-    // Confirma que a tentativa extra foi para 'instB', não 'instA'
-    // (o mock recebe o nome da instância como parâmetro — verificamos que houve chamada extra)
     const extraCalls = connectInstance.mock.calls.slice(callsBeforeCheckStatus);
     expect(extraCalls.length).toBeGreaterThan(0);
+    expect(extraCalls[0][0]).toBe('instB');
   });
 });

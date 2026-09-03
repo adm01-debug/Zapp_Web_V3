@@ -25,13 +25,13 @@
  */
 
 import { readdir } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 import { createRequire } from 'node:module';
 
 // --- Localização das migrations ---
 const REPO_ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 const MIGRATIONS_DIR = join(REPO_ROOT, 'supabase', 'migrations');
-const PREFIX_LEN = 14; // timestamp + 2 chars extras: YYYYMMDDHHMMSS
+const PREFIX_LEN = 14; // 14-char timestamp: YYYYMMDDHHMMSS
 
 // --- Conexão ---
 const DB_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
@@ -59,6 +59,7 @@ function parseFilename(filename) {
   const base = filename.replace(/\.sql$/, '');
   const version = base.slice(0, PREFIX_LEN);
   if (!/^\d{14}$/.test(version)) return null;
+  if (base[PREFIX_LEN] !== '_') return null; // separador '_' obrigatório após o timestamp
   const name = base.slice(PREFIX_LEN + 1); // pula o underscore separador
   return { version, name };
 }
@@ -101,7 +102,8 @@ async function collectDbMigrations(client) {
 // ─── main ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  const client = new Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
+  const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false';
+  const client = new Client({ connectionString: DB_URL, ssl: { rejectUnauthorized } });
   try {
     await client.connect();
   } catch (err) {
