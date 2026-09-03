@@ -62,7 +62,7 @@ export default defineConfig({
       'src/hooks/__tests__/useExportData.test.tsx',
       'src/hooks/__tests__/useQueueAnalytics.test.tsx',
       'src/hooks/__tests__/useQueueGoals.test.tsx',
-      'src/hooks/__tests__/useRealtimeMessages.test.tsx',
+      // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
       'src/hooks/__tests__/useRealtimeSentimentAlerts.test.ts',
       'src/hooks/__tests__/useWarRoomAlerts.integration.test.tsx',
       'src/components/settings/__tests__/MediaLibraryAdmin.test.tsx',
