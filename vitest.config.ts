@@ -54,7 +54,7 @@ export default defineConfig({
       'src/hooks/__tests__/useSidebarFavorites.test.ts',
       'src/hooks/__tests__/useSwipeGesture.test.ts',
       'src/hooks/__tests__/useSwipeNavigation.test.ts',
-      'src/hooks/useEmailActions.test.ts',
+      // useEmailActions — reativado 2026-09-03: 5/5 passam (renderHook sem QueryClientProvider)
       // FAILING — hook existe, API refatorada.
       // useContactCustomFields — reativado 2026-09-03: 5/5 passam (IDs não-UUID bloqueavam enabled flag)
       // useExportData — reativado 2026-09-03: 7/7 passam (mock faltava SUPABASE_RESOLVED_URL)
