@@ -23,7 +23,7 @@ export interface ChannelAccount {
 export type CanonicalMessageType =
   | 'text' | 'image' | 'video' | 'audio' | 'document'
   | 'sticker' | 'location' | 'contact' | 'reaction'
-  | 'interactive' | 'template' | 'unknown';
+  | 'interactive' | 'template' | 'poll' | 'unknown';
 
 // ─── DeliveryStatus canônico ──────────────────────────────────────────────────
 export type CanonicalDeliveryStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
@@ -87,6 +87,9 @@ export const BAILEYS_TO_CANONICAL: Record<string, CanonicalMessageType> = {
   buttonsMessage: 'interactive',
   listMessage: 'interactive',
   templateMessage: 'template',
+  pollCreationMessage: 'poll',
+  documentWithCaptionMessage: 'document',
+  contactsArrayMessage: 'contact',
 };
 
 // ─── Mapeamentos Meta Cloud → canônico ───────────────────────────────────────
