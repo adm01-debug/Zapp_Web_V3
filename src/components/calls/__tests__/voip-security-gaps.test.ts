@@ -3,7 +3,7 @@
  * Itens "✅ FIXED" têm assertions concretas.
  * Itens "GAP" permanecem como documentação das limitações conhecidas.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // ── Formatação de duração (DialPad.tsx — formatTime interna) ─────────────────
 // Reproduzida aqui para testar a lógica sem renderizar o componente.
