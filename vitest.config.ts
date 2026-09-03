@@ -59,7 +59,6 @@ export default defineConfig({
       // useContactCustomFields — reativado 2026-09-03: 5/5 passam (IDs não-UUID bloqueavam enabled flag)
       // useExportData — reativado 2026-09-03: 7/7 passam (mock faltava SUPABASE_RESOLVED_URL)
       // useGlobalSearchShortcut — reativado 2026-09-03: 5/5 passam (dispatch em window, não document; onOpen via useEffect assíncrono)
-      'src/hooks/__tests__/useExportData.test.tsx',
       // useQueueAnalytics — reativado 2026-09-03: 9/9 passam após fix de mock e placeholder de dias
       // useQueueGoals — reativado 2026-09-03: 8/8 passam (mockUser instável causava loop; testes de channel removidos por comportamento inexistente)
       // useRealtimeMessages.test.tsx — arquivo removido do codebase (ORPHAN)
