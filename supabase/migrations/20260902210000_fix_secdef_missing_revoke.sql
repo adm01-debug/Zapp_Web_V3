@@ -1,5 +1,11 @@
 -- SEC: REVOKE EXECUTE de funções SECURITY DEFINER sem cobertura anterior
 --
+-- NOTA DE VERSAO: este arquivo foi renumerado (era 202609020[45]0000) porque
+-- aqueles prefixos ja estavam ocupados na main e pelo PR #1483. O prefixo de
+-- 14 digitos e a PRIMARY KEY de supabase_migrations.schema_migrations: dois
+-- arquivos com a mesma versao fazem o segundo ser ignorado em silencio. Nao
+-- renumerar de volta.
+--
 -- Auditoria de 2026-09-02 identificou cinco funções SECURITY DEFINER cujos
 -- GRANTs implícitos a PUBLIC (herdados na criação) nunca foram revogados por
 -- nenhuma migration anterior:
