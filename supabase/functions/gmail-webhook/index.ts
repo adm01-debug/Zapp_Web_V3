@@ -1,3 +1,4 @@
+import * as jose from 'https://deno.land/x/jose@v4.14.4/index.ts';
 import { createZappAdminClient } from '../_shared/db-client.ts';
 import { getSecret } from '../_shared/mod.ts';
 import { requireUser } from '../_shared/auth.ts';
@@ -14,6 +15,29 @@ const PUBSUB_TOPIC = (() => {
   // Non-fatal: returns undefined if not set; handler will return 503
   return v;
 })();
+
+// Auditoria 22D (item #8, 2026-09-02): verificação do OIDC assinado pelo Google
+// que o Pub/Sub push subscription anexa em `Authorization: Bearer <jwt>` quando
+// "Enable authentication" está ligado na subscription. JWKS do Google, cache em
+// módulo (createRemoteJWKSet resolve lazy + cacheia por processo).
+const GOOGLE_OIDC_JWKS = jose.createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
+
+async function verifyPubSubOidcToken(authHeader: string | null, expectedAudience: string): Promise<boolean> {
+  if (!authHeader?.startsWith('Bearer ')) return false;
+  const token = authHeader.slice('Bearer '.length);
+  try {
+    const { payload } = await jose.jwtVerify(token, GOOGLE_OIDC_JWKS, {
+      issuer: ['https://accounts.google.com', 'accounts.google.com'],
+      audience: expectedAudience,
+    });
+    // Tokens de service account do Google sempre carregam `email` — sanity check
+    // extra além de assinatura/iss/aud/exp (já verificados por jwtVerify acima).
+    return typeof payload.email === 'string' && payload.email.length > 0;
+  } catch (err) {
+    console.error('[gmail-webhook] OIDC verification failed', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
 
 Deno.serve(async (req) => {
   initSentry('gmail-webhook');
@@ -64,14 +88,27 @@ Deno.serve(async (req) => {
       // push — ingesting arbitrary emailAddress/historyId with zero auth.
       // Whitelisting the one authenticated action closes that bypass.
       if (action !== 'registerWatch') {
-        // F2+vault: read token from vault first (gmail_pubsub_token), env fallback for legacy
-        const expectedToken = await getSecret('gmail_pubsub_token') ?? Deno.env.get('GMAIL_PUBSUB_TOKEN');
-        if (!expectedToken) {
-          return json({ error: 'Webhook authentication not configured' }, 401);
-        }
-        const receivedToken = new URL(req.url).searchParams.get('token');
-        if (!receivedToken || !timingSafeEqual(receivedToken, expectedToken)) {
-          return json({ error: 'Invalid or missing push token' }, 401);
+        // Item #8 da auditoria 22D: quando o audience OIDC está configurado
+        // (subscription Pub/Sub com "Enable authentication" ligado no GCP), ele
+        // vira a ÚNICA fonte de verdade — mais forte que o token em querystring,
+        // que pode vazar em logs de proxy/CDN. Sem o audience configurado ainda
+        // (secret não setado), cai no fallback legado de token — comportamento
+        // idêntico ao de antes desta mudança, zero risco de quebrar produção.
+        const expectedAudience = await getSecret('gmail_pubsub_oidc_audience') ?? Deno.env.get('GMAIL_PUBSUB_OIDC_AUDIENCE');
+
+        if (expectedAudience) {
+          const oidcOk = await verifyPubSubOidcToken(req.headers.get('authorization'), expectedAudience);
+          if (!oidcOk) return json({ error: 'Invalid or missing OIDC token' }, 401);
+        } else {
+          // F2+vault: read token from vault first (gmail_pubsub_token), env fallback for legacy
+          const expectedToken = await getSecret('gmail_pubsub_token') ?? Deno.env.get('GMAIL_PUBSUB_TOKEN');
+          if (!expectedToken) {
+            return json({ error: 'Webhook authentication not configured' }, 401);
+          }
+          const receivedToken = new URL(req.url).searchParams.get('token');
+          if (!receivedToken || !timingSafeEqual(receivedToken, expectedToken)) {
+            return json({ error: 'Invalid or missing push token' }, 401);
+          }
         }
       }
 
