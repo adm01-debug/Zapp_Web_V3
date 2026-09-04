@@ -295,6 +295,7 @@ export function useInboxFilters({
   // Load custom scopes (separate key from useInboxDataQueries to avoid partial-result collision)
   const { data: customScopes = [] } = useQuery({
     queryKey: ['inbox-custom-scopes-full'],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inbox_custom_scopes')
@@ -309,6 +310,7 @@ export function useInboxFilters({
   // Load full contact_tags mapping (separate key from useInboxDataQueries which is conversation-scoped)
   const { data: contactTagsMap = {} } = useQuery({
     queryKey: ['contact-tags-map-full'],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase.from('contact_tags').select('contact_id, tag_id');
       if (error) throw error;

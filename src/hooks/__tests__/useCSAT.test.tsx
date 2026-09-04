@@ -17,6 +17,10 @@ vi.mock('@/hooks/use-toast', () => ({
 
 vi.mock('@/lib/logger');
 
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'test-user-id' }, profile: null })),
+}));
+
 import { useCSAT } from '@/hooks/useCSAT';
 
 function createWrapper() {

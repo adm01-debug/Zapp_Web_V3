@@ -18,6 +18,7 @@ import { EmailAccount } from '@/types/gmail';
 import { emailRefreshToken, emailRevokeAccount, emailRegisterWatch } from './gmail/gmailApi';
 import { toast } from 'sonner';
 import { getLogger } from '@/lib/logger';
+import { useAuth } from '@/features/auth';
 
 const log = getLogger('useEmailOAuthFlow');
 
@@ -41,6 +42,7 @@ interface UseEmailOAuthFlowReturn {
 const GMAIL_ACCOUNTS_KEY = ['gmail-accounts'] as const;
 
 export function useEmailOAuthFlow(): UseEmailOAuthFlowReturn {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [tokenStatus, setTokenStatus] = useState<Record<string, TokenStatus>>({});
   const refreshingRef = useRef<Set<string>>(new Set());
@@ -52,6 +54,7 @@ export function useEmailOAuthFlow(): UseEmailOAuthFlowReturn {
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: GMAIL_ACCOUNTS_KEY,
+    enabled: !!user?.id,
     queryFn: async () => {
       const { data, error } = await safeClient.from<Record<string, unknown>>(
         'email_accounts',

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getLogger } from '@/lib/logger';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth';
 
 const log = getLogger('useGeoBlocking');
 
@@ -25,6 +26,7 @@ const GEO_KEY = ['geo-blocking'] as const;
 
 /** Manages geographic blocking settings with whitelist and blacklist country controls. */
 export function useGeoBlocking() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('');
@@ -50,6 +52,7 @@ export function useGeoBlocking() {
         blockedCountries: (blockedResult.data || []) as Country[],
       };
     },
+    enabled: !!user,
     staleTime: 30_000,
   });
 

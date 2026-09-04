@@ -11,6 +11,10 @@ const mockToastSuccess = vi.hoisted(() => vi.fn());
 const mockToastError = vi.hoisted(() => vi.fn());
 vi.mock('sonner', () => ({ toast: { success: mockToastSuccess, error: mockToastError } }));
 
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'test-user-id' }, profile: null })),
+}));
+
 import { useCampaigns } from '@/hooks/useCampaigns';
 
 function createWrapper() {

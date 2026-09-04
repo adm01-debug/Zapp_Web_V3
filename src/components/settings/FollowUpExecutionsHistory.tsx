@@ -1,6 +1,7 @@
 import { queryKeys } from '@/services/api/queryKeys';
 import { useQuery } from '@tanstack/react-query';
 import { safeClient } from '@/integrations/supabase/safeClient';
+import { useAuth } from '@/features/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,8 +41,10 @@ interface EngineFollowupRow {
 
 /** Follow Up Executions History component for the settings section. */
 export function FollowUpExecutionsHistory() {
+  const { user } = useAuth();
   const { data: executions = [], isLoading, error } = useQuery({
     queryKey: queryKeys.followupSequences.executionsRoot(),
+    enabled: !!user,
     queryFn: async () => {
       type Row = EngineFollowupRow;
       const { data, error } = await safeClient.from<Row>(
