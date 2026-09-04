@@ -92,7 +92,7 @@ jobs:
             echo "DATABASE_URL não definido — pulando instalação do pg."
             exit 0
           fi
-          npm install --prefix . --no-save pg
+          npm install --prefix . --no-save pg@8
 
       - name: Verificar drift migration repo ↔ banco
         env:

@@ -119,12 +119,9 @@ Deno.serve(async (req) => {
         } else {
           // F2+vault: getSecret() lê env (GMAIL_PUBSUB_TOKEN) antes do vault.
           const expectedToken = await getSecret('gmail_pubsub_token');
-          if (!expectedToken) {
-            return json({ error: 'Webhook authentication not configured' }, 401);
-          }
           const receivedToken = new URL(req.url).searchParams.get('token');
-          if (!receivedToken || !timingSafeEqual(receivedToken, expectedToken)) {
-            return json({ error: 'Invalid or missing push token' }, 401);
+          if (!expectedToken || !receivedToken || !timingSafeEqual(receivedToken, expectedToken)) {
+            return json({ error: 'Unauthorized' }, 401);
           }
         }
       }
@@ -204,6 +201,7 @@ Deno.serve(async (req) => {
 
       const { emailAddress, historyId } = decoded;
       if (!emailAddress || !historyId) return respondWithContract(parsed, { ok: true, skipped: 'missing_fields' }, { status: 200, headers: getCorsHeaders(req) });
+      if (!/^\d{1,20}$/.test(historyId)) return respondWithContract(parsed, { ok: true, skipped: 'invalid_history_id' }, { status: 200, headers: getCorsHeaders(req) });
 
       const { data: account } = await supabase.from('email_accounts').select('id, access_token, refresh_token, token_expires_at').eq('email', emailAddress).maybeSingle();
       if (!account) return respondWithContract(parsed, { ok: true, skipped: 'account_not_found' }, { status: 200, headers: getCorsHeaders(req) });
@@ -226,8 +224,7 @@ Deno.serve(async (req) => {
 
     // ── GET: status endpoint ────────────────────────────────────────
     if (req.method === 'GET') {
-      const tokenConfigured = !!(await getSecret('gmail_pubsub_token') ?? Deno.env.get('GMAIL_PUBSUB_TOKEN'));
-      return json({ service: 'gmail-webhook', status: 'healthy', token_configured: tokenConfigured });
+      return json({ service: 'gmail-webhook', status: 'healthy' });
     }
 
     return json({ error: 'Method not allowed' }, 405);
@@ -235,7 +232,7 @@ Deno.serve(async (req) => {
     console.error('[gmail-webhook]', err instanceof Error ? (err.stack ?? err.message) : String(err));
     await captureException(err, {
       functionName: 'gmail-webhook',
-      requestUrl: req.url,
+      requestUrl: req.url.split('?')[0],
       metadata: {
         method: req.method,
       },
