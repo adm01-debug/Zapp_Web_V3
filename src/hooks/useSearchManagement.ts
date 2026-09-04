@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { log } from '@/lib/logger';
+import { useAuth } from '@/features/auth';
 
 // ignore-audit — RPCs administrativas sem entrada no typegen (zapp): cast estrutural p/ chamadas diretas
 const dynamicRpc = supabase.rpc as unknown as (
@@ -84,6 +85,7 @@ const SEARCH_HISTORY_KEY = ['search-history'] as const;
 
 /** Manages search history with persistence, add, and clear operations. */
 export function useSearchHistoryManagement() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const {
@@ -110,6 +112,7 @@ export function useSearchHistoryManagement() {
         result_type: row.result_type ?? '',
       }));
     },
+    enabled: !!user,
     staleTime: 30_000,
   });
 
@@ -217,6 +220,7 @@ export function normalizeSearchInsights(raw: unknown): SearchInsights {
 
 /** Retrieves search insights and trends for specified time window. */
 export function useSearchInsightsManagement(timeWindow: number = 7) {
+  const { user } = useAuth();
   const { data: insights = null, isLoading: loading } = useQuery({
     queryKey: ['search-insights', timeWindow] as const,
     queryFn: async () => {
@@ -229,6 +233,7 @@ export function useSearchInsightsManagement(timeWindow: number = 7) {
       }
       return normalizeSearchInsights(data);
     },
+    enabled: !!user,
     staleTime: 60_000,
   });
 

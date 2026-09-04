@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { sanitizePostgrestFilter } from '@/lib/sanitize';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/features/auth';
 import type { ExecutionRow, RuleLite, AutomationStatus } from '@/pages/admin/automationLogsHelpers';
 import { PAGE_SIZE } from '@/pages/admin/automationLogsHelpers';
 
@@ -20,6 +21,7 @@ export interface AutomationLogsFilters {
 /** use Automation Logs. */
 export function useAutomationLogs(filters: AutomationLogsFilters) {
   const { filterRule, filterStatus, filterJid, filterFrom, filterTo, page } = filters;
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -36,6 +38,7 @@ export function useAutomationLogs(filters: AutomationLogsFilters) {
 
   const { data: rows = [], isLoading: loading, isFetching, isError } = useQuery({
     queryKey: logsKey,
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await safeClient.from<ExecutionRow>('automation_executions', (q) => {
         let query = q
@@ -70,6 +73,7 @@ export function useAutomationLogs(filters: AutomationLogsFilters) {
 
   const { data: rules = [] } = useQuery({
     queryKey: rulesKey,
+    enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase.from('automation_rules').select('id,name').order('name');
       return (data ?? []) as RuleLite[];

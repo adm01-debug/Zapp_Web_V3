@@ -16,6 +16,7 @@ import { ptBR } from 'date-fns/locale';
 import { queryKeys } from '@/services/api/queryKeys';
 import { useQuery } from '@tanstack/react-query';
 import { dbFrom } from '@/integrations/datasource/db';
+import { useAuth } from '@/features/auth';
 
 interface ActivityData {
   date: Date;
@@ -45,6 +46,7 @@ export const ActivityHeatmap = ({
   data: propData,
   metric = 'messages',
 }: ActivityHeatmapProps) => {
+  const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<'3m' | '6m' | '1y'>('3m');
   const [_hoveredDay, setHoveredDay] = useState<ActivityData | null>(null);
 
@@ -83,7 +85,7 @@ export const ActivityHeatmap = ({
       });
     },
     staleTime: 5 * 60 * 1000,
-    enabled: !propData,
+    enabled: !!user && !propData,
   });
 
   // Use provided data, real data, or empty array

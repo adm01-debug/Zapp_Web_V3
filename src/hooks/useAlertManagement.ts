@@ -10,6 +10,7 @@ import { logChannelError } from '@/integrations/supabase/channelErrorLogging';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { usePushNotificationsManagement } from '@/hooks/useNotificationManagement';
 import { useNotificationSettingsManagement } from '@/hooks/useNotificationManagement';
+import { useAuth } from '@/features/auth';
 import { toast } from 'sonner';
 import { playNotificationSound, showBrowserNotification } from '@/utils/notificationSounds';
 import { getLogger } from '@/lib/logger';
@@ -101,6 +102,7 @@ export interface UseRealtimeSentimentAlertsResult {
 
 /** Manages war room alerts with sound notifications, push notifications, and alert history tracking. */
 export function useWarRoomAlertsManagement(soundEnabled = true): UseWarRoomAlertsResult {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { permission: pushPermission } = usePushNotificationsManagement();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -123,6 +125,7 @@ export function useWarRoomAlertsManagement(soundEnabled = true): UseWarRoomAlert
 
   const { data: alerts = [] } = useQuery({
     queryKey: queryKeys.alerts.all(),
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('warroom_alerts')
@@ -365,11 +368,13 @@ export function useSentimentAlertsManagement(): UseSentimentAlertsResult {
 
 /** Monitors webhook endpoint health with failure detection and alert management. */
 export function useWebhookHealthAlertsManagement(): UseWebhookHealthAlertsResult {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const key = useMemo(() => ['webhook-health-checks'] as const, []);
 
   const { data: alerts = [], isLoading: loading } = useQuery({
     queryKey: key,
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await safeClient.from('webhook_health_checks', (q) =>
         q.select('*').order('created_at', { ascending: false }).limit(100)

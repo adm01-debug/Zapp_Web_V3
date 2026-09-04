@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { queryKeys } from '@/services/api/queryKeys';
+import { useAuth } from '@/features/auth';
 
 export interface ConnectionRow {
   id: string;
@@ -12,8 +13,10 @@ export interface ConnectionRow {
 }
 
 export function useConnectionsHealth() {
+  const { user } = useAuth();
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.adminOps.realtimeMonitorConnections(),
+    enabled: !!user,
     queryFn: async (): Promise<ConnectionRow[]> => {
       const { data, error } = await supabase
         .from('channel_connections_safe')

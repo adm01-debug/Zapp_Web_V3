@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/features/auth';
 
 export type ProviderType = 'evolution' | 'wppconnect' | 'baileys' | 'custom';
 
@@ -43,6 +44,7 @@ interface ProviderPanelData {
 }
 
 export function useProviderPanel() {
+  const { user } = useAuth();
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -62,6 +64,7 @@ export function useProviderPanel() {
       ]);
       return { rows: panelData ?? [], logs: logsData ?? [] };
     },
+    enabled: !!user,
     staleTime: 30_000,
     refetchInterval: 30_000,
   });

@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { queryKeys } from '@/services/api/queryKeys';
 import { useQuery } from '@tanstack/react-query';
 import { dbFrom } from '@/integrations/datasource/db';
+import { useAuth } from '@/features/auth';
 
 interface HeatmapData {
   day: number; // 0-6 (Sunday-Saturday)
@@ -30,6 +31,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 // Generate heatmap data from real messages
 function useHeatmapData() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: queryKeys.adminOps.conversationHeatmap(),
     queryFn: async () => {
@@ -58,6 +60,7 @@ function useHeatmapData() {
 
       return heatmap;
     },
+    enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 }
