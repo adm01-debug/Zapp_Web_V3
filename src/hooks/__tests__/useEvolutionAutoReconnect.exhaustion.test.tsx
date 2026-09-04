@@ -23,6 +23,7 @@ const { logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartI
     getInstanceStatus: vi.fn(async () => ({ instance: { state: 'close' } })),
     restartInstance: vi.fn(async () => ({})),
     emit: vi.fn(),
+    mockQueryClient: { invalidateQueries: vi.fn() },
   })
 );
 
