@@ -14,21 +14,23 @@ import { renderHook, act } from '@testing-library/react';
 
 // vi.mock é içado acima das declarações do módulo — as refs precisam vir de
 // vi.hoisted para existirem quando a factory do mock roda.
-const { logError, logInfo, connectInstance, getInstanceStatus, restartInstance, emit } = vi.hoisted(
+const { logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartInstance, emit } = vi.hoisted(
   () => ({
     logError: vi.fn(),
     logInfo: vi.fn(),
+    logWarn: vi.fn(),
     connectInstance: vi.fn(async () => ({})),
     getInstanceStatus: vi.fn(async () => ({ instance: { state: 'close' } })),
     restartInstance: vi.fn(async () => ({})),
     emit: vi.fn(),
+    mockQueryClient: { invalidateQueries: vi.fn() },
   })
 );
 
 vi.mock('@/lib/logger', () => ({
   getLogger: () => ({
     error: logError,
-    warn: vi.fn(),
+    warn: logWarn,
     info: logInfo,
     debug: vi.fn(),
   }),
@@ -76,6 +78,7 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
     vi.useFakeTimers();
     logError.mockClear();
     logInfo.mockClear();
+    logWarn.mockClear();
     emit.mockClear();
     connectInstance.mockClear();
     getInstanceStatus.mockClear();
@@ -310,6 +313,7 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
     vi.useFakeTimers();
     logError.mockClear();
     logInfo.mockClear();
+    logWarn.mockClear();
     emit.mockClear();
     connectInstance.mockClear();
     connectInstance.mockImplementation(async () => ({}));
@@ -366,6 +370,7 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
     // circuitOpenUntilRef = t + CIRCUIT_BASE_MS = 60_000 + 120_000 = 180_000.
     await advance(65_000);
     expect(getInstanceStatus.mock.calls.length).toBe(3);
+    expect(logWarn.mock.calls.some((c) => String(c[0]).includes('Circuit breaker opened'))).toBe(true);
 
     // Dentro da janela de cooldown: intervalo em t=90s bloqueado pelo Guard 2.
     await advance(30_000); // t=95s

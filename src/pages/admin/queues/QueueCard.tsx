@@ -1,15 +1,8 @@
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { Pencil, Trash2, Users, Pause, Play, Radio, ChevronDown } from 'lucide-react';
+import { Pencil, Trash2, Users, Pause, Play, Radio } from 'lucide-react';
 import { ALGO_LABEL, type Queue } from '@/hooks/admin/useAdminQueues';
-import { QueueRoutingRules } from '@/features/queues/components/QueueRoutingRules';
 
 interface QueueSkill {
   id: string;
@@ -52,7 +45,7 @@ interface Props {
   onMembers: (q: Queue) => void;
 }
 
-/** Queue Card — includes collapsible Regras de Roteamento section (FILAS-04). */
+/** Queue Card. */
 export function QueueCard({
   queue,
   members,
@@ -64,8 +57,6 @@ export function QueueCard({
   onRemove,
   onMembers,
 }: Props) {
-  const [rulesOpen, setRulesOpen] = useState(false);
-
   const qMembers = members.filter((m) => m.queue_id === queue.id);
   const qSkills = skills.filter((s) => s.queue_id === queue.id);
   const qChannels = channelQueues.filter((cq) => cq.queue_id === queue.id && cq.is_active);
@@ -161,26 +152,6 @@ export function QueueCard({
             </Badge>
           ))}
         </div>
-
-        {/* Regras de Roteamento — FILAS-04 */}
-        <Collapsible open={rulesOpen} onOpenChange={setRulesOpen}>
-          <CollapsibleTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-3 h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform duration-200 ${rulesOpen ? 'rotate-180' : ''}`}
-              />
-              Regras de Roteamento
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            {/* Only mount QueueRoutingRules when expanded to avoid N parallel queries on page load */}
-            {rulesOpen && <QueueRoutingRules queueId={queue.id} />}
-          </CollapsibleContent>
-        </Collapsible>
       </CardContent>
     </Card>
   );

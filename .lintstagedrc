@@ -1,6 +1,6 @@
 {
   "src/**/*.{ts,tsx}": [
-    "bash -c 'eslint --fix \"$@\"; exit 0' --",
+    "eslint --fix",
     "prettier --write"
   ]
 }
