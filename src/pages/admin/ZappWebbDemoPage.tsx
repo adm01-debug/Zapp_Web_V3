@@ -8,7 +8,7 @@
  *
  * Rota: /admin/zappweb-demo
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { motion } from '@/components/ui/motion';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -149,6 +149,10 @@ export default function ZappWebbDemoPage() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [retryingConvs, setRetryingConvs] = useState(false);
+  // Rastreia se o último erro de mensagens veio de loadOlder() (paginação)
+  // ou do fetchAll() inicial — necessário porque ao trocar de conversa o hook
+  // ainda carrega o array de mensagens antigo enquanto o fetch novo está em voo.
+  const messagesErrorFromOlderRef = useRef(false);
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -166,6 +170,11 @@ export default function ZappWebbDemoPage() {
     remoteJid: active?.remote_jid ?? null,
   });
   const contact = active?.evolution_contacts ?? null;
+
+  // Reseta o rastreador de origem do erro ao trocar de conversa.
+  useEffect(() => {
+    messagesErrorFromOlderRef.current = false;
+  }, [activeId]);
 
   const handleOpen = async (conv: EvolutionConversation) => {
     setActiveId(conv.id);
@@ -335,7 +344,10 @@ export default function ZappWebbDemoPage() {
                             size="sm"
                             variant="outline"
                             disabled={loadingMore}
-                            onClick={() => void loadOlder()}
+                            onClick={() => {
+                              messagesErrorFromOlderRef.current = true;
+                              void loadOlder();
+                            }}
                           >
                             {loadingMore ? (
                               <>
@@ -359,7 +371,9 @@ export default function ZappWebbDemoPage() {
                             size="sm"
                             variant="outline"
                             onClick={() =>
-                              void (messages.length > 0 ? loadOlder() : refetchMessages())
+                              void (messagesErrorFromOlderRef.current
+                                ? loadOlder()
+                                : refetchMessages())
                             }
                           >
                             Tentar novamente

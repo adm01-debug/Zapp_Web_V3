@@ -280,7 +280,9 @@ export function useZappConversations(opts: Options = {}) {
         async (payload) => {
           // Fix B (P1): guarda de tipo — ver comentário no INSERT handler.
           const row = payload.new as Record<string, unknown>;
-          if (typeof row.id !== 'string' || typeof row.status !== 'string') return;
+          // Fix: mesma relaxação do INSERT — status: null deve fluir para
+          // o check `willRemove` (null !== status → willRemove=true → remove).
+          if (typeof row.id !== 'string') return;
           const exists = conversationsRef.current.some((c) => c.id === row.id);
           if (exists) {
             const willRemove = row.status !== status;

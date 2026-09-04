@@ -845,4 +845,22 @@ describe('useZappConversations — gaps P0/P1 (cobertura de segurança)', () => 
     expect(result.current.conversations).toHaveLength(2);
     expect(result.current.conversations.find((c) => c.id === 'nova-sem-fetch')).toBeUndefined();
   });
+
+  it('G6: UPDATE com status null remove a conversa (relaxação do guard no UPDATE handler)', async () => {
+    const { result } = renderHook(() => useZappConversations({ status: 'aberta' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations).toHaveLength(2);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const updateHandler = latestHandlerFor(channel, 'UPDATE');
+
+    await act(async () => {
+      // status: null — antes do fix era ignorado pelo guard `typeof row.status !== 'string'`
+      // e a conversa ficava listada incorretamente.
+      await updateHandler({ new: { id: '0', status: null } });
+    });
+
+    expect(result.current.conversations.find((c) => c.id === '0')).toBeUndefined();
+    expect(result.current.conversations).toHaveLength(1);
+  });
 });
