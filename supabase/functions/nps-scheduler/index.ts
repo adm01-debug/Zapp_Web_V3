@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
         const resp = await evolutionClient.sendText(instanceName, contact.phone, text, { timeoutMs: 15_000 });
         if (!resp.ok) {
           const txt = resp.error ?? 'evolution_send_failed';
-          await supabase.from('failed_messages').insert({
+          const { error: failedMsgErr } = await supabase.from('failed_messages').insert({
             instance_name: instanceName,
             remote_jid: `${contact.phone}@s.whatsapp.net`,
             payload: { __path: '/message/sendText', number: contact.phone, text },
@@ -108,28 +108,31 @@ Deno.serve(async (req) => {
             error_message: txt.slice(0, 500),
             error_code: 'NPS_INVITE_FAILED',
           });
+          if (failedMsgErr) console.warn('[nps-scheduler] failed_messages insert failed:', failedMsgErr.message);
           failed++;
           continue;
         }
       }
 
-      await supabase.from('nps_invitations').insert({
+      const { error: inviteErr } = await supabase.from('nps_invitations').insert({
         contact_id: contact.id,
         channel: 'whatsapp',
         sent_at: new Date().toISOString(),
       });
+      if (inviteErr) console.warn('[nps-scheduler] nps_invitations insert failed (message was sent):', inviteErr.message);
       sent++;
     } catch (e) {
       failed++;
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[nps-scheduler] Exception sending to', contact.id, msg);
-      await supabase.from('failed_messages').insert({
+      const { error: exceptionMsgErr } = await supabase.from('failed_messages').insert({
         instance_name: instanceName,
         remote_jid: `${contact.phone}@s.whatsapp.net`,
         payload: { __path: '/message/sendText', number: contact.phone, text },
         error_message: msg.slice(0, 500),
         error_code: 'NPS_INVITE_EXCEPTION',
       });
+      if (exceptionMsgErr) console.warn('[nps-scheduler] failed_messages insert (exception) failed:', exceptionMsgErr.message);
     }
   }
 

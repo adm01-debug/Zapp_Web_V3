@@ -160,12 +160,13 @@ export function TrainingMode(): JSX.Element {
     }
     setMessages(newMessages);
 
-    await supabase
+    const { error: msgUpdateErr } = await supabase
       .from('training_sessions')
       .update({
         messages: newMessages as unknown as Json,
       })
       .eq('id', activeSession);
+    if (msgUpdateErr) console.warn('[TrainingMode] Failed to persist messages:', msgUpdateErr.message);
 
     // Complete if all steps done
     if (customerStep >= scenario.customerScript.length) {
@@ -188,7 +189,7 @@ export function TrainingMode(): JSX.Element {
             : 'Precisa melhorar a abordagem e tempo de resposta.';
       setFeedback(fb);
 
-      await supabase
+      const { error: completeUpdateErr } = await supabase
         .from('training_sessions')
         .update({
           score: finalScore,
@@ -197,6 +198,7 @@ export function TrainingMode(): JSX.Element {
           completed_at: new Date().toISOString(),
         })
         .eq('id', activeSession);
+      if (completeUpdateErr) console.warn('[TrainingMode] Failed to persist session completion:', completeUpdateErr.message);
 
       loadSessions();
     }

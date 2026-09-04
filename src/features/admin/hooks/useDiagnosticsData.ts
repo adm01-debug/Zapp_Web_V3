@@ -180,11 +180,11 @@ async function fetchSystemHealth(): Promise<SystemHealth> {
   });
 
   const dbStart = performance.now();
-  await dbFrom('contacts').select('id').limit(1);
+  const { error: dbPingErr } = await dbFrom('contacts').select('id').limit(1);
   const dbLatency = Math.round(performance.now() - dbStart);
 
   const storageStart = performance.now();
-  await supabase.storage.from('whatsapp-media').list('', { limit: 1 });
+  const { error: storagePingErr } = await supabase.storage.from('whatsapp-media').list('', { limit: 1 });
   const storageLatency = Math.round(performance.now() - storageStart);
 
   const { count: messagesCount } = await dbFrom('messages').select('*', {
@@ -204,8 +204,8 @@ async function fetchSystemHealth(): Promise<SystemHealth> {
   }
 
   return {
-    database: dbLatency < 500 ? 'healthy' : dbLatency < 2000 ? 'degraded' : 'down',
-    storage: storageLatency < 1000 ? 'healthy' : storageLatency < 3000 ? 'degraded' : 'down',
+    database: dbPingErr ? 'down' : dbLatency < 500 ? 'healthy' : dbLatency < 2000 ? 'degraded' : 'down',
+    storage: storagePingErr ? 'down' : storageLatency < 1000 ? 'healthy' : storageLatency < 3000 ? 'degraded' : 'down',
     realtime: 'healthy',
     edgeFunctions: edgeFunctionsStatus,
     dbLatency,

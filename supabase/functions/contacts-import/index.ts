@@ -129,11 +129,12 @@ Deno.serve(async (req) => {
       else inserted += (data ?? []).length;
     }
 
-    await supabase.from('contact_export_log').insert({
+    const { error: exportLogErr } = await supabase.from('contact_export_log').insert({
       exported_by: user.id, instance_name: instanceName, contact_count: inserted,
       export_format: 'csv_import',
       filters_used: { rows_total: rows.length, inserted, errors: errors.length },
-    }).then(() => void 0);
+    });
+    if (exportLogErr) console.warn('[contacts-import] contact_export_log insert failed:', exportLogErr.message);
 
     return new Response(
       JSON.stringify({ inserted, updated: 0, skipped, errors: errors.slice(0, 50), total_processed: rows.length, duration_ms: Date.now() - startTime }),

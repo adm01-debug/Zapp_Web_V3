@@ -91,7 +91,7 @@ export function LGPDComplianceView() {
       });
 
       // Mantém o audit trail (rastreabilidade LGPD)
-      await supabase.rpc('log_audit_event', {
+      const { error: auditError } = await supabase.rpc('log_audit_event', {
         p_action: 'gdpr_deletion_request',
         p_entity_type: 'user',
         p_entity_id: user.id,
@@ -102,6 +102,10 @@ export function LGPDComplianceView() {
         },
         p_user_agent: navigator.userAgent,
       });
+      if (auditError) {
+        // Pedido de exclusão já registrado — audit trail é best-effort, não bloqueia o fluxo.
+        log.warn('[LGPD] audit trail write failed — deletion request still recorded', auditError);
+      }
 
       toast.success(
         'Solicitação de exclusão registrada. Um administrador irá processar em até 30 dias.'

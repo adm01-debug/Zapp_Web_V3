@@ -104,9 +104,10 @@ export function MessageHoverToolbar({
           log.warn('WhatsApp API delete failed, marking locally only');
         }
       }
-      await dbFrom('messages')
+      const { error: deleteHoverErr } = await dbFrom('messages')
         .update({ is_deleted: true, content: '[Mensagem apagada]' })
         .eq('id', message.id);
+      if (deleteHoverErr) throw deleteHoverErr;
       toast.success(externalId ? 'Mensagem deletada para todos' : 'Mensagem removida');
       onMessageDeleted(message.id);
     } catch {

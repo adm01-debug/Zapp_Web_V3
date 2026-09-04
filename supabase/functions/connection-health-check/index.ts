@@ -303,12 +303,13 @@ Deno.serve(async (req) => {
           const { data: recent } = await supabase.from('warroom_alerts')
             .select('id').eq('title', title).gte('created_at', sixHoursAgo).limit(1);
           if (!recent || recent.length === 0) {
-            await supabase.from('warroom_alerts').insert({
+            const { error: ghostAlertErr } = await supabase.from('warroom_alerts').insert({
               alert_type: 'critical',
               title,
               message: `O número ${conn.phone_number ?? expectedOwner ?? '?'} está pareado e ATIVO na instância "${ghost.name}", mas esta conexão roteia por "${evoName}". Eventos/envios não fluem pelo pipeline. Runbook: docs/_archive/EVOLUTION_API_AUDIT_2026-07-04_sessao5_wpp2.md §4.`,
               source: 'connection_health',
             });
+            if (ghostAlertErr) log.warn('ghost alert insert failed', { error: ghostAlertErr.message });
           }
         } catch (e) {
           log.warn('ghost alert failed', { error: e instanceof Error ? e.message : String(e) });
@@ -374,7 +375,8 @@ Deno.serve(async (req) => {
 
     // Cleanup
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from('connection_health_logs').delete().lt('checked_at', sevenDaysAgo);
+    const { error: cleanupErr } = await supabase.from('connection_health_logs').delete().lt('checked_at', sevenDaysAgo);
+    if (cleanupErr) log.warn('health log cleanup failed', { error: cleanupErr.message });
 
     log.done(200, { checked: results.length, alerts: alertsToCreate.length });
     return jsonResponse({ success: true, checked_at: new Date().toISOString(), connections: results, alerts_created: alertsToCreate.length }, 200, req);
@@ -394,13 +396,14 @@ async function persistResult(
   log: Logger,
   ownerJid?: string | null,
 ) {
-  await supabase.from('connection_health_logs').insert({
+  const { error: logInsertErr } = await supabase.from('connection_health_logs').insert({
     connection_id: conn.id,
     instance_id: conn.instance_id,
     status: evalResult.healthStatus,
     response_time_ms: responseTime,
     error_message: errorMessage ?? evalResult.reason,
   });
+  if (logInsertErr) log.warn('health log insert failed', { error: logInsertErr.message });
 
   // Status DB transition?
   if (evalResult.dbStatus !== conn.status || evalResult.healthStatus !== conn.health_status) {
@@ -425,9 +428,10 @@ async function persistResult(
     }).then(({ error }: { error: { message: string } | null }) => { if (error) log.warn('audit insert failed', { error: error.message }); });
 
     if (isStatusChange) {
-      await supabase.from('whatsapp_connections')
+      const { error: statusUpdateErr } = await supabase.from('whatsapp_connections')
         .update({ status: evalResult.dbStatus, updated_at: new Date().toISOString() })
         .eq('id', conn.id);
+      if (statusUpdateErr) log.warn('whatsapp_connections status update failed', { error: statusUpdateErr.message });
       
       if (evalResult.dbStatus === 'disconnected' && conn.status === 'connected') {
         alertsToCreate.push({
@@ -459,5 +463,6 @@ async function persistResult(
     });
   }
 
-  await supabase.from('whatsapp_connections').update(updatePayload).eq('id', conn.id);
+  const { error: healthUpdateErr } = await supabase.from('whatsapp_connections').update(updatePayload).eq('id', conn.id);
+  if (healthUpdateErr) log.warn('whatsapp_connections health update failed', { error: healthUpdateErr.message });
 }

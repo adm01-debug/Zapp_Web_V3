@@ -78,7 +78,7 @@ export async function logAiUsage(entry: AiUsageEntry): Promise<void> {
     // Auto-resolve profile_id if not provided
     const profileId = entry.profileId || await resolveProfileId(supabase, entry.userId);
 
-    await supabase.from('ai_usage_logs').insert({
+    const { error: insertErr } = await supabase.from('ai_usage_logs').insert({
       user_id: entry.userId || null,
       profile_id: profileId,
       function_name: entry.functionName,
@@ -90,9 +90,10 @@ export async function logAiUsage(entry: AiUsageEntry): Promise<void> {
       error_message: entry.errorMessage || null,
       metadata: entry.metadata || null,
     });
+    if (insertErr) console.warn(`[ai-usage] Failed to log: ${insertErr.message}`);
   } catch (e) {
     // Never throw — logging failures must not break the main flow
-    console.warn(`[ai-usage] Failed to log: ${e instanceof Error ? e.message : String(e)}`);
+    console.warn(`[ai-usage] Exception during log: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

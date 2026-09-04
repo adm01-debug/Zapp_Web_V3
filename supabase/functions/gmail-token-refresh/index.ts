@@ -159,13 +159,14 @@ Deno.serve(async (req) => {
 
       // Registrar resultado
       if (refreshed > 0 || failed > 0) {
-        await supabase.from('evolution_alerts').insert({
+        const { error: alertErr } = await supabase.from('evolution_alerts').insert({
           alert_type: 'gmail_token_refresh',
           severity:   failed > 0 ? 'warning' : 'info',
           message:    `Token refresh: ${refreshed} renovados, ${failed} falhas`,
           acknowledged: true,
           acknowledged_at: new Date().toISOString(),
         });
+        if (alertErr) console.warn('[gmail-token-refresh] evolution_alerts insert failed:', alertErr.message);
       }
 
       return json({
@@ -216,11 +217,12 @@ Deno.serve(async (req) => {
       const tokens = await tokenRes.json();
       const newExpiry = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000);
 
-      await supabase.from('gmail_accounts').update({
+      const { error: updateErr } = await supabase.from('gmail_accounts').update({
         access_token: tokens.access_token,
         token_expiry: newExpiry.toISOString(),
         updated_at:   new Date().toISOString(),
       }).eq('id', accountId);
+      if (updateErr) return json({ error: 'Failed to update token' }, 500);
 
       return json({ success: true, newExpiry: newExpiry.toISOString() });
     }
@@ -310,10 +312,11 @@ async function refreshOneAccount(
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       if (errText.includes('invalid_grant')) {
-        await supabase.from('gmail_accounts').update({
+        const { error: deactivateErr } = await supabase.from('gmail_accounts').update({
           is_active:  false,
           updated_at: new Date().toISOString(),
         }).eq('id', account.id);
+        if (deactivateErr) console.error('[gmail-token-refresh] failed to deactivate account:', deactivateErr.message);
       }
       return { email: account.email, status: 'failed', error: `Token refresh failed: ${errText.substring(0, 200)}` };
     }
@@ -321,12 +324,13 @@ async function refreshOneAccount(
     const tokens = await tokenRes.json();
     const newExpiry = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000);
 
-    await supabase.from('gmail_accounts').update({
+    const { error: tokenErr } = await supabase.from('gmail_accounts').update({
       access_token:  tokens.access_token,
       token_expiry:  newExpiry.toISOString(),
       updated_at:    new Date().toISOString(),
       ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
     }).eq('id', account.id);
+    if (tokenErr) return { email: account.email, status: 'error', error: tokenErr.message };
 
     if (account.watch_expiry && new Date(account.watch_expiry) < new Date(Date.now() + 2 * 3600_000)) {
       try {
@@ -338,10 +342,11 @@ async function refreshOneAccount(
         });
         if (watchRes.ok) {
           const watchData = await watchRes.json();
-          await supabase.from('gmail_accounts').update({
+          const { error: watchErr } = await supabase.from('gmail_accounts').update({
             watch_expiry: new Date(Number(watchData.expiration)).toISOString(),
             history_id:   watchData.historyId,
           }).eq('id', account.id);
+          if (watchErr) console.warn('[gmail-token-refresh] watch_expiry update failed:', watchErr.message);
         }
       } catch { /* best-effort */ }
     }

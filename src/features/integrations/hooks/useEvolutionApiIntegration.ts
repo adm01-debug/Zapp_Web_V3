@@ -152,7 +152,7 @@ export function useEvolutionApiIntegration() {
 
       // Log the health check via RPC canônica (F3 ingest-port — evolution_health_logs vive em evo)
       if (creds.instance_name) {
-        await supabase.rpc('rpc_log_evolution_health', {
+        const { error: healthLogErr } = await supabase.rpc('rpc_log_evolution_health', {
           p_instance_name: creds.instance_name,
           p_status: isSuccess ? 'success' : 'failure',
           p_error_message: errorMsg ?? undefined,
@@ -160,6 +160,7 @@ export function useEvolutionApiIntegration() {
           p_online_instances: onlineCount,
           p_total_instances: totalCount,
         });
+        if (healthLogErr) console.warn('[evolution] rpc_log_evolution_health falhou', healthLogErr);
 
         // health_status/last_health_check NÃO são atualizados aqui: a view omite api_key
         // e o update via evo falhava (PGRST106). A edge fn save não aceita health fields.
@@ -173,12 +174,13 @@ export function useEvolutionApiIntegration() {
       toast.error(`Erro de conexão: ${errorMsg}`);
 
       if (creds.instance_name) {
-        await supabase.rpc('rpc_log_evolution_health', {
+        const { error: healthLogErr2 } = await supabase.rpc('rpc_log_evolution_health', {
           p_instance_name: creds.instance_name,
           p_status: 'failure',
           p_error_message: errorMsg ?? undefined,
           p_response_time_ms: Date.now() - startTime,
         });
+        if (healthLogErr2) console.warn('[evolution] rpc_log_evolution_health falhou (catch path)', healthLogErr2);
         fetchData();
       }
       return false;

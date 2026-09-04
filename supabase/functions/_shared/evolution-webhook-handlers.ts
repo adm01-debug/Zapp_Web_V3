@@ -18,19 +18,21 @@ export async function handleLogoutInstance(supabase: SupabaseClient<any, any>, i
   const { data: prev } = await supabase.from('whatsapp_connections')
     .select('id, status, phone_number').or(instanceOrFilter(instance)).maybeSingle();
 
-  await supabase.from('whatsapp_connections')
+  const { error: logoutErr } = await supabase.from('whatsapp_connections')
     .update({ status: 'logged_out', qr_code: null, updated_at: new Date().toISOString() })
     .or(instanceOrFilter(instance));
+  if (logoutErr) console.warn(`[LOGOUT_INSTANCE] failed to update connection status: ${logoutErr.message}`);
 
   if (prev && prev.status !== 'logged_out') {
     const phone = prev.phone_number ? ` (${prev.phone_number})` : '';
-    await supabase.from('warroom_alerts').insert({
+    const { error: alertErr } = await supabase.from('warroom_alerts').insert({
       alert_type: 'critical',
       title: `🚪 Instância ${instance} deslogada`,
       message: `WhatsApp desconectou por logout${reasonCode ? ` (code=${reasonCode})` : ''}. ` +
         `A instância${phone} precisa reautenticar via QR code.`,
       source: 'evolution-webhook',
     });
+    if (alertErr) console.warn(`[LOGOUT_INSTANCE] failed to insert warroom alert: ${alertErr.message}`);
   }
   console.log(`[LOGOUT_INSTANCE] instance=${instance} reasonCode=${reasonCode ?? 'n/a'}`);
 }
@@ -141,14 +143,16 @@ export async function handleGroupParticipantsUpdate(supabase: SupabaseClient<any
   const nextCount = Math.max(0, (existing?.participant_count ?? 0) + delta);
 
   if (existing) {
-    await supabase.from('whatsapp_groups')
+    const { error: grpUpdateErr } = await supabase.from('whatsapp_groups')
       .update({ participant_count: nextCount, updated_at: new Date().toISOString() })
       .eq('id', existing.id);
+    if (grpUpdateErr) console.warn(`[group.participants.update] failed to update group: ${grpUpdateErr.message}`);
   } else {
-    await supabase.from('whatsapp_groups').insert({
+    const { error: grpInsertErr } = await supabase.from('whatsapp_groups').insert({
       whatsapp_connection_id: connection.id, group_id: groupId,
       name: groupId, participant_count: Math.max(0, delta),
     });
+    if (grpInsertErr) console.warn(`[group.participants.update] failed to insert group: ${grpInsertErr.message}`);
   }
 
   // Persistência real de participantes em evo (evolution_group_participants),
@@ -220,27 +224,29 @@ export async function handleConnectionUpdate(supabase: SupabaseClient<any, any>,
       cause = 'Sessão expirada';
     }
 
-    await supabase.from('audit_logs').insert({
+    const { error: auditDisconnErr } = await supabase.from('audit_logs').insert({
       action,
       entity_type: 'whatsapp_connection',
-      details: { 
-        instance_id: instance, 
-        cause, 
+      details: {
+        instance_id: instance,
+        cause,
         reason_code: reasonCode,
         source: 'evolution-webhook'
       }
     });
+    if (auditDisconnErr) console.warn(`[connection.update] failed to insert audit log (disconnect): ${auditDisconnErr.message}`);
   } else if (evoState === 'open' || evoState === 'connected') {
     if (prevConn?.status !== 'connected') {
-      await supabase.from('audit_logs').insert({
+      const { error: auditReconnErr } = await supabase.from('audit_logs').insert({
         action: 'instance_reconnected',
         entity_type: 'whatsapp_connection',
-        details: { 
-          instance_id: instance, 
+        details: {
+          instance_id: instance,
           source: 'evolution-webhook',
           previous_status: prevConn?.status
         }
       });
+      if (auditReconnErr) console.warn(`[connection.update] failed to insert audit log (reconnect): ${auditReconnErr.message}`);
     }
   }
 
@@ -256,28 +262,32 @@ export async function handleConnectionUpdate(supabase: SupabaseClient<any, any>,
 
   // Reset QR sempre que recebermos uma transição não-pendente (open ou close).
   if (evoState === 'open' || evoState === 'close') {
-    await supabase.from('whatsapp_connections').update({ qr_code: null }).or(instanceOrFilter(instance));
+    const { error: qrResetErr } = await supabase.from('whatsapp_connections')
+      .update({ qr_code: null }).or(instanceOrFilter(instance));
+    if (qrResetErr) console.warn(`[connection.update] failed to reset QR code: ${qrResetErr.message}`);
   }
 
   // Alertas warroom: olhar status do RPC retornado (autoritário) ao invés do baseData.
   const newStatus = (rpcRes as Record<string,unknown>)?.new_status as string | undefined;
   if (newStatus === 'disconnected' && prevConn?.status === 'connected') {
     const phone = prevConn.phone_number ? ` (${prevConn.phone_number})` : '';
-    await supabase.from('warroom_alerts').insert({
+    const { error: alertDisconnErr } = await supabase.from('warroom_alerts').insert({
       alert_type: 'critical',
       title: `🔴 Conexão ${instance} desconectou`,
       message: `A instância ${instance}${phone} perdeu conexão com o WhatsApp. Reconecte imediatamente para evitar perda de mensagens.`,
       source: 'evolution-webhook',
     });
+    if (alertDisconnErr) console.warn(`[connection.update] failed to insert warroom alert (disconnect): ${alertDisconnErr.message}`);
   }
 
   if (newStatus === 'connected' && prevConn?.status !== 'connected') {
-    await supabase.from('warroom_alerts').insert({
+    const { error: alertReconnErr } = await supabase.from('warroom_alerts').insert({
       alert_type: 'info',
       title: `🟢 Conexão ${instance} restaurada`,
       message: `A instância ${instance} reconectou com sucesso ao WhatsApp.`,
       source: 'evolution-webhook',
     });
+    if (alertReconnErr) console.warn(`[connection.update] failed to insert warroom alert (reconnect): ${alertReconnErr.message}`);
   }
 }
 
@@ -331,16 +341,18 @@ export async function handleContactsUpsert(supabase: SupabaseClient<any, any>, i
       if (existing) {
         const updateData: Record<string, unknown> = { name: pushName, updated_at: new Date().toISOString() };
         if (permanentAvatarUrl) updateData.avatar_url = permanentAvatarUrl;
-        await supabase.from('contacts').update(updateData).eq('id', existing.id);
+        const { error: contactUpdateErr } = await supabase.from('contacts').update(updateData).eq('id', existing.id);
+        if (contactUpdateErr) console.warn(`[contacts.upsert] failed to update contact: ${contactUpdateErr.message}`);
       } else {
         const { error: insertErr } = await supabase.from('contacts').insert({
           phone, name: pushName, avatar_url: permanentAvatarUrl || null, whatsapp_connection_id: connection.id,
         });
         if (insertErr && insertErr.code === '23505') {
-          await supabase.from('contacts').update({
+          const { error: conflictUpdateErr } = await supabase.from('contacts').update({
             name: pushName, avatar_url: permanentAvatarUrl || null,
             updated_at: new Date().toISOString(),
           }).in('phone', generatePhoneVariants(phone)).eq('whatsapp_connection_id', connection.id);
+          if (conflictUpdateErr) console.warn(`[contacts.upsert] failed conflict-update: ${conflictUpdateErr.message}`);
         }
       }
     }
@@ -487,7 +499,8 @@ export async function handleChatsUpdate(supabase: SupabaseClient<any, any>, inst
       const contact = await getContactByPhone(supabase, phone, connection.id);
       if (contact && unreadCount === 0) {
         // F4: rpc_mark_messages_read (bulk is_read via RPC)
-        await supabase.rpc('rpc_mark_messages_read', { p_contact_id: contact.id, p_instance: instance });
+        const { error: markReadErr } = await supabase.rpc('rpc_mark_messages_read', { p_contact_id: contact.id, p_instance: instance });
+        if (markReadErr) console.warn(`[chats.update] rpc_mark_messages_read failed: ${markReadErr.message}`);
       }
     }
   }
@@ -506,14 +519,17 @@ export async function handleLabelsEdit(supabase: SupabaseClient<any, any>, insta
   if (!connection) return;
 
   if (deleted) {
-    await supabase.from('tags').delete().ilike('name', `wa:${labelId}:%`);
+    const { error: tagDeleteErr } = await supabase.from('tags').delete().ilike('name', `wa:${labelId}:%`);
+    if (tagDeleteErr) console.warn(`[labels.edit] failed to delete tag: ${tagDeleteErr.message}`);
   } else {
     const tagName = labelName || `Label ${labelId}`;
     const { data: existingTag } = await supabase.from('tags').select('id').ilike('name', `wa:${labelId}:%`).maybeSingle();
     if (existingTag) {
-      await supabase.from('tags').update({ name: `wa:${labelId}:${tagName}`, color: labelColor || '#3B82F6' }).eq('id', existingTag.id);
+      const { error: tagUpdateErr } = await supabase.from('tags').update({ name: `wa:${labelId}:${tagName}`, color: labelColor || '#3B82F6' }).eq('id', existingTag.id);
+      if (tagUpdateErr) console.warn(`[labels.edit] failed to update tag: ${tagUpdateErr.message}`);
     } else {
-      await supabase.from('tags').insert({ name: `wa:${labelId}:${tagName}`, color: labelColor || '#3B82F6' });
+      const { error: tagInsertErr } = await supabase.from('tags').insert({ name: `wa:${labelId}:${tagName}`, color: labelColor || '#3B82F6' });
+      if (tagInsertErr) console.warn(`[labels.edit] failed to insert tag: ${tagInsertErr.message}`);
     }
   }
 }
@@ -536,12 +552,14 @@ export async function handleLabelsAssociation(supabase: SupabaseClient<any, any>
 
   if (contact && tag) {
     if (type === 'remove') {
-      await supabase.from('contact_tags').delete().eq('contact_id', contact.id).eq('tag_id', tag.id);
+      const { error: ctDeleteErr } = await supabase.from('contact_tags').delete().eq('contact_id', contact.id).eq('tag_id', tag.id);
+      if (ctDeleteErr) console.warn(`[labels.association] failed to delete contact_tag: ${ctDeleteErr.message}`);
     } else {
       const { data: existing } = await supabase.from('contact_tags').select('id')
         .eq('contact_id', contact.id).eq('tag_id', tag.id).maybeSingle();
       if (!existing) {
-        await supabase.from('contact_tags').insert({ contact_id: contact.id, tag_id: tag.id });
+        const { error: ctInsertErr } = await supabase.from('contact_tags').insert({ contact_id: contact.id, tag_id: tag.id });
+        if (ctInsertErr) console.warn(`[labels.association] failed to insert contact_tag: ${ctInsertErr.message}`);
       }
     }
   }
@@ -571,7 +589,8 @@ export async function handleCallEvent(supabase: SupabaseClient<any, any>, instan
         .in('phone', phonesVariants).eq('whatsapp_connection_id', connection.id).limit(1).maybeSingle();
       if (existing) {
         contact = existing;
-        await supabase.from('contacts').update({ whatsapp_connection_id: connection.id, updated_at: new Date().toISOString() }).eq('id', existing.id);
+        const { error: contactCallUpdateErr } = await supabase.from('contacts').update({ whatsapp_connection_id: connection.id, updated_at: new Date().toISOString() }).eq('id', existing.id);
+        if (contactCallUpdateErr) console.warn(`[handleCallEvent] failed to update contact: ${contactCallUpdateErr.message}`);
       }
     } else {
       contact = newContact;
@@ -580,22 +599,24 @@ export async function handleCallEvent(supabase: SupabaseClient<any, any>, instan
   if (!contact) return;
 
   const agentId = contact.assigned_to || null;
-  await supabase.from('calls').insert({
+  const { error: callInsertErr } = await supabase.from('calls').insert({
     contact_id: contact.id, whatsapp_connection_id: connection.id, agent_id: agentId,
     direction: 'inbound', status: callStatus || 'ringing', started_at: new Date().toISOString(),
     notes: isVideo ? 'Chamada de vídeo' : 'Chamada de voz',
   });
+  if (callInsertErr) console.warn(`[handleCallEvent] failed to insert call: ${callInsertErr.message}`);
 
   if (agentId) {
     const { data: agentProfile } = await supabase.from('profiles')
       .select('user_id, name').eq('id', agentId).single();
     if (agentProfile?.user_id) {
-      await supabase.from('app_notifications').insert({
+      const { error: notifErr } = await supabase.from('app_notifications').insert({
         user_id: agentProfile.user_id, type: 'incoming_call',
         title: isVideo ? '📹 Chamada de vídeo recebida' : '📞 Chamada de voz recebida',
         message: `${contact.name || phone} está ligando para você`,
         metadata: { contact_id: contact.id, phone, is_video: isVideo, call_status: callStatus, whatsapp_connection_id: connection.id, agent_profile_id: agentId },
       });
+      if (notifErr) console.warn(`[handleCallEvent] failed to insert notification: ${notifErr.message}`);
     }
   }
 
@@ -647,7 +668,8 @@ export async function handleChatsDelete(supabase: SupabaseClient<any, any>, inst
     if (contact) {
       const now = new Date().toISOString();
       // F4: rpc_mark_messages_deleted (bulk soft-delete via RPC)
-      await supabase.rpc('rpc_mark_messages_deleted', { p_contact_id: contact.id, p_instance: instance });
+      const { error: markDeletedErr } = await supabase.rpc('rpc_mark_messages_deleted', { p_contact_id: contact.id, p_instance: instance });
+      if (markDeletedErr) console.warn(`[chats.delete] rpc_mark_messages_deleted failed: ${markDeletedErr.message}`);
     }
   }
 }
@@ -658,8 +680,9 @@ export async function handleApplicationStartup(supabase: SupabaseClient<any, any
   const { data: conn } = await supabase.from('whatsapp_connections')
     .select('id, status').or(instanceOrFilter(instance)).maybeSingle();
   if (conn && conn.status === 'disconnected') {
-    await supabase.from('whatsapp_connections')
+    const { error: startupUpdateErr } = await supabase.from('whatsapp_connections')
       .update({ status: 'connecting', updated_at: new Date().toISOString() }).eq('id', conn.id);
+    if (startupUpdateErr) console.warn(`[application.startup] failed to update connection status: ${startupUpdateErr.message}`);
   }
 }
 
@@ -707,7 +730,8 @@ export async function handleChatsSet(supabase: SupabaseClient<any, any>, instanc
       const contact = await getContactByPhone(supabase, phone, connection.id);
       if (contact) {
         // F4: rpc_mark_messages_read (bulk is_read via RPC — chats.set)
-        await supabase.rpc('rpc_mark_messages_read', { p_contact_id: contact.id, p_instance: instance });
+        const { error: chatsSetReadErr } = await supabase.rpc('rpc_mark_messages_read', { p_contact_id: contact.id, p_instance: instance });
+        if (chatsSetReadErr) console.warn(`[chats.set] rpc_mark_messages_read failed: ${chatsSetReadErr.message}`);
         processed++;
       }
     }

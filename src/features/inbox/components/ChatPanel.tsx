@@ -448,7 +448,7 @@ export function ChatPanel({
       try {
         const ref = resolveContactRef(conversation.contact.id);
         if (!isUuidRef(ref)) return;
-        await dbFrom('messages').insert({
+        const { error: pollInsertErr } = await dbFrom('messages').insert({
           contact_id: ref.uuid,
           whatsapp_connection_id: whatsappConnectionId,
           content: `📊 *Enquete:* ${poll.name}\n${poll.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}`,
@@ -456,6 +456,7 @@ export function ChatPanel({
           sender: 'agent',
           status: 'pending',
         });
+        if (pollInsertErr) throw pollInsertErr;
       } catch (err) {
         log.error('Failed to insert poll message', err);
       }
@@ -469,7 +470,7 @@ export function ChatPanel({
       try {
         const ref = resolveContactRef(conversation.contact.id);
         if (!isUuidRef(ref)) return;
-        await dbFrom('messages').insert({
+        const { error: cardInsertErr } = await dbFrom('messages').insert({
           contact_id: ref.uuid,
           whatsapp_connection_id: whatsappConnectionId,
           content: `📇 Cartão de contato: ${contactName}`,
@@ -477,6 +478,7 @@ export function ChatPanel({
           sender: 'agent',
           status: 'pending',
         });
+        if (cardInsertErr) throw cardInsertErr;
       } catch (err) {
         log.error('Failed to insert contact card message', err);
       }

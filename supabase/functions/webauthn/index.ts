@@ -115,8 +115,10 @@ Deno.serve(async (req) => {
           }));
 
         const challenge = generateChallenge();
-        await supabaseAdmin.from('webauthn_challenges').insert({ user_id: userId, challenge, type: 'registration' });
-        await supabaseAdmin.rpc('cleanup_expired_challenges');
+        const { error: challengeInsertErr } = await supabaseAdmin.from('webauthn_challenges').insert({ user_id: userId, challenge, type: 'registration' });
+        if (challengeInsertErr) return errorResponse('Failed to create registration challenge', 500, req);
+        const { error: cleanupErr } = await supabaseAdmin.rpc('cleanup_expired_challenges');
+        if (cleanupErr) log.warn('cleanup_expired_challenges failed', { error: cleanupErr.message });
 
         const options = {
           challenge, rp: { name: rpName, id: rpId },
@@ -200,7 +202,8 @@ Deno.serve(async (req) => {
         });
 
         if (insertError) return errorResponse('Failed to store credential', 500, req);
-        await supabaseAdmin.from('webauthn_challenges').delete().eq('user_id', userId).eq('type', 'registration');
+        const { error: deleteRegChalErr } = await supabaseAdmin.from('webauthn_challenges').delete().eq('user_id', userId).eq('type', 'registration');
+        if (deleteRegChalErr) log.warn('Failed to delete registration challenge', { error: deleteRegChalErr.message });
 
         log.done(200, { action });
         return jsonResponse({ success: true, credentialId: id }, 200, req);
@@ -237,7 +240,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        await supabaseAdmin.from('webauthn_challenges').insert({ user_id: authUserId, challenge, type: 'authentication' });
+        const { error: authChallengeErr } = await supabaseAdmin.from('webauthn_challenges').insert({ user_id: authUserId, challenge, type: 'authentication' });
+        if (authChallengeErr) return errorResponse('Failed to create authentication challenge', 500, req);
 
         log.done(200, { action });
         return jsonResponse({
@@ -311,10 +315,12 @@ Deno.serve(async (req) => {
           return errorResponse('Counter regression detected - possible cloned authenticator', 400, req);
         }
 
-        await supabaseAdmin.from('passkey_credentials')
+        const { error: counterUpdateErr } = await supabaseAdmin.from('passkey_credentials')
           .update({ last_used_at: new Date().toISOString(), counter: newCounter })
           .eq('id', storedObj.id);
-        await supabaseAdmin.from('webauthn_challenges').delete().eq('user_id', storedObj.user_id).eq('type', 'authentication');
+        if (counterUpdateErr) log.warn('Failed to update passkey counter', { error: counterUpdateErr.message });
+        const { error: deleteAuthChalErr } = await supabaseAdmin.from('webauthn_challenges').delete().eq('user_id', storedObj.user_id).eq('type', 'authentication');
+        if (deleteAuthChalErr) log.warn('Failed to delete authentication challenge', { error: deleteAuthChalErr.message });
 
         const { data: userData } = await supabaseAdmin.auth.admin.getUserById(storedObj.user_id);
         const userEmail = userData && typeof userData === 'object' && 'user' in userData && userData.user && typeof userData.user === 'object'

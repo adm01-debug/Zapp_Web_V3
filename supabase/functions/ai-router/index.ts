@@ -469,7 +469,7 @@ async function logAiMetrics(params: {
   metadata: Record<string, unknown>;
 }, supabase: ReturnType<typeof createZappAdminClient>): Promise<void> {
   try {
-    await supabase.rpc('record_ai_metrics', {
+    const { error: metricsErr } = await supabase.rpc('record_ai_metrics', {
       p_function_name: params.functionName,
       p_action: params.action,
       p_duration_ms: Math.round(params.durationMs),
@@ -478,6 +478,7 @@ async function logAiMetrics(params: {
       p_error_message: params.errorMessage,
       p_metadata: params.metadata,
     });
+    if (metricsErr) console.warn(`[ai-router] record_ai_metrics failed: ${metricsErr.message}`);
   } catch {
     // Metrics logging is non-critical, do not propagate errors
   }
@@ -1339,7 +1340,7 @@ Responda APENAS em JSON:
       }
 
       try {
-        await supabase.rpc('record_ai_metrics', {
+        const { error: autoTagMetricsErr } = await supabase.rpc('record_ai_metrics', {
           p_function_name: 'ai-auto-tag',
           p_action: 'classification',
           p_duration_ms: Math.round(durationMs),
@@ -1348,6 +1349,7 @@ Responda APENAS em JSON:
           p_error_message: errorMessage,
           p_metadata: metricsMetadata,
         });
+        if (autoTagMetricsErr) console.warn(`[ai-router/auto-tag] record_ai_metrics failed: ${autoTagMetricsErr.message}`);
       } catch {
         // Metrics not critical
       }
@@ -1367,7 +1369,8 @@ Responda APENAS em JSON:
       if (response.status === 429) {
         if (ctx.requestId) {
           try {
-            await supabase.from('webhook_events_processed').delete().eq('event_id', ctx.requestId).then(undefined, () => {});
+            const { error: dedupeDeleteErr } = await supabase.from('webhook_events_processed').delete().eq('event_id', ctx.requestId);
+            if (dedupeDeleteErr) console.warn(`[ai-router] failed to delete dedup record on 429: ${dedupeDeleteErr.message}`);
           } catch {
             // Graceful degradation
           }
@@ -2037,7 +2040,7 @@ Foque em:
     const clientErrorMsg = sanitizeErrorMessage(errMsg);
 
     try {
-      await supabase.rpc('record_ai_metrics', {
+      const { error: summaryMetricsErr } = await supabase.rpc('record_ai_metrics', {
         p_function_name: 'ai-conversation-summary',
         p_action: 'analysis',
         p_duration_ms: Math.round(durationMs),
@@ -2045,7 +2048,8 @@ Foque em:
         p_user_id: ctx.userId,
         p_error_message: errMsg,
         p_metadata: { requestId: ctx.requestId },
-      }).then(undefined, () => {});
+      });
+      if (summaryMetricsErr) console.warn(`[ai-router/summary] record_ai_metrics failed: ${summaryMetricsErr.message}`);
     } catch {
       // Metrics not critical
     }
@@ -2351,7 +2355,7 @@ async function handleClassifyEmoji(
       }
 
       try {
-        await supabase.rpc('record_ai_metrics', {
+        const { error: emojiMetricsErr } = await supabase.rpc('record_ai_metrics', {
           p_function_name: 'ai-classify-emoji',
           p_action: 'classification',
           p_duration_ms: Math.round(durationMs),
@@ -2360,6 +2364,7 @@ async function handleClassifyEmoji(
           p_error_message: errorMessage,
           p_metadata: metricsMetadata,
         });
+        if (emojiMetricsErr) console.warn(`[ai-router/emoji] record_ai_metrics failed: ${emojiMetricsErr.message}`);
       } catch {
         // Metrics not critical
       }
@@ -3356,7 +3361,7 @@ Analise a conversa de forma profunda e forneça análise técnica das interaçõ
     const errMsg = err instanceof Error ? err.message : String(err);
 
     try {
-      await supabase.rpc('record_ai_metrics', {
+      const { error: analysisMetricsErr } = await supabase.rpc('record_ai_metrics', {
         p_function_name: 'ai-conversation-analysis',
         p_action: 'analysis',
         p_duration_ms: Math.round(durationMs),
@@ -3364,7 +3369,8 @@ Analise a conversa de forma profunda e forneça análise técnica das interaçõ
         p_user_id: ctx.userId,
         p_error_message: errMsg,
         p_metadata: { requestId: ctx.requestId },
-      }).then(undefined, () => {});
+      });
+      if (analysisMetricsErr) console.warn(`[ai-router/analysis] record_ai_metrics failed: ${analysisMetricsErr.message}`);
     } catch {
       // Metrics not critical
     }
@@ -4178,8 +4184,9 @@ Retorne APENAS o JSON array, sem markdown.`,
         )
       );
 
-      const succeeded = updateResults.filter((r) => r.status === 'fulfilled').length;
-      const failed = updateResults.filter((r) => r.status === 'rejected').length;
+      // Supabase nunca rejeita — erros vêm em r.value.error (status sempre 'fulfilled')
+      const succeeded = updateResults.filter((r) => r.status === 'fulfilled' && !r.value.error).length;
+      const failed = updateResults.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error)).length;
       if (failed > 0) log.warn("Some ticket updates failed", { failed, succeeded });
 
       metricsMetadata.classified = succeeded;

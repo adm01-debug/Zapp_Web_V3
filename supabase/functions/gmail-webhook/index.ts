@@ -175,11 +175,12 @@ Deno.serve(async (req) => {
         }
 
         const expires = watchData.expiration ? new Date(parseInt(watchData.expiration)).toISOString() : null;
-        await supabase.from('email_watch_history').upsert({
+        const { error: watchHistErr } = await supabase.from('email_watch_history').upsert({
           account_id: accountId, history_id: watchData.historyId ?? null,
           expires_at: expires, watch_registered_at: new Date().toISOString(),
           status: 'active',
         }, { onConflict: 'account_id' });
+        if (watchHistErr) return json({ error: 'Failed to register watch' }, 500);
 
         // Etapa 54 (PLANO-100-CONTRATOS-EDGE): respostas de SUCESSO migram pra
         // respondWithContract — parsed.headers (x-contract-version/deprecated/
@@ -214,10 +215,11 @@ Deno.serve(async (req) => {
 
       await processHistory(supabase, token, account.id, startHistoryId);
 
-      await supabase.from('email_watch_history').upsert({
+      const { error: histUpsertErr } = await supabase.from('email_watch_history').upsert({
         account_id: account.id, history_id: historyId,
         status: 'active',
       }, { onConflict: 'account_id' });
+      if (histUpsertErr) console.error('[gmail-webhook] watch history upsert failed:', histUpsertErr.message);
 
       return respondWithContract(parsed, { ok: true }, { status: 200, headers: getCorsHeaders(req) });
     }
@@ -285,9 +287,10 @@ async function getValidToken(supabase: ReturnType<typeof createZappAdminClient>,
   const newToken = refreshData.access_token;
   const newExpiry = new Date(Date.now() + refreshData.expires_in * 1000).toISOString();
 
-  await supabase.from('email_accounts').update({
+  const { error: tokenErr } = await supabase.from('email_accounts').update({
     access_token: newToken, token_expires_at: newExpiry,
   }).eq('id', accountId);
+  if (tokenErr) { console.error('[gmail-webhook] token update failed:', tokenErr.message); return null; }
 
   return newToken;
 }
@@ -444,7 +447,7 @@ async function fetchAndPersistMessage(
   const hasAttach    = !!(msg.payload?.parts ?? []).some((p: Record<string, unknown>) => p.filename);
 
   // Step 1: insert the thread row if it doesn't exist yet (no-op on conflict).
-  await supabase.from('gmail_threads').upsert({
+  const { error: threadUpsertErr } = await supabase.from('gmail_threads').upsert({
     account_id:      accountId,
     thread_id:       threadId,
     subject,
@@ -452,16 +455,18 @@ async function fetchAndPersistMessage(
     label_ids:       labelIds,
     last_message_at: date,
   }, { onConflict: 'account_id,thread_id', ignoreDuplicates: true });
+  if (threadUpsertErr) throw new Error('gmail_threads upsert: ' + threadUpsertErr.message);
 
   // Step 2: update metadata only when this message is strictly more recent.
   // PostgreSQL row-level locking serialises concurrent writers; the WHERE
   // predicate guarantees the newest timestamp always wins, preventing an older
   // parallel message from clobbering subject / snippet / last_message_at.
-  await supabase.from('gmail_threads')
+  const { error: threadUpdateErr } = await supabase.from('gmail_threads')
     .update({ subject, snippet, label_ids: labelIds, last_message_at: date })
     .eq('account_id', accountId)
     .eq('thread_id', threadId)
     .lt('last_message_at', date);
+  if (threadUpdateErr) throw new Error('gmail_threads update: ' + threadUpdateErr.message);
 
   // Step 3: fetch the row id needed for the message upsert below.
   const { data: thread } = await supabase.from('gmail_threads')
@@ -473,7 +478,7 @@ async function fetchAndPersistMessage(
   if (!thread) return;
 
   // Upsert gmail_messages
-  await supabase.from('gmail_messages').upsert({
+  const { error: msgUpsertErr } = await supabase.from('gmail_messages').upsert({
     thread_id_ref:  thread.id,
     account_id:     accountId,
     message_id:     messageId,
@@ -492,6 +497,7 @@ async function fetchAndPersistMessage(
     has_attachments: hasAttach,
     internal_date:  date,
   }, { onConflict: 'account_id,message_id' });
+  if (msgUpsertErr) throw new Error('gmail_messages upsert: ' + msgUpsertErr.message);
 
   // Recompute unread_count from actual message records — avoids the literal
   // 0/1 last-write-wins race when concurrent messages share the same thread.
@@ -502,8 +508,9 @@ async function fetchAndPersistMessage(
     .eq('is_read', false);
 
   if (unreadCount !== null) {
-    await supabase.from('gmail_threads')
+    const { error: unreadErr } = await supabase.from('gmail_threads')
       .update({ unread_count: unreadCount })
       .eq('id', thread.id);
+    if (unreadErr) console.warn('[gmail-webhook] unread_count update failed:', unreadErr.message);
   }
 }

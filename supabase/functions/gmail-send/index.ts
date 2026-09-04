@@ -157,24 +157,21 @@ Deno.serve(async (req) => {
 
       // Persiste registro de tracking (EMAIL-10) — best-effort, nunca falha o envio.
       if (trackingId) {
-        try {
-          await supabase.from('email_tracked_messages').upsert({
-            tracking_id:       trackingId,
-            account_id:        accountId,
-            user_id:           userId,
-            sender_email:      typeof accountCheck?.email === 'string' ? accountCheck.email : null,
-            recipient_email:   toArray[0] ?? null,
-            subject,
-            thread_id:         responseThreadId || threadId || null,
-            gmail_message_id:  messageId || null,
-            has_tracking_pixel: true,
-            provider:          'gmail',
-            open_count:        0,
-            click_count:       0,
-          }, { onConflict: 'tracking_id' });
-        } catch (trackErr) {
-          console.error('[gmail-send] tracking record upsert failed (best-effort)', trackErr instanceof Error ? trackErr.message : String(trackErr));
-        }
+        const { error: trackUpsertErr } = await supabase.from('email_tracked_messages').upsert({
+          tracking_id:       trackingId,
+          account_id:        accountId,
+          user_id:           userId,
+          sender_email:      typeof accountCheck?.email === 'string' ? accountCheck.email : null,
+          recipient_email:   toArray[0] ?? null,
+          subject,
+          thread_id:         responseThreadId || threadId || null,
+          gmail_message_id:  messageId || null,
+          has_tracking_pixel: true,
+          provider:          'gmail',
+          open_count:        0,
+          click_count:       0,
+        }, { onConflict: 'tracking_id' });
+        if (trackUpsertErr) console.error('[gmail-send] tracking record upsert failed (best-effort)', trackUpsertErr.message);
       }
 
       // Persiste mensagem enviada no Supabase
@@ -185,7 +182,7 @@ Deno.serve(async (req) => {
           const threadObj = thread as Record<string, unknown>;
           const threadRefId = typeof threadObj.id === 'string' ? threadObj.id : '';
           if (threadRefId) {
-            await supabase.from('gmail_messages').upsert({
+            const { error: msgUpsertErr } = await supabase.from('gmail_messages').upsert({
               thread_id_ref: threadRefId,
               account_id:    accountId,
               message_id:    messageId,
@@ -201,6 +198,7 @@ Deno.serve(async (req) => {
               is_sent:       true,
               internal_date: new Date().toISOString(),
             }, { onConflict: 'account_id,message_id' });
+            if (msgUpsertErr) console.warn('[gmail-send] sent message upsert failed', msgUpsertErr.message);
           }
         }
       }
@@ -237,7 +235,8 @@ Deno.serve(async (req) => {
           label: 'Gmail',
         });
         if (!gmailRes.ok) { failures.push(msgId); continue; }
-        await supabase.from('gmail_messages').update({ is_read: read }).eq('message_id', msgId).eq('account_id', accountId);
+        const { error: readUpdateErr } = await supabase.from('gmail_messages').update({ is_read: read }).eq('message_id', msgId).eq('account_id', accountId);
+        if (readUpdateErr) console.warn('[gmail-send] markRead db update failed', { msgId, error: readUpdateErr.message });
       }
 
       return json({ success: true, ...(failures.length ? { failed: failures } : {}) });
@@ -266,7 +265,8 @@ Deno.serve(async (req) => {
         return json({ error: 'Failed to trash message in Gmail' }, 502);
       }
 
-      await supabase.from('gmail_messages').delete().eq('message_id', messageId).eq('account_id', accountId);
+      const { error: trashDelErr } = await supabase.from('gmail_messages').delete().eq('message_id', messageId).eq('account_id', accountId);
+      if (trashDelErr) console.warn('[gmail-send] trash db delete failed', trashDelErr.message);
       return json({ success: true });
     }
 
@@ -486,7 +486,10 @@ async function getValidToken(supabase: ReturnType<typeof createZappAdminClient>,
     const PERMANENT_ERRORS = ['invalid_grant', 'token_revoked'];
     const isPermanent = typeof tokensObj.error === 'string' && PERMANENT_ERRORS.includes(tokensObj.error);
     console.error(`[gmail-send] token refresh error: ${errorMsg} (permanent=${isPermanent})`);
-    if (isPermanent) await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    if (isPermanent) {
+      const { error: deactivateErr } = await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+      if (deactivateErr) console.warn('[gmail-send] deactivate account failed', deactivateErr.message);
+    }
     return null;
   }
 
@@ -498,7 +501,8 @@ async function getValidToken(supabase: ReturnType<typeof createZappAdminClient>,
   }
 
   const newExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
-  await supabase.from('gmail_accounts').update({ access_token: newAccessToken, token_expiry: newExpiry }).eq('id', accountId);
+  const { error: tokenUpdateErr } = await supabase.from('gmail_accounts').update({ access_token: newAccessToken, token_expiry: newExpiry }).eq('id', accountId);
+  if (tokenUpdateErr) console.warn('[gmail-send] token persist failed', tokenUpdateErr.message);
   return newAccessToken;
 }
 
@@ -550,7 +554,7 @@ async function rewriteLinksForTracking(
       const trackedUrl = `${publicBaseUrl}/functions/v1/email-track-link?l=${encodeURIComponent(linkId)}`;
       linkByUrl.set(url, trackedUrl);
 
-      await supabase.from('email_tracked_links').upsert({
+      const { error: linkUpsertErr } = await supabase.from('email_tracked_links').upsert({
         link_id:       linkId,
         tracking_id:   trackingId,
         original_url:  url,
@@ -558,9 +562,13 @@ async function rewriteLinksForTracking(
         position:      i,
         click_count:   0,
       }, { onConflict: 'link_id' });
+      if (linkUpsertErr) {
+        console.error('[gmail-send] link tracking upsert failed (best-effort — links mantidos originais)', linkUpsertErr.message);
+        return bodyHtml;
+      }
     }
   } catch (err) {
-    console.error('[gmail-send] link tracking upsert failed (best-effort — links mantidos originais)',
+    console.error('[gmail-send] link tracking loop error (best-effort — links mantidos originais)',
       err instanceof Error ? err.message : String(err));
     return bodyHtml;
   }

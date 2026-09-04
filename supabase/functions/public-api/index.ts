@@ -82,15 +82,20 @@ Deno.serve(async (req) => {
         const { data: invokeData, error: invokeError } = await supabase.functions.invoke('evolution-api', { body: { action: 'send-text', instanceName: connection.instance_id, number: phone, text: message } });
         if (invokeError) {
           log.error('evolution-api invoke error', { error: invokeError.message });
-          await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+          const { error: failErr } = await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+          if (failErr) log.warn('failed to mark message as failed', { error: failErr.message });
         } else {
           const externalId = extractEvolutionMessageId(invokeData);
-          if (externalId) await supabase.from('messages').update({ external_id: externalId, status: 'sent' }).eq('id', msg.id);
+          if (externalId) {
+            const { error: sentErr } = await supabase.from('messages').update({ external_id: externalId, status: 'sent' }).eq('id', msg.id);
+            if (sentErr) log.warn('failed to mark message as sent', { error: sentErr.message });
+          }
         }
       }
     } catch (sendErr) {
       log.error('Evolution API send error', { error: String(sendErr) });
-      await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+      const { error: failErr } = await supabase.from('messages').update({ status: 'failed' }).eq('id', msg.id);
+      if (failErr) log.warn('failed to mark message as failed after send error', { error: failErr.message });
     }
 
     log.done(200, { messageId: msg.id, requestId });

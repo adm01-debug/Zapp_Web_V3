@@ -312,14 +312,16 @@ export function useRealtimeInbox() {
 
     // Auto-assign on reply (only valid for local team_conversations; evolution_contacts has no routing_status)
     try {
-      const { data: conv } = await dbFrom('team_conversations')
+      const { data: conv, error: convSelErr } = await dbFrom('team_conversations')
         .select('id, routing_status')
         .eq('id', contactId)
         .maybeSingle();
+      if (convSelErr) throw convSelErr;
       if (conv && conv.routing_status === 'pending') {
-        await dbFrom('team_conversations')
+        const { error: routingErr } = await dbFrom('team_conversations')
           .update({ routing_status: 'assigned' })
           .eq('id', contactId);
+        if (routingErr) throw routingErr;
       }
     } catch (err) {
       log.error('Error auto-assigning on reply:', err);

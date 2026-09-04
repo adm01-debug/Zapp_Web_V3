@@ -72,7 +72,9 @@ export async function uploadStickerFile(file: File): Promise<UploadStickerResult
     const url = await getSignedMediaUrl(STICKER_BUCKET, path, 604800);
     if (!url) {
       // O objeto foi gravado; sem URL de exibição a figurinha seria invisível.
-      void supabase.storage.from(STICKER_BUCKET).remove([path]);
+      void supabase.storage.from(STICKER_BUCKET).remove([path]).then(({ error: rmErr }) => {
+        if (rmErr) console.warn('[stickerUpload] rollback remove failed (best-effort):', rmErr);
+      });
       return { ok: false, error: 'Falha ao resolver a URL da figurinha enviada.' };
     }
 

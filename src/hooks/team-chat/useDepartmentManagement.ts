@@ -209,17 +209,14 @@ export function useDepartmentManagement(
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      try {
-        await supabase.from('audit_logs').insert({
-          action: action === 'add' ? 'ADD_MEMBER' : 'REMOVE_MEMBER',
-          entity_id: initialDepartment.id,
-          entity_type: 'department',
-          user_id: user?.id,
-          details: { profile_id: profileId },
-        });
-      } catch (err: unknown) {
-        log.warn('[audit] department member change log failed', err);
-      }
+      const { error: auditErr } = await supabase.from('audit_logs').insert({
+        action: action === 'add' ? 'ADD_MEMBER' : 'REMOVE_MEMBER',
+        entity_id: initialDepartment.id,
+        entity_type: 'department',
+        user_id: user?.id,
+        details: { profile_id: profileId },
+      });
+      if (auditErr) log.warn('[audit] department member change log failed', auditErr);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({

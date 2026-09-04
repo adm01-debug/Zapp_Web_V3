@@ -67,10 +67,11 @@ Deno.serve(async (req) => {
       if (avatar_url) profileUpdate.avatar_url = avatar_url;
 
       if (Object.keys(profileUpdate).length > 0) {
-        await adminClient
+        const { error: profileUpdateErr } = await adminClient
           .from("profiles")
           .update(profileUpdate)
           .eq("user_id", newUser.user.id);
+        if (profileUpdateErr) console.warn("[create-user] Failed to update profile fields:", profileUpdateErr.message);
       }
     }
 

@@ -178,17 +178,12 @@ export async function markDelivery(
   status: 'sent' | 'failed',
   errorMsg: string | null,
 ): Promise<void> {
-  try {
-    await supabase
-      .from('notification_delivery_log')
-      .update({ status, error: errorMsg })
-      .eq('event_key', key)
-      .eq('channel_id', channelId);
-  } catch (e) {
-    console.warn(
-      `[zapp-notifications-dispatch] markDelivery falhou: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
+  const { error } = await supabase
+    .from('notification_delivery_log')
+    .update({ status, error: errorMsg })
+    .eq('event_key', key)
+    .eq('channel_id', channelId);
+  if (error) console.warn(`[zapp-notifications-dispatch] markDelivery falhou: ${error.message}`);
 }
 
 /** Persiste o estado do canal (last_sent_at/error — Etapa 68.3) — best-effort. */
@@ -201,7 +196,8 @@ export async function updateChannelState(
   try {
     const payload: Record<string, unknown> = { last_sent_at: nowIso };
     if (errorMsg !== null) payload.error = errorMsg;
-    await supabase.from('notification_channels_config').update(payload).eq('id', channelId);
+    const { error: updateErr } = await supabase.from('notification_channels_config').update(payload).eq('id', channelId);
+    if (updateErr) console.warn(`[zapp-notifications-dispatch] updateChannelState db update failed: ${updateErr.message}`);
   } catch (e) {
     console.warn(
       `[zapp-notifications-dispatch] updateChannelState falhou: ${e instanceof Error ? e.message : String(e)}`,

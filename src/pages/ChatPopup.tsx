@@ -70,12 +70,13 @@ export default function ChatPopup() {
   const handleSendMessage = useCallback(
     async (content: string) => {
       if (!contactId) return;
-      await dbFrom('messages').insert({
+      const { error: msgInsertErr } = await dbFrom('messages').insert({
         contact_id: contactId,
         content,
         sender: 'agent',
         message_type: 'text',
       });
+      if (msgInsertErr) log.error('Failed to insert text message from popup', { error: msgInsertErr.message });
     },
     [contactId]
   );
@@ -91,13 +92,14 @@ export default function ChatPopup() {
 
         if (uploadError) throw uploadError;
 
-        await dbFrom('messages').insert({
+        const { error: audioInsertErr } = await dbFrom('messages').insert({
           contact_id: contactId,
           content: '🎵 Mensagem de áudio',
           sender: 'agent',
           message_type: 'audio',
           media_url: (await getSignedMediaUrl('whatsapp-media', fileName, 604800)) ?? '',
         });
+        if (audioInsertErr) throw audioInsertErr;
       } catch (err) {
         log.error('Failed to send audio from popup:', err);
       }

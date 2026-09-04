@@ -495,10 +495,11 @@ export function useDeviceDetectionManagement() {
   const removeDevice = useCallback(
     async (deviceId: string) => {
       try {
-        await supabase
+        const { error: sessionUpdateErr } = await supabase
           .from('user_sessions')
           .update({ is_active: false, ended_at: new Date().toISOString() })
           .eq('device_id', deviceId);
+        if (sessionUpdateErr) deviceDetectionLog.warn('Error deactivating user sessions for device:', sessionUpdateErr.message);
 
         const { error } = await supabase.from('user_devices').delete().eq('id', deviceId);
 

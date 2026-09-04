@@ -149,10 +149,11 @@ Deno.serve(async (req) => {
     const format = job.format === "json" ? "json" : "csv";
 
     // Claim: marca processando ANTES de executar (idempotência de re-run).
-    await supabase
+    const { error: claimErr } = await supabase
       .from("auto_export_jobs")
       .update({ status: "processing", last_error: null, updated_at: new Date().toISOString() })
       .eq("id", jobId);
+    if (claimErr) log.warn("Failed to claim job as processing", { jobId, error: claimErr.message });
 
     let query = supabase.from(sourceTable).select("*").limit(MAX_EXPORT_ROWS);
     const filters = (job.filters ?? {}) as Record<string, unknown>;
@@ -173,7 +174,7 @@ Deno.serve(async (req) => {
 
     // ── Vazio → 200 honesto (sem arquivo no storage) ─────────────────────────
     if (rowArray.length === 0) {
-      await supabase
+      const { error: emptyCompleteErr } = await supabase
         .from("auto_export_jobs")
         .update({
           status: "completed",
@@ -184,6 +185,7 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", jobId);
+      if (emptyCompleteErr) log.warn("Failed to mark empty job as completed", { jobId, error: emptyCompleteErr.message });
       log.done(200, { jobId, rowCount: 0, empty: true });
       return jsonResponse(
         {
@@ -224,7 +226,7 @@ Deno.serve(async (req) => {
       return errorResponse("Falha ao gerar link de download", 500, req);
     }
 
-    await supabase
+    const { error: completeErr } = await supabase
       .from("auto_export_jobs")
       .update({
         status: "completed",
@@ -235,6 +237,7 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId);
+    if (completeErr) log.warn("Failed to mark job as completed", { jobId, error: completeErr.message });
 
     log.done(200, { jobId, rowCount: rowArray.length, truncated, path });
     return jsonResponse(
@@ -259,17 +262,14 @@ Deno.serve(async (req) => {
 
 /** Marca o job como failed com last_error truncado (2000 chars). */
 async function markFailed(jobId: string, message: string): Promise<void> {
-  try {
-    const supabase = createZappAdminClient();
-    await supabase
-      .from("auto_export_jobs")
-      .update({
-        status: "failed",
-        last_error: message.slice(0, 2000),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
-  } catch {
-    // best-effort: falha ao marcar não deve estourar o fluxo principal
-  }
+  const supabase = createZappAdminClient();
+  const { error } = await supabase
+    .from("auto_export_jobs")
+    .update({
+      status: "failed",
+      last_error: message.slice(0, 2000),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", jobId);
+  if (error) console.warn("[zapp-auto-export] markFailed failed:", error.message);
 }

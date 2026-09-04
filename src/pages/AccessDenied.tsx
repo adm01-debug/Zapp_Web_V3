@@ -22,7 +22,7 @@ export default function AccessDenied() {
     const logEvent = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.rpc('log_security_event', {
+        const { error: secErr } = await supabase.rpc('log_security_event', {
           p_event_type: 'unauthorized_access',
           p_resource: from,
           p_action: 'NAVIGATE',
@@ -32,6 +32,7 @@ export default function AccessDenied() {
             timestamp: new Date().toISOString()
           }
         });
+        if (secErr) log.warn('[security] log_security_event falhou', secErr);
       }
     };
     void logEvent();

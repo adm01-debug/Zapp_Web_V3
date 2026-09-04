@@ -91,7 +91,8 @@ Deno.serve(async (req) => {
           });
           if (error) { failed++; return; }
 
-          await supabase.from('contacts').update({ avatar_url: getStoragePublicUrl('avatars', storagePath) }).eq('id', contact.id);
+          const { error: updateErr } = await supabase.from('contacts').update({ avatar_url: getStoragePublicUrl('avatars', storagePath) }).eq('id', contact.id);
+          if (updateErr) { failed++; return; }
           updated++;
         } catch { failed++; }
       }));

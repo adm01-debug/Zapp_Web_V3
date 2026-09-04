@@ -24,7 +24,8 @@ export function RealtimeCollaboration({ contactId, className }: RealtimeCollabor
 
   const handleHandoff = async (agentId: string, comment: string) => {
     if (!isValidUUID(contactId)) return;
-    await dbFrom('contacts').update({ assigned_to: agentId }).eq('id', contactId);
+    const { error: handoffErr } = await dbFrom('contacts').update({ assigned_to: agentId }).eq('id', contactId);
+    if (handoffErr) throw handoffErr;
     if (comment) {
       const { data: userRes } = await supabase.auth.getUser();
       const userId = userRes.user?.id;

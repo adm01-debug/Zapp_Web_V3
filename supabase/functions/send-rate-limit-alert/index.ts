@@ -79,7 +79,8 @@ Deno.serve(async (req) => {
         metadata: { ip_address, endpoint, request_count, blocked },
       }));
 
-      await supabaseClient.from("app_notifications").insert(notifications);
+      const { error: notifyErr } = await supabaseClient.from("app_notifications").insert(notifications);
+      if (notifyErr) log.warn("Failed to insert rate-limit notifications", { error: notifyErr.message });
     }
 
     log.done(200);
