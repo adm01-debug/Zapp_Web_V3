@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { safeWhatsAppConnectionsQuery } from '@/integrations/supabase/safe-queries';
 import { useTalkX, TalkXCampaign } from '@/hooks/useTalkX';
+import { useAuth } from '@/features/auth';
 
 // Format an ISO/UTC timestamp into the "YYYY-MM-DDTHH:mm" a <input type="datetime-local">
 // expects, in the browser's LOCAL time. Using toISOString() here would show UTC and
@@ -65,6 +66,7 @@ export const MEDIA_TYPES = [
 
 /** use Campaign Editor component for the talkx section. */
 export function useCampaignEditor(campaign: TalkXCampaign | null, onClose: () => void) {
+  const { user } = useAuth();
   const { createCampaign, updateCampaign, addRecipients } = useTalkX();
 
   const [name, setName] = useState(campaign?.name || '');
@@ -94,6 +96,7 @@ export function useCampaignEditor(campaign: TalkXCampaign | null, onClose: () =>
 
   const { data: connections } = useQuery({
     queryKey: queryKeys.talkx.waConnections(),
+    enabled: !!user,
     queryFn: async () => {
       const safeQueries = safeWhatsAppConnectionsQuery(supabase);
       const { data, error: _error } = await safeQueries.getList({ status: 'connected' });
@@ -104,6 +107,7 @@ export function useCampaignEditor(campaign: TalkXCampaign | null, onClose: () =>
 
   const { data: contacts } = useQuery({
     queryKey: queryKeys.talkx.contactsTalkx(),
+    enabled: !!user,
     queryFn: async () => {
       const { data, error: _error } = await supabase
         .from('contacts')

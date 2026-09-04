@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/schema';
 import { queryKeys } from '@/services/api/queryKeys';
+import { useAuth } from '@/features/auth';
 
 type CampaignRow = Tables<'campaigns'>;
 type CampaignInsert = TablesInsert<'campaigns'>;
@@ -65,10 +66,12 @@ export function campaignErrorToMessage(error: Error): string {
 
 /** Provides campaigns CRUD operations and contact targeting for campaigns. */
 export function useCampaigns() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const campaignsQuery = useQuery({
     queryKey: queryKeys.campaigns.all(),
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('campaigns')

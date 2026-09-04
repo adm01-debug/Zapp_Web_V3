@@ -42,6 +42,10 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'test-user-id' }, profile: null })),
+}));
+
 import { useTalkX } from '@/hooks/useTalkX';
 
 function createWrapper() {

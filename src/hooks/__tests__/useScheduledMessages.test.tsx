@@ -27,6 +27,9 @@ vi.mock('@/hooks/useAuth', () => ({
 vi.mock('@/features/auth/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }));
+vi.mock('@/features/auth', () => ({
+  useAuth: () => mockUseAuth(),
+}));
 
 vi.mock('@/hooks/use-toast', () => ({
   toast: mockToast,

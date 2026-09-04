@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { queryKeys } from '@/services/api/queryKeys';
+import { useAuth } from '@/features/auth';
 
 /** C S A T Survey interface definition. */
 export interface CSATSurvey {
@@ -32,6 +33,7 @@ const EMPTY_STATS: CSATStats = {
 
 /** Manages CSAT surveys with period-based filtering, statistics calculation, and submission. */
 export function useCSAT(period: 'today' | 'week' | 'month' = 'month') {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const getDateFilter = () => {
@@ -54,6 +56,7 @@ export function useCSAT(period: 'today' | 'week' | 'month' = 'month') {
 
   const surveysQuery = useQuery({
     queryKey: queryKeys.csat.surveys(period),
+    enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
