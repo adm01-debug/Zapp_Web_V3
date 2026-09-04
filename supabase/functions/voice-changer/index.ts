@@ -251,16 +251,18 @@ Deno.serve(async (req) => {
           .from('audio-memes')
           .upload(outputPath, audioBuffer, { contentType: 'audio/mpeg', upsert: true });
 
-        await supabaseClient
+        const { error: queueCompleteErr } = await supabaseClient
           .from('voice_conversion_queue')
           .update({
             status: 'completed',
             output_audio_url: getStoragePublicUrl('audio-memes', outputPath),
           })
           .eq('id', taskId);
+        if (queueCompleteErr) log.warn('Failed to mark queue task as completed', { error: queueCompleteErr.message });
       }
 
-      await supabaseClient.from('sts_telemetry').insert(telemetryData);
+      const { error: telemetryErr } = await supabaseClient.from('sts_telemetry').insert(telemetryData);
+      if (telemetryErr) log.warn('Failed to insert telemetry', { error: telemetryErr.message });
 
       return new Response(audioBuffer, {
         status: 200,
@@ -273,13 +275,15 @@ Deno.serve(async (req) => {
     } catch (innerErr: unknown) {
       telemetryData.error_type = 'EXCEPTION';
       telemetryData.metadata.error = innerErr instanceof Error ? innerErr.message : String(innerErr);
-      await supabaseClient.from('sts_telemetry').insert(telemetryData);
-      
+      const { error: telemetryFailErr } = await supabaseClient.from('sts_telemetry').insert(telemetryData);
+      if (telemetryFailErr) log.warn('Failed to insert error telemetry', { error: telemetryFailErr.message });
+
       if (taskId) {
-        await supabaseClient
+        const { error: queueFailErr } = await supabaseClient
           .from('voice_conversion_queue')
           .update({ status: 'failed', error_message: innerErr instanceof Error ? innerErr.message : String(innerErr) })
           .eq('id', taskId);
+        if (queueFailErr) log.warn('Failed to mark queue task as failed', { error: queueFailErr.message });
       }
       throw innerErr;
     }

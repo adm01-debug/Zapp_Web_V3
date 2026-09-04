@@ -375,7 +375,8 @@ Deno.serve(async (req) => {
 
     // Cleanup
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from('connection_health_logs').delete().lt('checked_at', sevenDaysAgo);
+    const { error: cleanupErr } = await supabase.from('connection_health_logs').delete().lt('checked_at', sevenDaysAgo);
+    if (cleanupErr) log.warn('health log cleanup failed', { error: cleanupErr.message });
 
     log.done(200, { checked: results.length, alerts: alertsToCreate.length });
     return jsonResponse({ success: true, checked_at: new Date().toISOString(), connections: results, alerts_created: alertsToCreate.length }, 200, req);
