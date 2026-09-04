@@ -41,6 +41,7 @@ jobs:
             -- '.github/workflows' '.github/actions' 2>/dev/null \
             | grep '^+' \
             | grep -v '^+++' \
+            | grep -v '^\+[[:space:]]*#' \
             || true)
 
           if [ -z "$ADDED" ]; then
