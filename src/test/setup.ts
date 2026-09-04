@@ -1,18 +1,27 @@
 import "@testing-library/jest-dom";
 
-// framer-motion/motion-dom cancela animações durante o teardown do happy-dom,
-// emitindo AbortError como rejeição não tratada. Isso não indica falha real —
-// todos os testes passam. Suprimimos apenas esse erro específico.
-process.on('unhandledRejection', (reason) => {
-  if (
-    reason instanceof Error &&
-    reason.name === 'AbortError' &&
-    reason.message === 'The animation was canceled.'
-  ) {
-    return;
-  }
-  throw reason;
-});
+// framer-motion usa Element.animate() — no happy-dom, cancelar a animação
+// durante o teardown rejeita a Promise `finished` com AbortError. Substituímos
+// o método por um stub que retorna Promises que nunca rejeitam, prevenindo o
+// erro na origem sem risco de mascarar AbortError de fetches reais.
+if (typeof Element !== 'undefined') {
+  const animationStub = (): Animation => {
+    const noop = () => {};
+    const never = new Promise<Animation>(() => {});
+    return {
+      cancel: noop, finish: noop, pause: noop, play: noop, reverse: noop,
+      commitStyles: noop, persist: noop, updatePlaybackRate: noop,
+      addEventListener: noop, removeEventListener: noop,
+      dispatchEvent: () => false,
+      ready: never, finished: never,
+      currentTime: 0, startTime: null, playbackRate: 1,
+      playState: 'idle', replaceState: 'active', pending: false,
+      effect: null, timeline: null, id: '',
+      oncancel: null, onfinish: null, onremove: null,
+    } as unknown as Animation;
+  };
+  Element.prototype.animate = animationStub;
+}
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
