@@ -9,6 +9,10 @@ export default {
   name: "no-direct-evo-url",
   rules: {
     "no-direct-evo-url": {
+      // Tipos reais de Deno.lint.Plugin vêm do runtime Deno (deno lint),
+      // não visíveis ao tsc/eslint deste repo (config Node/Vite) — sem
+      // @types/deno no projeto, any é o tipo seguro disponível aqui.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       create(context: any) {
         const isExempt = (rawPath: string) => {
           const filePath = rawPath.replace(/\\/g, "/");
@@ -23,6 +27,7 @@ export default {
           );
         };
         return {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           CallExpression(node: any) {
             const callee = node.callee;
             if (!callee || callee.type !== "MemberExpression") return;

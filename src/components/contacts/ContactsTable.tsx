@@ -52,6 +52,7 @@ const CONTACT_TYPE_ICONS: Record<string, React.ReactNode> = {
 };
 
 /** Re-exported module members. */
+// eslint-disable-next-line react-refresh/only-export-components -- constante, não componente
 export { CONTACT_TYPE_ICONS };
 
 type SortField = 'name' | 'type' | 'phone' | 'email' | 'company' | 'job_title' | 'created_at';
