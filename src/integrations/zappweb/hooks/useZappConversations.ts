@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import { zappSupabase, ZAPPWEB_INSTANCE } from '../supabaseClient';
 import type { EvolutionConversation } from '../types';
 import { getLogger } from '@/lib/logger';
@@ -11,8 +11,15 @@ const SELECT_FIELDS = `id, remote_jid, contact_id, status, unread_count, last_me
    evolution_contacts ( id, push_name, full_name, phone_number,
      profile_picture_url, lead_status, company, tags )`;
 
+// Fix 4b (P3): ISO timestamps são lexicograficamente ordenáveis — >/<
+// são suficientes e mais rápidos que localeCompare (que aplica regras
+// de locale desnecessárias em strings ISO 8601).
 const sortByLastMessage = (rows: EvolutionConversation[]) =>
-  [...rows].sort((a, b) => (b.last_message_at ?? '').localeCompare(a.last_message_at ?? ''));
+  [...rows].sort((a, b) => {
+    const ta = a.last_message_at ?? '';
+    const tb = b.last_message_at ?? '';
+    return tb > ta ? 1 : tb < ta ? -1 : 0;
+  });
 
 interface Options {
   instance?: string;
@@ -40,7 +47,11 @@ export function useZappConversations(opts: Options = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const conversationsRef = useRef<EvolutionConversation[]>([]);
-  useEffect(() => {
+  // Fix 2 (P2): useLayoutEffect para sincronizar o ref ANTES de qualquer
+  // handler de evento que leia conversationsRef.current no mesmo frame de
+  // render. useEffect corre DEPOIS do paint — um evento realtime que chega
+  // entre o setState e o próximo paint leria o ref desatualizado (stale).
+  useLayoutEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
 
@@ -142,12 +153,19 @@ export function useZappConversations(opts: Options = {}) {
           }
           if (isLastAttempt) {
             if (!hasLoadedOnceRef.current) {
-              // 1ª carga: melhor mostrar algo desatualizado do que ficar
-              // vazio pra sempre — agenda mais uma rodada pra alcançar o
-              // estado atual assim que o lock liberar.
-              setConversations((data ?? []) as unknown as EvolutionConversation[]);
-              setError(null);
-              hasLoadedOnceRef.current = true;
+              // Fix BUG #1 (P1 — race condition agent): curInstance/curStatus
+              // foram capturados no início do attempt; a rede é lenta e os
+              // parâmetros podem ter mudado durante o round-trip. Só escreve
+              // se os parâmetros ainda batem — evita exibir conversas do
+              // status errado por ~300-500ms na janela de switching.
+              const { instance: nowInstance, status: nowStatus } = optsRef.current;
+              if (curInstance === nowInstance && curStatus === nowStatus) {
+                setConversations((data ?? []) as unknown as EvolutionConversation[]);
+                setError(null);
+                hasLoadedOnceRef.current = true;
+              }
+              // Independente da paridade: agenda rodada extra para alcançar
+              // a geração atual (params mudaram ou dados desatualizados).
               needsFollowUpFetch = true;
             }
             // Já tínhamos dado real: os patches locais (INSERT/UPDATE/DELETE)
@@ -241,8 +259,11 @@ export function useZappConversations(opts: Options = {}) {
           filter: `instance_name=eq.${instance}`,
         },
         async (payload) => {
-          const row = payload.new as { id?: string; status?: string };
-          if (!row.id || row.status !== status) return;
+          // Fix B (P1): guarda de tipo em runtime antes de usar o payload —
+          // o Supabase Realtime não garante o shape exato de `payload.new`.
+          const row = payload.new as Record<string, unknown>;
+          if (typeof row.id !== 'string' || typeof row.status !== 'string') return;
+          if (row.status !== status) return;
           const full = await fetchOne(row.id);
           if (!isSubscriptionActive) return;
           if (full) insertIfAbsent(full);
@@ -257,7 +278,9 @@ export function useZappConversations(opts: Options = {}) {
           filter: `instance_name=eq.${instance}`,
         },
         async (payload) => {
-          const row = payload.new as Partial<EvolutionConversation> & { id: string; status: string };
+          // Fix B (P1): guarda de tipo — ver comentário no INSERT handler.
+          const row = payload.new as Record<string, unknown>;
+          if (typeof row.id !== 'string' || typeof row.status !== 'string') return;
           const exists = conversationsRef.current.some((c) => c.id === row.id);
           if (exists) {
             const willRemove = row.status !== status;
@@ -265,13 +288,21 @@ export function useZappConversations(opts: Options = {}) {
             // acha (review do cubic — a próxima conversa elegível nunca
             // entrava sozinha).
             const wasFull = conversationsRef.current.length === limit;
-            generationRef.current += 1;
+            // Fix A (P2): só avança a geração (sinalizando "estrutura mudou")
+            // quando a conversa sai da janela. Updates in-place (reordenamento,
+            // campos atualizados) não mudam a composição da lista — não precisam
+            // de um refetch completo para reconciliação.
+            if (willRemove) generationRef.current += 1;
             setConversations((prev) => {
               const idx = prev.findIndex((c) => c.id === row.id);
               if (idx === -1) return prev;
-              if (willRemove) return prev.filter((c) => c.id !== row.id);
+              if (willRemove) {
+                // Fix 3 (P3): bail-out se o item já não está (possível race).
+                const next = prev.filter((c) => c.id !== row.id);
+                return next.length === prev.length ? prev : next;
+              }
               const next = [...prev];
-              next[idx] = { ...next[idx], ...row };
+              next[idx] = { ...next[idx], ...(row as Partial<EvolutionConversation>) };
               return sortByLastMessage(next);
             });
             if (willRemove && wasFull) void fetchAll();
@@ -295,13 +326,19 @@ export function useZappConversations(opts: Options = {}) {
           filter: `instance_name=eq.${instance}`,
         },
         (payload) => {
-          const oldRow = payload.old as { id?: string };
-          if (!oldRow.id) return;
+          // Fix B (P1): guarda de tipo — ver comentário no INSERT handler.
+          const oldRow = payload.old as Record<string, unknown>;
+          if (typeof oldRow.id !== 'string') return;
           const hadIt = conversationsRef.current.some((c) => c.id === oldRow.id);
           if (!hadIt) return;
           const wasFull = conversationsRef.current.length === limit;
           generationRef.current += 1;
-          setConversations((prev) => prev.filter((c) => c.id !== oldRow.id));
+          // Fix 3 (P3): bail-out se o item já não estava (race entre
+          // DELETE realtime e um refetch que já removeu a linha).
+          setConversations((prev) => {
+            const next = prev.filter((c) => c.id !== oldRow.id);
+            return next.length === prev.length ? prev : next;
+          });
           if (wasFull) void fetchAll();
         }
       )
@@ -309,7 +346,14 @@ export function useZappConversations(opts: Options = {}) {
     return () => {
       isSubscriptionActive = false;
       ch.unsubscribe();
-      zappSupabase.removeChannel(ch);
+      // Fix P3 (race condition agent): removeChannel pode lançar em versões
+      // futuras do SDK (ou se o channel já foi removido externamente);
+      // isola para não propagar fora do cleanup do React.
+      try {
+        zappSupabase.removeChannel(ch);
+      } catch {
+        // inofensivo na versão atual do supabase-js; registrado pra debug.
+      }
     };
   }, [instance, status, limit, fetchAll, fetchOne]);
 

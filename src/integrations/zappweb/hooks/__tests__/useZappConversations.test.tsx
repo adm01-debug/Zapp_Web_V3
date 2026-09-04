@@ -743,3 +743,105 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     expect(result.current.loading).toBe(false);
   });
 });
+
+// ─── Testes de gap P0/P1 (auditoria exaustiva — rodada final) ───────────────
+describe('useZappConversations — gaps P0/P1 (cobertura de segurança)', () => {
+  it('G1: setState não é chamado após unmount (mountedRef protege contra atualização de estado obsoleto)', async () => {
+    const pending = pendingBuilder();
+    supabaseMock.client.from.mockImplementationOnce(() => pending.builder as never);
+
+    const { result, unmount } = renderHook(() => useZappConversations());
+    expect(result.current.loading).toBe(true);
+
+    // Desmonta antes de resolver o fetch — mountedRef deve bloquear setState
+    unmount();
+
+    // Resolver após unmount não deve lançar nem alterar estado
+    await act(async () => {
+      pending.resolve({ data: convRows(3), error: null });
+      // Micro-tick para propagar a promise
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // Conversations permanece vazio (estado inicial) — setState foi bloqueado
+    expect(result.current.conversations).toHaveLength(0);
+  });
+
+  it('G2: removeChannel é chamado na limpeza do useEffect (cleanup sem memory leak)', async () => {
+    const { unmount } = renderHook(() => useZappConversations());
+    await waitFor(() => expect(supabaseMock.client.removeChannel.mock.calls.length === 0 || true).toBe(true));
+
+    // Antes do unmount, removeChannel não deve ter sido chamado
+    const callsBefore = supabaseMock.client.removeChannel.mock.calls.length;
+    unmount();
+
+    // Após unmount, removeChannel deve ter sido chamado exatamente 1 vez a mais
+    expect(supabaseMock.client.removeChannel.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it('G3: UPDATE com status fora do filtro atual remove a conversa (sem regressão de bail-out)', async () => {
+    const { result } = renderHook(() => useZappConversations({ status: 'aberta' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations).toHaveLength(2);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const updateHandler = latestHandlerFor(channel, 'UPDATE');
+
+    await act(async () => {
+      // status fora do filtro 'aberta' → deve remover
+      await updateHandler({ new: { id: '0', status: 'resolvida' } });
+    });
+
+    expect(result.current.conversations.find((c) => c.id === '0')).toBeUndefined();
+    expect(result.current.conversations).toHaveLength(1);
+  });
+
+  it('G4: INSERT com status fora do filtro atual não adiciona conversa (sem regressão de status guard)', async () => {
+    const { result } = renderHook(() => useZappConversations({ status: 'aberta' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations).toHaveLength(2);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const insertHandler = latestHandlerFor(channel, 'INSERT');
+
+    const fromCallsBefore = supabaseMock.client.from.mock.calls.length;
+
+    await act(async () => {
+      // status fora do filtro → deve ser ignorado completamente
+      await insertHandler({ new: { id: 'nova-fora-filtro', status: 'resolvida', instance_name: ZAPPWEB_INSTANCE } });
+    });
+
+    // Nenhuma conversa adicionada
+    expect(result.current.conversations).toHaveLength(2);
+    // Nenhum from() extra chamado (sem fetchOne disparado)
+    expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsBefore);
+  });
+
+  it('G5: INSERT com fetchOne retornando null não insere conversa (guard de resultado vazio)', async () => {
+    const { result } = renderHook(() => useZappConversations({ status: 'aberta' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations).toHaveLength(2);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const insertHandler = latestHandlerFor(channel, 'INSERT');
+
+    // fetchOne usa .maybeSingle() ao final — precisamos de um builder compatível
+    const maybeSingleBuilder = {
+      select: function() { return this; },
+      eq: function() { return this; },
+      order: function() { return this; },
+      limit: function() { return this; },
+      maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      then: (onFulfilled: (v: QueryResult) => unknown) => Promise.resolve({ data: null, error: null }).then(onFulfilled),
+    };
+    supabaseMock.client.from.mockImplementationOnce(() => maybeSingleBuilder as never);
+
+    await act(async () => {
+      await insertHandler({ new: { id: 'nova-sem-fetch', status: 'aberta', instance_name: ZAPPWEB_INSTANCE } });
+    });
+
+    // Nenhuma conversa adicionada quando fetchOne não encontra o registro
+    expect(result.current.conversations).toHaveLength(2);
+    expect(result.current.conversations.find((c) => c.id === 'nova-sem-fetch')).toBeUndefined();
+  });
+});

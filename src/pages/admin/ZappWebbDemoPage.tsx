@@ -144,7 +144,7 @@ function MessageBubble({ msg }: { msg: EvolutionMessage }) {
 
 /** Default export. */
 export default function ZappWebbDemoPage() {
-  const { conversations, loading, markAsRead } = useZappConversations();
+  const { conversations, loading, error: conversationsError, refetch: refetchConversations, markAsRead } = useZappConversations();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -160,6 +160,7 @@ export default function ZappWebbDemoPage() {
     loadingMore,
     hasMore,
     error: messagesError,
+    refetch: refetchMessages,
   } = useZappMessages({
     remoteJid: active?.remote_jid ?? null,
   });
@@ -218,6 +219,13 @@ export default function ZappWebbDemoPage() {
             {loading ? (
               <div className="p-6 text-center">
                 <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+              </div>
+            ) : conversationsError ? (
+              <div className="p-6 text-center">
+                <p className="mb-2 text-xs text-destructive">{conversationsError}</p>
+                <Button size="sm" variant="outline" onClick={() => void refetchConversations()}>
+                  Tentar novamente
+                </Button>
               </div>
             ) : conversations.length === 0 ? (
               <div className="p-6 text-center text-xs text-muted-foreground">
@@ -335,7 +343,12 @@ export default function ZappWebbDemoPage() {
                           bloco acima (gated por hasMore && messages.length > 0), uma falha
                           na 1ª carga (messages ainda vazio) nunca aparecia pro usuário. */}
                       {messagesError && (
-                        <p className="text-xs text-destructive">{messagesError}</p>
+                        <div className="flex flex-col items-center gap-1">
+                          <p className="text-xs text-destructive">{messagesError}</p>
+                          <Button size="sm" variant="outline" onClick={() => void refetchMessages()}>
+                            Tentar novamente
+                          </Button>
+                        </div>
                       )}
                       {messages.map((m) => <MessageBubble key={m.id} msg={m} />)}
                     </>
