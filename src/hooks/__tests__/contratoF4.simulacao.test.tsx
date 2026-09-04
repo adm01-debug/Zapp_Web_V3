@@ -26,6 +26,12 @@ vi.mock('@/integrations/supabase/client', () => ({
         upsertMock(table, payload, opts);
         return Promise.resolve({ error: null });
       },
+      select: vi.fn().mockReturnValue({
+        gte: vi.fn().mockReturnValue({
+          order: vi.fn().mockResolvedValue({ data: [], error: null }),
+        }),
+        order: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }),
     }),
   },
 }));
