@@ -211,6 +211,14 @@ export function useZappConversations(opts: Options = {}) {
   }, [instance, status]);
 
   useEffect(() => {
+    // Achado do coderabbit (PR #1514, rodada I): os handlers de INSERT/UPDATE
+    // são async e fecham sobre o `status`/`fetchOne` desta execução do efeito.
+    // ch.unsubscribe() no cleanup não cancela um callback que já começou —
+    // se instance/status mudar enquanto um `await fetchOne(...)` está em voo,
+    // o callback da assinatura VELHA ainda completa e pode inserir uma
+    // conversa do filtro antigo no estado atual. isSubscriptionActive garante
+    // que só o callback da assinatura vigente aplica o resultado.
+    let isSubscriptionActive = true;
     void fetchAll();
 
     const insertIfAbsent = (row: EvolutionConversation) => {
@@ -236,6 +244,7 @@ export function useZappConversations(opts: Options = {}) {
           const row = payload.new as { id?: string; status?: string };
           if (!row.id || row.status !== status) return;
           const full = await fetchOne(row.id);
+          if (!isSubscriptionActive) return;
           if (full) insertIfAbsent(full);
         }
       )
@@ -273,6 +282,7 @@ export function useZappConversations(opts: Options = {}) {
           // só essa linha, nunca a lista inteira.
           if (row.status !== status) return;
           const full = await fetchOne(row.id);
+          if (!isSubscriptionActive) return;
           if (full) insertIfAbsent(full);
         }
       )
@@ -297,6 +307,7 @@ export function useZappConversations(opts: Options = {}) {
       )
       .subscribe();
     return () => {
+      isSubscriptionActive = false;
       ch.unsubscribe();
       zappSupabase.removeChannel(ch);
     };

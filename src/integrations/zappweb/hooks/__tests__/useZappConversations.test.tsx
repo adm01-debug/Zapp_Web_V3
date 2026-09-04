@@ -268,6 +268,63 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     expect(fetchOneBuilder.eq).toHaveBeenCalledWith('status', 'aberta');
   });
 
+  it('achado do coderabbit (PR #1514, rodada I): troca de status durante um INSERT em voo não insere conversa do filtro antigo', async () => {
+    const { result, rerender } = renderHook(
+      (props: { status?: 'aberta' | 'arquivada' }) => useZappConversations(props),
+      { initialProps: { status: 'aberta' } as { status?: 'aberta' | 'arquivada' } }
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const insertHandler = latestHandlerFor(channel, 'INSERT'); // handler da assinatura ANTIGA (status: 'aberta')
+
+    // fetchOne() da conversa nova fica pendente — dá tempo da troca de status
+    // rodar o cleanup do efeito (unsubscribe) ANTES do handler terminar.
+    let resolveFetchOne!: (v: { data: unknown; error: unknown }) => void;
+    const pendingFetchOne = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveFetchOne = resolve;
+    });
+    const fetchOneBuilder = {
+      select: () => fetchOneBuilder,
+      eq: () => fetchOneBuilder,
+      maybeSingle: () => pendingFetchOne,
+    };
+    const emptyBuilder = {
+      select: () => emptyBuilder,
+      eq: () => emptyBuilder,
+      order: () => emptyBuilder,
+      limit: () => emptyBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        Promise.resolve({ data: [], error: null }).then(onFulfilled),
+    };
+    // Ordem das próximas 2 chamadas a from(): 1) fetchOne() do handler velho
+    // (fica pendente); 2) fetchAll() disparado pela nova assinatura no
+    // rerender (nenhuma conversa arquivada — resultado real esperado).
+    supabaseMock.client.from
+      .mockImplementationOnce(() => fetchOneBuilder as never)
+      .mockImplementationOnce(() => emptyBuilder as never);
+
+    let insertHandled: Promise<void> | undefined;
+    act(() => {
+      insertHandled = insertHandler({ new: { id: 'straggler', status: 'aberta' } }) as unknown as Promise<void>;
+    });
+
+    // Troca o filtro ANTES do fetchOne resolver — dispara cleanup (unsubscribe
+    // do canal velho) e re-assina com um novo closure de status.
+    rerender({ status: 'arquivada' });
+    await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual([]));
+
+    // Só agora o fetchOne da assinatura VELHA resolve — sem o guard de
+    // assinatura ativa, isso inseriria 'straggler' na lista mesmo depois da
+    // troca de filtro (a conversa nunca deveria aparecer sob status: 'arquivada').
+    await act(async () => {
+      resolveFetchOne({ data: { ...CONV_FIXTURE, id: 'straggler', status: 'aberta' }, error: null });
+      await insertHandled;
+    });
+
+    expect(result.current.conversations.find((c) => c.id === 'straggler')).toBeUndefined();
+  });
+
   it('achado do cubic (PR #1514): DELETE com a janela cheia dispara refetch pra repor a vaga no top-N', async () => {
     supabaseMock.convRows.length = 0;
     supabaseMock.convRows.push(...convRows(2));
