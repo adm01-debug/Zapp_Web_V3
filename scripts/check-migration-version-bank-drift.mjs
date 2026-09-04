@@ -25,11 +25,12 @@
  */
 
 import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 // --- Localização das migrations ---
-const REPO_ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const MIGRATIONS_DIR = join(REPO_ROOT, 'supabase', 'migrations');
 const PREFIX_LEN = 14; // 14-char timestamp: YYYYMMDDHHMMSS
 
