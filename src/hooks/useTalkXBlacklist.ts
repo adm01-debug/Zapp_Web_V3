@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fromTable } from '@/lib/supabaseHelpers';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth';
 
 export interface BlacklistEntry {
   id: string;
@@ -39,6 +40,7 @@ interface BlacklistQueryBuilder {
 const blacklistQuery = fromTable('talkx_blacklist') as unknown as BlacklistQueryBuilder;
 
 export function useTalkXBlacklist(showAddDialog: boolean) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: blacklist = [], isLoading } = useQuery({
@@ -50,6 +52,7 @@ export function useTalkXBlacklist(showAddDialog: boolean) {
       if (error) throw error;
       return data ?? [];
     },
+    enabled: !!user,
     staleTime: Infinity,
   });
 
@@ -63,7 +66,7 @@ export function useTalkXBlacklist(showAddDialog: boolean) {
         .order('name');
       return data || [];
     },
-    enabled: showAddDialog,
+    enabled: !!user && showAddDialog,
     staleTime: 300_000,
   });
 

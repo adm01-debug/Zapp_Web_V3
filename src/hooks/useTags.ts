@@ -33,6 +33,7 @@ export function useTags() {
   } = useQuery({
     queryKey: queryKeys.tags.all(),
     staleTime: Infinity,
+    enabled: !!user,
     queryFn: async () => {
       const { data: tagsData, error: tagsError } = await supabase
         .from('tags')
