@@ -155,12 +155,21 @@ export function useZappConversations(opts: Options = {}) {
               log.warn('[useZappConversations] retry após erro (refetch concorrente)', e);
               continue;
             }
-            // Achado do cubic: a última tentativa não tem mais iteração pra
-            // "continue" — sem isso, o pedido concorrente era perdido do
-            // mesmo jeito. Agenda mais uma rodada em vez de propagar o erro.
-            log.warn('[useZappConversations] última tentativa falhou com refetch concorrente pendente — agenda nova rodada', e);
-            needsFollowUpFetch = true;
-            break;
+            // Achado do cubic (2ª rodada): agendar rodada extra aqui sem o
+            // mesmo teto do caminho de sucesso reabria o risco original —
+            // eventos realtime sustentados + falhas intermitentes podiam
+            // encadear follow-ups indefinidamente. Só agenda na 1ª carga
+            // (mesma proteção de hasLoadedOnceRef); depois de já termos dado
+            // real, propaga o erro normalmente — os patches locais bastam.
+            if (!hasLoadedOnceRef.current) {
+              log.warn(
+                '[useZappConversations] última tentativa falhou com refetch concorrente pendente (1ª carga) — agenda nova rodada',
+                e
+              );
+              hasLoadedOnceRef.current = true;
+              needsFollowUpFetch = true;
+              break;
+            }
           }
           log.error('[useZappConversations]', e);
           setError(e instanceof Error ? e.message : String(e));

@@ -42,6 +42,34 @@ function convRows(n: number) {
   return Array.from({ length: n }, (_, i) => ({ ...CONV_FIXTURE, id: `${i}` }));
 }
 
+// Nitpick do cubic: helpers de builder duplicados inline em cada teste de
+// corrida — hoisted aqui pra reuso (não têm estado próprio).
+type QueryResult = { data: unknown; error: unknown };
+function pendingBuilder() {
+  let resolve!: (v: QueryResult) => void;
+  const promise = new Promise<QueryResult>((r) => {
+    resolve = r;
+  });
+  const builder = {
+    select: () => builder,
+    eq: () => builder,
+    order: () => builder,
+    limit: () => builder,
+    then: (onFulfilled: (v: QueryResult) => unknown) => promise.then(onFulfilled),
+  };
+  return { builder, resolve };
+}
+function syncBuilder(data: unknown) {
+  const builder = {
+    select: () => builder,
+    eq: () => builder,
+    order: () => builder,
+    limit: () => builder,
+    then: (onFulfilled: (v: QueryResult) => unknown) => Promise.resolve({ data, error: null }).then(onFulfilled),
+  };
+  return builder;
+}
+
 beforeEach(() => {
   // Review do cubic (PR #1514): channel() usa mockReturnValue — 1 objeto único
   // reutilizado pra suíte inteira — então os spies aninhados (.on/.subscribe)
@@ -482,21 +510,6 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']); // 1ª carga já concluída
 
-    const pendingBuilder = () => {
-      let resolve!: (v: { data: unknown; error: unknown }) => void;
-      const promise = new Promise<{ data: unknown; error: unknown }>((r) => {
-        resolve = r;
-      });
-      const builder = {
-        select: () => builder,
-        eq: () => builder,
-        order: () => builder,
-        limit: () => builder,
-        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => promise.then(onFulfilled),
-      };
-      return { builder, resolve };
-    };
-
     const attemptA = pendingBuilder();
     const attemptB = pendingBuilder();
     const attemptC = pendingBuilder();
@@ -535,32 +548,6 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
   });
 
   it('achado do cubic (PR #1514, P1): esgotar as 3 tentativas na 1ª carga aplica o melhor resultado e agenda uma rodada extra', async () => {
-    const pendingBuilder = () => {
-      let resolve!: (v: { data: unknown; error: unknown }) => void;
-      const promise = new Promise<{ data: unknown; error: unknown }>((r) => {
-        resolve = r;
-      });
-      const builder = {
-        select: () => builder,
-        eq: () => builder,
-        order: () => builder,
-        limit: () => builder,
-        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => promise.then(onFulfilled),
-      };
-      return { builder, resolve };
-    };
-    const syncBuilder = (data: unknown) => {
-      const builder = {
-        select: () => builder,
-        eq: () => builder,
-        order: () => builder,
-        limit: () => builder,
-        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
-          Promise.resolve({ data, error: null }).then(onFulfilled),
-      };
-      return builder;
-    };
-
     const attemptA = pendingBuilder();
     const attemptB = pendingBuilder();
     const attemptC = pendingBuilder();
@@ -598,46 +585,23 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     );
   });
 
-  it('achado do cubic (PR #1514, P2): a ÚLTIMA tentativa falhando com refetch concorrente pendente também agenda nova rodada (não perde o pedido)', async () => {
+  it('achado do cubic (PR #1514, 2ª rodada): a ÚLTIMA tentativa falhando com refetch concorrente pendente numa RECARGA propaga o erro (não agenda rodada extra — evita loop sem fim)', async () => {
     const { result } = renderHook(() => useZappConversations());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']); // 1ª carga já concluída
 
-    const pendingBuilder = () => {
-      let resolve!: (v: { data: unknown; error: unknown }) => void;
-      const promise = new Promise<{ data: unknown; error: unknown }>((r) => {
-        resolve = r;
-      });
-      const builder = {
-        select: () => builder,
-        eq: () => builder,
-        order: () => builder,
-        limit: () => builder,
-        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => promise.then(onFulfilled),
-      };
-      return { builder, resolve };
-    };
-    const syncBuilder = (data: unknown) => {
-      const builder = {
-        select: () => builder,
-        eq: () => builder,
-        order: () => builder,
-        limit: () => builder,
-        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
-          Promise.resolve({ data, error: null }).then(onFulfilled),
-      };
-      return builder;
-    };
-
+    const fromCallsBeforeRefetch = supabaseMock.client.from.mock.calls.length; // 1 (carga inicial)
     const attemptA = pendingBuilder();
     const attemptB = pendingBuilder();
     const attemptC = pendingBuilder(); // última tentativa — vai FALHAR
-    const followUpRows = convRows(2).map((c) => ({ ...c, id: `atual-${c.id}` }));
+    // Só 3 mocks: numa RECARGA (hasLoadedOnceRef já true), a última tentativa
+    // falhando NÃO agenda uma 4ª chamada — achado do cubic: sem esse teto, um
+    // fluxo de eventos + falhas intermitentes sustentado podia encadear
+    // follow-ups indefinidamente. Depois da 1ª carga, propaga o erro normal.
     supabaseMock.client.from
       .mockImplementationOnce(() => attemptA.builder as never)
       .mockImplementationOnce(() => attemptB.builder as never)
-      .mockImplementationOnce(() => attemptC.builder as never)
-      .mockImplementationOnce(() => syncBuilder(followUpRows) as never);
+      .mockImplementationOnce(() => attemptC.builder as never);
 
     let refetchDone: Promise<void> | undefined;
     act(() => {
@@ -658,12 +622,10 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
       await refetchDone;
     });
 
-    // A última tentativa falhou COM um refetch concorrente pendente — não
-    // pode propagar esse erro específico (perderia o pedido); agenda mais
-    // uma rodada, que já deve ter trazido o estado atual sem erro.
-    await waitFor(() =>
-      expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1'])
-    );
-    expect(result.current.error).toBeNull();
+    // Erro propagado normalmente (não perdido em silêncio) — e sem nenhuma
+    // 4ª chamada a from() (nenhum follow-up agendado).
+    expect(result.current.error).toBe('falha na última tentativa');
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']);
+    expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsBeforeRefetch + 3);
   });
 });

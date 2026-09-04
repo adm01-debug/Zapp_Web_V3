@@ -41,6 +41,11 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
   const queryGenerationRef = useRef(0);
   useEffect(() => {
     queryGenerationRef.current += 1;
+    // Achado do cubic: sem isso, um erro de loadOlder() na conversa A
+    // (ex.: falha de rede) sobrevivia à troca pra conversa B — a mensagem de
+    // erro velha aparecia embaixo do botão da conversa nova até o fetchAll()
+    // de B resolver.
+    setError(null);
   }, [remoteJid, instance, limit]);
 
   const fetchAll = useCallback(async () => {
