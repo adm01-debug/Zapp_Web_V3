@@ -68,7 +68,6 @@ export interface UseMonitoringActionsResult {
 // Helper Functions
 // ═══════════════════════════════════════════════════════════
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const log = getLogger('useMonitoringManagement');
 const HEALTHY_STATUSES = ['connected', 'healthy'];
 

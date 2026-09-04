@@ -28,6 +28,7 @@ const TourContext = createContext<TourContextType | null>(null);
 export const TourContextProvider = TourContext.Provider;
 
 /** Returns the TourContext value; must be called inside a TourProvider or it throws. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook, não componente
 export function useTour(): TourContextType {
   const context = useContext(TourContext);
   if (!context) {
