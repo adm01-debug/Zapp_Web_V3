@@ -43658,27 +43658,27 @@ export type Database = {
           contact_id: string
           created_at: string
           id: string
-          sicoob_singular_id: string
+          sicoob_singular_id: string | null
           sicoob_user_id: string
-          sicoob_vendedor_id: string
+          sicoob_vendedor_id: string | null
           zappweb_agent_id: string | null
         }
         Insert: {
           contact_id: string
           created_at?: string
           id?: string
-          sicoob_singular_id: string
+          sicoob_singular_id?: string | null
           sicoob_user_id: string
-          sicoob_vendedor_id: string
+          sicoob_vendedor_id?: string | null
           zappweb_agent_id?: string | null
         }
         Update: {
           contact_id?: string
           created_at?: string
           id?: string
-          sicoob_singular_id?: string
+          sicoob_singular_id?: string | null
           sicoob_user_id?: string
-          sicoob_vendedor_id?: string
+          sicoob_vendedor_id?: string | null
           zappweb_agent_id?: string | null
         }
         Relationships: [

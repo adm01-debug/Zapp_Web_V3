@@ -125,6 +125,7 @@ export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Pro
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
+        data-testid="chat-scroller"
         className={cn('relative flex-1 overflow-y-auto overscroll-none', className)}
       >
         {header}
@@ -158,6 +159,7 @@ export const ChatScrollerV2 = forwardRef<ChatScrollerV2Handle, ChatScrollerV2Pro
         {!atBottom && newMessageCount > 0 && (
           <button
             type="button"
+            data-testid="new-message-indicator"
             className="animate-bounce-once absolute bottom-14 right-4 z-20 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
               const c = scrollContainerRef.current;

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook } from '@testing-library/react';
 
 const mockChannel = vi.hoisted(() => vi.fn());
 const mockRemoveChannel = vi.hoisted(() => vi.fn());
@@ -8,11 +9,14 @@ vi.mock('@/integrations/supabase/client', () => ({
     channel: (...args: unknown[]) => mockChannel(...args),
     removeChannel: (...args: unknown[]) => mockRemoveChannel(...args),
   },
-  // The hook short-circuits when Supabase isn't configured; the mock must
-  // expose these exports (added with the graceful-degradation work) or the
-  // hook throws "No isSupabaseConfigured export is defined on the mock".
   isSupabaseConfigured: true,
   warnSupabaseUnconfigured: vi.fn(),
+}));
+
+// Hook usa useAuth de @/hooks/useAuth para obter session.user.id
+// Sem userId o useEffect não cria canal nenhum → testes falhariam silenciosamente
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: vi.fn(() => ({ session: { user: { id: 'u-test' } } })),
 }));
 
 vi.mock('@/hooks/useNotificationSettings', () => ({
@@ -23,7 +27,7 @@ vi.mock('@/hooks/useNotificationSettings', () => ({
 }));
 
 vi.mock('sonner', () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
 
 vi.mock('@/utils/notificationSound', () => ({
@@ -34,17 +38,26 @@ vi.mock('@/utils/notificationSound', () => ({
 
 vi.mock('@/lib/logger');
 
-const { useRealtimeSentimentAlerts } = await import('@/hooks/useRealtimeSentimentAlerts');
-const { renderHook } = await import('@testing-library/react');
+import { useRealtimeSentimentAlerts } from '@/hooks/useRealtimeSentimentAlerts';
 
 describe('useRealtimeSentimentAlerts', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockChannel.mockReturnValue({
+  let channelInstance: ReturnType<typeof makeChanInstance>;
+
+  function makeChanInstance() {
+    return {
       on: vi.fn().mockReturnThis(),
       subscribe: vi.fn().mockReturnThis(),
-      unsubscribe: vi.fn().mockReturnThis(),
-    });
+      // unsubscribe precisa retornar Promise — hook chama .catch()
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    channelInstance = makeChanInstance();
+    mockChannel.mockReturnValue(channelInstance);
+    // removeChannel também pode receber .catch() implicitamente via Promise.resolve
+    mockRemoveChannel.mockResolvedValue(undefined);
   });
 
   it('returns null', () => {
@@ -52,18 +65,16 @@ describe('useRealtimeSentimentAlerts', () => {
     expect(result.current).toBeNull();
   });
 
-  it('subscribes to sentiment-alerts-realtime channel', () => {
+  it('subscribes to a sentiment-alerts channel', () => {
     renderHook(() => useRealtimeSentimentAlerts());
-    expect(mockChannel).toHaveBeenCalledWith('sentiment-alerts-realtime');
+    expect(mockChannel).toHaveBeenCalledWith(
+      expect.stringMatching(/^sentiment-alerts-u-test:/)
+    );
   });
 
   it('listens for INSERT events on zapp.sentiment_alerts', () => {
     const onMock = vi.fn().mockReturnThis();
-    mockChannel.mockReturnValue({
-      on: onMock,
-      subscribe: vi.fn().mockReturnThis(),
-      unsubscribe: vi.fn().mockReturnThis(),
-    });
+    channelInstance.on = onMock;
     renderHook(() => useRealtimeSentimentAlerts());
     expect(onMock).toHaveBeenCalledWith(
       'postgres_changes',
@@ -77,12 +88,6 @@ describe('useRealtimeSentimentAlerts', () => {
   });
 
   it('cleans up channel on unmount via removeChannel', () => {
-    const channelInstance = {
-      on: vi.fn().mockReturnThis(),
-      subscribe: vi.fn().mockReturnThis(),
-      unsubscribe: vi.fn().mockReturnThis(),
-    };
-    mockChannel.mockReturnValue(channelInstance);
     const { unmount } = renderHook(() => useRealtimeSentimentAlerts());
     unmount();
     expect(mockRemoveChannel).toHaveBeenCalledWith(channelInstance);
@@ -90,11 +95,7 @@ describe('useRealtimeSentimentAlerts', () => {
 
   it('calls subscribe on channel', () => {
     const subscribeMock = vi.fn().mockReturnThis();
-    mockChannel.mockReturnValue({
-      on: vi.fn().mockReturnThis(),
-      subscribe: subscribeMock,
-      unsubscribe: vi.fn().mockReturnThis(),
-    });
+    channelInstance.subscribe = subscribeMock;
     renderHook(() => useRealtimeSentimentAlerts());
     expect(subscribeMock).toHaveBeenCalled();
   });

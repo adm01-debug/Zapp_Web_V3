@@ -548,3 +548,110 @@ O Joaquim adicionou `src/lib/__tests__/featureFlags.test.ts` (commit `4d56f2d`) 
 | Required check `Contract Tests (Deno)` nunca reporta em PR só-.md | 🟠 Alto | Ajustar paths/always-report do workflow ou remover da protection — hoje PRs de docs só mergeiam via bypass admin |
 | Merge do #1402 com CI vermelho | 🟡 Info | Bypass consciente do dono (Quality diagnostics falhou em Install dependencies — falha ambiental); registrado como incidente de processo |
 | Working tree local em branch já-squashado (`fix/plano-100-execucao-2026-08-24`, 4 commits redundantes pós-#1401) | 🟠 Alto | Ressincronizar com `origin/main` após a sessão concorrente (backup/restore) concluir |
+
+---
+
+## Sessão 2026-09-02 — Auditoria técnica (PR #1483) + validação exaustiva pós-review
+
+### Fixes de segurança/dados aplicados direto em produção (com migration versionada)
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| RLS/RBAC materializada | `20260902040000` | 12 policies + 9 funções `SECURITY DEFINER` órfãs (existiam em produção sem arquivo) materializadas; `ops.safe_create_policy` tinha EXECUTE aberto para PUBLIC | ✅ |
+| `fn_sicoob_bridge_ingest_message` exposta | `20260902050000` | RPC `SECURITY DEFINER` com EXECUTE aberto para `authenticated` — qualquer usuário logado injetava contatos/mensagens forjados via PostgREST, contornando o secret HMAC do webhook | ✅ |
+| `sicoob_contact_mapping` NOT NULL | `20260902060000` | Contrato do webhook aceita `singular_id`/`vendedor_user_id` nulos, mas a tabela exigia NOT NULL — mensagem inteira era perdida (rollback) | ✅ |
+| `fn_sicoob_bridge_ingest_message` lookup NULL-unsafe | `20260902070000` | Achado cubic P1 + CodeRabbit, **confirmado ao vivo por reprodução real**: com `singular_id` NULL, `=` nunca casava e a 2ª mensagem do mesmo cooperado era rejeitada por `unique_violation` em `remote_jid`; fallback de telefone também podia virar NULL (falha NOT NULL) ou estourar `varchar(50)` com IDs longos (achado extra descoberto durante o próprio fix) | ✅ |
+| `rpc_upsert_contact` exposta | `20260902080000` | Mesma classe de vulnerabilidade do Sicoob: EXECUTE aberto para `authenticated`, guarda interna não verifica o contato-alvo, contornava HMAC de webhooks Evolution/WhatsApp Cloud | ✅ |
+| `fn_require_app_user` fail-open | `20260902090000` | Retornava sucesso silencioso quando `auth.uid()` é NULL em vez de bloquear — não explorado hoje (nenhuma RPC dependente exposta a `anon`), corrigido por design | ✅ |
+| Ledger incompleto | INSERT manual | `20260902040000` estava aplicada em produção mas nunca registrada em `supabase_migrations.schema_migrations` (nenhuma sessão anterior tinha rodado o INSERT) | ✅ |
+
+Validação: cada fix foi reproduzido (erro real) e depois confirmado corrigido via `DO $$ ... RAISE EXCEPTION ... END $$` em produção real (garante rollback atômico, sem gravar dado de teste). Metodologia usada porque a ferramenta MCP de SQL não devolve resultados intermediários de `BEGIN`/`COMMIT` em chamadas separadas.
+
+### Achados documentados, não corrigidos nesta sessão (decisão do dono)
+
+| Item | Severidade | Observação |
+|---|---|---|
+| `zapp.contacts` (view) descarta silenciosamente `contact_type`/`channel_type` no INSERT | 🟡 Média | O trigger `fn_contacts_view_insert_handler` nunca lê `NEW.contact_type` e não tem coluna para `channel_type` — contatos do Sicoob bridge são gravados como `channel_type='whatsapp'` (hardcoded na view), não `'internal_chat'` como a função pretende. Blast radius alto (trigger compartilhado por todos os canais) — precisa de auditoria própria antes de mexer. |
+| Falta UNIQUE em `sicoob_contact_mapping(sicoob_user_id, sicoob_singular_id)` | 🟡 Média | Race condition entre requisições concorrentes ainda possível (só resolvido o caso sequencial via `IS NOT DISTINCT FROM`) |
+| `EXCEPTION WHEN unique_violation` em `fn_sicoob_bridge_ingest_message` é dead code | ⚪ Baixa | `zapp.messages` é view com `ON CONFLICT DO NOTHING` no trigger — nunca lança `unique_violation` |
+| `acquire_idempotency_lock`/`check_duplicate_request`/`record_processed_request` aceitam `p_user_id` arbitrário | 🟡 Média | Sem validação contra `auth.uid()` — exige conhecer `request_id` de outro usuário para explorar |
+| `zapp_schema_snapshot.sql` gerado com `--no-privileges` | 🟠 Alto (processo) | O gate `zapp-schema-drift-gate.yml` nunca vai detectar GRANT/REVOKE — as correções de segurança desta sessão são estruturalmente invisíveis a esse gate, hoje e no futuro |
+| Commit de auto-regen do snapshot usa `[skip ci]` | 🟠 Alto (processo) | Se for o último commit da branch, zera os 6 required status checks no HEAD (branch protection com `enforce_admins: true` bloqueia merge). Sequência correta: sempre commitar código real (sem skip-ci) DEPOIS de qualquer regen automático, nunca antes |
+| FK-orphan policy em `evolution_whatsapp_status.contact_id` (14.780 linhas, 64 FKs `NO ACTION`) | — | Decisão explícita do dono: não fazer nada agora |
+
+### Metodologia desta sessão
+
+Auditoria em 2 fases: (1) 3 fixes de segurança/dados aplicados e commitados; (2) por pedido explícito do dono, 5 agentes especializados rodaram em paralelo para validar exaustivamente cada fix contra produção real (não só reler o código) — essa validação encontrou os 3 achados novos acima (bugs P1/P2 do Sicoob + `rpc_upsert_contact`) que nenhuma revisão anterior tinha pego, além do ledger incompleto e do PR bloqueado por `[skip ci]`.
+
+### Rodada 2 — 2ª leva de 5 agentes (bugs autoinfligidos da rodada 1 + 1 vulnerabilidade nova)
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| `fn_require_app_user` bloqueava `service_role` | `20260902110000` | O fix da rodada 1 (`090000`) tratava `auth.uid() IS NULL` como não-autorizado, mas chamadas via `service_role` também têm `auth.uid()=NULL` — quebrou as ~54 funções que dependem da guarda | ✅ |
+| `rpc_upsert_contact` REVOKE quebrou automação real | `20260902100000` (reverte `080000`) | A varredura da rodada 1 só checou `supabase/functions/`; 3 hooks do frontend (`useAutomationManagement.ts`, `useAutomations.ts`, `useAutomationSuggestions.ts`) chamam a RPC com sessão própria do usuário — GRANT restaurado, vulnerabilidade de ownership documentada como pendência aberta (ver abaixo) | ✅ (restaurado; guarda de ownership ainda não desenhada) |
+| `upsert_conversation_tags_atomic` — 3 bugs independentes | `20260902140000` | (1) EXECUTE para `authenticated` sem NENHUMA guarda; (2) `ON CONFLICT ... SET updated_at=now()` referenciava coluna inexistente; (3) tabela nunca teve UNIQUE em `(contact_id, tag_name)` — `ON CONFLICT` falhava desde a primeira chamada (0 linhas em produção, função nunca rodou com sucesso) | ✅ |
+| `fn_sicoob_bridge_ingest_message` — colisão de delimitador + overflow | `20260902120000` | Fallback de telefone concatenava com `\|` literal (colisão entre IDs que contenham `\|`); telefone real >34 chars não truncado estourava `varchar(50)` de `remote_jid` | ✅ |
+| `fn_sicoob_bridge_ingest_message` — notes NULL | `20260902130000` | Mesmo padrão de concatenação-com-NULL já corrigido para `phone` continuava em `notes` — perda silenciosa de contexto no CRM | ✅ |
+| Hardening pós-3ª review cubic | `20260902150000` | REVOKE explícito de PUBLIC/anon em `upsert_conversation_tags_atomic`/`fn_require_app_user` (defesa em profundidade p/ rebuild-from-scratch); truncamento de telefone (`left(...,34)`) podia colidir dois telefones reais diferentes com mesmo prefixo — trocado por hash md5 do telefone completo | ✅ |
+
+### Rodada 3 — 3ª leva de 5 agentes (validação exaustiva final, por pedido explícito e repetido do dono)
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| `ADD CONSTRAINT` sem guarda em `20260902140000` | `20260902140000` (editado in-place, PR ainda não mergeada) | Replay completo das 12 migrations 040000→150000 contra produção (dentro de `BEGIN;...;ROLLBACK;`) confirmou: Postgres não tem `ADD CONSTRAINT IF NOT EXISTS` — um rebuild-from-scratch que reexecutasse `140000` falharia com `42P07 constraint already exists`. Guardado com checagem em `pg_constraint`, mesmo padrão de `ops.safe_create_policy` | ✅ |
+| Hash anti-colisão do Sicoob mutilado pelo trigger de normalização de telefone | `20260902160000` | O hash hex (`'sic' \|\| md5(...)`) introduzido em `120000`/`150000` era destruído pelo trigger `trg_normalize_contact_phone` (já existente, roda em todo INSERT de contato): remove toda letra a-f e o prefixo `sic`, sobrando um resíduo de comprimento variável em `phone_number` — `remote_jid` ficava íntegro, mas `phone_number` não, e um resíduo de exatamente 10-11 dígitos viraria indistinguível de telefone real, arriscando colidir com `UNIQUE(phone_number, instance_name)` de um cliente já cadastrado no wpp2. Reproduzido ao vivo antes/depois. Fix: `translate()` mapeando hex a-f→0-5, gerando string puramente numérica de 30 chars fixos — o trigger vira no-op sobre o valor | ✅ |
+| E2E dos 4 call sites de `rpc_upsert_contact` | — (sem fix, achado de risco) | Confirmado que nenhum dos 4 call sites tem o mesmo bug de mismatch de parâmetro do `ai-router` — todos funcionam. Mas a simulação (usuário A cria tag, usuário B sem nenhuma relação sobrescreve a mesma linha só sabendo o `remote_jid`) **demonstrou na prática** a vulnerabilidade de ownership já documentada como pendência — deixa de ser teórica | ⚠️ Pendência de design confirmada, não corrigida (decisão do dono) |
+| Drift-check desatualizado | — (processo, não migration) | Snapshot `zapp_schema_snapshot.sql` ficou 1 migration atrás (150000 commitada depois do último regen) — disparado `workflow_dispatch` de `zapp-schema-drift-gate.yml` com `regen=true` para corrigir | ✅ (regen disparado) |
+| Varredura ampla de RPCs, idempotência do lote completo, catálogo/tipos/CI | — | Sem novos achados de segurança além dos já listados; catálogo (`generate-schema-catalog.mjs --check`) e lint (`lint-migrations.mjs`) passam limpos; truth table função×role×ACL sem divergência entre banco vivo e última migration de cada função; 6 checks obrigatórios da PR #1483 verdes no HEAD | ✅ |
+
+### Rodada 3 (continuação) — varredura ampla de RPCs sem guarda, 6 vulnerabilidades críticas novas
+
+Agente dedicado ampliou a varredura além do padrão anterior (funções ligadas ao secret HMAC de webhook) para TODAS as `SECURITY DEFINER` de `zapp` com `EXECUTE` para `authenticated` que escrevem dado sensível (~313 funções reduzidas a ~40 sem guarda real, priorizadas por blast radius). **Incidente durante o teste**: uso de `supabase_db_transaction` (auto-commit) alterou de fato um negócio real (`8e1d896f-3b69-42d3-981c-ffac8a77f165`, R$8.500) — revertido e confirmado independentemente nesta sessão (stage/task/fila Bitrix, sem resíduo além do `updated_at` inevitável).
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| `bulk_update_lead_status` | `20260902170000` | Zero checagem, nem `fn_require_app_user()` — qualquer sessão sem app-user válido (nem `authenticated` de verdade) conseguia mudar `lead_status` de qualquer contato em lote | ⚠️ Piso mínimo adicionado (exige app-user válido); **qualquer agente autenticado continua podendo mudar `lead_status` de contato alheio** — sem checagem de ownership, achado ainda real (ver pendência abaixo) |
+| `grant_lgpd_consent` / `revoke_lgpd_consent` | `20260902170000` | Zero checagem — nem exigia app-user válido | ⚠️ Piso mínimo adicionado; **qualquer agente autenticado continua podendo forjar consentimento LGPD de contato alheio** — mesma pendência de ownership |
+| `rpc_complete_task` | `20260902170000` + `20260902180000` | Zero checagem, e `completed_by` era forjável (parâmetro livre) | ⚠️ Piso mínimo adicionado + `completed_by` agora deriva de `auth.uid()` (não forjável); **qualquer agente autenticado continua podendo completar tarefa alheia** — mesma pendência de ownership |
+| `manage_department_member` (overload 4 args) | `20260902170000` | Checagem de permissão usava `_admin_user_id`, parâmetro livre do chamador (mesma classe de bug de impersonação já corrigida 3x nesta sessão) — reproduzido ao vivo (agente comum + UUID de admin real no parâmetro passou pela checagem) | ✅ Corrigido de verdade — exige `is_admin_or_supervisor()` do chamador REAL (`auth.uid()`), não do parâmetro |
+| `manage_department_member` (overload 5 args) | `20260902170000` | Zero checagem nenhuma — reatribui `department_id` de qualquer perfil | ✅ Corrigido de verdade — mesma guarda `is_admin_or_supervisor()` |
+| `rpc_delete_message`, `rpc_change_deal_stage`/`rpc_move_deal`/`rpc_upsert_deal`, `rpc_purge_contact_intelligence`, `bulk_update_lead_status`, `grant_lgpd_consent`/`revoke_lgpd_consent`, `rpc_complete_task` | — (não corrigido) | Todas já têm `fn_require_app_user()`, mas NENHUMA checa posse/atribuição do registro-alvo — qualquer agente autenticado apaga mensagem de outro, move negócio não atribuído a si, purga inteligência de IA de qualquer contato, muda lead status/consentimento LGPD/tarefa de qualquer contato alheio | ⚠️ Pendência de modelo de autorização, decisão do dono (times colaboram em registros de outros agentes, ou deve ser restrito ao dono/admin?) — **NÃO tratar os itens desta linha como corrigidos só porque têm `fn_require_app_user()`** |
+| `conversation_transfers` (5 funções), `rpc_associate_label`/`rpc_upsert_label`/`rpc_create_task`/`rpc_upsert_task`, RPCs de `email_app` | — (não corrigido) | Zero checagem, mas 0 linhas em produção hoje — risco latente, não explorado em tráfego real | ⚪ Documentado, não corrigido |
+| `anonymize_contacts_batch`, `delete_contact_completely` | — (não corrigido) | Zero checagem, mas já quebradas por bug de schema preexistente (não exploráveis no caminho normal hoje) — viram arma sem guarda se esse bug for corrigido sem adicionar checagem | ⚪ Documentado, não corrigido |
+
+**Correção de precisão (achado do cubic, confiança 10, sobre a própria tabela acima):** o ✅ original em `bulk_update_lead_status`/`grant_lgpd_consent`/`revoke_lgpd_consent`/`rpc_complete_task` dava a entender que a vulnerabilidade estava fechada — não estava. `fn_require_app_user()` só exige que o chamador seja um app-user válido (tenha perfil + role/workspace), não que ele tenha qualquer relação com o registro-alvo. Essas 4 funções (mais as já listadas na linha de pendência) continuam permitindo que qualquer agente autenticado altere dado de qualquer outro. Tabela corrigida acima para refletir isso explicitamente.
+
+Testado ao vivo: agente comum tentando a impersonação via `_admin_user_id` em `manage_department_member` agora recebe `Permissão insuficiente`; o mesmo admin real chamando por si mesmo passa a checagem (falha depois só por `zapp.departments` estar vazia); nenhuma mutação real aconteceu em nenhum teste pós-fix (confirmado sem resíduo em `zapp.profiles`).
+
+### Rodada 3 (continuação) — review coderabbit: overwrite em replay + impersonação em rpc_complete_task
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| `fn_sicoob_bridge_ingest_message` — UPDATE do contato existente não NULL-safe | `20260902180000` | Reproduzido ao vivo: contato criado com `name`/`company` corretos, depois um replay do MESMO `p_message_id` com payload NULL sobrescreveu `name`→'Sem nome' e `company`→NULL — perda real de dado já gravado no CRM | ✅ |
+| `fn_sicoob_bridge_ingest_message` — detecção de duplicata é código morto | `20260902180000` | Já documentado nesta sessão que `EXCEPTION WHEN unique_violation` nunca dispara (view com `ON CONFLICT DO NOTHING`); isso significa que TODO replay executava o UPDATE do contato antes de qualquer checagem de duplicata. Fix: checagem real de idempotência no início da função via `SELECT` em `zapp.messages` por `external_id` — retorna `idempotent=true` sem tocar no contato | ✅ |
+| Achado extra durante o teste do fix acima: `zapp.messages` também descarta `channel_type` no INSERT | `20260902180000` | Mesmo bug já documentado para `zapp.contacts` (view ignora o valor passado) — `channel_type` gravado sempre como `'whatsapp'` literal, nunca `'internal_chat'`. Descoberto porque a checagem de idempotência inicial (filtrando por `channel_type='internal_chat'`) nunca batia; corrigida para checar só por `external_id` | ✅ (idempotência), ⚪ mesmo bug de view já documentado, não corrigido no trigger compartilhado |
+| `rpc_complete_task` — `completed_by` forjável | `20260902180000` | Gravava `p_completed_by` (texto livre do chamador) direto no campo de auditoria — qualquer autenticado forjava quem completou a tarefa. Sem callers reais (mesmo achado da `170000`); fix usa `auth.uid()::text` como valor principal, parâmetro só como fallback | ✅ |
+| `v_sicoob_user_id` usa `p_message_id` como chave quando `p_sender_id` é NULL | — (não corrigido) | Cada mensagem sem `sender_id` gera uma chave DIFERENTE, nunca reencontrando o mapping do mesmo remetente — mesma classe da pendência já registrada de UNIQUE em `sicoob_contact_mapping`. Requer decisão de design (derivar chave estável do telefone quando existe; como tratar remetente sem nenhum identificador confiável) | ⚠️ Pendência de design, backlog do Joaquim |
+
+Testado ao vivo: replay adversarial (mesmo `message_id`, payload NULL) agora retorna `idempotent=true` sem alterar `name`/`company`; mensagem legítima nova do mesmo remetente com campo NULL preserva o dado existente em vez de apagar.
+
+### Rodada 3 (continuação) — review cubic sobre o próprio fix de idempotência: soft-delete + concorrência
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| Checagem de idempotência não via mensagens soft-deletadas | `20260902190000` | A checagem de `20260902180000` consultava `zapp.messages` (view, filtra `WHERE deleted_at IS NULL`) — uma mensagem soft-deletada (via `DELETE`, restrito a admin/supervisor) ficava invisível, então um replay dela não era detectado como duplicata. Reproduzido ao vivo: mensagem criada, soft-deletada, replay com payload divergente não detectado (idempotência retornava `false`), embora o conteúdo físico da mensagem tenha permanecido intacto (o handler da view já preserva o original via `ON CONFLICT DO NOTHING`) e o contato não tenha sido corrompido (só tocado à toa, graças ao NULL-safe já aplicado). Fix: checagem agora consulta a tabela FÍSICA (`evo.evolution_messages`) direto, sem o filtro de `deleted_at` | ✅ |
+| Race condition entre requisições verdadeiramente concorrentes | — (não corrigido) | Confirmado pelo cubic e pelo coderabbit: duas transações concorrentes podem passar pela checagem de `SELECT` antes de qualquer uma inserir a mensagem, ambas prosseguindo para alterar/criar o contato. Mesma classe já registrada (falta de lock/UNIQUE em `sicoob_contact_mapping`) — não vou empilhar mais uma correção parcial de concorrência sem desenhar a serialização (advisory lock ou reserva atômica) de forma unificada para as duas races da mesma função | ⚠️ Pendência de design, backlog do Joaquim |
+
+Testado ao vivo: mensagem soft-deletada + replay agora retorna `idempotent=true` sem tocar no contato (`updated_at` inalterado); cenário de replay normal (sem soft-delete) continua funcionando sem regressão.
+
+### Rodada 3 (continuação) — review cubic sobre o fix anterior: colisão cross-instância
+
+| Item | Migration | Achado | Status |
+|---|---|---|---|
+| Checagem de idempotência sem filtro de `instance_name` | `20260902200000` | A checagem de `20260902190000` filtrava só por `message_id`, mas a chave física real de `evo.evolution_messages` é composta (`message_id`, `instance_name`) — `message_id` sozinho não é único entre canais/instâncias diferentes (wpp2, comercial_01-08, financeiro, etc). Um `message_id` do Sicoob (string arbitrária do sistema deles) que coincidisse por acaso com o de uma mensagem real de OUTRO canal seria marcado como duplicata e devolveria o contato ALHEIO daquela mensagem, nunca criando o contato Sicoob correto. Confirmado via `pg_get_functiondef` que o INSERT desta função sempre grava `instance_name='wpp2'` (fallback do handler da view). Fix: checagem agora filtra também por `instance_name='wpp2'`, batendo exatamente com o que a função grava | ✅ |
+
+Testado ao vivo: inserida mensagem fake em outra instância (`financeiro`) com o mesmo `message_id` de um teste Sicoob — antes do fix teria colidido; depois do fix, a função corretamente ignora a mensagem de outro canal e cria/atualiza o contato Sicoob certo.
+
+### Metodologia das rodadas 2 e 3
+
+Por pedido explícito e repetido do dono ("SEJA EXAUSTIVO E MINUCIOSO"), cada rodada rodou 5 agentes especializados em paralelo, cada um focado num ângulo diferente (idempotência do lote completo, varredura ampla de RPCs sem guarda, teste E2E dos callers reais, matriz combinatória adversarial, consolidação de catálogo/CI). Cada achado real foi reproduzido ao vivo (erro real antes do fix) e reconfirmado corrigido depois, sem deixar dado de teste residual em produção. As rodadas 2 e 3 encontraram, cada uma, pelo menos 1 bug real que a rodada anterior não tinha pego — inclusive 2 regressões autoinfligidas pelos próprios fixes da rodada 1 (`fn_require_app_user` bloqueando `service_role`; `rpc_upsert_contact` quebrando automação real do frontend).

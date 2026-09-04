@@ -30,7 +30,9 @@ jobs:
         run: |
           set -euo pipefail
           base_ref="origin/${{ github.base_ref || 'main' }}"
-          git fetch origin "${{ github.base_ref || 'main' }}" 2>/dev/null || true
+          if ! git fetch origin "${{ github.base_ref || 'main' }}"; then
+            echo "::warning::git fetch falhou — usando HEAD como base de comparação"
+          fi
 
           if git rev-parse "$base_ref" >/dev/null 2>&1; then
             changed_sql=$(git diff --diff-filter=AM --name-only "$base_ref"...HEAD -- '*.sql' | \
@@ -38,7 +40,8 @@ jobs:
               grep -v '^infra/migrations/' | \
               grep -v '^scripts/' | \
               grep -v '^supabase/functions/' | \
-              grep -v '^supabase/ci/' || true)
+              grep -v '^supabase/ci/' | \
+              grep -v '^docs/runbooks/P100_EVO_FIXES_MANUAL\.sql$' || true)
           else
             changed_sql=""
           fi

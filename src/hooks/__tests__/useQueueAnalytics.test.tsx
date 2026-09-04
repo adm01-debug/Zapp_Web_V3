@@ -1,29 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 
-const mockFrom = vi.hoisted(() => vi.fn());
+/**
+ * Estratégia: useQueueAnalytics é pura transformação — delega fetching para
+ * useQueueAnalyticsManagement. Mockamos o hook base e testamos a lógica de
+ * transformação diretamente (sem await, sem mock de banco de dados).
+ */
 
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    from: (...args: unknown[]) => mockFrom(...args),
-  },
+const mockUseQueueAnalyticsManagement = vi.hoisted(() => vi.fn());
+
+vi.mock('@/hooks/useQueueManagement', () => ({
+  useQueueAnalyticsManagement: (...args: unknown[]) =>
+    mockUseQueueAnalyticsManagement(...args),
 }));
-
-vi.mock('@/lib/logger');
-vi.mock('@/features/auth', () => ({
-  useAuth: vi.fn(() => ({ user: { id: 'u-test' }, session: null })),
-}));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn(() => ({ user: { id: 'u-test' } })) }));
 
 import { useQueueAnalytics } from '@/hooks/useQueueAnalytics';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 
 const dateRange = {
   from: new Date('2024-01-01'),
   to: new Date('2024-01-07'),
 };
-
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import React from 'react';
 
 function createWrapper() {
   const qc = new QueryClient({
@@ -33,163 +31,120 @@ function createWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
+const sampleAnalytics = {
+  queue_id: 'q1',
+  total_messages: 120,
+  average_response_time: 300,
+  first_response_time: 60,
+  resolution_rate: 75,
+  customer_satisfaction: 4.2,
+  timestamp: '2024-01-05T10:00:00Z',
+};
+
 describe('useQueueAnalytics', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'contacts') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({
-              data: [
-                { id: 'c1', assigned_to: 'p1', created_at: '2024-01-03' },
-                { id: 'c2', assigned_to: null, created_at: '2024-01-04' },
-              ],
-              error: null,
-            }),
-          }),
-        };
-      }
-      if (table === 'messages') {
-        return {
-          select: vi.fn().mockReturnValue({
-            in: vi.fn().mockReturnValue({
-              gte: vi.fn().mockReturnValue({
-                lte: vi.fn().mockResolvedValue({
-                  data: [
-                    {
-                      id: 'm1',
-                      contact_id: 'c1',
-                      sender: 'agent',
-                      created_at: '2024-01-03T10:00:00Z',
-                    },
-                    {
-                      id: 'm2',
-                      contact_id: 'c1',
-                      sender: 'contact',
-                      created_at: '2024-01-03T11:00:00Z',
-                    },
-                  ],
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === 'profiles') {
-        return {
-          select: vi.fn().mockReturnValue({
-            in: vi.fn().mockResolvedValue({
-              data: [{ id: 'p1', name: 'Agent 1' }],
-              error: null,
-            }),
-          }),
-        };
-      }
-      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
+    mockUseQueueAnalyticsManagement.mockReturnValue({
+      analytics: sampleAnalytics,
+      loading: false,
+      refetch: vi.fn(),
     });
   });
 
-  it('fetches analytics data', async () => {
+  it('loading=false quando analytics resolvido', () => {
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.loading).toBe(false);
   });
 
-  it('returns daily data array', async () => {
+  it('dailyData tem 1 entrada com dados reais quando há analytics', () => {
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(Array.isArray(result.current.dailyData)).toBe(true);
+    expect(result.current.dailyData.length).toBe(1);
+    expect(result.current.dailyData[0].messages).toBe(120);
+    expect(result.current.dailyData[0].mensagens).toBe(120);
   });
 
-  it('returns hourly data array', async () => {
+  it('hourlyData tem entrada "Atual" com total_messages quando há analytics', () => {
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(Array.isArray(result.current.hourlyData)).toBe(true);
+    expect(result.current.hourlyData.length).toBe(1);
+    expect(result.current.hourlyData[0].hour).toBe('Atual');
+    expect(result.current.hourlyData[0].hora).toBe('Atual');
+    expect(result.current.hourlyData[0].messages).toBe(120);
   });
 
-  it('returns status data', async () => {
+  it('statusData tem 2 itens com valores corretos e cores HSL semânticas', () => {
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(Array.isArray(result.current.statusData)).toBe(true);
+
+    expect(result.current.statusData).toHaveLength(2);
+
+    const resolvidas = result.current.statusData.find((s) => s.name === 'Resolvidas');
+    const pendentes = result.current.statusData.find((s) => s.name === 'Pendentes');
+    expect(resolvidas?.value).toBe(75);
+    expect(pendentes?.value).toBe(25); // 100 - 75
+    expect(resolvidas?.color).toContain('hsl(var(--');
+    expect(pendentes?.color).toContain('hsl(var(--');
   });
 
-  it('returns agent performance', async () => {
+  it('agentPerformance é sempre array vazio', () => {
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(Array.isArray(result.current.agentPerformance)).toBe(true);
+    expect(result.current.agentPerformance).toHaveLength(0);
   });
 
-  it('handles empty queue (no contacts)', async () => {
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'contacts') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        };
-      }
-      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
+  it('sem analytics (null) → dailyData com placeholders, statusData e hourlyData vazios', () => {
+    mockUseQueueAnalyticsManagement.mockReturnValue({
+      analytics: null,
+      loading: false,
+      refetch: vi.fn(),
     });
 
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.dailyData.length).toBeGreaterThan(0); // empty daily placeholders
+    // buildDailyPlaceholders gera uma entrada por dia (01/01–07/01 = 7 dias)
+    expect(result.current.dailyData.length).toBe(7);
+    expect(result.current.dailyData[0].messages).toBe(0);
+    expect(result.current.statusData).toHaveLength(0);
+    expect(result.current.hourlyData).toHaveLength(0);
   });
 
-  it('handles fetch error', async () => {
-    mockFrom.mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockRejectedValue(new Error('DB error')),
-      }),
+  it('loading=true propagado enquanto analytics não resolveu', () => {
+    mockUseQueueAnalyticsManagement.mockReturnValue({
+      analytics: null,
+      loading: true,
+      refetch: vi.fn(),
     });
 
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
-      wrapper: createWrapper(),
-    });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-  });
-
-  it('initializes with loading true', () => {
     const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
       wrapper: createWrapper(),
     });
     expect(result.current.loading).toBe(true);
+    // Sem analytics → placeholders
+    expect(result.current.dailyData.length).toBe(7);
+    expect(result.current.statusData).toHaveLength(0);
   });
 
-  it('status data uses semantic HSL colors', async () => {
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'contacts') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        };
-      }
-      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) };
+  it('dateRange legado (startDate/endDate) também gera placeholders corretos', () => {
+    mockUseQueueAnalyticsManagement.mockReturnValue({
+      analytics: null,
+      loading: false,
+      refetch: vi.fn(),
     });
 
-    const { result } = renderHook(() => useQueueAnalytics('q1', dateRange), {
+    const legacyRange = { startDate: new Date('2024-01-01'), endDate: new Date('2024-01-03') };
+    const { result } = renderHook(() => useQueueAnalytics('q1', legacyRange), {
       wrapper: createWrapper(),
     });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    result.current.statusData.forEach((s) => {
-      // Colors are now semantic HSL tokens like 'hsl(var(--primary))'
-      expect(s.color).toContain('hsl(var(--');
-      expect(s.name).toBeTruthy();
-    });
+    // 01/01, 02/01, 03/01 = 3 dias
+    expect(result.current.dailyData.length).toBe(3);
+    expect(result.current.dailyData[0].messages).toBe(0);
   });
 });

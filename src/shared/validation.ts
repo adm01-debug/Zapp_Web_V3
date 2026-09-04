@@ -10,6 +10,10 @@
  */
 import { z } from 'zod';
 
+// Caracteres invisíveis que bypassam .trim() (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+FEFF BOM)
+// eslint-disable-next-line no-misleading-character-class -- intencional: detecta ZWJ isolado em inputs de usuário
+export const INVISIBLE_CHARS = /[\u200b\u200c\u200d\ufeff]/u;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mensagens
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,7 +22,8 @@ export const messageContentSchema = z
   .string()
   .min(1, 'Mensagem não pode ser vazia')
   .max(4096, 'Mensagem excede limite de 4096 caracteres')
-  .refine((val) => val.trim().length > 0, 'Mensagem não pode ser só espaços');
+  .refine((val) => val.trim().length > 0, 'Mensagem não pode ser só espaços')
+  .refine((val) => !INVISIBLE_CHARS.test(val.trim()), 'Mensagem contém caracteres inválidos');
 
 export const sendMessageSchema = z.object({
   contactId: z.string().uuid('ID de contato inválido'),
@@ -52,7 +57,12 @@ export const contactEmailSchema = z
   .nullable();
 
 export const createContactSchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório').max(200, 'Nome muito longo'),
+  name: z
+    .string()
+    .min(1, 'Nome é obrigatório')
+    .max(200, 'Nome muito longo')
+    .refine((v) => v.trim().length > 0, 'Nome não pode ser só espaços')
+    .refine((v) => !INVISIBLE_CHARS.test(v.trim()), 'Nome contém caracteres inválidos'),
   phone: contactPhoneSchema,
   email: contactEmailSchema,
   company: z.string().max(200).optional().nullable(),
