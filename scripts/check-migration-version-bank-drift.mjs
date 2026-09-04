@@ -91,7 +91,7 @@ async function collectRepoMigrations() {
 
 async function collectDbMigrations(client) {
   const { rows } = await client.query(
-    `SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version`
+    `SELECT version, COALESCE(name, '') AS name FROM supabase_migrations.schema_migrations ORDER BY version`
   );
   const migrations = new Map(); // version → name
   for (const row of rows) {
