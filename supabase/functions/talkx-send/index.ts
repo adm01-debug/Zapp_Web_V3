@@ -176,7 +176,11 @@ Deno.serve(async (req) => {
     // Handle pause/cancel
     if (action === "pause" || action === "cancel") {
       const newStatus = action === "pause" ? "paused" : "cancelled";
-      await supabase.from("talkx_campaigns").update({ status: newStatus }).eq("id", campaignId);
+      const { error: statusErr } = await supabase.from("talkx_campaigns").update({ status: newStatus }).eq("id", campaignId);
+      if (statusErr) {
+        console.error(`[talkx-send] failed to set campaign status to ${newStatus}:`, statusErr.message);
+        return new Response(JSON.stringify({ error: `Failed to ${action} campaign` }), { status: 500, headers });
+      }
       return new Response(JSON.stringify({ success: true, status: newStatus }), { headers });
     }
 
@@ -203,8 +207,9 @@ Deno.serve(async (req) => {
     const connObj = connection as Record<string, unknown>;
 
     // Mark as sending
-    await supabase.from("talkx_campaigns")
+    const { error: markSendingErr } = await supabase.from("talkx_campaigns")
       .update({ status: "sending", started_at: new Date().toISOString() }).eq("id", campaignObj.id);
+    if (markSendingErr) console.warn('[talkx-send] failed to mark campaign as sending:', markSendingErr.message);
 
     // Get pending recipients with contact info
     const { data: recipients } = await supabase
@@ -251,8 +256,9 @@ Deno.serve(async (req) => {
     }
 
     if (eligibleRecipients.length === 0) {
-      await supabase.from("talkx_campaigns")
+      const { error: completedErr } = await supabase.from("talkx_campaigns")
         .update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", campaignObj.id);
+      if (completedErr) console.warn('[talkx-send] failed to mark campaign as completed:', completedErr.message);
       return new Response(JSON.stringify({ success: true, message: "No eligible recipients to send" }), { headers });
     }
 
@@ -385,9 +391,10 @@ Deno.serve(async (req) => {
     if (finalCampaign && typeof finalCampaign === 'object' && !Array.isArray(finalCampaign)) {
       const fcObj = finalCampaign as Record<string, unknown>;
       if (fcObj.status === "sending") {
-        await supabase.from("talkx_campaigns")
+        const { error: finalErr } = await supabase.from("talkx_campaigns")
           .update({ status: "completed", completed_at: new Date().toISOString(), sent_count: sentCount, failed_count: failedCount })
           .eq("id", campaignObj.id);
+        if (finalErr) console.warn('[talkx-send] failed to mark campaign as completed at end:', finalErr.message);
       }
     }
 

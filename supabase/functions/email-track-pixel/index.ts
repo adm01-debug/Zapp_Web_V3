@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
       .single();
 
     // Chamar RPC
-    await supabase.rpc('rpc_email_register_open', {
+    const { error: rpcErr } = await supabase.rpc('rpc_email_register_open', {
       p_tracking_id:  trackingId,
       p_ip:           ip,
       p_user_agent:   ua.substring(0, 500), // Limitar tamanho
@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
       p_os:           parsed.os,
       p_is_self_open: false, // Client-side detection
     });
+    if (rpcErr) console.warn('[email-track-pixel] rpc_email_register_open failed (non-fatal):', rpcErr.message);
 
   } catch (err) {
     console.error('[email-track-pixel] Error:', err);

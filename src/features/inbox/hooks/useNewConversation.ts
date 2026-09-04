@@ -214,7 +214,9 @@ export function useNewConversation(
       }
       if (sendError) throw sendError;
       toast.success('Mensagem enviada!');
-      await supabase.functions.invoke('batch-fetch-avatars');
+      void supabase.functions.invoke('batch-fetch-avatars').then(({ error }) => {
+        if (error) log.warn('[new-conv] batch-fetch-avatars pós-envio falhou (best-effort)', error);
+      });
       onConversationStarted?.(contactId);
       onClose?.();
       resetForm();
