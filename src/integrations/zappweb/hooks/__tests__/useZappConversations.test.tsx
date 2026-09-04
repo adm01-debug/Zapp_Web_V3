@@ -628,4 +628,69 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']);
     expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsBeforeRefetch + 3);
   });
+
+  it('achado do coderabbit (PR #1514, rodada H): catch-path na 1ª carga não trava o fallback da rodada seguinte em silêncio', async () => {
+    const round1A = pendingBuilder();
+    const round1B = pendingBuilder();
+    const round1C = pendingBuilder(); // catch-path: última tentativa da rodada 1 também falha
+    const round2A = pendingBuilder();
+    const round2B = pendingBuilder();
+    const round2C = pendingBuilder(); // success-path: última tentativa da rodada 2, obsoleta mas SEM erro
+    const round3Rows = convRows(2).map((c) => ({ ...c, id: `atual-${c.id}` }));
+    supabaseMock.client.from
+      .mockImplementationOnce(() => round1A.builder as never)
+      .mockImplementationOnce(() => round1B.builder as never)
+      .mockImplementationOnce(() => round1C.builder as never)
+      .mockImplementationOnce(() => round2A.builder as never)
+      .mockImplementationOnce(() => round2B.builder as never)
+      .mockImplementationOnce(() => round2C.builder as never)
+      .mockImplementationOnce(() => syncBuilder(round3Rows) as never);
+
+    const { result } = renderHook(() => useZappConversations());
+    expect(result.current.loading).toBe(true); // nada carregado ainda — 1ª carga
+
+    // Rodada 1 (carga inicial): as 3 tentativas FALHAM, cada uma com um
+    // refetch() concorrente no meio — cai no caminho de ERRO na última
+    // tentativa. Antes do fix, isso marcava hasLoadedOnceRef=true sem
+    // nunca ter mostrado nada; agora só marca followUpAttemptedRef.
+    await act(async () => {
+      await result.current.refetch();
+      round1A.resolve({ data: null, error: new Error('falha transitória a') });
+    });
+    await act(async () => {
+      await result.current.refetch();
+      round1B.resolve({ data: null, error: new Error('falha transitória b') });
+    });
+    await act(async () => {
+      await result.current.refetch();
+      round1C.resolve({ data: null, error: new Error('falha transitória c') });
+    });
+
+    // Rodada 2 (follow-up automático): as 3 tentativas SUCEDEM mas seguem
+    // obsoletas até a última (bump concorrente antes de cada resolve).
+    await act(async () => {
+      await result.current.refetch();
+      round2A.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-2a' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch();
+      round2B.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-2b' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch();
+      round2C.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-2c' }], error: null });
+    });
+
+    // A última tentativa da rodada 2 devia aplicar o snapshot obsoleto como
+    // fallback (achado do coderabbit: antes do fix, hasLoadedOnceRef já
+    // estava true — marcado sem exibir nada no caminho de erro da rodada 1 —
+    // e esse fallback nunca disparava: loading=false, conversations=[],
+    // error=null pra sempre). Isso agenda uma 3ª rodada, que roda sem mais
+    // bumps e traz o estado real.
+    await waitFor(() =>
+      expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1'])
+    );
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
 });

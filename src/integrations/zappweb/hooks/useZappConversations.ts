@@ -68,9 +68,22 @@ export function useZappConversations(opts: Options = {}) {
   // Reseta a cada troca de filtro: um instance/status/limit novo também
   // conta como "ainda não carregamos isso".
   const hasLoadedOnceRef = useRef(false);
+  // Achado do coderabbit (PR #1514, rodada H): o caminho de erro (abaixo)
+  // marcava hasLoadedOnceRef=true so pra parar de agendar rodada extra —
+  // mas SEM nunca chamar setConversations. Se a rodada extra caísse no
+  // caminho de SUCESSO com geração obsoleta, o guard "!hasLoadedOnceRef"
+  // de lá já estava falso (por causa dessa marcação prematura) e o
+  // fallback otimista nunca aplicava nada — sidebar ficava presa em
+  // loading=false / conversations=[] / error=null, sem jeito de sair.
+  // followUpAttemptedRef separa "já usei minha rodada extra" (evita loop
+  // sem fim) de hasLoadedOnceRef, que passa a significar só "já mostrei
+  // ALGO pro usuário" — condição que o caminho de sucesso continua usando
+  // pra decidir se vale aplicar um snapshot obsoleto como fallback.
+  const followUpAttemptedRef = useRef(false);
   useEffect(() => {
     optsRef.current = { instance, status, limit };
     hasLoadedOnceRef.current = false;
+    followUpAttemptedRef.current = false;
   }, [instance, status, limit]);
   // Review do CodeRabbit no PR #1514: sob React 18 StrictMode (dev), o efeito
   // roda setup→cleanup→setup de novo — sem um `mountedRef.current = true` no
@@ -161,12 +174,12 @@ export function useZappConversations(opts: Options = {}) {
             // encadear follow-ups indefinidamente. Só agenda na 1ª carga
             // (mesma proteção de hasLoadedOnceRef); depois de já termos dado
             // real, propaga o erro normalmente — os patches locais bastam.
-            if (!hasLoadedOnceRef.current) {
+            if (!hasLoadedOnceRef.current && !followUpAttemptedRef.current) {
               log.warn(
                 '[useZappConversations] última tentativa falhou com refetch concorrente pendente (1ª carga) — agenda nova rodada',
                 e
               );
-              hasLoadedOnceRef.current = true;
+              followUpAttemptedRef.current = true;
               needsFollowUpFetch = true;
               break;
             }

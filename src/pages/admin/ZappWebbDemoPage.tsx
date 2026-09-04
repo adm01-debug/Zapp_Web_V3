@@ -328,12 +328,14 @@ export default function ZappWebbDemoPage() {
                               'Carregar mensagens mais antigas'
                             )}
                           </Button>
-                          {/* Achado do cubic: setError sem exibição na UI não resolve nada
-                              pro usuário — loadOlder() falhando precisa aparecer aqui. */}
-                          {messagesError && (
-                            <p className="text-xs text-destructive">{messagesError}</p>
-                          )}
                         </div>
+                      )}
+                      {/* Achado do coderabbit (PR #1514, rodada H): messagesError cobre
+                          tanto loadOlder() quanto o fetchAll() inicial — preso dentro do
+                          bloco acima (gated por hasMore && messages.length > 0), uma falha
+                          na 1ª carga (messages ainda vazio) nunca aparecia pro usuário. */}
+                      {messagesError && (
+                        <p className="text-xs text-destructive">{messagesError}</p>
                       )}
                       {messages.map((m) => <MessageBubble key={m.id} msg={m} />)}
                     </>
