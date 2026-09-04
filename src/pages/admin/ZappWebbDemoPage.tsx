@@ -171,10 +171,12 @@ export default function ZappWebbDemoPage() {
   });
   const contact = active?.evolution_contacts ?? null;
 
-  // Reseta o rastreador de origem do erro ao trocar de conversa.
+  // Reseta o rastreador de origem do erro ao trocar de conversa ou quando o
+  // remoteJid da conversa ativa muda (ex.: conversa sai do filtro e retorna
+  // com o mesmo activeId mas remoteJid diferente ou ausente).
   useEffect(() => {
     messagesErrorFromOlderRef.current = false;
-  }, [activeId]);
+  }, [activeId, active?.remote_jid]);
 
   const handleOpen = async (conv: EvolutionConversation) => {
     setActiveId(conv.id);
