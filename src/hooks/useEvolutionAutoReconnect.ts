@@ -539,7 +539,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         );
       }
     }
-  }, [instanceName, getInstanceStatus, setIsReconnecting]);
+  }, [instanceName, getInstanceStatus, setIsReconnecting, mountedRef]);
 
   useEffect(() => {
     if (!instanceName) return;
