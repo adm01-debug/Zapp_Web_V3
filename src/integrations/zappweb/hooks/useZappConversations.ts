@@ -43,15 +43,20 @@ export function useZappConversations(opts: Options = {}) {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
-  // Review do cubic no PR #1514: se um evento incremental chegar e patchear o
-  // estado enquanto este fetchAll ainda está em voo, a resposta do fetchAll
-  // (pedida antes, mas que pode responder depois do evento) sobrescreveria o
-  // patch com o snapshot antigo. Descarta o resultado do fetch nesse caso —
-  // o realtime já deixou o estado mais atual que a query.
-  const staleFetchRef = useRef(false);
+  // Review do cubic no PR #1514 (2ª rodada, 2 achados P1): um boolean
+  // compartilhado não basta — se um SEGUNDO fetchAll() começar enquanto o
+  // primeiro ainda está em voo (refetch manual, ou o backfill disparado por
+  // uma remoção), o reset no início do segundo apaga o "sujo" do primeiro, e
+  // o primeiro pode aplicar um snapshot desatualizado por cima. E descartar
+  // o snapshot inteiro (em vez de reconciliar) podia esconder a lista toda
+  // atrás de só 1 linha se um evento chegasse durante a carga inicial.
+  // Contador de geração: cada fetchAll() e cada mutação incremental avança a
+  // geração; se algo mudou entre o início da query e a resposta, refaz a
+  // busca (nunca descarta em silêncio) até convergir sem concorrência.
+  const generationRef = useRef(0);
 
   const fetchAll = useCallback(async () => {
-    staleFetchRef.current = false;
+    const myGeneration = ++generationRef.current;
     try {
       const { data, error: err } = await zappSupabase
         .from('evolution_conversations_wpp2')
@@ -61,14 +66,19 @@ export function useZappConversations(opts: Options = {}) {
         .order('last_message_at', { ascending: false })
         .limit(limit);
       if (err) throw err;
-      if (!staleFetchRef.current) {
-        setConversations((data ?? []) as unknown as EvolutionConversation[]);
+      if (generationRef.current !== myGeneration) {
+        // Outro fetchAll() ou uma mutação incremental aconteceu durante esta
+        // query — o snapshot recebido já pode estar desatualizado. Busca de
+        // novo em vez de descartar ou aplicar por cima do que já é mais novo.
+        void fetchAll();
+        return;
       }
+      setConversations((data ?? []) as unknown as EvolutionConversation[]);
       setError(null);
+      setLoading(false);
     } catch (e: unknown) {
       log.error('[useZappConversations]', e);
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
       setLoading(false);
     }
   }, [instance, status, limit]);
@@ -91,7 +101,7 @@ export function useZappConversations(opts: Options = {}) {
     void fetchAll();
 
     const insertIfAbsent = (row: EvolutionConversation) => {
-      staleFetchRef.current = true;
+      generationRef.current += 1;
       setConversations((prev) =>
         prev.some((c) => c.id === row.id) ? prev : sortByLastMessage([...prev, row]).slice(0, limit)
       );
@@ -133,7 +143,7 @@ export function useZappConversations(opts: Options = {}) {
             // acha (review do cubic — a próxima conversa elegível nunca
             // entrava sozinha).
             const wasFull = conversationsRef.current.length === limit;
-            staleFetchRef.current = true;
+            generationRef.current += 1;
             setConversations((prev) => {
               const idx = prev.findIndex((c) => c.id === row.id);
               if (idx === -1) return prev;
@@ -167,7 +177,7 @@ export function useZappConversations(opts: Options = {}) {
           const hadIt = conversationsRef.current.some((c) => c.id === oldRow.id);
           if (!hadIt) return;
           const wasFull = conversationsRef.current.length === limit;
-          staleFetchRef.current = true;
+          generationRef.current += 1;
           setConversations((prev) => prev.filter((c) => c.id !== oldRow.id));
           if (wasFull) void fetchAll();
         }

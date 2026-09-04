@@ -34,14 +34,14 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof zappSupabase.channel> | null>(null);
   // Review do Copilot + cubic no PR #1514: sem isso, uma troca de conversa
-  // (remoteJid OU instance) enquanto loadOlder() está em voo faz o resultado
-  // antigo poluir a conversa nova (setMessages resolve depois do fetchAll da
-  // nova conversa já ter rodado). Geração incrementada a cada troca — mais
-  // robusto que comparar só remoteJid, cobre instance e futuros parâmetros.
+  // (remoteJid, instance OU limit) enquanto loadOlder() está em voo faz o
+  // resultado antigo poluir a conversa nova (setMessages resolve depois do
+  // fetchAll da nova conversa já ter rodado). Geração incrementada a cada
+  // troca — mais robusto que comparar só remoteJid.
   const queryGenerationRef = useRef(0);
   useEffect(() => {
     queryGenerationRef.current += 1;
-  }, [remoteJid, instance]);
+  }, [remoteJid, instance, limit]);
 
   const fetchAll = useCallback(async () => {
     if (!remoteJid) {

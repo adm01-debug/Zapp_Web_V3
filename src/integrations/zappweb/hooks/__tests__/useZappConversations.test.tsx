@@ -275,29 +275,45 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['novo-0', 'novo-1']));
   });
 
-  it('achado do cubic (PR #1514): fetchAll() em voo descarta o resultado se um evento incremental já mudou o estado', async () => {
-    let resolveFetch!: (v: { data: unknown; error: unknown }) => void;
-    const pendingFetch = new Promise<{ data: unknown; error: unknown }>((resolve) => {
-      resolveFetch = resolve;
+  it('achado do cubic (PR #1514, P1): fetchAll() inicial obsoleto refaz a busca (nunca descarta o snapshot inteiro)', async () => {
+    let resolveInitialFetch!: (v: { data: unknown; error: unknown }) => void;
+    const pendingInitialFetch = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveInitialFetch = resolve;
     });
     const staleBuilder = {
       select: () => staleBuilder,
       eq: () => staleBuilder,
       order: () => staleBuilder,
       limit: () => staleBuilder,
-      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => pendingFetch.then(onFulfilled),
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        pendingInitialFetch.then(onFulfilled),
     };
     const insertRowBuilder = {
       select: () => insertRowBuilder,
       eq: () => insertRowBuilder,
       maybeSingle: () => Promise.resolve({ data: { ...CONV_FIXTURE, id: 'incremental' }, error: null }),
     };
+    // A busca de retry (achado P1: descartar o snapshot inteiro sem
+    // reconciliar podia deixar a sidebar mostrando só a linha do evento pra
+    // sempre) precisa devolver o estado JÁ reconciliado — como aconteceria
+    // numa query real feita depois do INSERT já commitado no banco.
+    const reconciledBuilder = {
+      select: () => reconciledBuilder,
+      eq: () => reconciledBuilder,
+      order: () => reconciledBuilder,
+      limit: () => reconciledBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        Promise.resolve({
+          data: [...convRows(2), { ...CONV_FIXTURE, id: 'incremental' }],
+          error: null,
+        }).then(onFulfilled),
+    };
     // 1ª chamada a from() = fetchAll inicial (fica pendente); 2ª = fetchOne do
-    // INSERT abaixo (resolve na hora, com a linha certa — o createQueryBuilder
-    // genérico do mock não distingue .maybeSingle() de lista).
+    // INSERT abaixo; 3ª = retry do fetchAll (geração obsoleta) já reconciliado.
     supabaseMock.client.from
       .mockImplementationOnce(() => staleBuilder as never)
-      .mockImplementationOnce(() => insertRowBuilder as never);
+      .mockImplementationOnce(() => insertRowBuilder as never)
+      .mockImplementationOnce(() => reconciledBuilder as never);
 
     const { result } = renderHook(() => useZappConversations());
     // loading fica true enquanto o fetchAll inicial não resolve.
@@ -308,13 +324,67 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     await act(async () => {
       await insertHandler({ new: { id: 'incremental', status: 'aberta' } });
     });
-    expect(result.current.conversations.map((c) => c.id)).toContain('incremental');
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['incremental']);
 
-    // Só agora o fetchAll inicial (mais antigo) resolve — não pode sobrescrever o patch.
+    // Só agora o fetchAll inicial (mais antigo, geração obsoleta) resolve —
+    // em vez de aplicar o snapshot velho (sem 'incremental') OU descartá-lo
+    // (perdendo '0'/'1' pra sempre), ele refaz a busca sozinho.
     await act(async () => {
-      resolveFetch({ data: convRows(2), error: null });
+      resolveInitialFetch({ data: convRows(2), error: null });
     });
 
-    expect(result.current.conversations.map((c) => c.id)).toContain('incremental');
+    // O retry reconciliado chega e a lista final tem TODAS as conversas —
+    // não só a do evento, nem só o snapshot velho.
+    await waitFor(() =>
+      expect(result.current.conversations.map((c) => c.id).sort()).toEqual(['0', '1', 'incremental'].sort())
+    );
+  });
+
+  it('achado do cubic (PR #1514, P1): um refetch manual concorrente não faz o fetchAll inicial obsoleto vencer', async () => {
+    let resolveFirst!: (v: { data: unknown; error: unknown }) => void;
+    const pendingFirst = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const firstBuilder = {
+      select: () => firstBuilder,
+      eq: () => firstBuilder,
+      order: () => firstBuilder,
+      limit: () => firstBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => pendingFirst.then(onFulfilled),
+    };
+    // Qualquer chamada DEPOIS da 1ª (o refetch() manual, e um eventual retry
+    // do fetchAll inicial obsoleto) reflete o estado atual — com o boolean
+    // antigo (staleFetchRef), o refetch() resetava o marcador compartilhado e
+    // fazia o fetchAll inicial (mais velho) parecer "não-obsoleto" ao
+    // resolver depois, regredindo a lista pro snapshot velho.
+    const currentTruthBuilder = {
+      select: () => currentTruthBuilder,
+      eq: () => currentTruthBuilder,
+      order: () => currentTruthBuilder,
+      limit: () => currentTruthBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        Promise.resolve({ data: convRows(2).map((c) => ({ ...c, id: `atual-${c.id}` })), error: null }).then(
+          onFulfilled
+        ),
+    };
+    supabaseMock.client.from
+      .mockImplementationOnce(() => firstBuilder as never)
+      .mockImplementation(() => currentTruthBuilder as never);
+
+    const { result } = renderHook(() => useZappConversations());
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1']);
+
+    // O fetchAll inicial (obsoleto) resolve por último — não pode regredir o
+    // resultado mais recente do refetch manual pro snapshot velho.
+    await act(async () => {
+      resolveFirst({ data: convRows(2), error: null });
+    });
+
+    await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1']));
   });
 });
