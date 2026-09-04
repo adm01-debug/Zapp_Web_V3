@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getLogger } from '@/lib/logger';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizePostgrestFilter } from '@/lib/sanitize';
 import { toast } from 'sonner';
@@ -19,6 +20,8 @@ interface ContactResult {
   phone: string;
   avatar_url: string | null;
 }
+
+const log = getLogger('useNewConversation');
 
 /** Manages the new-conversation dialog state: contact search, new-contact creation, message composition, and sending via the Evolution API edge function. */
 export function useNewConversation(
@@ -144,7 +147,9 @@ export function useNewConversation(
           throw newContactErr;
         }
         contactId = newContact.id;
-        await supabase.functions.invoke('batch-fetch-avatars');
+        void supabase.functions.invoke('batch-fetch-avatars').then(({ error }) => {
+          if (error) log.warn('[new-conv] batch-fetch-avatars falhou (best-effort)', error);
+        });
       }
       if (!contactId) {
         toast.error('Selecione um contato');
@@ -209,7 +214,9 @@ export function useNewConversation(
       }
       if (sendError) throw sendError;
       toast.success('Mensagem enviada!');
-      await supabase.functions.invoke('batch-fetch-avatars');
+      void supabase.functions.invoke('batch-fetch-avatars').then(({ error }) => {
+        if (error) log.warn('[new-conv] batch-fetch-avatars pós-envio falhou (best-effort)', error);
+      });
       onConversationStarted?.(contactId);
       onClose?.();
       resetForm();

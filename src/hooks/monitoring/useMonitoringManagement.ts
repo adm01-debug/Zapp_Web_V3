@@ -346,7 +346,10 @@ export function useMonitoringActionsManagement(
         .select('id')
         .eq('message_id', testId)
         .maybeSingle();
-      if (msg?.id) await supabase.rpc('rpc_delete_message', { p_id: msg.id });
+      if (msg?.id) {
+        const { error: delErr } = await supabase.rpc('rpc_delete_message', { p_id: msg.id });
+        if (delErr) log.warn('[webhook-test] rpc_delete_message falhou (mensagem de teste persiste)', delErr);
+      }
       setWebhookTest({
         status: msg ? 'success' : 'error',
         message: msg

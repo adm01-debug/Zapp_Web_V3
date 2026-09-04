@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
           instance === '..'
         ) {
           console.error('[dlq-reprocess] unsafe path or instance, abandoning row', { id: row.id });
-          await supabase
+          const { error: ssrfAbandonErr } = await supabase
             .from('failed_messages')
             .update({
               status: 'abandoned',
@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
               error_message: 'unsafe path or instance_name rejected',
             })
             .eq('id', row.id);
+          if (ssrfAbandonErr) console.error('[dlq-reprocess] failed to mark ssrf row abandoned', ssrfAbandonErr.message);
           abandoned++;
           continue;
         }
@@ -161,7 +162,7 @@ Deno.serve(async (req) => {
         const respText = resp.ok ? '' : (resp.error ?? '').replace(/^HTTP \d+:\s*/, '');
 
         if (resp.ok) {
-          await supabase
+          const { error: succeedErr } = await supabase
             .from('failed_messages')
             .update({
               status: 'succeeded',
@@ -170,10 +171,11 @@ Deno.serve(async (req) => {
               succeeded_at: new Date().toISOString(),
             })
             .eq('id', row.id);
+          if (succeedErr) console.error('[dlq-reprocess] failed to mark succeeded', { id: row.id, error: succeedErr.message });
           succeeded++;
         } else if (attempt >= row.max_retries) {
           const reason = classifyRetryReason(statusCode, respText);
-          await supabase
+          const { error: abandonErr } = await supabase
             .from('failed_messages')
             .update({
               status: 'abandoned',
@@ -184,11 +186,12 @@ Deno.serve(async (req) => {
               last_retry_reason: reason,
             })
             .eq('id', row.id);
+          if (abandonErr) console.error('[dlq-reprocess] failed to mark abandoned', { id: row.id, error: abandonErr.message });
           abandoned++;
         } else {
           const reason = classifyRetryReason(statusCode, respText);
           const backoffMs = computeBackoffMsByReason(attempt + 1, reason);
-          await supabase
+          const { error: retryErr } = await supabase
             .from('failed_messages')
             .update({
               status: 'retrying',
@@ -200,6 +203,7 @@ Deno.serve(async (req) => {
               last_retry_reason: reason,
             })
             .eq('id', row.id);
+          if (retryErr) console.error('[dlq-reprocess] failed to mark retrying', { id: row.id, error: retryErr.message });
           failed++;
         }
       } catch (e) {
@@ -208,7 +212,7 @@ Deno.serve(async (req) => {
         const reason = classifyRetryReason(null, msg);
         const backoffMs = computeBackoffMsByReason(attempt + 1, reason);
         const next = attempt >= row.max_retries ? 'abandoned' : 'retrying';
-        await supabase
+        const { error: catchErr } = await supabase
           .from('failed_messages')
           .update({
             status: next,
@@ -219,6 +223,7 @@ Deno.serve(async (req) => {
             last_retry_reason: reason,
           })
           .eq('id', row.id);
+        if (catchErr) console.error('[dlq-reprocess] failed to update status after catch', { id: row.id, error: catchErr.message });
         if (next === 'abandoned') abandoned++;
         else failed++;
       }

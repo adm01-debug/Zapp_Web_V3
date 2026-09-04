@@ -196,18 +196,15 @@ export function useFailedMessages(filters: FailedMessagesFilters = {}) {
     ids: string[],
     reason?: string
   ) => {
-    try {
-      await supabase.rpc('rpc_dlq_log_item_action', {
-        p_action: action,
-        p_ids: ids,
-        p_reason: reason,
-      });
+    const { error: logErr } = await supabase.rpc('rpc_dlq_log_item_action', {
+      p_action: action,
+      p_ids: ids,
+      p_reason: reason,
+    });
+    if (logErr) {
+      log.warn('Failed to log DLQ item action', { action, error: logErr.message });
+    } else {
       queryClient.invalidateQueries({ queryKey: queryKeys.adminOps.dlqAuditLog() });
-    } catch (logErr) {
-      log.warn('Failed to log DLQ item action', {
-        action,
-        error: logErr instanceof Error ? logErr.message : String(logErr),
-      });
     }
   };
 
@@ -299,13 +296,8 @@ export function useFailedMessages(filters: FailedMessagesFilters = {}) {
 
   const triggerReprocess = useMutation({
     mutationFn: async () => {
-      try {
-        await supabase.rpc('rpc_dlq_log_reprocess_trigger', { p_source: 'panel' });
-      } catch (logErr) {
-        log.warn('Failed to log reprocess trigger', {
-          error: logErr instanceof Error ? logErr.message : String(logErr),
-        });
-      }
+      const { error: triggerErr } = await supabase.rpc('rpc_dlq_log_reprocess_trigger', { p_source: 'panel' });
+      if (triggerErr) log.warn('Failed to log reprocess trigger', { error: triggerErr.message });
       const { data, error } = await supabase.functions.invoke('reprocess-failed-messages', {
         method: 'POST',
       });
@@ -320,20 +312,18 @@ export function useFailedMessages(filters: FailedMessagesFilters = {}) {
     },
     onSuccess: async (data) => {
       const processed = data?.processed ?? 0;
-      try {
-        await supabase.rpc('rpc_dlq_log_reprocess_result', {
-          p_processed: processed,
-          p_succeeded: data?.succeeded ?? 0,
-          p_failed: data?.failed ?? 0,
-          p_abandoned: data?.abandoned ?? 0,
-          p_message: data?.message ?? undefined,
-          p_source: 'panel',
-        });
+      const { error: resultErr } = await supabase.rpc('rpc_dlq_log_reprocess_result', {
+        p_processed: processed,
+        p_succeeded: data?.succeeded ?? 0,
+        p_failed: data?.failed ?? 0,
+        p_abandoned: data?.abandoned ?? 0,
+        p_message: data?.message ?? undefined,
+        p_source: 'panel',
+      });
+      if (resultErr) {
+        log.warn('Failed to log reprocess result', { error: resultErr.message });
+      } else {
         queryClient.invalidateQueries({ queryKey: queryKeys.adminOps.dlqAuditLog() });
-      } catch (logErr) {
-        log.warn('Failed to log reprocess result', {
-          error: logErr instanceof Error ? logErr.message : String(logErr),
-        });
       }
       toast.success(
         processed === 0

@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
         }
 
         // Create security alert
-        await supabaseAdmin.from("security_alerts").insert({
+        const { error: alertInsertErr } = await supabaseAdmin.from("security_alerts").insert({
           user_id: user.id,
           alert_type: "new_device",
           severity: "medium",
@@ -157,15 +157,17 @@ Deno.serve(async (req) => {
           ip_address: clientIp,
           metadata: { device_fingerprint, browser, os, device_name },
         });
+        if (alertInsertErr) log.error("Failed to insert security alert", { error: alertInsertErr.message });
       }
     } else {
       deviceId = existingDevice.id;
       log.info("Known device, updating last_seen");
 
-      await supabaseAdmin
+      const { error: lastSeenErr } = await supabaseAdmin
         .from("user_devices")
         .update({ last_seen_at: new Date().toISOString(), ip_address: clientIp })
         .eq("id", deviceId);
+      if (lastSeenErr) log.warn("Failed to update device last_seen", { error: lastSeenErr.message });
     }
 
     // Create or update session

@@ -146,12 +146,16 @@ Deno.serve(async (req) => {
       if (tokens.error) {
         const PERMANENT_ERRORS = ['invalid_grant', 'token_revoked'];
         const isPermanent = typeof tokens.error === 'string' && PERMANENT_ERRORS.includes(tokens.error);
-        if (isPermanent) await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+        if (isPermanent) {
+          const { error: deactivateErr } = await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+          if (deactivateErr) console.warn('[gmail-oauth] deactivate account failed', deactivateErr.message);
+        }
         const msg = isPermanent ? 'refresh_token inv\u00e1lido \u2014 reconecte a conta' : `Google token error: ${tokens.error}`;
         return new Response(JSON.stringify({ error: msg }), { status: isPermanent ? 401 : 502, headers: jsonHeaders });
       }
       const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
-      await supabase.from('gmail_accounts').update({ access_token: tokens.access_token, token_expiry: expiresAt, ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}) }).eq('id', accountId);
+      const { error: tokenUpdateErr } = await supabase.from('gmail_accounts').update({ access_token: tokens.access_token, token_expiry: expiresAt, ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}) }).eq('id', accountId);
+      if (tokenUpdateErr) console.warn('[gmail-oauth] token update failed', tokenUpdateErr.message);
       return new Response(JSON.stringify({ access_token: tokens.access_token, token_expiry: expiresAt }), { headers: jsonHeaders });
     }
     if (action === 'revoke') {
@@ -164,7 +168,8 @@ Deno.serve(async (req) => {
         try { await fetch(GOOGLE_REVOKE, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: account.access_token }), signal: AbortSignal.timeout(10_000) }); }
         catch (revokeErr) { console.warn('[gmail-oauth] Google revoke failed (continuing with DB deletion)', revokeErr instanceof Error ? revokeErr.message : String(revokeErr)); }
       }
-      await supabase.from('gmail_accounts').delete().eq('id', accountId);
+      const { error: deleteAccErr } = await supabase.from('gmail_accounts').delete().eq('id', accountId);
+      if (deleteAccErr) console.warn('[gmail-oauth] account delete failed', deleteAccErr.message);
       return new Response(JSON.stringify({ success: true }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
     return new Response(JSON.stringify({ error: 'A\u00e7\u00e3o desconhecida' }), { status: 400, headers: jsonHeaders });

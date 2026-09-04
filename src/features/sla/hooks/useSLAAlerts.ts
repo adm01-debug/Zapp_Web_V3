@@ -285,6 +285,9 @@ export function useSLAAlerts(params: SLAAlertParams) {
               occurred_at: new Date().toISOString(),
             },
           })
+          .then(({ error }) => {
+            if (error) console.warn('[useSLAAlerts] sla-alert-forward falhou (não fatal):', error);
+          })
           .catch((err) => {
             console.warn(
               '[useSLAAlerts] sla-alert-forward falhou (não fatal):',

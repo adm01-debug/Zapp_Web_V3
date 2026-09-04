@@ -263,8 +263,11 @@ export interface WebhookAuditRow {
 // deno-lint-ignore no-explicit-any
 /** audit Webhook Event function. */
 export async function auditWebhookEvent(supabase: any, row: WebhookAuditRow): Promise<void> {
-  try { await supabase.from('webhook_audit_log').insert(row); } catch (e) {
-    console.warn('[audit] insert failed:', (e as Error).message ?? String(e));
+  try {
+    const { error: auditInsertErr } = await supabase.from('webhook_audit_log').insert(row);
+    if (auditInsertErr) console.warn('[audit] insert failed:', auditInsertErr.message);
+  } catch (e) {
+    console.warn('[audit] insert exception:', (e as Error).message ?? String(e));
   }
 }
 
@@ -543,7 +546,8 @@ export async function persistProfilePicture(supabase: any, phone: string, profil
 
     const { data: oldFiles } = await supabase.storage.from('avatars').list('avatars', { search: phone });
     if (oldFiles?.length) {
-      await supabase.storage.from('avatars').remove(oldFiles.map((f: { name: string }) => `avatars/${f.name}`));
+      const { error: rmErr } = await supabase.storage.from('avatars').remove(oldFiles.map((f: { name: string }) => `avatars/${f.name}`));
+      if (rmErr) console.warn('[avatar] old avatar remove failed (best-effort):', rmErr);
     }
 
     const { error } = await supabase.storage.from('avatars').upload(storagePath, bytes, {
@@ -643,9 +647,11 @@ export async function handleReactionEvent(
 
   if (emoji === '') {
     if (!actorFromMe) {
-      await supabase.from('message_reactions').delete()
+      const { error: reactionDeleteErr } = await supabase.from('message_reactions').delete()
         .eq('message_id', targetMessage.id).eq('contact_id', targetMessage.contact_id);
-      await supabase.from('messages').update({ updated_at: new Date().toISOString() }).eq('id', targetMessage.id);
+      if (reactionDeleteErr) console.warn(`[REACTION] failed to delete reaction: ${reactionDeleteErr.message}`);
+      const { error: msgTouchAfterDeleteErr } = await supabase.from('messages').update({ updated_at: new Date().toISOString() }).eq('id', targetMessage.id);
+      if (msgTouchAfterDeleteErr) console.warn(`[REACTION] failed to touch message after delete: ${msgTouchAfterDeleteErr.message}`);
       console.log(`Reaction removed on message ${targetExternalId}`);
     }
   } else if (!actorFromMe) {
@@ -655,7 +661,8 @@ export async function handleReactionEvent(
     );
     if (upsertErr) { console.error('Error upserting reaction:', upsertErr); }
     else {
-      await supabase.from('messages').update({ updated_at: new Date().toISOString() }).eq('id', targetMessage.id);
+      const { error: msgTouchAfterUpsertErr } = await supabase.from('messages').update({ updated_at: new Date().toISOString() }).eq('id', targetMessage.id);
+      if (msgTouchAfterUpsertErr) console.warn(`[REACTION] failed to touch message after upsert: ${msgTouchAfterUpsertErr.message}`);
       console.log(`Reaction synced: ${emoji} on message ${targetExternalId}`);
     }
   }

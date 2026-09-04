@@ -617,5 +617,5 @@ describe('config auth lock — session-wide', () => {
 // The original suites are preserved commented-out above (see header note).
 // This placeholder keeps vitest from failing the file with "No test suite found".
 describe.skip('externalProxy — deprecated (external DB path removal)', () => {
-  it('original suites commented out; see header note', () => {});
+  it.todo('original suites commented out; see header note');
 });

@@ -232,9 +232,10 @@ export function useGroupActions({
       toast.success('Categoria atualizada');
       const group = groups.find((g) => g.id === groupId);
       if (group) {
-        await dbFrom('contacts')
+        const { error: catErr } = await dbFrom('contacts')
           .update({ group_category: category })
           .like('phone', `%${group.group_id.replace('@g.us', '')}%`);
+        if (catErr) log.warn('Failed to update group_category on contacts', { error: catErr.message });
       }
       setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, category } : g)));
     },

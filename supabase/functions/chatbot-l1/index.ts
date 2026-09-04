@@ -178,7 +178,8 @@ Responda em JSON:
       if (result.detected_sentiment === 'critical' || result.detected_sentiment === 'negative') {
         updateData.ai_priority = 'high';
       }
-      await supabase.from('contacts').update(updateData).eq('id', contactId);
+      const { error: contactUpdateErr } = await supabase.from('contacts').update(updateData).eq('id', contactId);
+      if (contactUpdateErr) log.warn('contact sentiment update failed', { error: contactUpdateErr.message });
     }
 
     log.done(200);

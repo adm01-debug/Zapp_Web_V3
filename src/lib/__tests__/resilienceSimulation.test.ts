@@ -534,5 +534,5 @@ describe('Combined: Full Pipeline Failure then Recovery', () => {
 // The original suites are preserved commented-out above (see @deprecated header).
 // This placeholder keeps vitest from failing the file with "No test suite found".
 describe.skip('resilience simulation — deprecated (external DB path removal)', () => {
-  it('original suites commented out; see header note', () => {});
+  it.todo('original suites commented out; see header note');
 });
