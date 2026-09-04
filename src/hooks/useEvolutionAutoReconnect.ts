@@ -327,6 +327,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     if (reconnectExhaustedRef.current) return;
     if (!mountedRef?.current) return;
 
+    // O timer de backoff que disparou esta funcao ja foi consumido pelo runtime.
+    // Zerar a ref evita que timerRef.current != null bloqueie checkStatus depois
+    // do re-arm (caso a instancia volte e caia novamente).
+    timerRef.current = null;
+
     const capturedInstance = instanceName; // snapshot antes dos awaits assíncronos
     const capturedGeneration = instanceGenerationRef.current; // geração deste ciclo (A→B→A safe)
     setIsReconnecting(true);
@@ -444,6 +449,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // não pode disparar reconexão no ciclo atual.
       if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
+      if (!mountedRef.current) return;
       setStatus(state);
 
       // Reset failure counter on any success
@@ -481,7 +487,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
             `halting status polling permanently for this session`
         );
         credentialErrorRef.current = true;
-        setIsReconnecting(false);
+        if (mountedRef.current) setIsReconnecting(false);
         eventBus.emit('connection:credential-error', {
           instanceName,
           connectionName: instanceName,
@@ -525,6 +531,9 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
    * (ex.: botao "Tentar novamente" na tela de conexoes).
    */
   const resetReconnect = useCallback(() => {
+    // Cancela qualquer timer de backoff pendente antes de resetar o ciclo.
+    // Sem isso, o timer stale dispara attemptSpecificReconnect uma segunda vez
+    // apos o usuario clicar "Tentar novamente".
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
