@@ -25,6 +25,7 @@ interface AIChatScrollerContextValue {
 
 const AIChatScrollerContext = createContext<AIChatScrollerContextValue | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook, não componente
 export function useAIChatScrollerContext(): AIChatScrollerContextValue {
   const ctx = useContext(AIChatScrollerContext);
   if (!ctx) throw new Error('useAIChatScrollerContext must be inside <AIChatScroller>');
