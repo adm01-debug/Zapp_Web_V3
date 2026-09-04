@@ -113,11 +113,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      await supabase.from('nps_invitations').insert({
+      const { error: inviteErr } = await supabase.from('nps_invitations').insert({
         contact_id: contact.id,
         channel: 'whatsapp',
         sent_at: new Date().toISOString(),
       });
+      if (inviteErr) console.warn('[nps-scheduler] nps_invitations insert failed (message was sent):', inviteErr.message);
       sent++;
     } catch (e) {
       failed++;

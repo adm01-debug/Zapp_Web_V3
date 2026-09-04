@@ -285,9 +285,10 @@ async function sendMessageToContactInner(
 
     if (!connection?.instance_id || connection.status !== 'connected') {
       log.warn('WhatsApp connection not active, message marked as failed');
-      await dbFrom('messages')
+      const { error: noConnErr } = await dbFrom('messages')
         .update({ status: 'failed', error_reason: 'Nenhuma conexão WhatsApp ativa disponível' })
         .eq('id', data.id);
+      if (noConnErr) log.warn('Failed to mark message as failed (no active connection)', { error: noConnErr.message });
 
       // F4-15: audit via batcher + flush explícito (erro é caminho raro —
       // garante a gravação antes do throw sem custo no caminho feliz).
@@ -318,9 +319,10 @@ async function sendMessageToContactInner(
         'WhatsApp connection has no usable instance name (only UUID available), refusing to send',
         { connectionId: resolvedConnectionId }
       );
-      await dbFrom('messages')
+      const { error: noInstErr } = await dbFrom('messages')
         .update({ status: 'failed', error_reason: 'Conexão WhatsApp sem nome de instância válido' })
         .eq('id', data.id);
+      if (noInstErr) log.warn('Failed to mark message as failed (no instance name)', { error: noInstErr.message });
       // F4-15: audit via batcher + flush explícito (caminho de erro raro).
       enqueueAudit({
         entity_type: 'conversation',
@@ -431,7 +433,7 @@ async function sendMessageToContactInner(
         'Falha ao enviar mensagem';
 
       if (auth.isAuth) {
-        await dbFrom('messages')
+        const { error: authErrUpd } = await dbFrom('messages')
           .update({
             // DB trigger normalizes 'failed_auth' -> 'failed' via messages_update_trigger
             status: 'failed_auth',
@@ -440,6 +442,7 @@ async function sendMessageToContactInner(
             error_reason: auth.reason || reason,
           })
           .eq('id', data.id);
+        if (authErrUpd) log.warn('Failed to mark message as failed_auth', { error: authErrUpd.message });
         const sid = opts.optimisticId || data.id;
         emitSendStatus(
           sid,
@@ -447,13 +450,14 @@ async function sendMessageToContactInner(
           { contactId, source: 'messageSender' }
         );
       } else {
-        await dbFrom('messages')
+        const { error: failErrUpd } = await dbFrom('messages')
           .update({
             status: 'failed',
             whatsapp_connection_id: resolvedConnectionId,
             error_reason: reason,
           })
           .eq('id', data.id);
+        if (failErrUpd) log.warn('Failed to mark message as failed', { error: failErrUpd.message });
         const sid = opts.optimisticId || data.id;
         emitSendStatus(
           sid,
@@ -477,7 +481,7 @@ async function sendMessageToContactInner(
     // independentes — rodam em PARALELO (antes: 2 awaits sequenciais). O
     // audit vai pelo batcher com flush explícito (1 insert multi-row para
     // N envios concorrentes; tolera falha — telemetria não-crítica, F4-17).
-    await Promise.all([
+    const [sentUpd] = await Promise.all([
       dbFrom('messages')
         .update({
           status: effectiveStatus,
@@ -497,6 +501,7 @@ async function sendMessageToContactInner(
           flushAuditBatch())
         : Promise.resolve(null),
     ]);
+    if (sentUpd?.error) log.warn('Failed to update message status to sent', { error: sentUpd.error.message });
     const finalSid = opts.optimisticId || data.id;
     emitSendStatus(finalSid, { status: 'sent' }, { contactId, source: 'messageSender' });
   } catch (evolutionError) {
@@ -511,7 +516,7 @@ async function sendMessageToContactInner(
       evolutionError instanceof Error ? evolutionError.message : 'Falha ao enviar mensagem';
     const sid = opts.optimisticId || data.id;
     if (auth.isAuth) {
-      await dbFrom('messages')
+      const { error: catchAuthErr } = await dbFrom('messages')
         .update({
           // DB trigger normalizes 'failed_auth' -> 'failed' via messages_update_trigger
           status: 'failed_auth',
@@ -519,6 +524,7 @@ async function sendMessageToContactInner(
           error_reason: auth.reason || reason,
         })
         .eq('id', data.id);
+      if (catchAuthErr) log.warn('Failed to mark message as failed_auth (catch)', { error: catchAuthErr.message });
       emitSendStatus(
         sid,
         { status: 'failed_auth', errorCode: auth.code, errorReason: auth.reason || reason },
@@ -527,7 +533,7 @@ async function sendMessageToContactInner(
     } else {
       // If error came from withRetry exhausting attempts, mark failed_retries.
       // DB trigger normalizes 'failed_retries' -> 'failed' via messages_update_trigger
-      await dbFrom('messages')
+      const { error: retriesErr } = await dbFrom('messages')
         .update({
           status: 'failed_retries',
           error_reason: reason,
@@ -535,6 +541,7 @@ async function sendMessageToContactInner(
           retry_total: MAX_RETRIES,
         })
         .eq('id', data.id);
+      if (retriesErr) log.warn('Failed to mark message as failed_retries', { error: retriesErr.message });
       emitSendStatus(
         sid,
         { status: 'failed_retries', totalRetries: MAX_RETRIES, errorReason: reason },

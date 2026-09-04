@@ -172,15 +172,17 @@ export function useConversationActions({ commitConversations }: UseConversationA
     );
 
     try {
-      const { data: conv } = await dbFrom('team_conversations')
+      const { data: conv, error: convSelErr } = await dbFrom('team_conversations')
         .select('id, routing_status')
         .eq('id', contactId)
         .maybeSingle();
+      if (convSelErr) throw convSelErr;
 
       if (conv && conv.routing_status === 'pending') {
-        await dbFrom('team_conversations')
+        const { error: routingErr } = await dbFrom('team_conversations')
           .update({ routing_status: 'assigned' })
           .eq('id', contactId);
+        if (routingErr) throw routingErr;
       }
     } catch (err) {
       log.error('Error checking routing status on send:', err);
