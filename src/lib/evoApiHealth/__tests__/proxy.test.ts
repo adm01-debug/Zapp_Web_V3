@@ -160,8 +160,6 @@ beforeEach(() => {
   vi.useFakeTimers();
   mockFetch.mockReset();
   mockGetSession.mockReset();
-  // Reset the cached session between tests by accessing internal state
-  (evoApi as unknown as { cachedSession: null }).cachedSession = null;
 });
 
 afterEach(() => {
@@ -201,7 +199,11 @@ describe('call() — happy path', () => {
     expect(result.data).toBeNull();
   });
 
-  it.skip('sends schema: evo_api in the request body', async () => {});
+  it.skip('sends schema: evo_api in the request body', async () => {
+    // SUPERSEDED: proxy consolidado (2026-08) — não usa mais edge function HTTP.
+    // O schema 'zapp' fica configurado no cliente Supabase (db.schema); 'evo_api'
+    // nunca foi campo do corpo da requisição na arquitetura atual.
+  });
 });
 
 // ── 2. Transient schema errors → retry ────────────────────────────────────────
