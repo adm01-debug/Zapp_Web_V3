@@ -581,11 +581,12 @@ export function useBusinessLogicPipelineManagement(
       toast({ title: 'Erro ao mover deal', description: error.message, variant: 'destructive' });
       return;
     }
-    await supabase.from('deal_activities').insert({
+    const { error: actErr } = await supabase.from('deal_activities').insert({
       deal_id: dealId,
       activity_type: 'stage_change',
       description: `Movido para ${stages.find((s) => s.id === newStageId)?.name}`,
     });
+    if (actErr) log.warn('[deal] deal_activities insert falhou', actErr);
     void queryClient.invalidateQueries({ queryKey: PIPELINE_KEY });
   };
 
