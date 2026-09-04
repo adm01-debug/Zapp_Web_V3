@@ -18,6 +18,7 @@ export function useCSATAutoConfig() {
 
   const { data: connections = [] } = useQuery({
     queryKey: queryKeys.adminOps.whatsappConnectionsCsat(),
+    enabled: !!profile?.id,
     queryFn: async () => {
       const { data } = await supabase.from('whatsapp_connections').select('id, name, status');
       return data || [];
@@ -26,6 +27,7 @@ export function useCSATAutoConfig() {
 
   const { data: config } = useQuery({
     queryKey: queryKeys.adminOps.csatAutoConfig(),
+    enabled: !!profile?.id,
     queryFn: async () => {
       const { data } = await supabase
         .from('csat_auto_config')
