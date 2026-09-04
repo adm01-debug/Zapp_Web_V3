@@ -5,13 +5,17 @@ import { ConversationWithMessages } from '@/features/inbox';
 import { getLogger } from '@/lib/logger';
 import { isValidUUID } from '@/utils/uuid';
 import { QUERY_STALE_TIMES, QUERY_GC_TIMES } from '@/lib/queryStaleTimes';
+import { useAuth } from '@/features/auth';
 
 const log = getLogger('useInboxDataQueries');
 
 /** Loads auxiliary inbox data (custom scopes and a contact→tags map) via React Query; tags are chunked in batches of 500 to stay within PostgREST limits. */
 export function useInboxDataQueries(conversations: ConversationWithMessages[]) {
+  const { user } = useAuth();
+
   const { data: customScopes = [] } = useQuery({
     queryKey: queryKeys.contactDetails.inboxScopes(),
+    enabled: !!user,
     queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from('inbox_custom_scopes')
@@ -27,7 +31,7 @@ export function useInboxDataQueries(conversations: ConversationWithMessages[]) {
 
   const { data: contactTagsMap = {} } = useQuery({
     queryKey: queryKeys.contactDetails.tagsMap(),
-    enabled: conversations.length > 0,
+    enabled: !!user && conversations.length > 0,
     queryFn: async ({ signal }) => {
       const conversationContactIds = new Set(
         conversations.filter((c) => c?.contact?.id).map((c) => c.contact.id)
