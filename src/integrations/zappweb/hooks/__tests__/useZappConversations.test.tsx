@@ -769,7 +769,8 @@ describe('useZappConversations — gaps P0/P1 (cobertura de segurança)', () => 
 
   it('G2: removeChannel é chamado na limpeza do useEffect (cleanup sem memory leak)', async () => {
     const { unmount } = renderHook(() => useZappConversations());
-    await waitFor(() => expect(supabaseMock.client.removeChannel.mock.calls.length === 0 || true).toBe(true));
+    // Garante que o hook inicializou sem chamar removeChannel ainda
+    await waitFor(() => expect(supabaseMock.client.removeChannel).not.toHaveBeenCalled());
 
     // Antes do unmount, removeChannel não deve ter sido chamado
     const callsBefore = supabaseMock.client.removeChannel.mock.calls.length;

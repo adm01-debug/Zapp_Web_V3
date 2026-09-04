@@ -148,6 +148,7 @@ export default function ZappWebbDemoPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [retryingConvs, setRetryingConvs] = useState(false);
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -223,7 +224,16 @@ export default function ZappWebbDemoPage() {
             ) : conversationsError ? (
               <div className="p-6 text-center">
                 <p className="mb-2 text-xs text-destructive">{conversationsError}</p>
-                <Button size="sm" variant="outline" onClick={() => void refetchConversations()}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={retryingConvs}
+                  onClick={() => {
+                    setRetryingConvs(true);
+                    void refetchConversations().finally(() => setRetryingConvs(false));
+                  }}
+                >
+                  {retryingConvs && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                   Tentar novamente
                 </Button>
               </div>
@@ -345,7 +355,13 @@ export default function ZappWebbDemoPage() {
                       {messagesError && (
                         <div className="flex flex-col items-center gap-1">
                           <p className="text-xs text-destructive">{messagesError}</p>
-                          <Button size="sm" variant="outline" onClick={() => void refetchMessages()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void (messages.length > 0 ? loadOlder() : refetchMessages())
+                            }
+                          >
                             Tentar novamente
                           </Button>
                         </div>

@@ -262,7 +262,7 @@ export function useZappConversations(opts: Options = {}) {
           // Fix B (P1): guarda de tipo em runtime antes de usar o payload —
           // o Supabase Realtime não garante o shape exato de `payload.new`.
           const row = payload.new as Record<string, unknown>;
-          if (typeof row.id !== 'string' || typeof row.status !== 'string') return;
+          if (typeof row.id !== 'string') return;
           if (row.status !== status) return;
           const full = await fetchOne(row.id);
           if (!isSubscriptionActive) return;
