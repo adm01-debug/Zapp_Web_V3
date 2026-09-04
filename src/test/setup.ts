@@ -7,18 +7,21 @@ import "@testing-library/jest-dom";
 if (typeof Element !== 'undefined') {
   const animationStub = (): Animation => {
     const noop = () => {};
-    const never = new Promise<Animation>(() => {});
-    return {
+    const stub: Record<string, unknown> = {
       cancel: noop, finish: noop, pause: noop, play: noop, reverse: noop,
       commitStyles: noop, persist: noop, updatePlaybackRate: noop,
       addEventListener: noop, removeEventListener: noop,
       dispatchEvent: () => false,
-      ready: never, finished: never,
       currentTime: 0, startTime: null, playbackRate: 1,
       playState: 'idle', replaceState: 'active', pending: false,
       effect: null, timeline: null, id: '',
       oncancel: null, onfinish: null, onremove: null,
-    } as unknown as Animation;
+    };
+    // Resolve imediatamente para que callbacks de conclusão disparem normalmente
+    // sem depender do happy-dom (que rejeita com AbortError ao cancelar).
+    stub.ready = Promise.resolve(stub as unknown as Animation);
+    stub.finished = Promise.resolve(stub as unknown as Animation);
+    return stub as unknown as Animation;
   };
   Element.prototype.animate = animationStub;
 }
