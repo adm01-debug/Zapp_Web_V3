@@ -1,6 +1,7 @@
 import { getWebhookConfig, setWebhookConfig } from '@/lib/whatsappAdapter';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/features/auth';
 import { safeFrom } from '@/integrations/supabase/safeClient';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -177,6 +178,7 @@ const DEFAULT_SNAPSHOT: MonitoringSnapshot = {
 export function useMonitoringDataManagement(
   params: UseMonitoringDataParams = {}
 ): UseMonitoringDataResult {
+  const { user } = useAuth();
   const { onConnectionsUpdate } = params;
   const [period, setPeriod] = useState<TimePeriod>('12h');
   const queryClient = useQueryClient();
@@ -255,6 +257,7 @@ export function useMonitoringDataManagement(
         instanceUptimes: computeInstanceUptimes(healthLogs, now),
       };
     },
+    enabled: !!user,
     staleTime: 30_000,
   });
 

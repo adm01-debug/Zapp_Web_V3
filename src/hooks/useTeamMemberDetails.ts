@@ -52,7 +52,7 @@ export function useTeamMemberDetails(
       }
       return null;
     },
-    enabled: conversation.type === 'direct' && !!otherMemberId,
+    enabled: !!currentProfileId && conversation.type === 'direct' && !!otherMemberId,
   });
 
   const { data: groupMembers = [] } = useQuery({
@@ -78,8 +78,9 @@ export function useTeamMemberDetails(
       return (data || []) as MemberProfile[];
     },
     enabled:
-      (conversation.type === 'group' && memberIds.length > 0) ||
-      (conversation.type === 'department' && !!conversation.department_id),
+      !!currentProfileId &&
+      ((conversation.type === 'group' && memberIds.length > 0) ||
+        (conversation.type === 'department' && !!conversation.department_id)),
   });
 
   return { memberProfile: memberProfile ?? null, isLoading, groupMembers };

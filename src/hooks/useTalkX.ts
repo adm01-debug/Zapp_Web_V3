@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getLogger } from '@/lib/logger';
+import { useAuth } from '@/features/auth';
 
 const log = getLogger('useTalkX');
 
@@ -21,11 +22,13 @@ const log = getLogger('useTalkX');
 
 /** Manages TalkX broadcast campaigns: listing, creating, pausing, resuming, archiving, and recipient tracking. Uses a stable refetch callback to avoid useCallback identity churn. */
 export function useTalkX() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const campaignsQuery = useQuery({
     queryKey: ['talkx-campaigns'],
+    enabled: !!user,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('talkx_campaigns')
