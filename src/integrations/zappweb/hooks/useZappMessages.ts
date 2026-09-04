@@ -33,6 +33,13 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof zappSupabase.channel> | null>(null);
+  // Review do Copilot no PR #1514: sem isso, uma troca de remoteJid enquanto
+  // loadOlder() está em voo faz o resultado antigo poluir a conversa nova
+  // (setMessages resolve depois do fetchAll da nova conversa já ter rodado).
+  const remoteJidRef = useRef(remoteJid);
+  useEffect(() => {
+    remoteJidRef.current = remoteJid;
+  }, [remoteJid]);
 
   const fetchAll = useCallback(async () => {
     if (!remoteJid) {
@@ -91,12 +98,16 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
         .order('created_at', { ascending: false })
         .limit(limit);
       if (err) throw err;
+      if (remoteJidRef.current !== remoteJid) return; // conversa trocou durante o fetch
       const rows = ((data ?? []) as unknown as EvolutionMessage[]).slice().reverse();
       setMessages((prev) => [...rows, ...prev]);
       setHasMore(rows.length === limit);
     } catch (e: unknown) {
       log.error('[useZappMessages] loadOlder', e);
     } finally {
+      // Sempre reseta, mesmo se a conversa mudou: senão loadingMore trava em
+      // true e loadOlder() da conversa nova vira no-op permanente (guard da
+      // linha 76).
       setLoadingMore(false);
     }
   }, [remoteJid, instance, limit, messages, loadingMore, hasMore]);

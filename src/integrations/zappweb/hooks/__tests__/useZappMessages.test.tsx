@@ -158,4 +158,57 @@ describe('useZappMessages — loadOlder (paginação incremental, auditoria 22D 
     expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsBefore);
     expect(result.current.messages).toHaveLength(1);
   });
+
+  // Review do Copilot no PR #1514: loadOlder() em voo + troca de remoteJid
+  // não pode poluir a conversa nova com o resultado (tardio) da antiga.
+  it('troca de remoteJid durante loadOlder() em voo não polui a conversa nova', async () => {
+    const REMOTE_JID_B = '5511999990002@s.whatsapp.net';
+
+    supabaseMock.table.data = [msg('a2', '2026-08-04T12:00:02Z'), msg('a1', '2026-08-04T12:00:01Z')];
+    const { result, rerender } = renderHook(
+      ({ remoteJid }) => useZappMessages({ remoteJid, limit: 2 }),
+      { initialProps: { remoteJid: REMOTE_JID as string | null } }
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.messages.map((m) => m.id)).toEqual(['a1', 'a2']);
+
+    // Query de loadOlder da conversa A fica pendente — resolvida manualmente
+    // só depois da troca de conversa, simulando a corrida.
+    let resolveStaleQuery!: (v: { data: unknown; error: unknown }) => void;
+    const staleQuery = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveStaleQuery = resolve;
+    });
+    const controllableBuilder = {
+      select: () => controllableBuilder,
+      eq: () => controllableBuilder,
+      is: () => controllableBuilder,
+      lt: () => controllableBuilder,
+      order: () => controllableBuilder,
+      limit: () => controllableBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        staleQuery.then(onFulfilled),
+    };
+    supabaseMock.client.from.mockImplementationOnce(() => controllableBuilder as never);
+
+    let loadOlderDone: Promise<void> | undefined;
+    act(() => {
+      loadOlderDone = result.current.loadOlder();
+    });
+
+    // Troca pra conversa B ANTES da query de A resolver.
+    supabaseMock.table.data = [msg('b1', '2026-08-04T13:00:01Z')];
+    rerender({ remoteJid: REMOTE_JID_B });
+    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual(['b1']));
+
+    // Só agora a query tardia de A resolve.
+    await act(async () => {
+      resolveStaleQuery({ data: [msg('a0', '2026-08-04T11:00:00Z')], error: null });
+      await loadOlderDone;
+    });
+
+    expect(result.current.messages.map((m) => m.id)).toEqual(['b1']);
+    // loadingMore não pode ficar travado em true (senão loadOlder da conversa
+    // B vira no-op permanente pelo guard `loadingMore` no topo da função).
+    expect(result.current.loadingMore).toBe(false);
+  });
 });
