@@ -543,7 +543,8 @@ export async function persistProfilePicture(supabase: any, phone: string, profil
 
     const { data: oldFiles } = await supabase.storage.from('avatars').list('avatars', { search: phone });
     if (oldFiles?.length) {
-      await supabase.storage.from('avatars').remove(oldFiles.map((f: { name: string }) => `avatars/${f.name}`));
+      const { error: rmErr } = await supabase.storage.from('avatars').remove(oldFiles.map((f: { name: string }) => `avatars/${f.name}`));
+      if (rmErr) console.warn('[avatar] old avatar remove failed (best-effort):', rmErr);
     }
 
     const { error } = await supabase.storage.from('avatars').upload(storagePath, bytes, {
