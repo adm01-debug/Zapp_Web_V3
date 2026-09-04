@@ -112,7 +112,7 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
       renderHook(() => useEvolutionAutoReconnect('wpp2'));
 
       // ~22min: backoff cresce 4s→8s→16s→32s→60s (teto) + 5s de execucao por
-      // tentativa. As 20 tentativas levam ~19min; 22min garante margem.
+      // tentativa. As 20 tentativas levam ~17 min 40 s; 22min garante margem.
       await advance(22 * 60_000);
 
       const givingUp = logError.mock.calls.filter((c) =>
@@ -143,8 +143,9 @@ describe('useEvolutionAutoReconnect — latch de esgotamento', () => {
       // + backoff inicial (5s) disparar + checkStatus acionar 2a tentativa.
       await advance(90_000);
       // Se B-2 regredisse, checkStatus ficaria mudo apos o 1o backoff timer
-      // e connectInstance seria chamado apenas 1x. Com o fix, deve haver >= 2.
-      expect(connectInstance.mock.calls.length).toBeGreaterThanOrEqual(2);
+      // e connectInstance seria chamado apenas 1x. A sequencia de backoff em 90s:
+      // t=0 (tentativa 1), t=9 (2), t=22 (3), t=43 (4), t=80 (5) → >= 4.
+      expect(connectInstance.mock.calls.length).toBeGreaterThanOrEqual(4);
     }
   );
 
@@ -413,10 +414,10 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
     expect(getInstanceStatus.mock.calls.length).toBe(3);
 
     // Após o cooldown (circuito fecha em t=180s):
-    // intervalo em t=180s passa pelo Guard 2 → nova chamada a getInstanceStatus.
-    // Cobre t=120s (bloqueado), t=150s (bloqueado), t=180s (passa).
+    // intervalo em t=180s passa pelo Guard 2 → 4ª chamada a getInstanceStatus.
+    // Cobre t=120s (bloqueado), t=150s (bloqueado), t=180s (passa, Guard > strict).
     await advance(100_000); // t=195s
-    expect(getInstanceStatus.mock.calls.length).toBeGreaterThan(3);
+    expect(getInstanceStatus.mock.calls.length).toBe(4);
   });
 
   it('resetReconnect zera circuitOpenUntilRef e credentialErrorRef — retomada imediata', async () => {
@@ -439,6 +440,14 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
     });
     await advance(2_000);
     expect(connectInstance.mock.calls.length).toBeGreaterThan(callsAfterCred);
+
+    // Prova real de que credentialErrorRef foi zerado: checkStatus precisa
+    // conseguir chamar getInstanceStatus no próximo ciclo (Guard 1 passa).
+    // Sem o reset de credentialErrorRef, Guard 1 bloqueia checkStatus
+    // permanentemente — getInstanceStatus NÃO seria chamado novamente.
+    const gsCallsAfterReset = getInstanceStatus.mock.calls.length;
+    await advance(35_000); // 1 ciclo de checkStatus (intervalo = 30s)
+    expect(getInstanceStatus.mock.calls.length).toBeGreaterThan(gsCallsAfterReset);
   });
 });
 
