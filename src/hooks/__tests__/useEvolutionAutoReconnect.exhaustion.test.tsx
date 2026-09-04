@@ -41,7 +41,11 @@ vi.mock('@/hooks/useEvolutionApi', () => ({
 
 vi.mock('@/integrations/supabase/client', () => {
   const channel = {
-    on: vi.fn(() => channel),
+    on: vi.fn((event: string, _filter: unknown, cb: (payload: unknown) => void) => {
+      // Captura o callback do postgres_changes para uso nos testes F-01
+      if (event === 'postgres_changes') capturedPgCallback.current = cb;
+      return channel;
+    }),
     subscribe: vi.fn(() => channel),
     unsubscribe: vi.fn(),
   };
@@ -62,6 +66,10 @@ vi.mock('@tanstack/react-query', () => {
 });
 
 vi.mock('@/lib/eventBus', () => ({ eventBus: { emit } }));
+
+vi.mock('@/hooks/evolutionAutoReconnectState', () => ({
+  isConclusiveEvolutionDisconnect: vi.fn((s: string) => s === 'close'),
+}));
 
 import { useEvolutionAutoReconnect } from '@/hooks/useEvolutionAutoReconnect';
 
@@ -402,5 +410,133 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
     });
     await advance(2_000);
     expect(connectInstance.mock.calls.length).toBeGreaterThan(callsAfterCred);
+  });
+});
+
+// F-02: credential errors (HTTP 401/403) em checkStatus param polling permanentemente
+describe('useEvolutionAutoReconnect — credential error em checkStatus', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    logError.mockClear();
+    logWarn.mockClear();
+    emit.mockClear();
+    getInstanceStatus.mockClear();
+    connectInstance.mockClear();
+    getInstanceStatus.mockImplementation(async () => ({ instance: { state: 'close' } }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([401, 403])(
+    'HTTP %i em getInstanceStatus para o polling permanentemente (credentialErrorRef)',
+    async (httpStatus) => {
+      getInstanceStatus.mockRejectedValueOnce({ status: httpStatus });
+
+      renderHook(() => useEvolutionAutoReconnect('wpp2'));
+      // Deixa o primeiro ciclo de checkStatus disparar (~2s)
+      await advance(2_000);
+
+      // O evento de credential error deve ter sido emitido
+      expect(emit.mock.calls.some((c) => c[0] === 'connection:credential-error')).toBe(true);
+
+      // A partir daqui o polling deve ter parado — congelar contagem
+      const callsAfterError = getInstanceStatus.mock.calls.length;
+      await advance(120_000);
+      expect(getInstanceStatus.mock.calls.length).toBe(callsAfterError);
+    },
+  );
+});
+
+// F-01: performReconnect disparada via evento Realtime (postgres_changes UPDATE)
+// capturedPgCallback é definido via vi.hoisted para ser acessível no vi.mock acima.
+const { capturedPgCallback } = vi.hoisted(() => ({
+  capturedPgCallback: { current: null as ((payload: unknown) => void) | null },
+}));
+
+describe('useEvolutionAutoReconnect — performReconnect via Realtime', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    logError.mockClear();
+    logInfo.mockClear();
+    logWarn.mockClear();
+    emit.mockClear();
+    restartInstance.mockClear();
+    connectInstance.mockClear();
+    getInstanceStatus.mockClear();
+    capturedPgCallback.current = null;
+    restartInstance.mockImplementation(async () => ({}));
+    getInstanceStatus.mockImplementation(async () => ({ instance: { state: 'open' } }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('invoca restartInstance quando UPDATE em whatsapp_connections sinaliza desconexao', async () => {
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+    // Deixa o useEffect montar e registrar o channel
+    await advance(100);
+    expect(capturedPgCallback.current).not.toBeNull();
+
+    // Simula payload de UPDATE: connected → disconnected
+    await act(async () => {
+      capturedPgCallback.current?.({
+        new: {
+          instance_id: 'inst-001',
+          status: 'disconnected',
+          health_reason: null,
+          auto_reconnect_enabled: true,
+          loop_protection_active: false,
+        },
+        old: { status: 'connected' },
+      });
+    });
+    await advance(5_000);
+
+    expect(restartInstance.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ignora UPDATE quando auto_reconnect_enabled e false', async () => {
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+    await advance(100);
+
+    await act(async () => {
+      capturedPgCallback.current?.({
+        new: {
+          instance_id: 'inst-001',
+          status: 'disconnected',
+          health_reason: null,
+          auto_reconnect_enabled: false,
+          loop_protection_active: false,
+        },
+        old: { status: 'connected' },
+      });
+    });
+    await advance(5_000);
+
+    expect(restartInstance.mock.calls.length).toBe(0);
+  });
+
+  it('ignora UPDATE quando loop_protection_active e true', async () => {
+    renderHook(() => useEvolutionAutoReconnect('wpp2'));
+    await advance(100);
+
+    await act(async () => {
+      capturedPgCallback.current?.({
+        new: {
+          instance_id: 'inst-001',
+          status: 'disconnected',
+          health_reason: null,
+          auto_reconnect_enabled: true,
+          loop_protection_active: true,
+        },
+        old: { status: 'connected' },
+      });
+    });
+    await advance(5_000);
+
+    expect(restartInstance.mock.calls.length).toBe(0);
   });
 });

@@ -1,0 +1,56 @@
+name: action-pin-check
+
+# Detecta ações de terceiros referenciadas por tag mutável (@vN) sem SHA digest.
+# Ações oficiais do GitHub (actions/*) na mesma versão são permitidas desde que
+# Dependabot esteja configurado para atualizá-las. Ações de terceiros com tags
+# mutáveis representam risco de supply-chain e são bloqueadas.
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-action-pins:
+    name: Detectar ações sem SHA pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar ações de terceiros sem SHA digest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Regex: linha "uses: <owner>/<repo>@<tag>" onde tag não é um SHA de 40 hex
+          # Exclui actions/* (monitorado pelo Dependabot com versioning-strategy)
+          # Exclui linhas comentadas
+
+          UNPINNED=$(grep -rn 'uses:' .github/workflows/ .github/actions/ 2>/dev/null \
+            | grep -v '^\s*#' \
+            | grep -E 'uses:\s+[^/]+/[^@]+@[^0-9a-f]' \
+            | grep -v 'uses:\s+actions/' \
+            | grep -vE 'uses:\s+[^/]+/[^@]+@[0-9a-f]{40}' \
+            || true)
+
+          if [ -z "$UNPINNED" ]; then
+            echo "Todas as ações de terceiros estão pinadas por SHA digest. OK."
+            exit 0
+          fi
+
+          echo "::error::Ações de terceiros com tag mutável detectadas (sem SHA digest):"
+          echo "$UNPINNED"
+          echo ""
+          echo "Substitua @<tag> por @<sha-de-40-hex> # tag: <versao>"
+          echo "Exemplo: uses: 3rd-party/action@abc123def456...0000 # v2.3.1"
+          exit 1
