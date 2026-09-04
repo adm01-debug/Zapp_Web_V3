@@ -290,11 +290,13 @@ export function useZappConversations(opts: Options = {}) {
             // acha (review do cubic — a próxima conversa elegível nunca
             // entrava sozinha).
             const wasFull = conversationsRef.current.length === limit;
-            // Fix A (P2): só avança a geração (sinalizando "estrutura mudou")
-            // quando a conversa sai da janela. Updates in-place (reordenamento,
-            // campos atualizados) não mudam a composição da lista — não precisam
-            // de um refetch completo para reconciliação.
-            if (willRemove) generationRef.current += 1;
+            // Avança a geração em todo UPDATE de uma conversa existente.
+            // Fix CodeRabbit (Major): mesmo em UPDATEs in-place (willRemove=false),
+            // um fetchAll() em voo com a geração anterior sobrescreveria o patch
+            // local ao resolver (linha 148: `generationRef.current === myGeneration`
+            // ainda true). Avançar aqui descarta qualquer resposta em trânsito
+            // sem disparar um novo refetch (só willRemove && wasFull faz isso).
+            generationRef.current += 1;
             setConversations((prev) => {
               const idx = prev.findIndex((c) => c.id === row.id);
               if (idx === -1) return prev;
@@ -347,15 +349,14 @@ export function useZappConversations(opts: Options = {}) {
       .subscribe();
     return () => {
       isSubscriptionActive = false;
-      ch.unsubscribe();
-      // Fix P3 (race condition agent): removeChannel pode lançar em versões
-      // futuras do SDK (ou se o channel já foi removido externamente);
-      // isola para não propagar fora do cleanup do React.
-      try {
-        zappSupabase.removeChannel(ch);
-      } catch {
-        // inofensivo na versão atual do supabase-js; registrado pra debug.
-      }
+      // Fix CodeRabbit (Minor): removeChannel() já chama unsubscribe()
+      // internamente — a chamada explícita era redundante (duplo unsubscribe).
+      // removeChannel() retorna Promise; .catch() captura rejeições assíncronas
+      // que um try/catch síncrono não alcança.
+      zappSupabase.removeChannel(ch).catch(() => {
+        // cleanup assíncrono falhou; ignorado — canal já invalidado por
+        // isSubscriptionActive=false e React já desmontou o componente.
+      });
     };
   }, [instance, status, limit, fetchAll, fetchOne]);
 
