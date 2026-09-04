@@ -340,7 +340,7 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     );
   });
 
-  it('achado do cubic (PR #1514, P1): um refetch manual concorrente não faz o fetchAll inicial obsoleto vencer', async () => {
+  it('achado do cubic (PR #1514, P1): refetch() concorrente durante fetchAll() em voo não dispara busca paralela', async () => {
     let resolveFirst!: (v: { data: unknown; error: unknown }) => void;
     const pendingFirst = new Promise<{ data: unknown; error: unknown }>((resolve) => {
       resolveFirst = resolve;
@@ -352,11 +352,8 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
       limit: () => firstBuilder,
       then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => pendingFirst.then(onFulfilled),
     };
-    // Qualquer chamada DEPOIS da 1ª (o refetch() manual, e um eventual retry
-    // do fetchAll inicial obsoleto) reflete o estado atual — com o boolean
-    // antigo (staleFetchRef), o refetch() resetava o marcador compartilhado e
-    // fazia o fetchAll inicial (mais velho) parecer "não-obsoleto" ao
-    // resolver depois, regredindo a lista pro snapshot velho.
+    // Qualquer chamada DEPOIS da 1ª reflete o estado atual — usada pelo loop
+    // de reconciliação quando ele refizer a busca sozinho.
     const currentTruthBuilder = {
       select: () => currentTruthBuilder,
       eq: () => currentTruthBuilder,
@@ -373,18 +370,26 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
 
     const { result } = renderHook(() => useZappConversations());
     expect(result.current.loading).toBe(true);
+    const fromCallsAfterMount = supabaseMock.client.from.mock.calls.length; // 1 (fetchAll inicial, pendente)
 
+    // Achado do cubic (P1): a versão anterior (retry recursivo direto) fazia
+    // CADA chamada concorrente disparar sua própria busca em paralelo — sem
+    // limite. Um refetch() manual enquanto o fetchAll inicial ainda está em
+    // voo deve só sinalizar o loop já em andamento, nunca abrir uma 2ª
+    // requisição imediatamente.
     await act(async () => {
       await result.current.refetch();
     });
-    expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1']);
+    expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsAfterMount);
 
-    // O fetchAll inicial (obsoleto) resolve por último — não pode regredir o
-    // resultado mais recente do refetch manual pro snapshot velho.
+    // Só agora o fetchAll inicial (obsoleto) resolve — o loop já em andamento
+    // percebe que a geração avançou e refaz a busca sozinho (1 chamada nova,
+    // não mais).
     await act(async () => {
       resolveFirst({ data: convRows(2), error: null });
     });
 
     await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1']));
+    expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsAfterMount + 1);
   });
 });

@@ -43,45 +43,69 @@ export function useZappConversations(opts: Options = {}) {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
-  // Review do cubic no PR #1514 (2ª rodada, 2 achados P1): um boolean
-  // compartilhado não basta — se um SEGUNDO fetchAll() começar enquanto o
-  // primeiro ainda está em voo (refetch manual, ou o backfill disparado por
-  // uma remoção), o reset no início do segundo apaga o "sujo" do primeiro, e
-  // o primeiro pode aplicar um snapshot desatualizado por cima. E descartar
-  // o snapshot inteiro (em vez de reconciliar) podia esconder a lista toda
-  // atrás de só 1 linha se um evento chegasse durante a carga inicial.
-  // Contador de geração: cada fetchAll() e cada mutação incremental avança a
-  // geração; se algo mudou entre o início da query e a resposta, refaz a
-  // busca (nunca descarta em silêncio) até convergir sem concorrência.
+
+  // Review do cubic no PR #1514 (3ª rodada, 2 achados a essa altura P1/P2):
+  // 1) fetchAll() fechava sobre instance/status/limit da renderização em que
+  //    foi criado — se esses props mudassem enquanto um retry recursivo
+  //    ainda rodava, o retry continuava usando os valores VELHOS (podendo
+  //    sobrescrever o filtro novo, inclusive depois do unmount).
+  // 2) `void fetchAll()` recursivo deixava chamadas concorrentes se
+  //    perseguirem sem limite: cada resposta obsoleta disparava outra busca,
+  //    cada uma avançando a geração antes da outra checar a sua.
+  // Fix: fetchAll vira uma função ESTÁVEL (deps []) que lê instance/status/
+  // limit sempre de optsRef (nunca de um closure velho), e um lock
+  // (fetchInFlightRef) garante um único loop de reconciliação ativo por vez
+  // — chamadas concorrentes só avançam a geração pro loop já em andamento
+  // pegar na próxima iteração, nunca spawnam uma busca paralela.
+  const optsRef = useRef({ instance, status, limit });
+  useEffect(() => {
+    optsRef.current = { instance, status, limit };
+  }, [instance, status, limit]);
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
   const generationRef = useRef(0);
+  const fetchInFlightRef = useRef(false);
 
   const fetchAll = useCallback(async () => {
-    const myGeneration = ++generationRef.current;
+    if (fetchInFlightRef.current) {
+      generationRef.current += 1; // sinaliza pro loop já em andamento refazer
+      return;
+    }
+    fetchInFlightRef.current = true;
     try {
-      const { data, error: err } = await zappSupabase
-        .from('evolution_conversations_wpp2')
-        .select(SELECT_FIELDS)
-        .eq('instance_name', instance)
-        .eq('status', status)
-        .order('last_message_at', { ascending: false })
-        .limit(limit);
-      if (err) throw err;
-      if (generationRef.current !== myGeneration) {
-        // Outro fetchAll() ou uma mutação incremental aconteceu durante esta
-        // query — o snapshot recebido já pode estar desatualizado. Busca de
-        // novo em vez de descartar ou aplicar por cima do que já é mais novo.
-        void fetchAll();
-        return;
+      for (;;) {
+        const myGeneration = generationRef.current;
+        const { instance: curInstance, status: curStatus, limit: curLimit } = optsRef.current;
+        const { data, error: err } = await zappSupabase
+          .from('evolution_conversations_wpp2')
+          .select(SELECT_FIELDS)
+          .eq('instance_name', curInstance)
+          .eq('status', curStatus)
+          .order('last_message_at', { ascending: false })
+          .limit(curLimit);
+        if (err) throw err;
+        if (!mountedRef.current) return;
+        if (generationRef.current === myGeneration) {
+          setConversations((data ?? []) as unknown as EvolutionConversation[]);
+          setError(null);
+          break;
+        }
+        // Geração avançou durante a query — repete no MESMO loop (nunca
+        // spawna uma chamada concorrente) com instance/status/limit atuais.
       }
-      setConversations((data ?? []) as unknown as EvolutionConversation[]);
-      setError(null);
-      setLoading(false);
     } catch (e: unknown) {
       log.error('[useZappConversations]', e);
-      setError(e instanceof Error ? e.message : String(e));
-      setLoading(false);
+      if (mountedRef.current) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      fetchInFlightRef.current = false;
+      if (mountedRef.current) setLoading(false);
     }
-  }, [instance, status, limit]);
+  }, []);
 
   const fetchOne = useCallback(async (id: string): Promise<EvolutionConversation | null> => {
     // Entre o evento e este SELECT a conversa pode ter mudado de instância/status
