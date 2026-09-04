@@ -289,20 +289,12 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
       eq: () => fetchOneBuilder,
       maybeSingle: () => pendingFetchOne,
     };
-    const emptyBuilder = {
-      select: () => emptyBuilder,
-      eq: () => emptyBuilder,
-      order: () => emptyBuilder,
-      limit: () => emptyBuilder,
-      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
-        Promise.resolve({ data: [], error: null }).then(onFulfilled),
-    };
     // Ordem das próximas 2 chamadas a from(): 1) fetchOne() do handler velho
     // (fica pendente); 2) fetchAll() disparado pela nova assinatura no
     // rerender (nenhuma conversa arquivada — resultado real esperado).
     supabaseMock.client.from
       .mockImplementationOnce(() => fetchOneBuilder as never)
-      .mockImplementationOnce(() => emptyBuilder as never);
+      .mockImplementationOnce(() => syncBuilder([]) as never);
 
     let insertHandled: Promise<void> | undefined;
     act(() => {
