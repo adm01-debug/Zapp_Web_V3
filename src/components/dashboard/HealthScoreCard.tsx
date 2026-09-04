@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/features/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,7 @@ function fmtStatus(value: string | number | undefined): string {
 
 /** Health Score card — reads zapp.fn_system_health_score() (DASHBOARD-17). */
 export function HealthScoreCard() {
+  const { user } = useAuth();
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', 'health-score'],
     queryFn: async (): Promise<HealthScoreResult | null> => {
@@ -49,6 +51,7 @@ export function HealthScoreCard() {
       if (data == null || typeof data !== 'object') return null;
       return data as HealthScoreResult;
     },
+    enabled: !!user,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });
