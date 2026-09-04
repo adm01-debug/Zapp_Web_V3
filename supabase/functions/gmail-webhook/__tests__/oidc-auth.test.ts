@@ -13,6 +13,7 @@ Object.defineProperty(Deno, "serve", { value: (fn: H) => { h = fn; return { fini
 
 const PUSH_TOKEN = "test-pubsub-token";
 const AUDIENCE = "https://zapp.example/functions/v1/gmail-webhook";
+const SERVICE_ACCOUNT = "gmail-push@zapp-web.iam.gserviceaccount.com";
 const KID = "test-key-1";
 
 for (const [k, v] of Object.entries({
@@ -22,10 +23,14 @@ for (const [k, v] of Object.entries({
   GMAIL_PUBSUB_TOPIC: "projects/zapp/topics/gmail-push",
   GMAIL_PUBSUB_TOKEN: PUSH_TOKEN,
   GMAIL_PUBSUB_OIDC_AUDIENCE: AUDIENCE,
+  GMAIL_PUBSUB_OIDC_SERVICE_ACCOUNT: SERVICE_ACCOUNT,
 })) Deno.env.set(k, v);
 
 const { publicKey, privateKey } = await jose.generateKeyPair("RS256");
 const publicJwk = { ...(await jose.exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
+// Par de chaves de um "atacante" — nunca publicado no JWKS mockado — para
+// provar que a verificação de assinatura RS256 é real, não só estrutural.
+const { privateKey: attackerPrivateKey } = await jose.generateKeyPair("RS256");
 
 const J = { "content-type": "application/json" };
 const Jres = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -69,14 +74,19 @@ const pushBody = () => ({
 const push = (headers: Record<string, string> = {}, query = "") =>
   h(new Request(`http://mock.local/gmail-webhook${query}`, { method: "POST", body: JSON.stringify(pushBody()), headers: { ...J, ...headers } }));
 
-const signToken = (overrides: Partial<{ iss: string; aud: string; email: string; exp: string }> = {}) =>
-  new jose.SignJWT({ email: overrides.email ?? "gmail-push@zapp-web.iam.gserviceaccount.com" })
+const signToken = (
+  overrides: Partial<{ iss: string; aud: string; email: string; emailVerified: boolean; exp: string; key: jose.KeyLike }> = {}
+) =>
+  new jose.SignJWT({
+    email: overrides.email ?? SERVICE_ACCOUNT,
+    email_verified: overrides.emailVerified ?? true,
+  })
     .setProtectedHeader({ alg: "RS256", kid: KID })
     .setIssuedAt()
     .setIssuer(overrides.iss ?? "https://accounts.google.com")
     .setAudience(overrides.aud ?? AUDIENCE)
     .setExpirationTime(overrides.exp ?? "5m")
-    .sign(privateKey);
+    .sign(overrides.key ?? privateKey);
 
 Deno.test("gmail-webhook OIDC: audience configurado + sem Authorization header → 401 (token de querystring não basta mais)", async () => {
   account = { ...ACCOUNT };
@@ -97,12 +107,53 @@ Deno.test("gmail-webhook OIDC: JWT válido mas aud errado → 401", async () => 
   assertEquals(res.status, 401);
 });
 
-Deno.test("gmail-webhook OIDC: JWT válido (iss/aud/assinatura corretos) → passa da auth (200)", async () => {
+Deno.test("gmail-webhook OIDC: JWT estruturalmente válido mas assinado com chave errada → 401 (prova que a verificação RS256/JWKS é real)", async () => {
   account = { ...ACCOUNT };
-  certsRequests = 0;
+  const token = await signToken({ key: attackerPrivateKey });
+  const res = await push({ authorization: `Bearer ${token}` });
+  assertEquals(res.status, 401);
+});
+
+Deno.test("gmail-webhook OIDC: JWT válido de outra identidade Google (email diferente da service account esperada) → 401", async () => {
+  // Achado do review (cubic P1 / CodeRabbit): aud sozinho não autentica —
+  // qualquer service account do Google pode pedir um ID token com o aud
+  // configurado. Precisa pinar o email exato.
+  account = { ...ACCOUNT };
+  const token = await signToken({ email: "outra-conta@outro-projeto.iam.gserviceaccount.com" });
+  const res = await push({ authorization: `Bearer ${token}` });
+  assertEquals(res.status, 401);
+});
+
+Deno.test("gmail-webhook OIDC: JWT válido mas email_verified=false → 401", async () => {
+  account = { ...ACCOUNT };
+  const token = await signToken({ emailVerified: false });
+  const res = await push({ authorization: `Bearer ${token}` });
+  assertEquals(res.status, 401);
+});
+
+Deno.test("gmail-webhook OIDC: audience configurado sem service account (config parcial) → 500, nunca cai pro legado", async () => {
+  Deno.env.delete("GMAIL_PUBSUB_OIDC_SERVICE_ACCOUNT");
+  try {
+    account = { ...ACCOUNT };
+    const token = await signToken();
+    const res = await push({ authorization: `Bearer ${token}` });
+    assertEquals(res.status, 500);
+  } finally {
+    Deno.env.set("GMAIL_PUBSUB_OIDC_SERVICE_ACCOUNT", SERVICE_ACCOUNT);
+  }
+});
+
+Deno.test("gmail-webhook OIDC: JWT válido (iss/aud/assinatura/email corretos) → passa da auth (200), JWKS do Google foi consultado", async () => {
+  account = { ...ACCOUNT };
   const token = await signToken();
   const res = await push({ authorization: `Bearer ${token}` });
   assertEquals(res.status, 200);
   assertEquals(await res.json(), { ok: true }); // fixture sem messagesAdded — só valida que passou da auth e completou o fluxo
   assertEquals(gmailApiCalls, ["history"]);
+  // Cumulativo (não resetado antes deste teste): createRemoteJWKSet cacheia a
+  // chave por processo, então um reset local não força um novo fetch — o que
+  // importa é provar que o endpoint mock foi consultado pelo menos uma vez em
+  // todo o arquivo (se a verificação pulasse o JWKS por completo, os testes de
+  // assinatura/email errados acima também não teriam pego o achado do cubic).
+  assertEquals(certsRequests > 0, true);
 });

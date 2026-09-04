@@ -22,7 +22,7 @@ const PUBSUB_TOPIC = (() => {
 // módulo (createRemoteJWKSet resolve lazy + cacheia por processo).
 const GOOGLE_OIDC_JWKS = jose.createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
-async function verifyPubSubOidcToken(authHeader: string | null, expectedAudience: string): Promise<boolean> {
+async function verifyPubSubOidcToken(authHeader: string | null, expectedAudience: string, expectedServiceAccount: string): Promise<boolean> {
   // Esquema HTTP é case-insensitive (RFC 7235) e pode vir com espaçamento
   // extra — match tolerante em vez de exigir "Bearer " literal.
   const match = authHeader?.match(/^Bearer\s+(\S+)\s*$/i);
@@ -33,11 +33,16 @@ async function verifyPubSubOidcToken(authHeader: string | null, expectedAudience
       issuer: ['https://accounts.google.com', 'accounts.google.com'],
       audience: expectedAudience,
     });
-    // Tokens de service account do Google sempre carregam `email` — sanity check
-    // extra além de assinatura/iss/aud/exp (já verificados por jwtVerify acima).
-    return typeof payload.email === 'string' && payload.email.length > 0;
+    // Review 22D/#1511 (cubic P1 + CodeRabbit): `aud` sozinho não autentica o
+    // chamador — é um valor arbitrário que QUALQUER service account do Google
+    // (de qualquer projeto GCP) pode pedir ao gerar um ID token. Quem prova a
+    // identidade é o claim `email` verificado, comparado contra a service
+    // account exata configurada na push subscription do Pub/Sub.
+    return payload.email === expectedServiceAccount && payload.email_verified === true;
   } catch (err) {
-    console.error('[gmail-webhook] OIDC verification failed', err instanceof Error ? err.message : String(err));
+    // console.warn (não .error): endpoint é público e sem auth de rede — um
+    // atacante mandando Bearer arbitrário não deve inflar alertas de erro.
+    console.warn('[gmail-webhook] OIDC verification failed', err instanceof Error ? err.message : String(err));
     return false;
   }
 }
@@ -97,12 +102,19 @@ Deno.serve(async (req) => {
         // que pode vazar em logs de proxy/CDN. Sem o audience configurado ainda
         // (secret não setado), cai no fallback legado de token — comportamento
         // idêntico ao de antes desta mudança, zero risco de quebrar produção.
-        // getSecret() já lê o env (GMAIL_PUBSUB_OIDC_AUDIENCE) antes do vault —
-        // sem fallback redundante aqui.
+        // getSecret() já lê o env (GMAIL_PUBSUB_OIDC_AUDIENCE/_SERVICE_ACCOUNT)
+        // antes do vault — sem fallback redundante aqui.
         const expectedAudience = await getSecret('gmail_pubsub_oidc_audience');
+        const expectedServiceAccount = await getSecret('gmail_pubsub_oidc_service_account');
 
-        if (expectedAudience) {
-          const oidcOk = await verifyPubSubOidcToken(req.headers.get('authorization'), expectedAudience);
+        if (expectedAudience || expectedServiceAccount) {
+          // Os dois secrets sobem juntos ou não sobem — nunca tratar
+          // configuração parcial como legado (voltaria a aceitar qualquer
+          // identidade Google) nem como OIDC completo.
+          if (!expectedAudience || !expectedServiceAccount) {
+            return json({ error: 'OIDC auth misconfigured — audience and service account must both be set' }, 500);
+          }
+          const oidcOk = await verifyPubSubOidcToken(req.headers.get('authorization'), expectedAudience, expectedServiceAccount);
           if (!oidcOk) return json({ error: 'Invalid or missing OIDC token' }, 401);
         } else {
           // F2+vault: getSecret() lê env (GMAIL_PUBSUB_TOKEN) antes do vault.
