@@ -689,13 +689,14 @@ export async function authorizeRoles(
 
   if (!isAuthorized) {
     // Log unauthorized attempt to the database via RPC
-    await adminClient.rpc('log_security_event', {
+    const { error: secEventErr } = await adminClient.rpc('log_security_event', {
       p_event_type: 'unauthorized_api_call',
       p_resource: new URL(req.url).pathname,
       p_action: req.method,
       p_status: 'denied',
       p_details: { user_id: user.id, required_roles: requiredRoles, current_roles: userRoles }
     });
+    if (secEventErr) console.warn(`[validation] log_security_event failed: ${secEventErr.message}`);
     
     throw { message: "Acesso negado: permissão insuficiente", status: 403 };
   }
