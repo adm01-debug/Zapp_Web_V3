@@ -397,9 +397,12 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
           onFulfilled
         ),
     };
+    // mockImplementationOnce (não mockImplementation): um fallback persistente
+    // vazaria pros testes seguintes, já que beforeEach só faz mockClear() (que
+    // não reseta a implementação, só .mock.calls/.results).
     supabaseMock.client.from
       .mockImplementationOnce(() => firstBuilder as never)
-      .mockImplementation(() => currentTruthBuilder as never);
+      .mockImplementationOnce(() => currentTruthBuilder as never);
 
     const { result } = renderHook(() => useZappConversations());
     expect(result.current.loading).toBe(true);
@@ -448,9 +451,11 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
           onFulfilled
         ),
     };
+    // mockImplementationOnce (não mockImplementation): um fallback persistente
+    // vazaria pros testes seguintes, já que beforeEach só faz mockClear().
     supabaseMock.client.from
       .mockImplementationOnce(() => failingBuilder as never)
-      .mockImplementation(() => successBuilder as never);
+      .mockImplementationOnce(() => successBuilder as never);
 
     const { result } = renderHook(() => useZappConversations());
     expect(result.current.loading).toBe(true);
@@ -469,6 +474,196 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     });
 
     await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['ok-0', 'ok-1']));
+    expect(result.current.error).toBeNull();
+  });
+
+  it('achado do cubic (PR #1514, P1): esgotar as 3 tentativas numa recarga (não na 1ª carga) não sobrescreve o estado já carregado', async () => {
+    const { result } = renderHook(() => useZappConversations());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']); // 1ª carga já concluída
+
+    const pendingBuilder = () => {
+      let resolve!: (v: { data: unknown; error: unknown }) => void;
+      const promise = new Promise<{ data: unknown; error: unknown }>((r) => {
+        resolve = r;
+      });
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => promise.then(onFulfilled),
+      };
+      return { builder, resolve };
+    };
+
+    const attemptA = pendingBuilder();
+    const attemptB = pendingBuilder();
+    const attemptC = pendingBuilder();
+    supabaseMock.client.from
+      .mockImplementationOnce(() => attemptA.builder as never)
+      .mockImplementationOnce(() => attemptB.builder as never)
+      .mockImplementationOnce(() => attemptC.builder as never);
+
+    // Dispara o refetch (attempt 0/3, fica pendente em attemptA).
+    let refetchDone: Promise<void> | undefined;
+    act(() => {
+      refetchDone = result.current.refetch();
+    });
+
+    // Cada refetch() concorrente enquanto uma tentativa está em voo só
+    // avança a geração (achado já coberto acima) — usado aqui só pra forçar
+    // as 3 tentativas a nunca alcançarem a geração atual.
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 0
+      attemptA.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-a' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 1
+      attemptB.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-b' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 2 (última)
+      attemptC.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-c' }], error: null });
+      await refetchDone;
+    });
+
+    // As 3 tentativas nunca bateram a geração — como já tínhamos dado real
+    // (1ª carga concluída), a última tentativa NÃO aplica o snapshot obsoleto
+    // (que sobrescreveria/regrediria o estado). Fica como estava.
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']);
+  });
+
+  it('achado do cubic (PR #1514, P1): esgotar as 3 tentativas na 1ª carga aplica o melhor resultado e agenda uma rodada extra', async () => {
+    const pendingBuilder = () => {
+      let resolve!: (v: { data: unknown; error: unknown }) => void;
+      const promise = new Promise<{ data: unknown; error: unknown }>((r) => {
+        resolve = r;
+      });
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => promise.then(onFulfilled),
+      };
+      return { builder, resolve };
+    };
+    const syncBuilder = (data: unknown) => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+          Promise.resolve({ data, error: null }).then(onFulfilled),
+      };
+      return builder;
+    };
+
+    const attemptA = pendingBuilder();
+    const attemptB = pendingBuilder();
+    const attemptC = pendingBuilder();
+    const followUpRows = convRows(2).map((c) => ({ ...c, id: `atual-${c.id}` }));
+    supabaseMock.client.from
+      .mockImplementationOnce(() => attemptA.builder as never)
+      .mockImplementationOnce(() => attemptB.builder as never)
+      .mockImplementationOnce(() => attemptC.builder as never)
+      .mockImplementationOnce(() => syncBuilder(followUpRows) as never);
+
+    const { result } = renderHook(() => useZappConversations());
+    expect(result.current.loading).toBe(true); // nada carregado ainda — 1ª carga
+
+    // Cada refetch() concorrente enquanto uma tentativa está em voo só avança
+    // a geração — usado aqui pra forçar as 3 tentativas a nunca alcançarem a
+    // geração atual, igual ao teste acima, mas SEM carga inicial já concluída.
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 0
+      attemptA.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-a' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 1
+      attemptB.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-b' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 2 (última)
+      attemptC.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-c' }], error: null });
+    });
+
+    // A última tentativa aplicou o snapshot obsoleto como fallback (melhor
+    // que ficar vazio) e agendou uma rodada extra — que já deve ter rodado e
+    // trazido o estado realmente atual.
+    await waitFor(() =>
+      expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1'])
+    );
+  });
+
+  it('achado do cubic (PR #1514, P2): a ÚLTIMA tentativa falhando com refetch concorrente pendente também agenda nova rodada (não perde o pedido)', async () => {
+    const { result } = renderHook(() => useZappConversations());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']); // 1ª carga já concluída
+
+    const pendingBuilder = () => {
+      let resolve!: (v: { data: unknown; error: unknown }) => void;
+      const promise = new Promise<{ data: unknown; error: unknown }>((r) => {
+        resolve = r;
+      });
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => promise.then(onFulfilled),
+      };
+      return { builder, resolve };
+    };
+    const syncBuilder = (data: unknown) => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+          Promise.resolve({ data, error: null }).then(onFulfilled),
+      };
+      return builder;
+    };
+
+    const attemptA = pendingBuilder();
+    const attemptB = pendingBuilder();
+    const attemptC = pendingBuilder(); // última tentativa — vai FALHAR
+    const followUpRows = convRows(2).map((c) => ({ ...c, id: `atual-${c.id}` }));
+    supabaseMock.client.from
+      .mockImplementationOnce(() => attemptA.builder as never)
+      .mockImplementationOnce(() => attemptB.builder as never)
+      .mockImplementationOnce(() => attemptC.builder as never)
+      .mockImplementationOnce(() => syncBuilder(followUpRows) as never);
+
+    let refetchDone: Promise<void> | undefined;
+    act(() => {
+      refetchDone = result.current.refetch();
+    });
+
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 0
+      attemptA.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-a' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante attempt 1
+      attemptB.resolve({ data: [{ ...CONV_FIXTURE, id: 'obsoleta-b' }], error: null });
+    });
+    await act(async () => {
+      await result.current.refetch(); // bump concorrente durante a ÚLTIMA tentativa
+      attemptC.resolve({ data: null, error: new Error('falha na última tentativa') });
+      await refetchDone;
+    });
+
+    // A última tentativa falhou COM um refetch concorrente pendente — não
+    // pode propagar esse erro específico (perderia o pedido); agenda mais
+    // uma rodada, que já deve ter trazido o estado atual sem erro.
+    await waitFor(() =>
+      expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1'])
+    );
     expect(result.current.error).toBeNull();
   });
 });

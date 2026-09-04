@@ -153,7 +153,14 @@ export default function ZappWebbDemoPage() {
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId]
   );
-  const { messages, loading: loadingMsgs, loadOlder, loadingMore, hasMore } = useZappMessages({
+  const {
+    messages,
+    loading: loadingMsgs,
+    loadOlder,
+    loadingMore,
+    hasMore,
+    error: messagesError,
+  } = useZappMessages({
     remoteJid: active?.remote_jid ?? null,
   });
   const contact = active?.evolution_contacts ?? null;
@@ -305,7 +312,7 @@ export default function ZappWebbDemoPage() {
                   ) : (
                     <>
                       {hasMore && messages.length > 0 && (
-                        <div className="flex justify-center pb-2">
+                        <div className="flex flex-col items-center gap-1 pb-2">
                           <Button
                             size="sm"
                             variant="outline"
@@ -321,6 +328,11 @@ export default function ZappWebbDemoPage() {
                               'Carregar mensagens mais antigas'
                             )}
                           </Button>
+                          {/* Achado do cubic: setError sem exibição na UI não resolve nada
+                              pro usuário — loadOlder() falhando precisa aparecer aqui. */}
+                          {messagesError && (
+                            <p className="text-xs text-destructive">{messagesError}</p>
+                          )}
                         </div>
                       )}
                       {messages.map((m) => <MessageBubble key={m.id} msg={m} />)}

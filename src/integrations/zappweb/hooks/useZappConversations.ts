@@ -58,8 +58,19 @@ export function useZappConversations(opts: Options = {}) {
   // — chamadas concorrentes só avançam a geração pro loop já em andamento
   // pegar na próxima iteração, nunca spawnam uma busca paralela.
   const optsRef = useRef({ instance, status, limit });
+  // Achado do cubic (4ª rodada, P1): na última tentativa, aplicar o
+  // resultado mesmo com a geração obsoleta podia sobrescrever um patch ou
+  // remoção mais recente já aplicado em memória. hasLoadedOnceRef distingue
+  // a 1ª carga (sem dado nenhum ainda — melhor mostrar algo desatualizado do
+  // que ficar vazio pra sempre, com uma rodada extra agendada pra alcançar o
+  // estado atual) de recargas subsequentes (já há dado, os patches locais já
+  // mantêm a janela razoavelmente atual — não vale a pena arriscar regredir).
+  // Reseta a cada troca de filtro: um instance/status/limit novo também
+  // conta como "ainda não carregamos isso".
+  const hasLoadedOnceRef = useRef(false);
   useEffect(() => {
     optsRef.current = { instance, status, limit };
+    hasLoadedOnceRef.current = false;
   }, [instance, status, limit]);
   // Review do CodeRabbit no PR #1514: sob React 18 StrictMode (dev), o efeito
   // roda setup→cleanup→setup de novo — sem um `mountedRef.current = true` no
@@ -89,6 +100,11 @@ export function useZappConversations(opts: Options = {}) {
       return;
     }
     fetchInFlightRef.current = true;
+    // Só populada quando a última tentativa esgota sem alcançar a geração
+    // atual E ainda não tínhamos carregado nada (1ª carga) — disparada DEPOIS
+    // do finally liberar o lock, nunca de dentro do loop (senão cairia direto
+    // no branch "já em voo" acima e não faria nada).
+    let needsFollowUpFetch = false;
     try {
       for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
         const myGeneration = generationRef.current;
@@ -104,22 +120,47 @@ export function useZappConversations(opts: Options = {}) {
             .limit(curLimit);
           if (err) throw err;
           if (!mountedRef.current) return;
-          if (generationRef.current === myGeneration || isLastAttempt) {
+          const isLatest = generationRef.current === myGeneration;
+          if (isLatest) {
             setConversations((data ?? []) as unknown as EvolutionConversation[]);
             setError(null);
+            hasLoadedOnceRef.current = true;
             break;
           }
-          // Geração avançou durante a query — repete no MESMO loop (nunca
-          // spawna uma chamada concorrente) com instance/status/limit atuais.
+          if (isLastAttempt) {
+            if (!hasLoadedOnceRef.current) {
+              // 1ª carga: melhor mostrar algo desatualizado do que ficar
+              // vazio pra sempre — agenda mais uma rodada pra alcançar o
+              // estado atual assim que o lock liberar.
+              setConversations((data ?? []) as unknown as EvolutionConversation[]);
+              setError(null);
+              hasLoadedOnceRef.current = true;
+              needsFollowUpFetch = true;
+            }
+            // Já tínhamos dado real: os patches locais (INSERT/UPDATE/DELETE)
+            // já mantêm a janela razoavelmente atual — não arrisca regredir
+            // sobrescrevendo com este snapshot obsoleto.
+            break;
+          }
+          // Geração avançou e ainda sobram tentativas — repete no MESMO loop
+          // (nunca spawna uma chamada concorrente) com os valores atuais.
         } catch (e: unknown) {
           if (!mountedRef.current) return;
           // Achado do cubic: se um refetch()/troca de props chegou ENQUANTO
           // esta tentativa falhava, a geração já avançou — trata como pedido
-          // de nova busca (consome uma tentativa) em vez de propagar este
-          // erro específico e perder o pedido concorrente.
-          if (generationRef.current !== myGeneration && !isLastAttempt) {
-            log.warn('[useZappConversations] retry após erro (refetch concorrente)', e);
-            continue;
+          // de nova busca em vez de propagar este erro específico e perder o
+          // pedido concorrente.
+          if (generationRef.current !== myGeneration) {
+            if (!isLastAttempt) {
+              log.warn('[useZappConversations] retry após erro (refetch concorrente)', e);
+              continue;
+            }
+            // Achado do cubic: a última tentativa não tem mais iteração pra
+            // "continue" — sem isso, o pedido concorrente era perdido do
+            // mesmo jeito. Agenda mais uma rodada em vez de propagar o erro.
+            log.warn('[useZappConversations] última tentativa falhou com refetch concorrente pendente — agenda nova rodada', e);
+            needsFollowUpFetch = true;
+            break;
           }
           log.error('[useZappConversations]', e);
           setError(e instanceof Error ? e.message : String(e));
@@ -130,6 +171,7 @@ export function useZappConversations(opts: Options = {}) {
       fetchInFlightRef.current = false;
       if (mountedRef.current) setLoading(false);
     }
+    if (needsFollowUpFetch && mountedRef.current) void fetchAll();
   }, []);
 
   const fetchOne = useCallback(async (id: string): Promise<EvolutionConversation | null> => {

@@ -105,6 +105,9 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
       const rows = ((data ?? []) as unknown as EvolutionMessage[]).slice().reverse();
       setMessages((prev) => [...rows, ...prev]);
       setHasMore(rows.length === limit);
+      // Achado do cubic: sem isso, um erro de uma tentativa anterior ficava
+      // preso em `error` mesmo depois de uma página seguinte carregar bem.
+      setError(null);
     } catch (e: unknown) {
       log.error('[useZappMessages] loadOlder', e);
       // Achado do CodeRabbit: sem isso, o erro só ia pro log — o usuário
