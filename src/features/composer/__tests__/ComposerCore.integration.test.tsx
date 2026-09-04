@@ -4,7 +4,6 @@
  * de ComposerCore sem dependência de DOM real.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { ComposerCore as _ComposerCore } from '../ComposerCore';
 
 const BASE_PROPS = {
   value: '',
