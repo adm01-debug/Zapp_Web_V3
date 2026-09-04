@@ -558,8 +558,8 @@ describe('useEvolutionAutoReconnect — mountedRef guard (sem setState pós-unmo
 
   it('nao chama setState quando o componente e desmontado durante getInstanceStatus pendente', async () => {
     // Cria uma promise controlável — getInstanceStatus não resolve até liberarmos
-    let resolvePending!: (v: unknown) => void;
-    const pending = new Promise((res) => { resolvePending = res; });
+    let resolvePending!: (v: { instance: { state: string } }) => void;
+    const pending = new Promise<{ instance: { state: string } }>((res) => { resolvePending = res; });
     getInstanceStatus.mockImplementationOnce(() => pending);
 
     const { unmount } = renderHook(() => useEvolutionAutoReconnect('wpp2'));
