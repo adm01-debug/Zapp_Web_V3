@@ -43,6 +43,18 @@ function convRows(n: number) {
 }
 
 beforeEach(() => {
+  // Review do cubic (PR #1514): channel() usa mockReturnValue — 1 objeto único
+  // reutilizado pra suíte inteira — então os spies aninhados (.on/.subscribe)
+  // acumulam entre testes se não forem limpos ANTES do channel.mockClear() de
+  // baixo (que só limpa .mock.calls/.results do channel() em si, não os spies
+  // do objeto que ele retorna).
+  const prevResults = supabaseMock.client.channel?.mock.results ?? [];
+  const prevChannel = prevResults[prevResults.length - 1]?.value as
+    | { on: ReturnType<typeof vi.fn>; subscribe: ReturnType<typeof vi.fn> }
+    | undefined;
+  prevChannel?.on.mockClear();
+  prevChannel?.subscribe.mockClear();
+
   supabaseMock.convRows.length = 0;
   supabaseMock.convRows.push(...convRows(2));
   supabaseMock.client.from.mockClear();
@@ -142,9 +154,11 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     const channel = supabaseMock.client.channel.mock.results[0].value;
-    const events = channel.on.mock.calls
-      .slice(-3)
-      .map((c: unknown[]) => (c[1] as { event: string }).event);
+    // beforeEach limpa os spies aninhados do canal compartilhado — nesta altura
+    // channel.on.mock.calls só tem as chamadas DESTE render. Array completo
+    // (não slice(-3)) trava a regressão que o cubic apontou: um `event: '*'`
+    // reintroduzido apareceria como um 4º item e quebraria o toEqual.
+    const events = channel.on.mock.calls.map((c: unknown[]) => (c[1] as { event: string }).event);
     expect(events).toEqual(['INSERT', 'UPDATE', 'DELETE']);
   });
 
@@ -218,5 +232,89 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     // teste trava é que o handler realmente dispara uma busca direcionada).
     expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsBefore + 1);
     expect(supabaseMock.client.from).toHaveBeenLastCalledWith('evolution_conversations_wpp2');
+
+    // Achado do cubic (PR #1514): fetchOne() tem que refiltrar por
+    // instance_name/status, não só id — TOCTOU entre o evento e o SELECT.
+    const fetchOneBuilder = supabaseMock.client.from.mock.results[fromCallsBefore].value;
+    expect(fetchOneBuilder.eq).toHaveBeenCalledWith('instance_name', ZAPPWEB_INSTANCE);
+    expect(fetchOneBuilder.eq).toHaveBeenCalledWith('status', 'aberta');
+  });
+
+  it('achado do cubic (PR #1514): DELETE com a janela cheia dispara refetch pra repor a vaga no top-N', async () => {
+    supabaseMock.convRows.length = 0;
+    supabaseMock.convRows.push(...convRows(2));
+
+    const { result } = renderHook(() => useZappConversations({ limit: 2 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']); // janela cheia (== limit)
+
+    const fromCallsBefore = supabaseMock.client.from.mock.calls.length;
+    // Builder isolado pro refetch de backfill: NÃO reusa supabaseMock.convRows
+    // (o state atual já referencia esse array por identidade — mutar em
+    // place o "contaminaria" sem passar pelo setConversations do React).
+    const backfillRows = convRows(2).map((c) => ({ ...c, id: `novo-${c.id}` }));
+    const backfillBuilder = {
+      select: () => backfillBuilder,
+      eq: () => backfillBuilder,
+      order: () => backfillBuilder,
+      limit: () => backfillBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        Promise.resolve({ data: backfillRows, error: null }).then(onFulfilled),
+    };
+    supabaseMock.client.from.mockImplementationOnce(() => backfillBuilder as never);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const deleteHandler = latestHandlerFor(channel, 'DELETE');
+
+    await act(async () => {
+      await deleteHandler({ old: { id: '0' } });
+    });
+
+    // A janela estava cheia → sem isso a próxima conversa elegível nunca entraria sozinha.
+    expect(supabaseMock.client.from.mock.calls.length).toBeGreaterThan(fromCallsBefore);
+    await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['novo-0', 'novo-1']));
+  });
+
+  it('achado do cubic (PR #1514): fetchAll() em voo descarta o resultado se um evento incremental já mudou o estado', async () => {
+    let resolveFetch!: (v: { data: unknown; error: unknown }) => void;
+    const pendingFetch = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const staleBuilder = {
+      select: () => staleBuilder,
+      eq: () => staleBuilder,
+      order: () => staleBuilder,
+      limit: () => staleBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => pendingFetch.then(onFulfilled),
+    };
+    const insertRowBuilder = {
+      select: () => insertRowBuilder,
+      eq: () => insertRowBuilder,
+      maybeSingle: () => Promise.resolve({ data: { ...CONV_FIXTURE, id: 'incremental' }, error: null }),
+    };
+    // 1ª chamada a from() = fetchAll inicial (fica pendente); 2ª = fetchOne do
+    // INSERT abaixo (resolve na hora, com a linha certa — o createQueryBuilder
+    // genérico do mock não distingue .maybeSingle() de lista).
+    supabaseMock.client.from
+      .mockImplementationOnce(() => staleBuilder as never)
+      .mockImplementationOnce(() => insertRowBuilder as never);
+
+    const { result } = renderHook(() => useZappConversations());
+    // loading fica true enquanto o fetchAll inicial não resolve.
+    expect(result.current.loading).toBe(true);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const insertHandler = latestHandlerFor(channel, 'INSERT');
+    await act(async () => {
+      await insertHandler({ new: { id: 'incremental', status: 'aberta' } });
+    });
+    expect(result.current.conversations.map((c) => c.id)).toContain('incremental');
+
+    // Só agora o fetchAll inicial (mais antigo) resolve — não pode sobrescrever o patch.
+    await act(async () => {
+      resolveFetch({ data: convRows(2), error: null });
+    });
+
+    expect(result.current.conversations.map((c) => c.id)).toContain('incremental');
   });
 });

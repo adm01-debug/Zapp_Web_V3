@@ -43,8 +43,15 @@ export function useZappConversations(opts: Options = {}) {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+  // Review do cubic no PR #1514: se um evento incremental chegar e patchear o
+  // estado enquanto este fetchAll ainda está em voo, a resposta do fetchAll
+  // (pedida antes, mas que pode responder depois do evento) sobrescreveria o
+  // patch com o snapshot antigo. Descarta o resultado do fetch nesse caso —
+  // o realtime já deixou o estado mais atual que a query.
+  const staleFetchRef = useRef(false);
 
   const fetchAll = useCallback(async () => {
+    staleFetchRef.current = false;
     try {
       const { data, error: err } = await zappSupabase
         .from('evolution_conversations_wpp2')
@@ -54,7 +61,9 @@ export function useZappConversations(opts: Options = {}) {
         .order('last_message_at', { ascending: false })
         .limit(limit);
       if (err) throw err;
-      setConversations((data ?? []) as unknown as EvolutionConversation[]);
+      if (!staleFetchRef.current) {
+        setConversations((data ?? []) as unknown as EvolutionConversation[]);
+      }
       setError(null);
     } catch (e: unknown) {
       log.error('[useZappConversations]', e);
@@ -65,22 +74,28 @@ export function useZappConversations(opts: Options = {}) {
   }, [instance, status, limit]);
 
   const fetchOne = useCallback(async (id: string): Promise<EvolutionConversation | null> => {
+    // Entre o evento e este SELECT a conversa pode ter mudado de instância/status
+    // (TOCTOU) — refiltra pra não inserir uma linha fora da janela atual.
     const { data, error: err } = await zappSupabase
       .from('evolution_conversations_wpp2')
       .select(SELECT_FIELDS)
       .eq('id', id)
+      .eq('instance_name', instance)
+      .eq('status', status)
       .maybeSingle();
     if (err || !data) return null;
     return data as unknown as EvolutionConversation;
-  }, []);
+  }, [instance, status]);
 
   useEffect(() => {
     void fetchAll();
 
-    const insertIfAbsent = (row: EvolutionConversation) =>
+    const insertIfAbsent = (row: EvolutionConversation) => {
+      staleFetchRef.current = true;
       setConversations((prev) =>
         prev.some((c) => c.id === row.id) ? prev : sortByLastMessage([...prev, row]).slice(0, limit)
       );
+    };
 
     const ch = zappSupabase
       .channel(`zapp:conversations:${instance}:${Math.random().toString(36).slice(2, 10)}`)
@@ -113,14 +128,21 @@ export function useZappConversations(opts: Options = {}) {
           const row = payload.new as Partial<EvolutionConversation> & { id: string; status: string };
           const exists = conversationsRef.current.some((c) => c.id === row.id);
           if (exists) {
+            const willRemove = row.status !== status;
+            // Janela cheia + remoção: sobrou vaga no top-N que só um refetch
+            // acha (review do cubic — a próxima conversa elegível nunca
+            // entrava sozinha).
+            const wasFull = conversationsRef.current.length === limit;
+            staleFetchRef.current = true;
             setConversations((prev) => {
               const idx = prev.findIndex((c) => c.id === row.id);
               if (idx === -1) return prev;
-              if (row.status !== status) return prev.filter((c) => c.id !== row.id);
+              if (willRemove) return prev.filter((c) => c.id !== row.id);
               const next = [...prev];
               next[idx] = { ...next[idx], ...row };
               return sortByLastMessage(next);
             });
+            if (willRemove && wasFull) void fetchAll();
             return;
           }
           // Fora da janela local hoje (ex.: passou de "arquivada" para "aberta",
@@ -142,7 +164,12 @@ export function useZappConversations(opts: Options = {}) {
         (payload) => {
           const oldRow = payload.old as { id?: string };
           if (!oldRow.id) return;
+          const hadIt = conversationsRef.current.some((c) => c.id === oldRow.id);
+          if (!hadIt) return;
+          const wasFull = conversationsRef.current.length === limit;
+          staleFetchRef.current = true;
           setConversations((prev) => prev.filter((c) => c.id !== oldRow.id));
+          if (wasFull) void fetchAll();
         }
       )
       .subscribe();

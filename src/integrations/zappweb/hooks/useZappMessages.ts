@@ -33,13 +33,15 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof zappSupabase.channel> | null>(null);
-  // Review do Copilot no PR #1514: sem isso, uma troca de remoteJid enquanto
-  // loadOlder() está em voo faz o resultado antigo poluir a conversa nova
-  // (setMessages resolve depois do fetchAll da nova conversa já ter rodado).
-  const remoteJidRef = useRef(remoteJid);
+  // Review do Copilot + cubic no PR #1514: sem isso, uma troca de conversa
+  // (remoteJid OU instance) enquanto loadOlder() está em voo faz o resultado
+  // antigo poluir a conversa nova (setMessages resolve depois do fetchAll da
+  // nova conversa já ter rodado). Geração incrementada a cada troca — mais
+  // robusto que comparar só remoteJid, cobre instance e futuros parâmetros.
+  const queryGenerationRef = useRef(0);
   useEffect(() => {
-    remoteJidRef.current = remoteJid;
-  }, [remoteJid]);
+    queryGenerationRef.current += 1;
+  }, [remoteJid, instance]);
 
   const fetchAll = useCallback(async () => {
     if (!remoteJid) {
@@ -83,6 +85,7 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
     if (!remoteJid || loadingMore || !hasMore) return;
     const oldest = messages[0]?.created_at;
     if (!oldest) return;
+    const requestGeneration = queryGenerationRef.current;
     setLoadingMore(true);
     try {
       const { data, error: err } = await zappSupabase
@@ -98,7 +101,7 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
         .order('created_at', { ascending: false })
         .limit(limit);
       if (err) throw err;
-      if (remoteJidRef.current !== remoteJid) return; // conversa trocou durante o fetch
+      if (queryGenerationRef.current !== requestGeneration) return; // remoteJid/instance trocou durante o fetch
       const rows = ((data ?? []) as unknown as EvolutionMessage[]).slice().reverse();
       setMessages((prev) => [...rows, ...prev]);
       setHasMore(rows.length === limit);

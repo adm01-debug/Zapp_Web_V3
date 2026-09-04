@@ -134,6 +134,7 @@ describe('useZappMessages — loadOlder (paginação incremental, auditoria 22D 
 
     // Página 2 (mais antiga que m2): só 1 linha — sinaliza fim da paginação
     supabaseMock.table.data = [msg('m1', '2026-08-04T12:00:01Z')];
+    const fromCallsBefore = supabaseMock.client.from.mock.calls.length;
 
     await act(async () => {
       await result.current.loadOlder();
@@ -141,6 +142,11 @@ describe('useZappMessages — loadOlder (paginação incremental, auditoria 22D 
 
     expect(result.current.messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
     expect(result.current.hasMore).toBe(false);
+
+    // Achado do cubic (PR #1514): sem esta asserção, remover o `.lt('created_at', oldest)`
+    // do hook não quebrava o teste (o mock injeta a página 2 direto, sem filtrar).
+    const loadOlderBuilder = supabaseMock.client.from.mock.results[fromCallsBefore].value;
+    expect(loadOlderBuilder.lt).toHaveBeenCalledWith('created_at', '2026-08-04T12:00:02Z');
   });
 
   it('loadOlder é no-op quando hasMore já é false', async () => {
@@ -209,6 +215,53 @@ describe('useZappMessages — loadOlder (paginação incremental, auditoria 22D 
     expect(result.current.messages.map((m) => m.id)).toEqual(['b1']);
     // loadingMore não pode ficar travado em true (senão loadOlder da conversa
     // B vira no-op permanente pelo guard `loadingMore` no topo da função).
+    expect(result.current.loadingMore).toBe(false);
+  });
+
+  // Achado do cubic (PR #1514): o guard original só comparava remoteJid — uma
+  // troca de instance (mesma conversa, outra instância) durante loadOlder()
+  // em voo também não pode poluir o estado.
+  it('troca de instance durante loadOlder() em voo não polui a conversa atual', async () => {
+    supabaseMock.table.data = [msg('a2', '2026-08-04T12:00:02Z'), msg('a1', '2026-08-04T12:00:01Z')];
+    const { result, rerender } = renderHook(
+      ({ instance }) => useZappMessages({ remoteJid: REMOTE_JID, instance, limit: 2 }),
+      { initialProps: { instance: 'wpp2' } }
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.messages.map((m) => m.id)).toEqual(['a1', 'a2']);
+
+    let resolveStaleQuery!: (v: { data: unknown; error: unknown }) => void;
+    const staleQuery = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveStaleQuery = resolve;
+    });
+    const controllableBuilder = {
+      select: () => controllableBuilder,
+      eq: () => controllableBuilder,
+      is: () => controllableBuilder,
+      lt: () => controllableBuilder,
+      order: () => controllableBuilder,
+      limit: () => controllableBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        staleQuery.then(onFulfilled),
+    };
+    supabaseMock.client.from.mockImplementationOnce(() => controllableBuilder as never);
+
+    let loadOlderDone: Promise<void> | undefined;
+    act(() => {
+      loadOlderDone = result.current.loadOlder();
+    });
+
+    // Troca de instance ANTES da query antiga resolver.
+    supabaseMock.table.data = [msg('c1', '2026-08-04T13:00:01Z')];
+    rerender({ instance: 'comercial_01' });
+    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual(['c1']));
+
+    await act(async () => {
+      resolveStaleQuery({ data: [msg('a0', '2026-08-04T11:00:00Z')], error: null });
+      await loadOlderDone;
+    });
+
+    expect(result.current.messages.map((m) => m.id)).toEqual(['c1']);
     expect(result.current.loadingMore).toBe(false);
   });
 });

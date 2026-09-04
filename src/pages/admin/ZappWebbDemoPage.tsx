@@ -313,7 +313,10 @@ export default function ZappWebbDemoPage() {
                             onClick={() => void loadOlder()}
                           >
                             {loadingMore ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                Carregando mensagens mais antigas
+                              </>
                             ) : (
                               'Carregar mensagens mais antigas'
                             )}
