@@ -425,4 +425,50 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['atual-0', 'atual-1']));
     expect(supabaseMock.client.from.mock.calls.length).toBe(fromCallsAfterMount + 1);
   });
+
+  it('achado do cubic (PR #1514, P2): refetch() concorrente durante uma falha não perde o pedido', async () => {
+    let resolveFirst!: (v: { data: unknown; error: unknown }) => void;
+    const pendingFirst = new Promise<{ data: unknown; error: unknown }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const failingBuilder = {
+      select: () => failingBuilder,
+      eq: () => failingBuilder,
+      order: () => failingBuilder,
+      limit: () => failingBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) => pendingFirst.then(onFulfilled),
+    };
+    const successBuilder = {
+      select: () => successBuilder,
+      eq: () => successBuilder,
+      order: () => successBuilder,
+      limit: () => successBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        Promise.resolve({ data: convRows(2).map((c) => ({ ...c, id: `ok-${c.id}` })), error: null }).then(
+          onFulfilled
+        ),
+    };
+    supabaseMock.client.from
+      .mockImplementationOnce(() => failingBuilder as never)
+      .mockImplementation(() => successBuilder as never);
+
+    const { result } = renderHook(() => useZappConversations());
+    expect(result.current.loading).toBe(true);
+
+    // refetch() concorrente enquanto a 1ª tentativa ainda está pendente — só
+    // sinaliza (o loop já em andamento é quem vai perceber e refazer).
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    // A 1ª tentativa resolve com ERRO — como a geração já avançou (refetch()
+    // concorrente), o loop tenta de novo em vez de propagar esse erro
+    // específico e deixar o pedido concorrente sem efeito.
+    await act(async () => {
+      resolveFirst({ data: null, error: new Error('falha transitória') });
+    });
+
+    await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['ok-0', 'ok-1']));
+    expect(result.current.error).toBeNull();
+  });
 });

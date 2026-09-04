@@ -93,28 +93,39 @@ export function useZappConversations(opts: Options = {}) {
       for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
         const myGeneration = generationRef.current;
         const { instance: curInstance, status: curStatus, limit: curLimit } = optsRef.current;
-        const { data, error: err } = await zappSupabase
-          .from('evolution_conversations_wpp2')
-          .select(SELECT_FIELDS)
-          .eq('instance_name', curInstance)
-          .eq('status', curStatus)
-          .order('last_message_at', { ascending: false })
-          .limit(curLimit);
-        if (err) throw err;
-        if (!mountedRef.current) return;
-        const isLatest = generationRef.current === myGeneration;
         const isLastAttempt = attempt === MAX_FETCH_ATTEMPTS - 1;
-        if (isLatest || isLastAttempt) {
-          setConversations((data ?? []) as unknown as EvolutionConversation[]);
-          setError(null);
+        try {
+          const { data, error: err } = await zappSupabase
+            .from('evolution_conversations_wpp2')
+            .select(SELECT_FIELDS)
+            .eq('instance_name', curInstance)
+            .eq('status', curStatus)
+            .order('last_message_at', { ascending: false })
+            .limit(curLimit);
+          if (err) throw err;
+          if (!mountedRef.current) return;
+          if (generationRef.current === myGeneration || isLastAttempt) {
+            setConversations((data ?? []) as unknown as EvolutionConversation[]);
+            setError(null);
+            break;
+          }
+          // Geração avançou durante a query — repete no MESMO loop (nunca
+          // spawna uma chamada concorrente) com instance/status/limit atuais.
+        } catch (e: unknown) {
+          if (!mountedRef.current) return;
+          // Achado do cubic: se um refetch()/troca de props chegou ENQUANTO
+          // esta tentativa falhava, a geração já avançou — trata como pedido
+          // de nova busca (consome uma tentativa) em vez de propagar este
+          // erro específico e perder o pedido concorrente.
+          if (generationRef.current !== myGeneration && !isLastAttempt) {
+            log.warn('[useZappConversations] retry após erro (refetch concorrente)', e);
+            continue;
+          }
+          log.error('[useZappConversations]', e);
+          setError(e instanceof Error ? e.message : String(e));
           break;
         }
-        // Geração avançou durante a query — repete no MESMO loop (nunca
-        // spawna uma chamada concorrente) com instance/status/limit atuais.
       }
-    } catch (e: unknown) {
-      log.error('[useZappConversations]', e);
-      if (mountedRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
       fetchInFlightRef.current = false;
       if (mountedRef.current) setLoading(false);
