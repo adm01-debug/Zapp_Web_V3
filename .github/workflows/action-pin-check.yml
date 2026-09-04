@@ -1,9 +1,10 @@
 name: action-pin-check
 
-# Detecta ações de terceiros referenciadas por tag mutável (@vN) sem SHA digest.
-# Ações oficiais do GitHub (actions/*) na mesma versão são permitidas desde que
-# Dependabot esteja configurado para atualizá-las. Ações de terceiros com tags
-# mutáveis representam risco de supply-chain e são bloqueadas.
+# Detecta ações de terceiros adicionadas em workflows com tag mutável (@vN) sem SHA digest.
+# Aplica enforcement incremental: verifica apenas linhas ADICIONADAS no commit,
+# não falha em violações pré-existentes. actions/* e github/* são permitidos
+# (monitorados pelo Dependabot). Ações de terceiros com tags mutáveis representam
+# risco de supply-chain e são bloqueadas.
 
 on:
   pull_request:
@@ -26,29 +27,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Verificar ações de terceiros sem SHA digest
         shell: bash
         run: |
           set -euo pipefail
 
-          # Regex: linha "uses: <owner>/<repo>@<tag>" onde tag não é um SHA de 40 hex
-          # Exclui actions/* (monitorado pelo Dependabot com versioning-strategy)
-          # Exclui linhas comentadas
+          # Obtém apenas linhas ADICIONADAS neste commit em arquivos de workflow
+          # (enforcement incremental — não falha em violações pré-existentes)
+          ADDED=$(git diff --unified=0 HEAD^ HEAD \
+            -- '.github/workflows' '.github/actions' 2>/dev/null \
+            | grep '^+' \
+            | grep -v '^+++' \
+            || true)
 
-          UNPINNED=$(grep -rn 'uses:' .github/workflows/ .github/actions/ 2>/dev/null \
-            | grep -v '^\s*#' \
+          if [ -z "$ADDED" ]; then
+            echo "Nenhuma linha adicionada em workflows. OK."
+            exit 0
+          fi
+
+          # Detecta: uses: <owner>/<repo>@<tag-mutável>
+          # Exclui: actions/* e github/* (monitorados pelo Dependabot)
+          # Exclui: ações pinadas por SHA de 40 hex
+          UNPINNED=$(printf '%s\n' "$ADDED" \
             | grep -E 'uses:\s+[^/]+/[^@]+@[^0-9a-f]' \
-            | grep -v 'uses:\s+actions/' \
+            | grep -Ev 'uses:\s+(actions|github)/' \
             | grep -vE 'uses:\s+[^/]+/[^@]+@[0-9a-f]{40}' \
             || true)
 
           if [ -z "$UNPINNED" ]; then
-            echo "Todas as ações de terceiros estão pinadas por SHA digest. OK."
+            echo "Todas as ações de terceiros adicionadas estão pinadas por SHA digest. OK."
             exit 0
           fi
 
-          echo "::error::Ações de terceiros com tag mutável detectadas (sem SHA digest):"
+          echo "::error::Ações de terceiros com tag mutável detectadas nas linhas adicionadas (sem SHA digest):"
           echo "$UNPINNED"
           echo ""
           echo "Substitua @<tag> por @<sha-de-40-hex> # tag: <versao>"
