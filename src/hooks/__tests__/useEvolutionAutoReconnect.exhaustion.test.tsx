@@ -52,7 +52,13 @@ vi.mock('@/integrations/supabase/client', () => {
     subscribe: vi.fn(() => channel),
     unsubscribe: vi.fn(),
   };
-  return { supabase: { channel: vi.fn(() => channel), removeChannel: vi.fn() } };
+  return {
+    supabase: {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+      functions: { invoke: vi.fn(async () => ({ data: null, error: null })) },
+    },
+  };
 });
 
 vi.mock('@/integrations/supabase/safeClient', () => ({
