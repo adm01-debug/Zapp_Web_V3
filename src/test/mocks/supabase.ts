@@ -81,7 +81,7 @@ export function createMockSupabase(overrides: Overrides = {}) {
     from: mockFrom,
     rpc: mockRpc,
     channel: mockChannel,
-    removeChannel: vi.fn(),
+    removeChannel: vi.fn().mockResolvedValue('ok'),
     schema: mockSchema,
     functions: {
       invoke: vi.fn().mockResolvedValue({ data: null, error: null }),

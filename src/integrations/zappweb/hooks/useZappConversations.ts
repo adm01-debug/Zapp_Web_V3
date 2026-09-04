@@ -353,7 +353,9 @@ export function useZappConversations(opts: Options = {}) {
       // internamente — a chamada explícita era redundante (duplo unsubscribe).
       // removeChannel() retorna Promise; .catch() captura rejeições assíncronas
       // que um try/catch síncrono não alcança.
-      zappSupabase.removeChannel(ch).catch(() => {
+      // Promise.resolve() normaliza o retorno caso o mock/SDK retorne
+      // undefined (cubic P2): evita "TypeError: .catch is not a function".
+      void Promise.resolve(zappSupabase.removeChannel(ch)).catch(() => {
         // cleanup assíncrono falhou; ignorado — canal já invalidado por
         // isSubscriptionActive=false e React já desmontou o componente.
       });
