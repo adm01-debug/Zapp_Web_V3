@@ -540,3 +540,52 @@ describe('useEvolutionAutoReconnect — performReconnect via Realtime', () => {
     expect(restartInstance.mock.calls.length).toBe(0);
   });
 });
+
+// F-04-TEST: mountedRef guard — setState não chamado após unmount
+describe('useEvolutionAutoReconnect — mountedRef guard (sem setState pós-unmount)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    logError.mockClear();
+    logWarn.mockClear();
+    emit.mockClear();
+    getInstanceStatus.mockClear();
+    connectInstance.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('nao chama setState quando o componente e desmontado durante getInstanceStatus pendente', async () => {
+    // Cria uma promise controlável — getInstanceStatus não resolve até liberarmos
+    let resolvePending!: (v: unknown) => void;
+    const pending = new Promise((res) => { resolvePending = res; });
+    getInstanceStatus.mockImplementationOnce(() => pending);
+
+    const { unmount } = renderHook(() => useEvolutionAutoReconnect('wpp2'));
+
+    // Inicia o primeiro ciclo de checkStatus (~0s) mas não avança timers
+    // para que a promise ainda esteja pendente quando desmontarmos
+    await act(async () => {
+      // Avança apenas o suficiente para o useEffect montar (sem disparar intervalos)
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Desmonta o hook enquanto getInstanceStatus ainda está pendente
+    unmount();
+
+    // Resolve a promise APÓS o unmount — o guard mountedRef.current deve bloquear setStatus
+    // React 18 não lança erro para setState pós-unmount, mas logError não deve ser emitido
+    await act(async () => {
+      resolvePending({ instance: { state: 'close' } });
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    // Nenhum erro de React / logging anômalo após resolução pós-unmount
+    const unexpectedErrors = logError.mock.calls.filter(
+      (c) => String(c[0]).toLowerCase().includes('unmount') ||
+             String(c[0]).toLowerCase().includes('cannot update'),
+    );
+    expect(unexpectedErrors).toHaveLength(0);
+  });
+});
