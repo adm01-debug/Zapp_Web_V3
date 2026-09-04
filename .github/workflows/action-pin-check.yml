@@ -39,16 +39,32 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Trata push de branch nova (before = zeros) ou SHA vazio
+          # Trata push de branch nova (before = zeros) ou SHA vazio.
+          # FIX(P2): usa merge-base com main/master para cobrir TODOS os commits da branch,
+          # não apenas HEAD^..HEAD (que cobre só o commit final).
           if [ -z "$FROM_SHA" ] || echo "$FROM_SHA" | grep -qE '^0+$'; then
-            echo "Branch nova ou SHA base ausente — analisando somente HEAD^..HEAD."
-            FROM_SHA="HEAD^"
+            echo "Branch nova ou SHA base ausente — calculando base via merge-base."
+            FROM_SHA=$(git merge-base HEAD origin/main 2>/dev/null \
+              || git merge-base HEAD origin/master 2>/dev/null \
+              || git rev-list --max-parents=0 HEAD)
+            echo "FROM_SHA calculado: $FROM_SHA"
+          fi
+
+          # FIX(P1): validar que FROM_SHA é resolvível; falhar explicitamente se não for.
+          # Sem essa verificação, git diff falha silenciosamente (2>/dev/null + || true)
+          # e o guard retorna OK sem examinar nenhuma ação — falso-negativo crítico.
+          if ! git cat-file -e "${FROM_SHA}^{commit}" 2>/dev/null; then
+            echo "::error::SHA base '${FROM_SHA}' não encontrado no checkout — impossível verificar actions."
+            exit 1
           fi
 
           # Obtém apenas linhas ADICIONADAS em todos os commits do evento
-          # (enforcement incremental — não falha em violações pré-existentes)
-          ADDED=$(git diff --unified=0 "$FROM_SHA" HEAD \
-            -- '.github/workflows' '.github/actions' 2>/dev/null \
+          # (enforcement incremental — não falha em violações pré-existentes).
+          # git diff falha com código não-zero se o range for inválido; com set -euo pipefail
+          # isso aborta o job imediatamente (não convertido em sucesso silencioso).
+          DIFF_OUT=$(git diff --unified=0 "$FROM_SHA" HEAD \
+            -- '.github/workflows' '.github/actions')
+          ADDED=$(printf '%s\n' "$DIFF_OUT" \
             | grep '^+' \
             | grep -v '^+++' \
             | grep -v '^\+[[:space:]]*#' \
@@ -59,14 +75,17 @@ jobs:
             exit 0
           fi
 
-          # Detecta linhas de uses: com refs que NÃO são SHA de 40 hex
-          # Âncora no prefixo '+' do diff para evitar falsos positivos em run: ou comentários
-          # Exclui: actions/* e github/* (monitorados pelo Dependabot)
-          # Exclui: ações pinadas por SHA de 40 hex (case-insensitive para A-F)
+          # Detecta linhas de uses: com refs que NÃO são SHA de 40 hex.
+          # Âncora no prefixo '+' do diff para evitar falsos positivos em run: ou comentários.
+          # Exclui: actions/* e github/* (monitorados pelo Dependabot).
+          # Exclui: ações pinadas por SHA de 40 hex (case-insensitive para A-F).
+          # FIX(P2): aceita aspas YAML opcionais (' ou ") após o digest de 40 hex;
+          # sem isso uses: 'org/action@sha' gerava falso-positivo (aspa rejeitava a exclusão).
+          Q="'"
           UNPINNED=$(printf '%s\n' "$ADDED" \
             | grep -E '^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+[^/]+/[^@]+@[^[:space:]#]+' \
             | grep -Ev '^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+(actions|github)/' \
-            | grep -vE '^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+[^/]+/[^@]+@[0-9A-Fa-f]{40}([[:space:]]|#|$)' \
+            | grep -vE "^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+[^/]+/[^@]+@[0-9A-Fa-f]{40}([[:space:]]|${Q}|\"|#|$)" \
             || true)
 
           if [ -z "$UNPINNED" ]; then
