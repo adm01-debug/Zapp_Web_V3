@@ -62,25 +62,28 @@ Deno.serve(async (req) => {
 
     for (const contact of staleContacts) {
       if (config.close_message) {
-        await supabase.from('messages').insert({
+        const { error: msgErr } = await supabase.from('messages').insert({
           contact_id: contact.id,
           content: config.close_message,
           sender: 'system',
           type: 'text',
         });
+        if (msgErr) { log.error('Failed to insert close message', { error: msgErr.message }); continue; }
       }
 
-      await supabase.from('conversation_closures').insert({
+      const { error: closureErr } = await supabase.from('conversation_closures').insert({
         contact_id: contact.id,
         close_reason: 'inactivity',
         outcome: 'auto_closed',
         notes: `Auto-closed after ${config.inactivity_hours}h of inactivity`,
       });
+      if (closureErr) { log.error('Failed to insert closure', { error: closureErr.message }); continue; }
 
-      await supabase
+      const { error: contactErr } = await supabase
         .from('contacts')
         .update({ assigned_to: null })
         .eq('id', contact.id);
+      if (contactErr) { log.error('Failed to unassign contact', { error: contactErr.message }); continue; }
 
       closedCount++;
     }
