@@ -2,6 +2,7 @@
 
 **Última verificação:** 2026-09-02 (auditoria técnica 22 dimensões — sessão remota; anterior: 2026-08-25, pós-sprint feat/chat-ui-100 P01–P50)
 **Follow-up 2026-09-03:** item #5 do top-10 ROI da auditoria (lint-staged sem `exit 0`) resolvido — PR #1509.
+**Follow-up 2026-09-04:** item #6 do top-10 ROI da auditoria (paginação incremental `useZappMessages`/`useZappConversations`) resolvido — PR #1514 mergeado.
 → Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
 
 ## ⚠️ INGESTÃO WHATSAPP PARADA — detectado 2026-09-02 (decisão do dono pendente)

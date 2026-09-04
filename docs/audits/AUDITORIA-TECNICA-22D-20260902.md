@@ -108,7 +108,7 @@ inverso; `is_active` é flag. Nenhum objeto foi deletado em storage algum.
 3. **Corrigir os 2 testes vermelhos** de `useEvolutionAutoReconnect.exhaustion` na main — regressão do próprio bug que o fix recente tratou · `src/hooks/`
 4. **Tornar o typecheck bloqueante** — remover `set +e`/`exit 0` do quality-gate (baseline do ratchet já é 0) · `.github/workflows/quality-gate.yml:107-115`
 5. **lint-staged sem `exit 0`** ✅ resolvido em PR #1509 (2026-09-03) — falta ainda o hook `commit-msg` para o commitlint já configurado · `.lintstagedrc`, `.husky/`
-6. **Paginação incremental** em `useZappMessages`/`useZappConversations` (hoje: refetch total por evento realtime) · `src/integrations/zappweb/hooks/`
+6. **Paginação incremental** em `useZappMessages`/`useZappConversations` (hoje: refetch total por evento realtime) ✅ resolvido em PR #1514 (2026-09-04) · `src/integrations/zappweb/hooks/`
 7. **Remover o MCP "SUPABASE - ZAPP WEB V2"** das sessões deste projeto (service_role de outro banco) — guard documentado no CLAUDE.md · config claude.ai
 8. **gmail-webhook**: validar o JWT OIDC do Pub/Sub além do token de querystring · `supabase/functions/gmail-webhook/`
 9. **`queue_routing_rules`**: implementar o avaliador no `ticket-router` ou ocultar a UI (regras criadas hoje não são aplicadas por ninguém) · edge + `src/features/queues/`
