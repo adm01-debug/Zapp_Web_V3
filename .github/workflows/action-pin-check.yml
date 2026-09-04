@@ -1,0 +1,115 @@
+name: action-pin-check
+
+# Detecta ações de terceiros adicionadas em workflows com tag mutável (@vN) sem SHA digest.
+# Aplica enforcement incremental: verifica apenas linhas ADICIONADAS nos commits do evento,
+# não falha em violações pré-existentes. actions/* e github/* são permitidos
+# (monitorados pelo Dependabot). Ações de terceiros com tags mutáveis representam
+# risco de supply-chain e são bloqueadas.
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-action-pins:
+    name: Detectar ações sem SHA pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verificar ações de terceiros sem SHA digest
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FROM_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # Trata push de branch nova (before = zeros) ou SHA vazio.
+          # FIX(P2): usa merge-base com main/master para cobrir TODOS os commits da branch,
+          # não apenas HEAD^..HEAD (que cobre só o commit final).
+          # Árvore vazia do Git — usada como base para push inicial de main/master.
+          EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+          if [ -z "$FROM_SHA" ] || echo "$FROM_SHA" | grep -qE '^0+$'; then
+            echo "Branch nova ou SHA base ausente — calculando base via merge-base."
+            FROM_SHA=$(git merge-base HEAD origin/main 2>/dev/null \
+              || git merge-base HEAD origin/master 2>/dev/null \
+              || git rev-list --max-parents=0 HEAD)
+            echo "FROM_SHA calculado: $FROM_SHA"
+          fi
+
+          # FIX(P1-v2): Se merge-base == HEAD, o push criou main/master agora e
+          # origin/main já aponta para HEAD — diff seria vazio, guard passaria sem verificar.
+          # Usar empty-tree como base expõe todos os arquivos do commit inicial.
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$FROM_SHA" = "$HEAD_SHA" ]; then
+            echo "merge-base == HEAD — push inicial de main/master. Usando empty-tree como base."
+            FROM_SHA="$EMPTY_TREE"
+          fi
+
+          # FIX(P1): validar que FROM_SHA é resolvível; falhar explicitamente se não for.
+          # Empty-tree é um objeto tree (não commit) — bypassar a validação de commit para ele.
+          # Sem essa verificação, git diff falha silenciosamente e o guard retorna OK
+          # sem examinar nenhuma ação — falso-negativo crítico.
+          if [ "$FROM_SHA" = "$EMPTY_TREE" ]; then
+            echo "Base: empty-tree (push inicial). Verificando todas as linhas adicionadas."
+          elif ! git cat-file -e "${FROM_SHA}^{commit}" 2>/dev/null; then
+            echo "::error::SHA base '${FROM_SHA}' não encontrado no checkout — impossível verificar actions."
+            exit 1
+          fi
+
+          # Obtém apenas linhas ADICIONADAS em todos os commits do evento
+          # (enforcement incremental — não falha em violações pré-existentes).
+          # git diff falha com código não-zero se o range for inválido; com set -euo pipefail
+          # isso aborta o job imediatamente (não convertido em sucesso silencioso).
+          DIFF_OUT=$(git diff --unified=0 "$FROM_SHA" HEAD \
+            -- '.github/workflows' '.github/actions')
+          ADDED=$(printf '%s\n' "$DIFF_OUT" \
+            | grep '^+' \
+            | grep -v '^+++' \
+            | grep -v '^\+[[:space:]]*#' \
+            || true)
+
+          if [ -z "$ADDED" ]; then
+            echo "Nenhuma linha adicionada em workflows. OK."
+            exit 0
+          fi
+
+          # Detecta linhas de uses: com refs que NÃO são SHA de 40 hex.
+          # Âncora no prefixo '+' do diff para evitar falsos positivos em run: ou comentários.
+          # Exclui: actions/* e github/* (monitorados pelo Dependabot).
+          # Exclui: ações pinadas por SHA de 40 hex (case-insensitive para A-F).
+          # FIX(P2): aceita aspas YAML opcionais (' ou ") após o digest de 40 hex;
+          # sem isso uses: 'org/action@sha' gerava falso-positivo (aspa rejeitava a exclusão).
+          Q="'"
+          UNPINNED=$(printf '%s\n' "$ADDED" \
+            | grep -E '^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+[^/]+/[^@]+@[^[:space:]#]+' \
+            | grep -Ev '^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+(actions|github)/' \
+            | grep -vE "^\+[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]+[^/]+/[^@]+@[0-9A-Fa-f]{40}([[:space:]]|${Q}|\"|#|$)" \
+            || true)
+
+          if [ -z "$UNPINNED" ]; then
+            echo "Todas as ações de terceiros adicionadas estão pinadas por SHA digest. OK."
+            exit 0
+          fi
+
+          echo "::error::Ações de terceiros com tag mutável detectadas nas linhas adicionadas (sem SHA digest):"
+          echo "$UNPINNED"
+          echo ""
+          echo "Substitua @<tag> por @<sha-de-40-hex> # tag: <versao>"
+          echo "Exemplo: uses: 3rd-party/action@abc123def456...0000 # v2.3.1"
+          exit 1
