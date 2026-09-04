@@ -585,11 +585,10 @@ describe('useEvolutionAutoReconnect — mountedRef guard (sem setState pós-unmo
       await vi.advanceTimersByTimeAsync(100);
     });
 
-    // Nenhum erro de React / logging anômalo após resolução pós-unmount
-    const unexpectedErrors = logError.mock.calls.filter(
-      (c) => String(c[0]).toLowerCase().includes('unmount') ||
-             String(c[0]).toLowerCase().includes('cannot update'),
-    );
-    expect(unexpectedErrors).toHaveLength(0);
+    // O guard mountedRef.current deve ter bloqueado qualquer continuação:
+    // — getInstanceStatus chamado exatamente 1× (antes do unmount, nunca depois)
+    // — nenhum evento 'connection:recovered' emitido
+    expect(getInstanceStatus).toHaveBeenCalledTimes(1);
+    expect(emit).not.toHaveBeenCalledWith('connection:recovered', expect.anything());
   });
 });
