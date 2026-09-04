@@ -14,18 +14,20 @@ import { renderHook, act } from '@testing-library/react';
 
 // vi.mock é içado acima das declarações do módulo — as refs precisam vir de
 // vi.hoisted para existirem quando a factory do mock roda.
-const { logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartInstance, emit } = vi.hoisted(
-  () => ({
-    logError: vi.fn(),
-    logInfo: vi.fn(),
-    logWarn: vi.fn(),
-    connectInstance: vi.fn(async () => ({})),
-    getInstanceStatus: vi.fn(async () => ({ instance: { state: 'close' } })),
-    restartInstance: vi.fn(async () => ({})),
-    emit: vi.fn(),
-    mockQueryClient: { invalidateQueries: vi.fn() },
-  })
-);
+const {
+  logError, logInfo, logWarn, connectInstance, getInstanceStatus, restartInstance, emit,
+  capturedPgCallback,
+} = vi.hoisted(() => ({
+  logError: vi.fn(),
+  logInfo: vi.fn(),
+  logWarn: vi.fn(),
+  connectInstance: vi.fn(async () => ({})),
+  getInstanceStatus: vi.fn(async () => ({ instance: { state: 'close' } })),
+  restartInstance: vi.fn(async () => ({})),
+  emit: vi.fn(),
+  mockQueryClient: { invalidateQueries: vi.fn() },
+  capturedPgCallback: { current: null as ((payload: unknown) => void) | null },
+}));
 
 vi.mock('@/lib/logger', () => ({
   getLogger: () => ({
@@ -414,7 +416,7 @@ describe('useEvolutionAutoReconnect — proteção de circuito', () => {
   });
 });
 
-// F-02: credential errors (HTTP 401/403) em checkStatus param polling permanentemente
+// F-02: credential errors (HTTP 401/403) em checkStatus para o polling permanentemente
 describe('useEvolutionAutoReconnect — credential error em checkStatus', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -451,11 +453,6 @@ describe('useEvolutionAutoReconnect — credential error em checkStatus', () => 
 });
 
 // F-01: performReconnect disparada via evento Realtime (postgres_changes UPDATE)
-// capturedPgCallback é definido via vi.hoisted para ser acessível no vi.mock acima.
-const { capturedPgCallback } = vi.hoisted(() => ({
-  capturedPgCallback: { current: null as ((payload: unknown) => void) | null },
-}));
-
 describe('useEvolutionAutoReconnect — performReconnect via Realtime', () => {
   beforeEach(() => {
     vi.useFakeTimers();
