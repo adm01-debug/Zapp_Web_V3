@@ -138,7 +138,8 @@ export async function handleOutgoingWhatsAppMessage(
   });
   if (!outResult.ok) { console.error('[FROM_ME] Error inserting outgoing message:', outResult.error); return; }
   if (!outResult.rowId) return; // ON CONFLICT DO NOTHING: concurrent writer already persisted this message
-  await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', contact.id);
+  const { error: outContactUpdateErr } = await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', contact.id);
+  if (outContactUpdateErr) console.warn(`[FROM_ME] failed to update contact updated_at: ${outContactUpdateErr.message}`);
 }
 
 /** [FIX 2026-08-12] Avatar em background: nunca bloquear o insert da mensagem
@@ -159,7 +160,8 @@ function persistAvatarInBackground(
       if (!picUrl) return;
       const avatarUrl = await persistProfilePicture(supabase, phone, picUrl);
       if (avatarUrl) {
-        await supabase.from('contacts').update({ avatar_url: avatarUrl }).eq('id', contactId);
+        const { error: avatarUpdateErr } = await supabase.from('contacts').update({ avatar_url: avatarUrl }).eq('id', contactId);
+        if (avatarUpdateErr) console.warn(`[AVATAR-BG] failed to update avatar_url: ${avatarUpdateErr.message}`);
       }
     } catch (e) {
       console.warn('[AVATAR-BG] failed:', e instanceof Error ? e.message : String(e));
@@ -241,7 +243,8 @@ export async function handleIncomingMessage(
         .in('phone', phonesVariants).eq('whatsapp_connection_id', connection.id).limit(1).maybeSingle();
       if (existing) {
         contact = existing;
-        await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', existing.id);
+        const { error: recoveryUpdateErr } = await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', existing.id);
+        if (recoveryUpdateErr) console.warn(`[CONTACT] failed to update recovered contact updated_at: ${recoveryUpdateErr.message}`);
         console.log(`[CONTACT] Recovered existing contact ${existing.id} after duplicate insert conflict (instance: ${instance})`);
         if (!existing.avatar_url) persistAvatarInBackground(supabase, instance, phone, existing.id);
       } else {
@@ -332,7 +335,8 @@ export async function handleIncomingMessage(
     return;
   }
   if (!inResult.rowId) return; // ON CONFLICT DO NOTHING: concurrent writer won the race
-  await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', contact.id);
+  const { error: inContactUpdateErr } = await supabase.from('contacts').update({ updated_at: new Date().toISOString() }).eq('id', contact.id);
+  if (inContactUpdateErr) console.warn(`[INBOUND] failed to update contact updated_at: ${inContactUpdateErr.message}`);
   if (messageType === 'audio' && mediaUrl && inResult.rowId) await handleAudioTranscription(supabase, contact.id, inResult.rowId, mediaUrl, supabaseUrl, supabaseServiceKey);
 }
 
@@ -411,7 +415,8 @@ export async function handleStickerMedia(
           });
           if (classifyResp.ok) { const classifyResult = await classifyResp.json(); category = classifyResult.category || 'recebidas'; }
         } catch { /* classification failed, use default */ }
-        await supabase.from('stickers').insert({ name: `Recebida ${new Date().toLocaleDateString('pt-BR')}`, image_url: mediaUrl, category, is_favorite: false, use_count: 0 });
+        const { error: stickerInsertErr } = await supabase.from('stickers').insert({ name: `Recebida ${new Date().toLocaleDateString('pt-BR')}`, image_url: mediaUrl, category, is_favorite: false, use_count: 0 });
+        if (stickerInsertErr) console.warn(`[STICKER] failed to insert sticker: ${stickerInsertErr.message}`);
       }
     } catch { /* save error */ }
   }
@@ -426,7 +431,8 @@ export async function handleAudioTranscription(supabase: SupabaseClient<any, any
   if (globalSetting?.value === 'false') return;
 
   // F4: transcription status via RPC
-  await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'processing' });
+  const { error: transcriptProcessingErr } = await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'processing' });
+  if (transcriptProcessingErr) console.warn(`[TRANSCRIPTION] failed to set processing status: ${transcriptProcessingErr.message}`);
 
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/ai-transcribe-audio`, {
@@ -437,11 +443,14 @@ export async function handleAudioTranscription(supabase: SupabaseClient<any, any
 
     if (response.ok) {
       const result = await response.json();
-      await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'completed', p_transcription: result.text });
+      const { error: transcriptCompletedErr } = await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'completed', p_transcription: result.text });
+      if (transcriptCompletedErr) console.warn(`[TRANSCRIPTION] failed to set completed status: ${transcriptCompletedErr.message}`);
     } else {
-      await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'failed' });
+      const { error: transcriptFailedErr } = await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'failed' });
+      if (transcriptFailedErr) console.warn(`[TRANSCRIPTION] failed to set failed status (HTTP err): ${transcriptFailedErr.message}`);
     }
   } catch {
-    await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'failed' });
+    const { error: transcriptCatchErr } = await supabase.rpc('rpc_update_message_transcription', { p_message_uuid: messageId, p_status: 'failed' });
+    if (transcriptCatchErr) console.warn(`[TRANSCRIPTION] failed to set failed status (catch): ${transcriptCatchErr.message}`);
   }
 }

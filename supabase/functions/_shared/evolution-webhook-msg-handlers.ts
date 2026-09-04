@@ -24,9 +24,10 @@ export async function handleSendMessage(supabase: SupabaseClient<any, any>, inst
 
     if (existingMessage?.id) {
       if (shouldUpdateStatus(existingMessage.status, 'sent')) {
-        await supabase.from('messages')
+        const { error: sentUpdateErr } = await supabase.from('messages')
           .update({ status: 'sent', external_id: externalId, status_updated_at: now })
           .eq('id', existingMessage.id);
+        if (sentUpdateErr) console.warn(`[msg-handlers] failed to update message sent status: ${sentUpdateErr.message}`);
       }
       updatedMessageId = existingMessage.id;
     }
@@ -106,7 +107,8 @@ export async function handleMessagesUpdate(supabase: SupabaseClient<any, any>, i
 
       if (currentMessage?.id) {
         if (shouldUpdateStatus(currentMessage.status, newStatus)) {
-          await supabase.from('messages').update({ status: newStatus, status_updated_at: now }).eq('id', currentMessage.id);
+          const { error: statusUpdateErr } = await supabase.from('messages').update({ status: newStatus, status_updated_at: now }).eq('id', currentMessage.id);
+          if (statusUpdateErr) console.warn(`[msg-handlers] failed to update message status: ${statusUpdateErr.message}`);
           console.log(`Message ${key.id} status: ${currentMessage.status} → ${newStatus}`);
         }
       } else {
