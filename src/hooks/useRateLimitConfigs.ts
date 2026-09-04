@@ -28,10 +28,11 @@ export async function fetchRateLimitConfigs(): Promise<RateLimitRule[]> {
 }
 
 export async function saveRateLimitConfigs(rules: RateLimitRule[]): Promise<void> {
-  await supabase
+  const { error: deleteErr } = await supabase
     .from('rate_limit_configs')
     .delete()
     .neq('id', '00000000-0000-0000-0000-000000000000');
+  if (deleteErr) throw new Error(`Failed to clear rate limit configs: ${deleteErr.message}`);
 
   const toInsert = rules.map((r) => ({
     name: r.name,

@@ -4178,8 +4178,9 @@ Retorne APENAS o JSON array, sem markdown.`,
         )
       );
 
-      const succeeded = updateResults.filter((r) => r.status === 'fulfilled').length;
-      const failed = updateResults.filter((r) => r.status === 'rejected').length;
+      // Supabase nunca rejeita — erros vêm em r.value.error (status sempre 'fulfilled')
+      const succeeded = updateResults.filter((r) => r.status === 'fulfilled' && !r.value.error).length;
+      const failed = updateResults.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error)).length;
       if (failed > 0) log.warn("Some ticket updates failed", { failed, succeeded });
 
       metricsMetadata.classified = succeeded;
