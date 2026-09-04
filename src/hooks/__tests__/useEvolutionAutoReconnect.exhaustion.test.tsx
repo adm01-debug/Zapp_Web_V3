@@ -266,7 +266,7 @@ describe('useEvolutionAutoReconnect — staleness de geração A→B→A', () =>
     let resolveFirstConnect!: () => void;
     connectInstance.mockImplementationOnce(
       () =>
-        new Promise<Record<string, never>>((resolve) => {
+        new Promise<Record<string, unknown>>((resolve) => {
           resolveFirstConnect = () => resolve({});
         })
     );
@@ -466,7 +466,7 @@ describe('useEvolutionAutoReconnect — timerRef.current = null no callback (mut
     let resolveFirst!: () => void;
     connectInstance.mockImplementationOnce(
       () =>
-        new Promise<Record<string, never>>((r) => {
+        new Promise<Record<string, unknown>>((r) => {
           resolveFirst = () => r({});
         })
     );
