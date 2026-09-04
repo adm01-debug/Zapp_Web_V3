@@ -23,8 +23,11 @@ const PUBSUB_TOPIC = (() => {
 const GOOGLE_OIDC_JWKS = jose.createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
 async function verifyPubSubOidcToken(authHeader: string | null, expectedAudience: string): Promise<boolean> {
-  if (!authHeader?.startsWith('Bearer ')) return false;
-  const token = authHeader.slice('Bearer '.length);
+  // Esquema HTTP é case-insensitive (RFC 7235) e pode vir com espaçamento
+  // extra — match tolerante em vez de exigir "Bearer " literal.
+  const match = authHeader?.match(/^Bearer\s+(\S+)\s*$/i);
+  if (!match) return false;
+  const token = match[1];
   try {
     const { payload } = await jose.jwtVerify(token, GOOGLE_OIDC_JWKS, {
       issuer: ['https://accounts.google.com', 'accounts.google.com'],
@@ -94,14 +97,16 @@ Deno.serve(async (req) => {
         // que pode vazar em logs de proxy/CDN. Sem o audience configurado ainda
         // (secret não setado), cai no fallback legado de token — comportamento
         // idêntico ao de antes desta mudança, zero risco de quebrar produção.
-        const expectedAudience = await getSecret('gmail_pubsub_oidc_audience') ?? Deno.env.get('GMAIL_PUBSUB_OIDC_AUDIENCE');
+        // getSecret() já lê o env (GMAIL_PUBSUB_OIDC_AUDIENCE) antes do vault —
+        // sem fallback redundante aqui.
+        const expectedAudience = await getSecret('gmail_pubsub_oidc_audience');
 
         if (expectedAudience) {
           const oidcOk = await verifyPubSubOidcToken(req.headers.get('authorization'), expectedAudience);
           if (!oidcOk) return json({ error: 'Invalid or missing OIDC token' }, 401);
         } else {
-          // F2+vault: read token from vault first (gmail_pubsub_token), env fallback for legacy
-          const expectedToken = await getSecret('gmail_pubsub_token') ?? Deno.env.get('GMAIL_PUBSUB_TOKEN');
+          // F2+vault: getSecret() lê env (GMAIL_PUBSUB_TOKEN) antes do vault.
+          const expectedToken = await getSecret('gmail_pubsub_token');
           if (!expectedToken) {
             return json({ error: 'Webhook authentication not configured' }, 401);
           }
