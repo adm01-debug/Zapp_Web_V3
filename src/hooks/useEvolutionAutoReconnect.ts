@@ -470,6 +470,13 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
    * (ex.: botao "Tentar novamente" na tela de conexoes).
    */
   const resetReconnect = useCallback(() => {
+    // Cancela qualquer timer de backoff pendente antes de resetar o ciclo.
+    // Sem isso, o timer stale dispara attemptSpecificReconnect uma segunda vez
+    // apos o usuario clicar "Tentar novamente".
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     reconnectExhaustedRef.current = false;
     reconnectAttemptCountRef.current = 0;
     backoffRef.current = INITIAL_BACKOFF_MS;
