@@ -41,6 +41,10 @@ vi.mock('@/lib/supabaseHelpers', () => ({
   }),
 }));
 
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'test-user-id' }, profile: null })),
+}));
+
 import { useCSAT } from '@/hooks/useCSAT';
 import { upsertConnectionAlertPrefs } from '@/hooks/useConnectionAlertPreferences';
 import { useBulkActions } from '@/hooks/useBulkActions';
