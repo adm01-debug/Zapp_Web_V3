@@ -183,13 +183,14 @@ Deno.serve(async (req) => {
     const isSuspicious = !isMalicious && suspicious > 0;
 
     // 3. Log scan result
-    await supabase.from("file_scan_logs").insert({
+    const { error: scanLogErr } = await supabase.from("file_scan_logs").insert({
       file_name: file.name,
       bucket_id: bucketId,
       status: isMalicious ? "malicious" : isSuspicious ? "suspicious" : "clean",
       provider: "VirusTotal",
       provider_response: analysisResult,
     });
+    if (scanLogErr) log.warn("scan log insert failed", { error: scanLogErr.message });
 
     if (isMalicious || isSuspicious) {
       log.error("Unsafe file detected", { name: file.name, stats, analysisId });

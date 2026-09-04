@@ -335,12 +335,13 @@ Deno.serve(async (req) => {
         const lblType = typeof lbl.type === 'string' ? lbl.type.toLowerCase() : undefined;
 
         if (lblId) {
-          await supabase.from('gmail_labels').upsert({
+          const { error: lblUpsertErr } = await supabase.from('gmail_labels').upsert({
             account_id: accountId,
             label_id:   lblId,
             name:       lblName,
             type:       lblType,
           }, { onConflict: 'account_id,label_id' });
+          if (lblUpsertErr) console.warn('[gmail-sync] label upsert failed', lblUpsertErr.message);
         }
       }
 
@@ -375,10 +376,11 @@ Deno.serve(async (req) => {
         return json({ error: 'Gmail API error creating label' }, 400);
       }
       if (typeof createdObj.id === 'string' && createdObj.id) {
-        await supabase.from('gmail_labels').upsert({
+        const { error: lblUpsertErr } = await supabase.from('gmail_labels').upsert({
           account_id: accountId, label_id: createdObj.id,
           name: typeof createdObj.name === 'string' ? createdObj.name : name, type: 'user',
         }, { onConflict: 'account_id,label_id' });
+        if (lblUpsertErr) console.warn('[gmail-sync] createLabel upsert failed', lblUpsertErr.message);
       }
       return json({ label: createdObj });
     }
@@ -411,8 +413,9 @@ Deno.serve(async (req) => {
         return json({ error: 'Gmail API error updating label' }, 400);
       }
       if (typeof patchPayload.name === 'string') {
-        await supabase.from('gmail_labels').update({ name: patchPayload.name })
+        const { error: lblUpdateErr } = await supabase.from('gmail_labels').update({ name: patchPayload.name })
           .eq('account_id', accountId).eq('label_id', labelId);
+        if (lblUpdateErr) console.warn('[gmail-sync] updateLabel db update failed', lblUpdateErr.message);
       }
       return json({ label: updatedObj });
     }
@@ -431,7 +434,8 @@ Deno.serve(async (req) => {
         console.error('[gmail-sync] deleteLabel HTTP error', deleteRes.status);
         return json({ error: 'Failed to delete Gmail label' }, deleteRes.status >= 500 ? 502 : 400);
       }
-      await supabase.from('gmail_labels').delete().eq('account_id', accountId).eq('label_id', labelId);
+      const { error: lblDelErr } = await supabase.from('gmail_labels').delete().eq('account_id', accountId).eq('label_id', labelId);
+      if (lblDelErr) console.warn('[gmail-sync] deleteLabel db delete failed', lblDelErr.message);
       return json({ deleted: true, labelId });
     }
 
@@ -522,7 +526,8 @@ async function getValidToken(supabase: ReturnType<typeof createZappAdminClient>,
   const googleClientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
   if (!googleClientId || !googleClientSecret) {
     console.error('[gmail-sync] Missing Google OAuth credentials');
-    await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    const { error: deactivateErr1 } = await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    if (deactivateErr1) console.warn('[gmail-sync] deactivate account failed (missing creds)', deactivateErr1.message);
     return null;
   }
 
@@ -554,13 +559,15 @@ async function getValidToken(supabase: ReturnType<typeof createZappAdminClient>,
   }
 
   if (typeof tokensRaw !== 'object' || tokensRaw === null || Array.isArray(tokensRaw)) {
-    await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    const { error: deactivateErr2 } = await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    if (deactivateErr2) console.warn('[gmail-sync] deactivate account failed (non-object token response)', deactivateErr2.message);
     return null;
   }
 
   const tokens = tokensRaw as Record<string, unknown>;
   if (typeof tokens.error === 'object' && tokens.error !== null) {
-    await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    const { error: deactivateErr3 } = await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    if (deactivateErr3) console.warn('[gmail-sync] deactivate account failed (token error field)', deactivateErr3.message);
     return null;
   }
 
@@ -568,12 +575,14 @@ async function getValidToken(supabase: ReturnType<typeof createZappAdminClient>,
   const expiresIn = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600;
 
   if (!newAccessToken) {
-    await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    const { error: deactivateErr4 } = await supabase.from('gmail_accounts').update({ is_active: false }).eq('id', accountId);
+    if (deactivateErr4) console.warn('[gmail-sync] deactivate account failed (empty access_token)', deactivateErr4.message);
     return null;
   }
 
   const newExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
-  await supabase.from('gmail_accounts').update({ access_token: newAccessToken, token_expiry: newExpiry }).eq('id', accountId);
+  const { error: tokenUpdateErr } = await supabase.from('gmail_accounts').update({ access_token: newAccessToken, token_expiry: newExpiry }).eq('id', accountId);
+  if (tokenUpdateErr) console.warn('[gmail-sync] token refresh persist failed', tokenUpdateErr.message);
   return newAccessToken;
 }
 

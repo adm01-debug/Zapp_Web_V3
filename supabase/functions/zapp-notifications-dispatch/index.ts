@@ -201,7 +201,8 @@ export async function updateChannelState(
   try {
     const payload: Record<string, unknown> = { last_sent_at: nowIso };
     if (errorMsg !== null) payload.error = errorMsg;
-    await supabase.from('notification_channels_config').update(payload).eq('id', channelId);
+    const { error: updateErr } = await supabase.from('notification_channels_config').update(payload).eq('id', channelId);
+    if (updateErr) console.warn(`[zapp-notifications-dispatch] updateChannelState db update failed: ${updateErr.message}`);
   } catch (e) {
     console.warn(
       `[zapp-notifications-dispatch] updateChannelState falhou: ${e instanceof Error ? e.message : String(e)}`,
