@@ -151,7 +151,8 @@ export function usePersonalStickers(): UsePersonalStickersResult {
         const idx = url.pathname.indexOf(marker);
         if (idx >= 0) {
           const path = decodeURIComponent(url.pathname.slice(idx + marker.length));
-          await supabase.storage.from(STICKERS_BUCKET).remove([path]);
+          const { error: rmErr } = await supabase.storage.from(STICKERS_BUCKET).remove([path]);
+          if (rmErr) log.warn('[delete] storage remove failed (file may already be gone)', rmErr);
         }
       } catch (err) {
         log.warn('Storage cleanup skipped:', err);

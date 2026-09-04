@@ -164,7 +164,10 @@ function useMediaCrudManagement({ type }: UseMediaCrudParams): UseMediaCrudResul
   const deleteStorageFile = async (url: string | undefined) => {
     if (!url) return;
     const info = extractStoragePath(url, bucket);
-    if (info) await supabase.storage.from(info.bucket).remove([info.path]);
+    if (info) {
+      const { error: rmErr } = await supabase.storage.from(info.bucket).remove([info.path]);
+      if (rmErr) log.warn('[deleteStorageFile] storage remove failed (file may already be gone)', rmErr);
+    }
   };
 
   /** Deletes all currently selected items from the database and their backing storage files in a single batch operation. */
