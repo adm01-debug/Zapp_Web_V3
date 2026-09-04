@@ -765,3 +765,56 @@ describe('E32 useRealtimeInbox — ações do orquestrador (envio/áudio)', () =
     expect(type).toBe('audio');
   });
 });
+
+describe('E32 useRealtimeInbox — estabiliza contra flapping da lista (RCA bugs-console 2026-09-04)', () => {
+  // RCA: rajadas de CHANNEL_ERROR no Realtime faziam `conversations` perder o
+  // contato selecionado por 1+ renders antes do fallback assíncrono resolver
+  // de novo. Sem estabilização, resolvedSelectedConversation virava null,
+  // legacyConversation virava null e o RealtimeInboxView desmontava
+  // ChatPanel + ContactDetailsResponsive (chaveados por legacyConversation.id),
+  // cancelando e refazendo em rajada as queries de messages/sla_delivery_rules/
+  // contact_tags simultaneamente.
+  it('mantém legacyConversation quando o contato some momentaneamente de conversations', () => {
+    const qc = newQueryClient();
+    const contact = makeContact(CONTACT_UUID);
+    h.state.convos = [makeConversation(contact)];
+    const { result, rerender } = renderHook(() => useRealtimeInbox(), {
+      wrapper: makeWrapper(qc),
+    });
+    act(() => result.current.setSelectedContactId(CONTACT_UUID));
+    expect(result.current.legacyConversation?.contact.id).toBe(CONTACT_UUID);
+
+    // Contato some momentaneamente da lista (resync do Realtime).
+    h.state.convos = [];
+    rerender();
+    expect(result.current.legacyConversation?.contact.id).toBe(CONTACT_UUID);
+
+    // Lista se recompõe — continua resolvendo normalmente.
+    h.state.convos = [makeConversation(contact)];
+    rerender();
+    expect(result.current.legacyConversation?.contact.id).toBe(CONTACT_UUID);
+  });
+
+  it('troca real de contato NÃO herda a conversa anterior (sem vazamento cross-contact)', () => {
+    const qc = newQueryClient();
+    const contactA = makeContact(CONTACT_UUID);
+    const contactB = makeContact(SECOND_UUID);
+    h.state.convos = [makeConversation(contactA)];
+    const { result, rerender } = renderHook(() => useRealtimeInbox(), {
+      wrapper: makeWrapper(qc),
+    });
+    act(() => result.current.setSelectedContactId(CONTACT_UUID));
+    expect(result.current.legacyConversation?.contact.id).toBe(CONTACT_UUID);
+
+    // Troca para um contato B que ainda não está na lista local.
+    h.state.convos = [];
+    act(() => result.current.setSelectedContactId(SECOND_UUID));
+    rerender();
+    expect(result.current.legacyConversation).toBeNull();
+
+    // Quando B aparece na lista, resolve normalmente (não herda A).
+    h.state.convos = [makeConversation(contactB)];
+    rerender();
+    expect(result.current.legacyConversation?.contact.id).toBe(SECOND_UUID);
+  });
+});
