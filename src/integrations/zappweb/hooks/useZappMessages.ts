@@ -107,6 +107,11 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
       setHasMore(rows.length === limit);
     } catch (e: unknown) {
       log.error('[useZappMessages] loadOlder', e);
+      // Achado do CodeRabbit: sem isso, o erro só ia pro log — o usuário
+      // clicava em "carregar mais antigas" e nada acontecia na tela.
+      if (queryGenerationRef.current === requestGeneration) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       // Sempre reseta, mesmo se a conversa mudou: senão loadingMore trava em
       // true e loadOlder() da conversa nova vira no-op permanente (guard da

@@ -61,15 +61,27 @@ export function useZappConversations(opts: Options = {}) {
   useEffect(() => {
     optsRef.current = { instance, status, limit };
   }, [instance, status, limit]);
+  // Review do CodeRabbit no PR #1514: sob React 18 StrictMode (dev), o efeito
+  // roda setup→cleanup→setup de novo — sem um `mountedRef.current = true` no
+  // setup, o cleanup do 1º ciclo deixava o ref travado em `false` pro resto
+  // da vida real do componente, quebrando fetchAll() silenciosamente.
   const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    []
-  );
+    };
+  }, []);
   const generationRef = useRef(0);
   const fetchInFlightRef = useRef(false);
+
+  // Review do CodeRabbit: numa instância movimentada, INSERT/UPDATE/DELETE
+  // avançam a geração a cada evento — sem um teto, o loop de reconciliação
+  // podia girar indefinidamente (loading nunca libera) se a taxa de eventos
+  // superasse a latência da query. Teto de tentativas + aplica o melhor
+  // resultado disponível na última tentativa em vez de girar pra sempre (o
+  // próximo evento incremental corrige qualquer defasagem residual).
+  const MAX_FETCH_ATTEMPTS = 3;
 
   const fetchAll = useCallback(async () => {
     if (fetchInFlightRef.current) {
@@ -78,7 +90,7 @@ export function useZappConversations(opts: Options = {}) {
     }
     fetchInFlightRef.current = true;
     try {
-      for (;;) {
+      for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
         const myGeneration = generationRef.current;
         const { instance: curInstance, status: curStatus, limit: curLimit } = optsRef.current;
         const { data, error: err } = await zappSupabase
@@ -90,7 +102,9 @@ export function useZappConversations(opts: Options = {}) {
           .limit(curLimit);
         if (err) throw err;
         if (!mountedRef.current) return;
-        if (generationRef.current === myGeneration) {
+        const isLatest = generationRef.current === myGeneration;
+        const isLastAttempt = attempt === MAX_FETCH_ATTEMPTS - 1;
+        if (isLatest || isLastAttempt) {
           setConversations((data ?? []) as unknown as EvolutionConversation[]);
           setError(null);
           break;

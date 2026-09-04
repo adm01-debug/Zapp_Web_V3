@@ -304,7 +304,7 @@ export default function ZappWebbDemoPage() {
                     <Loader2 className="mx-auto my-8 h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      {hasMore && (
+                      {hasMore && messages.length > 0 && (
                         <div className="flex justify-center pb-2">
                           <Button
                             size="sm"

@@ -275,6 +275,39 @@ describe('useZappConversations — patch incremental de Realtime (auditoria 22D,
     await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['novo-0', 'novo-1']));
   });
 
+  // Nitpick do CodeRabbit: o caminho equivalente do DELETE (teste acima)
+  // tinha cobertura, o do UPDATE-pra-fora-do-filtro com a janela cheia não.
+  it('achado do CodeRabbit: UPDATE que remove com a janela cheia também dispara refetch de backfill', async () => {
+    supabaseMock.convRows.length = 0;
+    supabaseMock.convRows.push(...convRows(2));
+
+    const { result } = renderHook(() => useZappConversations({ limit: 2 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['0', '1']); // janela cheia (== limit)
+
+    const fromCallsBefore = supabaseMock.client.from.mock.calls.length;
+    const backfillRows = convRows(2).map((c) => ({ ...c, id: `novo-${c.id}` }));
+    const backfillBuilder = {
+      select: () => backfillBuilder,
+      eq: () => backfillBuilder,
+      order: () => backfillBuilder,
+      limit: () => backfillBuilder,
+      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+        Promise.resolve({ data: backfillRows, error: null }).then(onFulfilled),
+    };
+    supabaseMock.client.from.mockImplementationOnce(() => backfillBuilder as never);
+
+    const channel = supabaseMock.client.channel.mock.results[0].value;
+    const updateHandler = latestHandlerFor(channel, 'UPDATE');
+
+    await act(async () => {
+      await updateHandler({ new: { id: '0', status: 'arquivada' } });
+    });
+
+    expect(supabaseMock.client.from.mock.calls.length).toBeGreaterThan(fromCallsBefore);
+    await waitFor(() => expect(result.current.conversations.map((c) => c.id)).toEqual(['novo-0', 'novo-1']));
+  });
+
   it('achado do cubic (PR #1514, P1): fetchAll() inicial obsoleto refaz a busca (nunca descarta o snapshot inteiro)', async () => {
     let resolveInitialFetch!: (v: { data: unknown; error: unknown }) => void;
     const pendingInitialFetch = new Promise<{ data: unknown; error: unknown }>((resolve) => {
