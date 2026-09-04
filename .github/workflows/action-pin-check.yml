@@ -42,6 +42,8 @@ jobs:
           # Trata push de branch nova (before = zeros) ou SHA vazio.
           # FIX(P2): usa merge-base com main/master para cobrir TODOS os commits da branch,
           # não apenas HEAD^..HEAD (que cobre só o commit final).
+          # Árvore vazia do Git — usada como base para push inicial de main/master.
+          EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
           if [ -z "$FROM_SHA" ] || echo "$FROM_SHA" | grep -qE '^0+$'; then
             echo "Branch nova ou SHA base ausente — calculando base via merge-base."
             FROM_SHA=$(git merge-base HEAD origin/main 2>/dev/null \
@@ -50,10 +52,22 @@ jobs:
             echo "FROM_SHA calculado: $FROM_SHA"
           fi
 
+          # FIX(P1-v2): Se merge-base == HEAD, o push criou main/master agora e
+          # origin/main já aponta para HEAD — diff seria vazio, guard passaria sem verificar.
+          # Usar empty-tree como base expõe todos os arquivos do commit inicial.
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$FROM_SHA" = "$HEAD_SHA" ]; then
+            echo "merge-base == HEAD — push inicial de main/master. Usando empty-tree como base."
+            FROM_SHA="$EMPTY_TREE"
+          fi
+
           # FIX(P1): validar que FROM_SHA é resolvível; falhar explicitamente se não for.
-          # Sem essa verificação, git diff falha silenciosamente (2>/dev/null + || true)
-          # e o guard retorna OK sem examinar nenhuma ação — falso-negativo crítico.
-          if ! git cat-file -e "${FROM_SHA}^{commit}" 2>/dev/null; then
+          # Empty-tree é um objeto tree (não commit) — bypassar a validação de commit para ele.
+          # Sem essa verificação, git diff falha silenciosamente e o guard retorna OK
+          # sem examinar nenhuma ação — falso-negativo crítico.
+          if [ "$FROM_SHA" = "$EMPTY_TREE" ]; then
+            echo "Base: empty-tree (push inicial). Verificando todas as linhas adicionadas."
+          elif ! git cat-file -e "${FROM_SHA}^{commit}" 2>/dev/null; then
             echo "::error::SHA base '${FROM_SHA}' não encontrado no checkout — impossível verificar actions."
             exit 1
           fi
