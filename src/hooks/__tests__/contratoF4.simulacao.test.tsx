@@ -26,6 +26,12 @@ vi.mock('@/integrations/supabase/client', () => ({
         upsertMock(table, payload, opts);
         return Promise.resolve({ error: null });
       },
+      select: vi.fn().mockReturnValue({
+        gte: vi.fn().mockReturnValue({
+          order: vi.fn().mockResolvedValue({ data: [], error: null }),
+        }),
+        order: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }),
     }),
   },
 }));
@@ -39,6 +45,10 @@ vi.mock('@/lib/supabaseHelpers', () => ({
     },
     delete: () => ({ in: () => Promise.resolve({ error: null }) }),
   }),
+}));
+
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'test-user-id' }, profile: null })),
 }));
 
 import { useCSAT } from '@/hooks/useCSAT';

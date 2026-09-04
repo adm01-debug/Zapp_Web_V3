@@ -62,7 +62,7 @@ export function useScheduledMessages(contactId?: string) {
     queryKey: queryKeys.scheduledMessages.contact(contactId),
     // Sem contactId → listagem global (ScheduleCalendarView agenda por data, sem filtro de contato).
     // Com contactId → só busca se for UUID válido (evita queries inválidas no perfil de contato).
-    enabled: !contactId || isValidUUID(contactId),
+    enabled: !!user && (!contactId || isValidUUID(contactId)),
     staleTime: 30_000,
     queryFn: async () => {
       let query = supabase

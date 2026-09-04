@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { queryKeys } from '@/services/api/queryKeys';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/features/auth';
 import { useAgents } from '@/features/admin';
 import { useTags } from '@/hooks/useTags';
 import { format, subDays, startOfDay, endOfDay, eachDayOfInterval, parseISO } from 'date-fns';
@@ -26,6 +27,7 @@ interface ReportContact {
 
 /** use Reports Data component for the reports section. */
 export function useReportsData() {
+  const { user } = useAuth();
   const [period, setPeriod] = useState('30');
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -67,6 +69,7 @@ export function useReportsData() {
       if (error) throw error;
       return (data ?? []) as ReportMessage[];
     },
+    enabled: !!user,
     staleTime: 300_000,
   });
 
@@ -82,7 +85,7 @@ export function useReportsData() {
       if (error) throw error;
       return (data ?? []) as ReportMessage[];
     },
-    enabled: compareEnabled,
+    enabled: !!user && compareEnabled,
     staleTime: 300_000,
   });
 
@@ -98,6 +101,7 @@ export function useReportsData() {
       if (error) throw error;
       return (data ?? []) as ReportContact[];
     },
+    enabled: !!user,
     staleTime: 300_000,
   });
 
@@ -113,7 +117,7 @@ export function useReportsData() {
       if (error) throw error;
       return (data ?? []) as ReportContact[];
     },
-    enabled: compareEnabled,
+    enabled: !!user && compareEnabled,
     staleTime: 300_000,
   });
 
