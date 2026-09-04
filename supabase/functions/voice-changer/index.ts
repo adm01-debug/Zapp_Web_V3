@@ -185,14 +185,15 @@ Deno.serve(async (req) => {
         telemetryData.metadata.is_retry = currentAttempts > 1;
         telemetryData.metadata.attempt = currentAttempts;
 
-        await supabaseClient
+        const { error: processingUpdateErr } = await supabaseClient
           .from('voice_conversion_queue')
-          .update({ 
-            status: 'processing', 
+          .update({
+            status: 'processing',
             last_attempt_at: new Date().toISOString(),
-            attempts: currentAttempts 
+            attempts: currentAttempts
           })
           .eq('id', taskId);
+        if (processingUpdateErr) log.warn('Failed to set task status to processing', { error: processingUpdateErr.message });
       }
 
       const elevenlabsKey = requireEnv('ELEVENLABS_API_KEY');
@@ -226,13 +227,14 @@ Deno.serve(async (req) => {
         
         if (taskId) {
           const isRetryable = stsResponse.status >= 500 || stsResponse.status === 429;
-          await supabaseClient
+          const { error: failedStatusErr } = await supabaseClient
             .from('voice_conversion_queue')
-            .update({ 
-              status: 'failed', 
-              error_message: `ElevenLabs Error: ${stsResponse.status} - ${errText.substring(0, 100)}` 
+            .update({
+              status: 'failed',
+              error_message: `ElevenLabs Error: ${stsResponse.status} - ${errText.substring(0, 100)}`
             })
             .eq('id', taskId);
+          if (failedStatusErr) log.warn('Failed to set task status to failed', { error: failedStatusErr.message });
           
           if (isRetryable) {
             log.info("Task failed with retryable error", { taskId, status: stsResponse.status });
