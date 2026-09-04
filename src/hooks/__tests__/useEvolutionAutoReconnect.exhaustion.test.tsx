@@ -504,6 +504,6 @@ describe('useEvolutionAutoReconnect — timerRef.current = null no callback (mut
     expect(connectInstance.mock.calls.length).toBeGreaterThan(callsBeforeCheckStatus);
     const extraCalls = connectInstance.mock.calls.slice(callsBeforeCheckStatus);
     expect(extraCalls.length).toBeGreaterThan(0);
-    expect(extraCalls[0][0]).toBe('instB');
+    expect((extraCalls[0] as unknown[])[0]).toBe('instB');
   });
 });
