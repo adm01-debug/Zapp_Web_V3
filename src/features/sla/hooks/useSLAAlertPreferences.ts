@@ -44,7 +44,6 @@ export function useSLAAlertPreferences() {
 
   const { data: preferences = DEFAULT_SLA_ALERT_PREFERENCES, isLoading } = useQuery({
     queryKey,
-    enabled: !!userId,
     queryFn: async (): Promise<SLAAlertPreferences> => {
       if (!user) throw new Error('Usuário não autenticado');
       const { data, error } = await safeClient.from<SLAAlertPreferences>(
