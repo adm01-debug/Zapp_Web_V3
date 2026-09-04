@@ -153,7 +153,7 @@ export default function ZappWebbDemoPage() {
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId]
   );
-  const { messages, loading: loadingMsgs } = useZappMessages({
+  const { messages, loading: loadingMsgs, loadOlder, loadingMore, hasMore } = useZappMessages({
     remoteJid: active?.remote_jid ?? null,
   });
   const contact = active?.evolution_contacts ?? null;
@@ -303,7 +303,25 @@ export default function ZappWebbDemoPage() {
                   {loadingMsgs ? (
                     <Loader2 className="mx-auto my-8 h-4 w-4 animate-spin" />
                   ) : (
-                    messages.map((m) => <MessageBubble key={m.id} msg={m} />)
+                    <>
+                      {hasMore && (
+                        <div className="flex justify-center pb-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={loadingMore}
+                            onClick={() => void loadOlder()}
+                          >
+                            {loadingMore ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              'Carregar mensagens mais antigas'
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                      {messages.map((m) => <MessageBubble key={m.id} msg={m} />)}
+                    </>
                   )}
                 </div>
               </ScrollArea>

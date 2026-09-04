@@ -10,40 +10,51 @@ interface Options {
   limit?: number;
 }
 
+const SELECT_FIELDS = `id, message_id, remote_jid, from_me, message_type, content, media_url,
+   media_mimetype, media_type, caption, quoted_message_id, status,
+   push_name, created_at, deleted_at, edited_at, instance_name,
+   contact_id, conversation_id`;
+
 /**
  * Carrega mensagens de uma conversa + Realtime (INSERT/UPDATE).
  * UPDATE cobre: media_url preenchida pelo proxy, status sent→delivered→read,
  * deleted_at preenchido.
+ *
+ * Auditoria 22D (item #6, 2026-09-02): `limit` era fixo — não havia como
+ * carregar mensagens mais antigas que as últimas `limit`. `loadOlder()`
+ * pagina por cursor (`created_at` da mensagem mais antiga carregada) e
+ * prepend no início da lista, sem afetar o realtime (que continua
+ * patcheando em memória via INSERT/UPDATE, nunca refetch da lista).
  */
 export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit = 50 }: Options) {
   const [messages, setMessages] = useState<EvolutionMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof zappSupabase.channel> | null>(null);
 
   const fetchAll = useCallback(async () => {
     if (!remoteJid) {
       setMessages([]);
+      setHasMore(true);
       return;
     }
     setLoading(true);
     try {
       const { data, error: err } = await zappSupabase
         .from('evolution_messages_wpp2')
-        .select(
-          `id, message_id, remote_jid, from_me, message_type, content, media_url,
-           media_mimetype, media_type, caption, quoted_message_id, status,
-           push_name, created_at, deleted_at, edited_at, instance_name,
-           contact_id, conversation_id`
-        )
+        .select(SELECT_FIELDS)
         .eq('instance_name', instance)
         .eq('remote_jid', remoteJid)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(limit);
       if (err) throw err;
+      const rows = (data ?? []) as unknown as EvolutionMessage[];
       // ordenar ascendente para UI tipo chat
-      setMessages(((data ?? []) as unknown as EvolutionMessage[]).reverse());
+      setMessages(rows.slice().reverse());
+      setHasMore(rows.length === limit);
       setError(null);
     } catch (e: unknown) {
       log.error('[useZappMessages]', e);
@@ -60,6 +71,35 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
       setLoading(false);
     }
   }, [remoteJid, instance, limit]);
+
+  const loadOlder = useCallback(async () => {
+    if (!remoteJid || loadingMore || !hasMore) return;
+    const oldest = messages[0]?.created_at;
+    if (!oldest) return;
+    setLoadingMore(true);
+    try {
+      const { data, error: err } = await zappSupabase
+        .from('evolution_messages_wpp2')
+        .select(SELECT_FIELDS)
+        .eq('instance_name', instance)
+        .eq('remote_jid', remoteJid)
+        .is('deleted_at', null)
+        // Cursor simples por created_at (sem tiebreaker de id): mensagens com
+        // o exato mesmo timestamp que `oldest` (raro, rajada de webhook) podem
+        // ficar de fora desta página — aceitável para o volume desta conversa.
+        .lt('created_at', oldest)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (err) throw err;
+      const rows = ((data ?? []) as unknown as EvolutionMessage[]).slice().reverse();
+      setMessages((prev) => [...rows, ...prev]);
+      setHasMore(rows.length === limit);
+    } catch (e: unknown) {
+      log.error('[useZappMessages] loadOlder', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [remoteJid, instance, limit, messages, loadingMore, hasMore]);
 
   useEffect(() => {
     void fetchAll();
@@ -118,5 +158,5 @@ export function useZappMessages({ remoteJid, instance = ZAPPWEB_INSTANCE, limit 
     };
   }, [remoteJid, instance, fetchAll]);
 
-  return { messages, loading, error, refetch: fetchAll };
+  return { messages, loading, error, refetch: fetchAll, loadOlder, loadingMore, hasMore };
 }
