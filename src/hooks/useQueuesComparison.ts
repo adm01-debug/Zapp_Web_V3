@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { isValidUUID } from '@/utils/uuid';
+import { useAuth } from '@/features/auth';
 
 interface DateRange {
   from: Date;
@@ -25,6 +26,7 @@ export type { DateRange };
 
 /** Compares active queues by contacts, assignment rate, agent count, and message volume within the given date range. */
 export function useQueuesComparison(dateRange: DateRange) {
+  const { user } = useAuth();
   const fromIso = dateRange.from.toISOString();
   const toIso = dateRange.to.toISOString();
 
@@ -104,6 +106,7 @@ export function useQueuesComparison(dateRange: DateRange) {
         };
       });
     },
+    enabled: !!user,
     staleTime: 30_000,
   });
 

@@ -141,7 +141,7 @@
     "vite-plugin-compression2": "1.4.0",
     "vite-plugin-pwa": "^0.21.0",
     "web-vitals": "^6.0.1",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xlsx": "npm:@e965/xlsx@0.20.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -181,6 +181,7 @@
     "happy-dom": "^20.10.6",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
+    "pg": "^8.13.0",
     "playwright": "^1.59.1",
     "postcss": "^8.5.16",
     "prettier": "^3.9.5",

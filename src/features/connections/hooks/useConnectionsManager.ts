@@ -308,16 +308,17 @@ export function useConnectionsManager() {
           data: { user },
         } = await supabase.auth.getUser();
         if (user) {
-          await supabase.rpc('fn_safe_audit_log', {
+          const { error: auditErr } = await supabase.rpc('fn_safe_audit_log', {
             p_entity_type: 'whatsapp_connection',
             p_entity_id: connection.id,
             p_action: 'disconnect',
             p_performed_by: user.email,
             p_metadata: { instance: evoName, source: 'manual_ui' },
           });
+          if (auditErr) log.warn('Audit log failed — proceeding with disconnect', auditErr);
         }
       } catch (auditErr) {
-        log.warn('Audit log failed — proceeding with disconnect', auditErr);
+        log.warn('Audit log exception — proceeding with disconnect', auditErr);
       }
 
       // 2. Update local state immediately for UX (Optimistic)

@@ -310,7 +310,8 @@ export function useAudioMemes(open: boolean) {
 
   const handleCancelUpload = useCallback(async () => {
     if (pendingUpload) {
-      await supabase.storage.from('audio-memes').remove([pendingUpload.storagePath]);
+      const { error: rmErr } = await supabase.storage.from('audio-memes').remove([pendingUpload.storagePath]);
+      if (rmErr) log.warn('[handleCancelUpload] storage remove failed', rmErr);
     }
     setPendingUpload(null);
   }, [pendingUpload]);
@@ -398,7 +399,10 @@ export function useAudioMemes(open: boolean) {
         (prev ?? []).filter((m) => m.id !== meme.id)
       );
       const path = meme.audio_url.split('/audio-memes/')[1];
-      if (path) await supabase.storage.from('audio-memes').remove([path]);
+      if (path) {
+        const { error: rmErr } = await supabase.storage.from('audio-memes').remove([path]);
+        if (rmErr) log.warn('[handleDelete] storage remove failed (file may already be gone)', rmErr);
+      }
       const { error: deleteError } = await supabase.from('audio_memes').delete().eq('id', meme.id);
       if (deleteError) {
         log.error('[handleDelete] DB delete failed:', deleteError.message);

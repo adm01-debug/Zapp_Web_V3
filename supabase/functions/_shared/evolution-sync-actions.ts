@@ -51,17 +51,19 @@ export async function syncContacts(
 
   if (!contactsResponse.ok) {
     const errText = contactsResponse.error ?? 'Evolution API error';
-    await supabase.from('audit_logs').insert({
+    const { error: auditSyncErr } = await supabase.from('audit_logs').insert({
       action: 'contact_sync_failure',
       entity_type: 'whatsapp_connection',
       details: { instance_id: instanceName, status: contactsResponse.status, error: errText }
     });
-    await supabase.from('warroom_alerts').insert({
+    if (auditSyncErr) console.warn(`[syncContacts] failed to insert audit_log: ${auditSyncErr.message}`);
+    const { error: warnAlertErr } = await supabase.from('warroom_alerts').insert({
       alert_type: 'warning',
       title: `Falha na sincronização: ${instanceName}`,
       message: `Erro ao buscar contatos da Evolution API: ${errText.slice(0, 100)}`,
       source: 'evolution_sync'
     });
+    if (warnAlertErr) console.warn(`[syncContacts] failed to insert warroom_alert: ${warnAlertErr.message}`);
     throw new Error(`Evolution API error [${contactsResponse.status}]: ${errText}`);
   }
 
@@ -92,8 +94,9 @@ export async function syncContacts(
       { onConflict: 'phone,whatsapp_connection_id', ignoreDuplicates: false }
     );
     if (upsertError) {
-      await supabase.from('contacts').update({ name, avatar_url: contact.profilePictureUrl || null })
+      const { error: contactFallbackErr } = await supabase.from('contacts').update({ name, avatar_url: contact.profilePictureUrl || null })
         .eq('phone', phone).eq('whatsapp_connection_id', connection.id);
+      if (contactFallbackErr) console.warn(`[syncContacts] failed to update contact fallback: ${contactFallbackErr.message}`);
     }
     synced++;
   }
@@ -200,23 +203,25 @@ export async function syncAllMessages(
           });
           if (!insertError) totalSynced++;
         }
-      } catch (err) { 
-        totalErrors++; 
-        await supabase.from('audit_logs').insert({
+      } catch (err) {
+        totalErrors++;
+        const { error: auditBatchErr } = await supabase.from('audit_logs').insert({
           action: 'message_sync_batch_failure',
           entity_type: 'whatsapp_connection',
           details: { instance_id: instanceName, error: err instanceof Error ? err.message : String(err) }
         });
+        if (auditBatchErr) console.warn(`[syncAllMessages] failed to insert audit_log batch failure: ${auditBatchErr.message}`);
       }
     }
   }
 
   if (totalSynced > 0 || totalErrors > 0) {
-    await supabase.from('audit_logs').insert({
+    const { error: auditSyncCompletedErr } = await supabase.from('audit_logs').insert({
       action: 'message_sync_completed',
       entity_type: 'whatsapp_connection',
       details: { instance_id: instanceName, totalSynced, totalErrors, totalSkipped }
     });
+    if (auditSyncCompletedErr) console.warn(`[syncAllMessages] failed to insert audit_log completed: ${auditSyncCompletedErr.message}`);
   }
 
   return jsonRes({ success: true, totalSynced, totalSkipped, totalErrors, totalContacts: allContacts.length }, corsHeaders);
@@ -242,10 +247,14 @@ export async function cleanupMock(supabase: SupabaseClient<any, any>, corsHeader
   const { data: mockContacts } = await supabase.from('contacts').select('id').like('id', 'c1000001-%');
   if (mockContacts?.length) {
     const mockIds = mockContacts.map((c: { id: string }) => c.id);
-    await supabase.from('messages').delete().in('contact_id', mockIds);
-    await supabase.from('contact_tags').delete().in('contact_id', mockIds);
-    await supabase.from('contact_notes').delete().in('contact_id', mockIds);
-    await supabase.from('contacts').delete().in('id', mockIds);
+    const { error: delMsgErr } = await supabase.from('messages').delete().in('contact_id', mockIds);
+    if (delMsgErr) console.warn(`[cleanupMock] failed to delete messages: ${delMsgErr.message}`);
+    const { error: delTagsErr } = await supabase.from('contact_tags').delete().in('contact_id', mockIds);
+    if (delTagsErr) console.warn(`[cleanupMock] failed to delete contact_tags: ${delTagsErr.message}`);
+    const { error: delNotesErr } = await supabase.from('contact_notes').delete().in('contact_id', mockIds);
+    if (delNotesErr) console.warn(`[cleanupMock] failed to delete contact_notes: ${delNotesErr.message}`);
+    const { error: delContactsErr } = await supabase.from('contacts').delete().in('id', mockIds);
+    if (delContactsErr) console.warn(`[cleanupMock] failed to delete contacts: ${delContactsErr.message}`);
     return jsonRes({ success: true, removed: mockIds.length }, corsHeaders);
   }
   return jsonRes({ success: true, removed: 0, message: 'No mock data found' }, corsHeaders);
@@ -262,10 +271,14 @@ export async function fullSync(
   const { data: mockContacts } = await supabase.from('contacts').select('id').like('id', 'c1000001-%');
   if (mockContacts?.length) {
     const mockIds = mockContacts.map((c: { id: string }) => c.id);
-    await supabase.from('messages').delete().in('contact_id', mockIds);
-    await supabase.from('contact_tags').delete().in('contact_id', mockIds);
-    await supabase.from('contact_notes').delete().in('contact_id', mockIds);
-    await supabase.from('contacts').delete().in('id', mockIds);
+    const { error: fsDelMsgErr } = await supabase.from('messages').delete().in('contact_id', mockIds);
+    if (fsDelMsgErr) console.warn(`[fullSync/cleanup] failed to delete messages: ${fsDelMsgErr.message}`);
+    const { error: fsDelTagsErr } = await supabase.from('contact_tags').delete().in('contact_id', mockIds);
+    if (fsDelTagsErr) console.warn(`[fullSync/cleanup] failed to delete contact_tags: ${fsDelTagsErr.message}`);
+    const { error: fsDelNotesErr } = await supabase.from('contact_notes').delete().in('contact_id', mockIds);
+    if (fsDelNotesErr) console.warn(`[fullSync/cleanup] failed to delete contact_notes: ${fsDelNotesErr.message}`);
+    const { error: fsDelContactsErr } = await supabase.from('contacts').delete().in('id', mockIds);
+    if (fsDelContactsErr) console.warn(`[fullSync/cleanup] failed to delete contacts: ${fsDelContactsErr.message}`);
     results.cleanup = { removed: mockIds.length };
   } else {
     results.cleanup = { removed: 0 };
@@ -301,7 +314,8 @@ export async function fullSync(
         const { error: insErr } = await supabase.from('contacts').insert(ct);
         if (!insErr) totalSynced++;
         else if (insErr.code === '23505') {
-          await supabase.from('contacts').update({ name: ct.name, avatar_url: ct.avatar_url }).eq('phone', ct.phone).eq('whatsapp_connection_id', ct.whatsapp_connection_id);
+          const { error: fsContactUpdateErr } = await supabase.from('contacts').update({ name: ct.name, avatar_url: ct.avatar_url }).eq('phone', ct.phone).eq('whatsapp_connection_id', ct.whatsapp_connection_id);
+          if (fsContactUpdateErr) console.warn(`[fullSync] failed to update duplicate contact: ${fsContactUpdateErr.message}`);
           totalSynced++;
         }
       }

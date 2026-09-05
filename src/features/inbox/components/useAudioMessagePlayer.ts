@@ -161,9 +161,10 @@ export function useAudioMessagePlayer({
       if (data?.transcription) {
         setTranscription(data.transcription);
         setTranscriptionStatus('completed');
-        await dbFrom('messages')
+        const { error: transcriptErr } = await dbFrom('messages')
           .update({ transcription: data.transcription, transcription_status: 'completed' })
           .eq('id', messageId);
+        if (transcriptErr) log.warn('Failed to save transcription to DB', { error: transcriptErr.message });
       }
     } catch (error) {
       log.error('Transcription error:', error);

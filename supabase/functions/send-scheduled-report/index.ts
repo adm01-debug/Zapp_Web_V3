@@ -167,7 +167,7 @@ Deno.serve(async (req: Request) => {
         // Retryável até MAX_ATTEMPTS; depois vira DLQ (status='error').
         const attempts = run.send_attempts ?? 1;
         const dlq = attempts >= MAX_ATTEMPTS;
-        await supabase
+        const { error: runFailErr } = await supabase
           .from("scheduled_report_runs")
           .update({
             status: dlq ? "error" : "success",
@@ -175,6 +175,7 @@ Deno.serve(async (req: Request) => {
             error: dlq ? errorMsg : null,
           })
           .eq("id", run.run_id);
+        if (runFailErr) log.warn("Failed to update run status after send failure", { runId: run.run_id, error: runFailErr.message });
       }
     }
 

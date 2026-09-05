@@ -11,6 +11,7 @@ import {
   formatDuration,
   formatPercentage,
   formatSmartDate,
+  normalizeMoney,
 } from '@/lib/formatters';
 
 // ── formatShortDate ───────────────────────────────────────────────────────────
@@ -259,5 +260,32 @@ describe('formatPercentage', () => {
 
   it('respects custom decimals parameter', () => {
     expect(formatPercentage(0.3333, 2)).toBe('33.33%');
+  });
+});
+
+describe('normalizeMoney (regressão AUD-22D 2026-09-05 — payment links em float64)', () => {
+  it('arredonda para 2 casas o valor digitado pelo usuário', () => {
+    expect(normalizeMoney('19.999999')).toBe(20);
+    expect(normalizeMoney('10.005')).toBe(10.01);
+    expect(normalizeMoney('1234.5')).toBe(1234.5);
+  });
+
+  it('elimina artefato de ponto flutuante antes do NUMERIC', () => {
+    expect(normalizeMoney(0.1 + 0.2)).toBe(0.3);
+    expect(normalizeMoney(1.1 * 3)).toBe(3.3);
+  });
+
+  it('aceita vírgula decimal (entrada pt-BR) e espaços nas pontas', () => {
+    expect(normalizeMoney('0,01')).toBe(0.01);
+    expect(normalizeMoney(' 1234,5 ')).toBe(1234.5);
+  });
+
+  it('devolve NaN para entrada inválida, inclusive prefixo numérico (fail-closed)', () => {
+    expect(Number.isNaN(normalizeMoney('abc'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney('10abc'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney('R$ 10'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney('1.234,56'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney(''))).toBe(true);
+    expect(Number.isNaN(normalizeMoney(Infinity))).toBe(true);
   });
 });

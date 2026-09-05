@@ -150,11 +150,12 @@ Deno.serve(async (req) => {
           results[bucketName] = { deleted: deletedCount };
 
           // Log to audit table
-          await supabase.from("storage_cleanup_logs").insert({
+          const { error: cleanupLogErr } = await supabase.from("storage_cleanup_logs").insert({
             bucket_id: bucketName,
             files_deleted: deletedCount,
             status: "success"
           });
+          if (cleanupLogErr) log.warn(`cleanup log insert failed for ${bucketName}`, { error: cleanupLogErr.message });
         }
       } else {
         log.info(`Nenhum arquivo para deletar em ${bucketName}`);

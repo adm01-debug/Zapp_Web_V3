@@ -185,14 +185,15 @@ Deno.serve(async (req) => {
         telemetryData.metadata.is_retry = currentAttempts > 1;
         telemetryData.metadata.attempt = currentAttempts;
 
-        await supabaseClient
+        const { error: processingUpdateErr } = await supabaseClient
           .from('voice_conversion_queue')
-          .update({ 
-            status: 'processing', 
+          .update({
+            status: 'processing',
             last_attempt_at: new Date().toISOString(),
-            attempts: currentAttempts 
+            attempts: currentAttempts
           })
           .eq('id', taskId);
+        if (processingUpdateErr) log.warn('Failed to set task status to processing', { error: processingUpdateErr.message });
       }
 
       const elevenlabsKey = requireEnv('ELEVENLABS_API_KEY');
@@ -226,13 +227,14 @@ Deno.serve(async (req) => {
         
         if (taskId) {
           const isRetryable = stsResponse.status >= 500 || stsResponse.status === 429;
-          await supabaseClient
+          const { error: failedStatusErr } = await supabaseClient
             .from('voice_conversion_queue')
-            .update({ 
-              status: 'failed', 
-              error_message: `ElevenLabs Error: ${stsResponse.status} - ${errText.substring(0, 100)}` 
+            .update({
+              status: 'failed',
+              error_message: `ElevenLabs Error: ${stsResponse.status} - ${errText.substring(0, 100)}`
             })
             .eq('id', taskId);
+          if (failedStatusErr) log.warn('Failed to set task status to failed', { error: failedStatusErr.message });
           
           if (isRetryable) {
             log.info("Task failed with retryable error", { taskId, status: stsResponse.status });
@@ -251,16 +253,18 @@ Deno.serve(async (req) => {
           .from('audio-memes')
           .upload(outputPath, audioBuffer, { contentType: 'audio/mpeg', upsert: true });
 
-        await supabaseClient
+        const { error: queueCompleteErr } = await supabaseClient
           .from('voice_conversion_queue')
           .update({
             status: 'completed',
             output_audio_url: getStoragePublicUrl('audio-memes', outputPath),
           })
           .eq('id', taskId);
+        if (queueCompleteErr) log.warn('Failed to mark queue task as completed', { error: queueCompleteErr.message });
       }
 
-      await supabaseClient.from('sts_telemetry').insert(telemetryData);
+      const { error: telemetryErr } = await supabaseClient.from('sts_telemetry').insert(telemetryData);
+      if (telemetryErr) log.warn('Failed to insert telemetry', { error: telemetryErr.message });
 
       return new Response(audioBuffer, {
         status: 200,
@@ -273,13 +277,15 @@ Deno.serve(async (req) => {
     } catch (innerErr: unknown) {
       telemetryData.error_type = 'EXCEPTION';
       telemetryData.metadata.error = innerErr instanceof Error ? innerErr.message : String(innerErr);
-      await supabaseClient.from('sts_telemetry').insert(telemetryData);
-      
+      const { error: telemetryFailErr } = await supabaseClient.from('sts_telemetry').insert(telemetryData);
+      if (telemetryFailErr) log.warn('Failed to insert error telemetry', { error: telemetryFailErr.message });
+
       if (taskId) {
-        await supabaseClient
+        const { error: queueFailErr } = await supabaseClient
           .from('voice_conversion_queue')
           .update({ status: 'failed', error_message: innerErr instanceof Error ? innerErr.message : String(innerErr) })
           .eq('id', taskId);
+        if (queueFailErr) log.warn('Failed to mark queue task as failed', { error: queueFailErr.message });
       }
       throw innerErr;
     }

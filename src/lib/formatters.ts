@@ -78,6 +78,26 @@ export function formatBRL(value: number): string {
   }).format(value);
 }
 
+/**
+ * Normaliza um valor monetário (em reais) para 2 casas decimais, evitando que
+ * artefatos de float64 (ex.: "19.999999", 0.1 + 0.2) cheguem ao NUMERIC do banco.
+ * Strings: aceita apenas número puro com ponto OU vírgula decimal ("10.5", "10,5");
+ * qualquer outro conteúdo ("10abc", "R$ 10") é inválido. Retorna NaN para entrada
+ * inválida — o chamador decide. O retorno é em reais, não em centavos inteiros.
+ */
+export function normalizeMoney(value: string | number): number {
+  let n: number;
+  if (typeof value === 'number') {
+    n = value;
+  } else {
+    const s = value.trim().replace(',', '.');
+    if (!/^-?\d+(\.\d+)?$/.test(s)) return NaN;
+    n = Number(s);
+  }
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * 100) / 100;
+}
+
 // ─── Text Formatting ────────────────────────────────────────────────
 
 /**

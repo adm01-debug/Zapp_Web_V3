@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { getLogger } from '@/lib/logger';
 import { safeClient } from '@/integrations/supabase/safeClient';
 import { resolvePublicStorageUrl } from '@/lib/mediaUrl';
 import { toast } from 'sonner';
@@ -106,6 +107,8 @@ export interface InviteUserPayload {
 }
 
 /** Hook: use Admin Data. */
+const log = getLogger('useAdminData');
+
 export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
   const queryClient = useQueryClient();
   const [users, setUsers] = useState<UserWithRole[]>([]);
@@ -161,10 +164,11 @@ export function useAdminData(activeTab: 'users' | 'audit' | 'crm') {
         const userIds = [
           ...new Set(logs.map((l) => l.user_id).filter((id): id is string => id !== null)),
         ];
-        const { data: profilesData } =
+        const { data: profilesData, error: profilesErr } =
           userIds.length > 0
             ? await supabase.from('profiles').select('user_id, name, email').in('user_id', userIds)
-            : { data: [] };
+            : { data: [], error: null };
+        if (profilesErr) log.warn('[admin] profiles lookup failed — audit logs shown without user names', profilesErr);
         const profiles = unwrapRows<ProfileMini>(profilesData);
 
         const logsWithUsers: AuditLog[] = logs.map((log) => ({

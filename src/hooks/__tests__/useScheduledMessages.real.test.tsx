@@ -80,6 +80,9 @@ vi.mock('@/hooks/useAuth', () => ({
 vi.mock('@/features/auth/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }));
+vi.mock('@/features/auth', () => ({
+  useAuth: () => mockUseAuth(),
+}));
 
 const toastMock = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-toast', () => ({

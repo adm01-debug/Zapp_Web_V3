@@ -83,3 +83,23 @@ jobs:
             exit 0
           fi
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT ops.check_schema_drift(true);"
+
+      - name: Instalar dependências (pg driver)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL não definido — pulando instalação do pg."
+            exit 0
+          fi
+          npm install --prefix . --no-save pg@8
+
+      - name: Verificar drift migration repo ↔ banco
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL não definido — pulando verificação de drift de migration."
+            exit 0
+          fi
+          node scripts/check-migration-version-bank-drift.mjs

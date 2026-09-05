@@ -320,9 +320,10 @@ export function useBusinessLogicCatalogManagement(
 
           const externalId = extractEvolutionMessageId(apiResult);
           if (dbResult?.id && externalId) {
-            await dbFrom('messages')
+            const { error: mediaStatusErr } = await dbFrom('messages')
               .update({ external_id: externalId, status: 'sent' })
               .eq('id', dbResult.id);
+            if (mediaStatusErr) log.warn('Failed to update media message status to sent', { error: mediaStatusErr.message });
           }
         }
 
@@ -352,9 +353,10 @@ export function useBusinessLogicCatalogManagement(
 
         const textExternalId = extractEvolutionMessageId(textApiResult);
         if (textDbResult?.id && textExternalId) {
-          await dbFrom('messages')
+          const { error: textStatusErr } = await dbFrom('messages')
             .update({ external_id: textExternalId, status: 'sent' })
             .eq('id', textDbResult.id);
+          if (textStatusErr) log.warn('Failed to update text message status to sent', { error: textStatusErr.message });
         }
 
         toast({ title: '✅ Produto enviado!', description: `Enviado para ${contact.name}` });
@@ -581,11 +583,12 @@ export function useBusinessLogicPipelineManagement(
       toast({ title: 'Erro ao mover deal', description: error.message, variant: 'destructive' });
       return;
     }
-    await supabase.from('deal_activities').insert({
+    const { error: actErr } = await supabase.from('deal_activities').insert({
       deal_id: dealId,
       activity_type: 'stage_change',
       description: `Movido para ${stages.find((s) => s.id === newStageId)?.name}`,
     });
+    if (actErr) log.warn('[deal] deal_activities insert falhou', actErr);
     void queryClient.invalidateQueries({ queryKey: PIPELINE_KEY });
   };
 

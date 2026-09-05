@@ -1,5 +1,29 @@
 # 📜 Changelog — ZAPP WEB
 
+## [2.5.0] - 2026-09-05 — Auditoria 22D e hardening pós-auditoria
+
+### Auditoria técnica (22 dimensões)
+- Relatórios `docs/audits/AUDITORIA-TECNICA-22D-20260902.md` (6,9/10) e `AUDITORIA-TECNICA-22D-20260905.md` (re-auditoria com delta e execução das correções)
+- `ESTADO.md`: incidente wpp2 (25/08 → 03/09, 8,7 dias sem ingestão) fechado; disco da VPS 98 % → 80 % após limpeza dos runners self-hosted
+
+### Segurança
+- RLS: bypass de DELETE em 8 tabelas de config corrigido (`20260902220000`)
+- `public.rpc_e2e_*` sem guard de auth: EXECUTE revogado (`20260903210000`, PR #1507)
+- GoTrue: `GOTRUE_PASSWORD_MIN_LENGTH=8` (policy de senha deixou de ser só do frontend)
+
+### CI/CD e qualidade
+- `quality-gate` passou a required check da `main`; typecheck global bloqueante
+- lint-staged bloqueante (PR #1509) + hook `commit-msg` com commitlint
+- `bun.lock` deduplicado (13 chaves duplicadas removidas; `--frozen-lockfile` volta a funcionar); `xlsx` via alias npm `@e965/xlsx@0.20.3` em vez de tarball CDN — o pacote `xlsx` do npm parou em 0.18.5 (SheetJS distribui 0.19+ só pelo CDN próprio); `@e965/xlsx` é o espelho publicado no npm da mesma versão 0.20.3, pinado exato, e o nome `xlsx` no código não muda
+
+### Frontend
+- Paginação incremental + patch em memória no realtime (`useZappMessages`/`useZappConversations`, PR #1514)
+- Testes de `useEvolutionAutoReconnect` corrigidos (suíte: 9.328 testes, 0 falhas)
+- Payment links: valor normalizado para centavos antes do `NUMERIC`
+
+### Banco
+- `schema_migrations` reconciliado com o repo (registro de `20260903210000`; duplicatas sicoob removidas)
+
 ## [2.4.0] - 2026-08-12 — Desacoplamento Evolution Stack
 
 ### Separação de Infraestrutura Evolution API

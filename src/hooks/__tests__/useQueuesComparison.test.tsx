@@ -11,6 +11,10 @@ vi.mock('@/integrations/supabase/client', () => ({
 
 vi.mock('@/lib/logger');
 
+vi.mock('@/features/auth', () => ({
+  useAuth: vi.fn(() => ({ user: { id: 'test-user-id' }, profile: null })),
+}));
+
 import { useQueuesComparison } from '@/hooks/useQueuesComparison';
 
 const dateRange = {

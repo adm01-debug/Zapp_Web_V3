@@ -387,7 +387,7 @@ Gere a melhor próxima resposta do atendente e recomende a tag mais adequada.`;
       }
     }
 
-    await supabase
+    const { error: updateExecErr } = await supabase
       .from("automation_executions")
       .update({
         suggestion_text: suggestion,
@@ -395,6 +395,7 @@ Gere a melhor próxima resposta do atendente e recomende a tag mais adequada.`;
         kb_sources: kbSources,
       })
       .eq("id", executionId);
+    if (updateExecErr) console.warn("[automation-suggest-reply] Failed to update execution:", updateExecErr.message);
 
     return new Response(
       JSON.stringify({

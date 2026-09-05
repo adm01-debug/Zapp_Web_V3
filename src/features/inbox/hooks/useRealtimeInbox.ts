@@ -19,6 +19,7 @@ import { useFallbackContact } from './useFallbackContact';
 import { useContactSummaryBatch } from './useContactSummaryBatch';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/services/api/queryKeys';
+import type { ConversationWithMessages } from './realtime/types';
 
 const log = getLogger('useRealtimeInbox');
 
@@ -193,14 +194,42 @@ export function useRealtimeInbox() {
     false
   );
 
+  // ── Estabiliza a conversa resolvida contra "flapping" da lista ───────────
+  // RCA bugs-console 2026-09-04: durante rajadas de CHANNEL_ERROR/reconexão
+  // do Realtime, o contato selecionado pode sumir momentaneamente de
+  // `conversations` antes do fallback assíncrono (useFallbackContact)
+  // resolver de novo — nesse intervalo `resolvedSelectedConversation` é
+  // null, `legacyConversation` vira null (mapToLegacyConversation) e o
+  // RealtimeInboxView desmonta ChatPanel + ContactDetailsResponsive (ambos
+  // chaveados por legacyConversation.id), cancelando e refazendo em rajada
+  // as queries de messages/sla_delivery_rules/contact_tags simultaneamente.
+  // Mantém a última conversa resolvida enquanto selectedContactId não mudar.
+  const lastResolvedConversationRef = useRef<{
+    contactId: string | null;
+    conversation: ConversationWithMessages | null;
+  }>({ contactId: null, conversation: null });
+  const stableResolvedConversation = useMemo(() => {
+    if (resolvedSelectedConversation) {
+      lastResolvedConversationRef.current = {
+        contactId: selectedContactId,
+        conversation: resolvedSelectedConversation,
+      };
+      return resolvedSelectedConversation;
+    }
+    if (lastResolvedConversationRef.current.contactId === selectedContactId) {
+      return lastResolvedConversationRef.current.conversation;
+    }
+    return null;
+  }, [resolvedSelectedConversation, selectedContactId]);
+
   // ── Resolved instance name ──────────────────────────────────────────────
   // Priority: inbox source (from conversation list) > fallback contact >
   // undefined (causes dev warning + disables edit/automations)
   const instanceName = useMemo<string | undefined>(() => {
     if (selectedConversationInstance) return selectedConversationInstance;
-    const fb = resolvedSelectedConversation?.contact as { instance_name?: string } | null;
+    const fb = stableResolvedConversation?.contact as { instance_name?: string } | null;
     return fb?.instance_name ?? undefined;
-  }, [selectedConversationInstance, resolvedSelectedConversation]);
+  }, [selectedConversationInstance, stableResolvedConversation]);
 
   // Listen for SLA alerts
   useEffect(() => {
@@ -312,14 +341,16 @@ export function useRealtimeInbox() {
 
     // Auto-assign on reply (only valid for local team_conversations; evolution_contacts has no routing_status)
     try {
-      const { data: conv } = await dbFrom('team_conversations')
+      const { data: conv, error: convSelErr } = await dbFrom('team_conversations')
         .select('id, routing_status')
         .eq('id', contactId)
         .maybeSingle();
+      if (convSelErr) throw convSelErr;
       if (conv && conv.routing_status === 'pending') {
-        await dbFrom('team_conversations')
+        const { error: routingErr } = await dbFrom('team_conversations')
           .update({ routing_status: 'assigned' })
           .eq('id', contactId);
+        if (routingErr) throw routingErr;
       }
     } catch (err) {
       log.error('Error auto-assigning on reply:', err);
@@ -410,19 +441,19 @@ export function useRealtimeInbox() {
   }, [setSoundEnabled]);
 
   const legacyConversation = useMemo(
-    () => mapToLegacyConversation(resolvedSelectedConversation),
-    [resolvedSelectedConversation]
+    () => mapToLegacyConversation(stableResolvedConversation),
+    [stableResolvedConversation]
   );
   const legacyMessages = useMemo(
     () =>
       mapToLegacyMessages(
         (selectedContactId
           ? selectedMessages
-          : resolvedSelectedConversation?.messages || []) as RealtimeMessage[],
-        resolvedSelectedConversation?.contact.id || selectedContactId || '',
-        resolvedSelectedConversation?.contact.avatar_url
+          : stableResolvedConversation?.messages || []) as RealtimeMessage[],
+        stableResolvedConversation?.contact.id || selectedContactId || '',
+        stableResolvedConversation?.contact.avatar_url
       ),
-    [selectedMessages, resolvedSelectedConversation, selectedContactId]
+    [selectedMessages, stableResolvedConversation, selectedContactId]
   );
 
   return {

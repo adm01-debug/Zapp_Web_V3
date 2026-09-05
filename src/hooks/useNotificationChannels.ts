@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/schema';
 import { queryKeys } from '@/services/api/queryKeys';
 import { toast } from 'sonner';
+import { useAuth } from '@/features/auth';
 
 // DASHBOARD-08 — UI admin para zapp.notification_channels_config / zapp.notification_templates.
 //
@@ -43,10 +44,12 @@ const TEMPLATES_KEY = queryKeys.adminOps.notificationTemplates();
 
 /** CRUD de canais de notificação + templates (zapp.notification_channels_config / zapp.notification_templates). */
 export function useNotificationChannels() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const channelsQuery = useQuery({
     queryKey: CHANNELS_KEY,
+    enabled: !!user,
     queryFn: async (): Promise<NotificationChannelConfig[]> => {
       const { data, error } = await supabase
         .from('notification_channels_config')
@@ -60,6 +63,7 @@ export function useNotificationChannels() {
 
   const templatesQuery = useQuery({
     queryKey: TEMPLATES_KEY,
+    enabled: !!user,
     queryFn: async (): Promise<NotificationTemplate[]> => {
       const { data, error } = await supabase
         .from('notification_templates')

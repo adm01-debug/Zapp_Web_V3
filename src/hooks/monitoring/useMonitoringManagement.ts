@@ -1,6 +1,7 @@
 import { getWebhookConfig, setWebhookConfig } from '@/lib/whatsappAdapter';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/features/auth';
 import { safeFrom } from '@/integrations/supabase/safeClient';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -67,7 +68,6 @@ export interface UseMonitoringActionsResult {
 // Helper Functions
 // ═══════════════════════════════════════════════════════════
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const log = getLogger('useMonitoringManagement');
 const HEALTHY_STATUSES = ['connected', 'healthy'];
 
@@ -177,6 +177,7 @@ const DEFAULT_SNAPSHOT: MonitoringSnapshot = {
 export function useMonitoringDataManagement(
   params: UseMonitoringDataParams = {}
 ): UseMonitoringDataResult {
+  const { user } = useAuth();
   const { onConnectionsUpdate } = params;
   const [period, setPeriod] = useState<TimePeriod>('12h');
   const queryClient = useQueryClient();
@@ -255,6 +256,7 @@ export function useMonitoringDataManagement(
         instanceUptimes: computeInstanceUptimes(healthLogs, now),
       };
     },
+    enabled: !!user,
     staleTime: 30_000,
   });
 
@@ -343,7 +345,10 @@ export function useMonitoringActionsManagement(
         .select('id')
         .eq('message_id', testId)
         .maybeSingle();
-      if (msg?.id) await supabase.rpc('rpc_delete_message', { p_id: msg.id });
+      if (msg?.id) {
+        const { error: delErr } = await supabase.rpc('rpc_delete_message', { p_id: msg.id });
+        if (delErr) log.warn('[webhook-test] rpc_delete_message falhou (mensagem de teste persiste)', delErr);
+      }
       setWebhookTest({
         status: msg ? 'success' : 'error',
         message: msg

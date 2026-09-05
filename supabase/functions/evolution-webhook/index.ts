@@ -409,9 +409,10 @@ Deno.serve(async (req) => {
     if (event === 'qrcode.updated') {
       const qrCode = (baseData.qrcode as Record<string, string>)?.base64;
       if (qrCode) {
-        await supabase.from('whatsapp_connections')
+        const { error: qrErr } = await supabase.from('whatsapp_connections')
           .update({ qr_code: qrCode, status: 'qr_pending', updated_at: new Date().toISOString() })
           .or(instanceOrFilter(instance));
+        if (qrErr) console.error('[webhook] qr_code update failed:', qrErr.message);
       }
       // QR alert via n8n (fire-and-forget). Set QR_ALERT_WEBHOOK_URL env var to
       // enable; optional QR_ALERT_WEBHOOK_TOKEN for webhook auth. When the env
@@ -608,8 +609,9 @@ Deno.serve(async (req) => {
     try {
       const rawJson = JSON.parse(rawBody) as Record<string, unknown>;
       delete rawJson.apikey; // LGPD: demais chaves preservadas (data/event/instance/date_time/server_url — URL pública).
-      await supabase.from('webhook_events_processed').update({ payload: rawJson })
+      const { error: persistErr } = await supabase.from('webhook_events_processed').update({ payload: rawJson })
         .eq('event_id', eventId);
+      if (persistErr) console.warn(`[webhook][${requestId}] payload persist DB error: ${persistErr.message}`);
     } catch (e) {
       console.warn(`[webhook][${requestId}] payload persist failed: ${e instanceof Error ? e.message : String(e)}`);
     }

@@ -396,10 +396,11 @@ export function useOnboardingChecklistManagement(userId?: string) {
   const completeStep = useCallback(
     async (stepId: string) => {
       try {
-        await supabase
+        const { error: stepUpdateErr } = await supabase
           .from('onboarding_steps')
           .update({ completed: true, timestamp: new Date().toISOString() })
           .eq('id', stepId);
+        if (stepUpdateErr) throw stepUpdateErr;
         await fetchSteps();
       } catch (err) {
         if (mountedRef.current) {

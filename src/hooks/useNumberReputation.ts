@@ -35,8 +35,9 @@ export async function fetchNumberReputations(): Promise<
 }
 
 export async function startReputationWarmup(id: string): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from('number_reputation')
     .update({ warmup_status: 'active', warmup_day: 1, daily_limit: 20 })
     .eq('id', id);
+  if (error) throw new Error(`Failed to start reputation warmup: ${error.message}`);
 }

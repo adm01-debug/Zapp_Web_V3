@@ -53,9 +53,10 @@ export function MessageContextActions({
         }
       }
       // Always mark as deleted in local DB
-      await dbFrom('messages')
+      const { error: deleteErr } = await dbFrom('messages')
         .update({ is_deleted: true, content: '[Mensagem apagada]' })
         .eq('id', message.id);
+      if (deleteErr) throw deleteErr;
       toast.success(externalId ? 'Mensagem deletada para todos' : 'Mensagem removida');
       onMessageDeleted?.(message.id);
     } catch {

@@ -313,7 +313,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     timerRef.current = setTimeout(() => {
       timerRef.current = null; // descarta handle expirado antes de qualquer guard de re-entrada
       // Dual guard: instanceName E geração devem coincidir — protege contra A→B→A.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
       void attemptSpecificReconnectRef.current?.();
     }, nextDelay);
   }, [setIsReconnecting, instanceName]);
@@ -340,12 +344,20 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
     try {
       await connectInstance(instanceName);
       // Dual guard: instanceName E geração — protege contra A→B→A.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
       await new Promise<void>((r) => setTimeout(r, 5_000));
       // HOOK-004: componente pode ter desmontado durante os 5s de espera
       if (!mountedRef?.current) return;
       // Dual guard pós-espera de 5s.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
 
       const currentStatus = (await getInstanceStatus(instanceName)) as {
         instance?: { state?: string };
@@ -354,7 +366,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // HOOK-004: componente pode ter desmontado durante a chamada à API
       if (!mountedRef?.current) return;
       // Dual guard pós-getInstanceStatus.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
 
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       setStatus(state);
@@ -376,7 +392,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // HOOK-004: não agendar timer nem atualizar estado em componente desmontado
       if (!mountedRef?.current) return;
       // Dual guard: se instanceName ou geração mudaram durante o await que lançou, descarta.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
       const httpStatus = extractHttpStatus(err);
 
       if (httpStatus === 401 || httpStatus === 403) {
@@ -447,7 +467,11 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       } | null;
       // Dual guard: instanceName E geração — resposta de ciclo anterior de 'A'
       // não pode disparar reconexão no ciclo atual.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
       const state: string = currentStatus?.instance?.state ?? currentStatus?.state ?? 'unknown';
       if (!mountedRef.current) return;
       setStatus(state);
@@ -472,11 +496,16 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
       // timerRef.current !== null indica que scheduleNextAttempt ja agendou um retry
       // com backoff — nao interromper esse timer com uma chamada direta. O handle e
       // zerado no callback do setTimeout, entao o guard nao trava apos o disparo.
-      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null) return;
+      if (reconnectExhaustedRef.current || isReconnectingRef.current || timerRef.current !== null)
+        return;
       void attemptSpecificReconnectRef.current?.();
     } catch (err: unknown) {
       // Dual guard: se instanceName ou geração mudaram durante o await que lançou, descarta.
-      if (instanceNameRef.current !== capturedInstance || instanceGenerationRef.current !== capturedGeneration) return;
+      if (
+        instanceNameRef.current !== capturedInstance ||
+        instanceGenerationRef.current !== capturedGeneration
+      )
+        return;
       log.error(`Error checking status for ${instanceName}:`, err);
       const httpStatus = extractHttpStatus(err);
 
@@ -510,7 +539,7 @@ export function useEvolutionAutoReconnect(instanceName?: string) {
         );
       }
     }
-  }, [instanceName, getInstanceStatus, setIsReconnecting]);
+  }, [instanceName, getInstanceStatus, setIsReconnecting, mountedRef]);
 
   useEffect(() => {
     if (!instanceName) return;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type ComponentType } from 'react';
+import { normalizeMoney } from '@/lib/formatters';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -70,7 +71,9 @@ export function PaymentLinksView() {
 
   const createLink = async () => {
     if (!formTitle.trim() || !formAmount) return;
-    const amount = parseFloat(formAmount);
+    // Arredonda a 2 casas (valor em reais, não em centavos inteiros): evita 19.999999
+    // em float64 chegar ao NUMERIC do banco; entrada inválida vira NaN e cai no guard abaixo.
+    const amount = normalizeMoney(formAmount);
     if (isNaN(amount) || amount <= 0) return;
 
     // Generate a simple payment URL (in production would integrate with Stripe/payment provider)

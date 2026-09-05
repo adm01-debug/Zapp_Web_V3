@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/features/auth';
 import { Plus, Trash2, Star, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,8 +24,10 @@ import { toast } from 'sonner';
  * Gmail conectada, no padrão dos demais painéis de SettingsView.
  */
 export function EmailSignaturesSettings() {
+  const { user } = useAuth();
   const { data: accounts = [] } = useQuery({
     queryKey: ['email-accounts-settings'],
+    enabled: !!user,
     queryFn: async () => {
       const { data } = await safeClient.from<{ id: string; email: string }>(
         'email_accounts',

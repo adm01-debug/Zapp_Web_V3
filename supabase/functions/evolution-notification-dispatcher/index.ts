@@ -435,7 +435,8 @@ Deno.serve(async (req) => {
       if (config !== null) stats.config_used++;
 
       if (dryRun) {
-        await supabase.rpc('fn_evo_outbox_release', { p_id: row.id });
+        const { error: dryReleaseErr } = await supabase.rpc('fn_evo_outbox_release', { p_id: row.id });
+        if (dryReleaseErr) console.warn('[evolution-notification-dispatcher] dryRun outbox release failed', dryReleaseErr.message);
         continue;
       }
 

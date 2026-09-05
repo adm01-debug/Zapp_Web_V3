@@ -8,7 +8,7 @@
  *
  * Rota: /admin/zappweb-demo
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { motion } from '@/components/ui/motion';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -144,19 +144,39 @@ function MessageBubble({ msg }: { msg: EvolutionMessage }) {
 
 /** Default export. */
 export default function ZappWebbDemoPage() {
-  const { conversations, loading, markAsRead } = useZappConversations();
+  const { conversations, loading, error: conversationsError, refetch: refetchConversations, markAsRead } = useZappConversations();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [retryingConvs, setRetryingConvs] = useState(false);
+  // Rastreia se o último erro de mensagens veio de loadOlder() (paginação)
+  // ou do fetchAll() inicial — necessário porque ao trocar de conversa o hook
+  // ainda carrega o array de mensagens antigo enquanto o fetch novo está em voo.
+  const messagesErrorFromOlderRef = useRef(false);
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId]
   );
-  const { messages, loading: loadingMsgs } = useZappMessages({
+  const {
+    messages,
+    loading: loadingMsgs,
+    loadOlder,
+    loadingMore,
+    hasMore,
+    error: messagesError,
+    refetch: refetchMessages,
+  } = useZappMessages({
     remoteJid: active?.remote_jid ?? null,
   });
   const contact = active?.evolution_contacts ?? null;
+
+  // Reseta o rastreador de origem do erro ao trocar de conversa ou quando o
+  // remoteJid da conversa ativa muda (ex.: conversa sai do filtro e retorna
+  // com o mesmo activeId mas remoteJid diferente ou ausente).
+  useEffect(() => {
+    messagesErrorFromOlderRef.current = false;
+  }, [activeId, active?.remote_jid]);
 
   const handleOpen = async (conv: EvolutionConversation) => {
     setActiveId(conv.id);
@@ -211,6 +231,22 @@ export default function ZappWebbDemoPage() {
             {loading ? (
               <div className="p-6 text-center">
                 <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+              </div>
+            ) : conversationsError ? (
+              <div className="p-6 text-center">
+                <p className="mb-2 text-xs text-destructive">{conversationsError}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={retryingConvs}
+                  onClick={() => {
+                    setRetryingConvs(true);
+                    void refetchConversations().finally(() => setRetryingConvs(false));
+                  }}
+                >
+                  {retryingConvs && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                  Tentar novamente
+                </Button>
               </div>
             ) : conversations.length === 0 ? (
               <div className="p-6 text-center text-xs text-muted-foreground">
@@ -303,7 +339,51 @@ export default function ZappWebbDemoPage() {
                   {loadingMsgs ? (
                     <Loader2 className="mx-auto my-8 h-4 w-4 animate-spin" />
                   ) : (
-                    messages.map((m) => <MessageBubble key={m.id} msg={m} />)
+                    <>
+                      {hasMore && messages.length > 0 && (
+                        <div className="flex flex-col items-center gap-1 pb-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={loadingMore}
+                            onClick={() => {
+                              messagesErrorFromOlderRef.current = true;
+                              void loadOlder();
+                            }}
+                          >
+                            {loadingMore ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                Carregando mensagens mais antigas
+                              </>
+                            ) : (
+                              'Carregar mensagens mais antigas'
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                      {/* Achado do coderabbit (PR #1514, rodada H): messagesError cobre
+                          tanto loadOlder() quanto o fetchAll() inicial — preso dentro do
+                          bloco acima (gated por hasMore && messages.length > 0), uma falha
+                          na 1ª carga (messages ainda vazio) nunca aparecia pro usuário. */}
+                      {messagesError && (
+                        <div className="flex flex-col items-center gap-1">
+                          <p className="text-xs text-destructive">{messagesError}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void (messagesErrorFromOlderRef.current
+                                ? loadOlder()
+                                : refetchMessages())
+                            }
+                          >
+                            Tentar novamente
+                          </Button>
+                        </div>
+                      )}
+                      {messages.map((m) => <MessageBubble key={m.id} msg={m} />)}
+                    </>
                   )}
                 </div>
               </ScrollArea>

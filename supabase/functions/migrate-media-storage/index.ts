@@ -154,9 +154,15 @@ Deno.serve(async (req) => {
         }
 
         if (permanentUrl) {
-          await supabase.from('messages').update({ media_url: permanentUrl }).eq('id', messageId);
-          migrated++;
-          details.push(`✅ ${messageType} ${messageId.substring(0, 8)}`);
+          const { error: migrateUpdateErr } = await supabase.from('messages').update({ media_url: permanentUrl }).eq('id', messageId);
+          if (migrateUpdateErr) {
+            log.warn(`db update failed for message ${messageId}`, { error: migrateUpdateErr.message });
+            failed++;
+            details.push(`❌ ${messageType} ${messageId.substring(0, 8)} (db update failed)`);
+          } else {
+            migrated++;
+            details.push(`✅ ${messageType} ${messageId.substring(0, 8)}`);
+          }
         } else {
           failed++;
           details.push(`❌ ${messageType} ${messageId.substring(0, 8)} (irrecuperável)`);
@@ -332,8 +338,13 @@ async function migrateSimple(
 
     const url = await downloadAndUpload(supabase, mediaUrl, messageType, messageId, log);
     if (url) {
-      await supabase.from('messages').update({ media_url: url }).eq('id', messageId);
-      migrated++;
+      const { error: batchUpdateErr } = await supabase.from('messages').update({ media_url: url }).eq('id', messageId);
+      if (batchUpdateErr) {
+        log.warn(`db update failed for message ${messageId}`, { error: batchUpdateErr.message });
+        failed++;
+      } else {
+        migrated++;
+      }
     } else {
       failed++;
     }

@@ -122,7 +122,8 @@ Deno.serve(async (req) => {
         // (ADR-001 — resolve o host público) em vez de concatenar SUPABASE_URL,
         // que pode cair em kong:8000 (host interno) e gravar URL quebrada no DB.
         const newUrl = getStoragePublicUrl('audio-messages', storagePath);
-        await supabase.from("messages").update({ media_url: newUrl }).eq("id", msg.id);
+        const { error: recoverUpdateErr } = await supabase.from("messages").update({ media_url: newUrl }).eq("id", msg.id);
+        if (recoverUpdateErr) throw new Error(`db update failed: ${recoverUpdateErr.message}`);
         results.recovered++;
       } catch (err) {
         results.failed++;

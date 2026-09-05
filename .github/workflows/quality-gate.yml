@@ -104,15 +104,11 @@ jobs:
       - name: Schema access simulation (~300 cenários — blocking)
         run: node scripts/simulate-schema-access.mjs
 
-      - name: Type Check (advisory in CI — private registry unavailable)
-        run: |
-          set +e
-          bunx tsc --noEmit -p tsconfig.app.json
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "::warning title=TypeScript (GAR registry mismatch)::TS errors are caused by CI falling back to public npm for @supabase/postgrest-js (private GAR registry is unavailable in GitHub Actions). Not a code regression."
-          fi
-          exit 0
+      # AUD-22D 2026-09-05: bloqueante. O baseline do ratchet (scripts/tsc-error-baseline.json)
+      # está em 0 erros e o job "Gates TypeScript" do ci.yml já passa hospedado — a justificativa
+      # antiga (GAR registry indisponível) não se sustenta mais.
+      - name: Type Check (blocking)
+        run: bunx tsc --noEmit -p tsconfig.app.json
 
       - name: Cluster typecheck ratchet — blocking (crm-sales, queues, observability)
         run: |
