@@ -82,14 +82,17 @@ describe('useAuthForm — E52 MFA fail-closed', () => {
     mfa.listFactors.mockResolvedValue({ data: { totp: noFactors, webauthn: [] }, error: null });
   });
 
-  it('R1: aal1→aal2 sem erro → navega /2fa', async () => {
+  it('R1: aal1→aal2 sem erro → navega /2fa preservando o destino em state.from', async () => {
     mfa.getAAL.mockResolvedValue({
       data: { currentLevel: 'aal1', nextLevel: 'aal2' },
       error: null,
     });
     renderHook(() => useAuthForm(), { wrapper });
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/2fa', { replace: true });
+      expect(navigateMock).toHaveBeenCalledWith('/2fa', {
+        replace: true,
+        state: { from: { pathname: '/' } },
+      });
     });
   });
 
@@ -98,7 +101,10 @@ describe('useAuthForm — E52 MFA fail-closed', () => {
     mfa.listFactors.mockResolvedValue({ data: { totp: verifiedTotp, webauthn: [] }, error: null });
     renderHook(() => useAuthForm(), { wrapper });
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/2fa', { replace: true });
+      expect(navigateMock).toHaveBeenCalledWith('/2fa', {
+        replace: true,
+        state: { from: { pathname: '/' } },
+      });
     });
   });
 
@@ -116,7 +122,10 @@ describe('useAuthForm — E52 MFA fail-closed', () => {
     mfa.listFactors.mockResolvedValue({ data: { totp: verifiedTotp, webauthn: [] }, error: null });
     renderHook(() => useAuthForm(), { wrapper });
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/2fa', { replace: true });
+      expect(navigateMock).toHaveBeenCalledWith('/2fa', {
+        replace: true,
+        state: { from: { pathname: '/' } },
+      });
     });
   });
 
