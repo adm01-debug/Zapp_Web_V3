@@ -48,7 +48,7 @@ const STRICT_MODE = (Deno.env.get('EVOLUTION_WEBHOOK_STRICT') ?? 'true').toLower
 // puro (x-webhook-secret) só é aceito como fallback DEPRECATED para produtores que não assinam
 // payload (webhook nativo da Evolution ≤2.3.x envia apenas headers estáticos). Gate para
 // enforcement HMAC-only: EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET=false (default true).
-const ALLOW_SHARED_SECRET = (Deno.env.get('EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET') ?? 'true').toLowerCase() !== 'false';
+const ALLOW_SHARED_SECRET = (Deno.env.get('EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET') ?? 'false').toLowerCase() !== 'false'; // GAP-2 fix 2026-09-05: default changed to false (HMAC-only enforcement)
 const validateWebhook = WEBHOOK_SECRETS.length > 0
   ? createWebhookValidator(WEBHOOK_SECRETS, STRICT_MODE, ALLOW_SHARED_SECRET)
   : null;
