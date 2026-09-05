@@ -8,7 +8,6 @@ um redeploy pela UI do Portainer com estes conteúdos NÃO reverte nenhuma corre
 | Arquivo | Stack (id) | O que mudou na sessão 5 |
 |---|---|---|
 | `glitchtip.yml` | glitchtip (41) | + serviço `glitchtip-valkey` (Redis/fila Celery que faltava → ingestão dava HTTP 500) + `REDIS_URL` no web/worker |
-| `runner-janitor.yml` | runner-janitor (281, criado 2026-09-05, AUD-22D) | Reinicia (`service update --force`) runners `github-actions-runner_*` ociosos cuja camada gravável passa de 2,5 GB — causa raiz do disco a 98 % em 05/09 (`/root/.cache` + `/root/.bun` crescem por job e não são cobertos pelo housekeeping) |
 | `supabase-db-mcp.yml` | supabase-db-mcp (128) | `DATABASE_URL` saiu do env em texto puro → Docker secret `supabase_db_url_v1` + wrapper de entrypoint; healthcheck em `127.0.0.1` |
 | `postgres-backup-daily.yml` | postgres-backup-daily (112) | MinIO→R2 fixado no arquivo + credenciais via secrets |
 | `postgres-backup-weekly.yml` | postgres-backup-weekly (84) | idem + removido o one-shot `source-backfill-exporter` (obsoleto) |
@@ -40,3 +39,9 @@ Funcionalidades críticas do v2.4:
 
 > Stack file do zapp-web em produção: `infra/stacks/zapp-web-prod.yml` (Portainer id 157).
 > Runbook de rollback canônico: `docs/PORTAINER_ZAPP_FOOTPRINT.md §4`.
+
+## Stack runner-janitor (AUD-22D, 2026-09-05)
+
+| Arquivo | Stack (id) | O que faz |
+|---|---|---|
+| `runner-janitor.yml` | runner-janitor (281, criado 2026-09-05) | Reinicia (`service update --force --detach=false`) runners `github-actions-runner_*` ociosos cuja camada gravável passa de 2,5 GB — causa raiz do disco a 98 % em 05/09 (`/root/.cache` + `/root/.bun` crescem por job e não são cobertos pelo housekeeping). v1.0.2 encerra o processo se `docker ps` falhar (Swarm reinicia) e pula containers sem `SizeRw` no inspect |
