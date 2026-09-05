@@ -23,29 +23,38 @@ function extractVariants(content: string) {
   return variantObj;
 }
 
-interface RegistryEntry {
+export interface RegistryEntry {
   name: string;
   variants: Record<string, string[]> | null;
 }
 
-const registry: Record<string, RegistryEntry> = {};
-
 // readdirSync não garante ordem estável entre SOs/filesystems — sem o sort,
 // cada ambiente (CI vs local) produz uma ordem de chaves diferente no JSON,
 // gerando diff só de reordenação a cada rebuild.
-const files = readdirSync(UI_DIR).sort();
-for (const file of files) {
-  if (file.endsWith('.tsx')) {
-    const content = readFileSync(join(UI_DIR, file), 'utf-8');
-    const variants = extractVariants(content);
-    if (variants) {
-      registry[file.replace('.tsx', '')] = {
-        name: file.replace('.tsx', ''),
-        variants
-      };
-    }
-  }
+export function sortedUiFiles(dirEntries: string[]): string[] {
+  return [...dirEntries].sort();
 }
 
-writeFileSync(OUTPUT_FILE, JSON.stringify(registry, null, 2));
-console.log(`✅ Component registry generated at ${OUTPUT_FILE}`);
+export function buildRegistry(dir: string): Record<string, RegistryEntry> {
+  const registry: Record<string, RegistryEntry> = {};
+  const files = sortedUiFiles(readdirSync(dir));
+  for (const file of files) {
+    if (file.endsWith('.tsx')) {
+      const content = readFileSync(join(dir, file), 'utf-8');
+      const variants = extractVariants(content);
+      if (variants) {
+        registry[file.replace('.tsx', '')] = {
+          name: file.replace('.tsx', ''),
+          variants
+        };
+      }
+    }
+  }
+  return registry;
+}
+
+if (import.meta.main) {
+  const registry = buildRegistry(UI_DIR);
+  writeFileSync(OUTPUT_FILE, JSON.stringify(registry, null, 2));
+  console.log(`✅ Component registry generated at ${OUTPUT_FILE}`);
+}
