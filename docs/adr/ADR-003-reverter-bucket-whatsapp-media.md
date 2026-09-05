@@ -42,9 +42,9 @@ Em 26/07/2026, durante auditoria de segurança, foi identificado que:
 
 ### Imediatas (26/07/2026):
 
-- [] Executaro: `UPDATE storage.buckets SET public = false WHERE id = 'whatsapp-media'; ` — **FEITO**
-- [] Atualizar `PUBLIC_BUCKETS` em `useMediaUrl.ts` - **FEITO**
-- [] Implementar `useSignedMediaUrlBatch()` - **FEITO**
+- [x] Executar: `UPDATE storage.buckets SET public = false WHERE id = 'whatsapp-media'; ` — **FEITO**
+- [x] Atualizar `PUBLIC_BUCKETS` em `useMediaUrl.ts` - **FEITO**
+- [x] Implementar `useSignedMediaUrlBatch()` - **FEITO**
 
 ### Futuras (para o time):
 
