@@ -18,11 +18,17 @@ import { Users, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
+/** Resultado de um handoff bem-sucedido — a atribuição em si sempre ocorreu;
+ * `noteSaved=false` sinaliza sucesso parcial (nota interna não persistiu). */
+export interface HandoffResult {
+  noteSaved: boolean;
+}
+
 interface HandoffDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contactId: string;
-  onHandoff: (agentId: string, comment: string) => Promise<void>;
+  onHandoff: (agentId: string, comment: string) => Promise<HandoffResult>;
 }
 
 /** Handoff Dialog component for the collaboration section. */
@@ -53,12 +59,18 @@ export function HandoffDialog({
     if (!selectedAgent) return;
     setIsSubmitting(true);
     try {
-      await onHandoff(selectedAgent, comment);
+      const result = await onHandoff(selectedAgent, comment);
       onOpenChange(false);
       setSelectedAgent(null);
       setComment('');
-      toast.success('Conversa transferida com sucesso!');
+      if (result.noteSaved) {
+        toast.success('Conversa transferida com sucesso!');
+      } else {
+        toast.warning('Conversa transferida, mas a nota não pôde ser salva.');
+      }
     } catch {
+      // Falha real (ID inválido, RLS, zero-row): nada foi commitado — o
+      // diálogo permanece aberto para o agente tentar de novo.
       toast.error('Erro ao transferir conversa');
     } finally {
       setIsSubmitting(false);
@@ -81,7 +93,8 @@ export function HandoffDialog({
             <ScrollArea className="h-48 rounded-lg border p-2">
               <div className="space-y-1">
                 {agents?.map((agent) => (
-                  <button type="button"
+                  <button
+                    type="button"
                     key={agent.id}
                     onClick={() => setSelectedAgent(agent.id)}
                     className={cn(
