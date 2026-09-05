@@ -39,3 +39,9 @@ Funcionalidades críticas do v2.4:
 
 > Stack file do zapp-web em produção: `infra/stacks/zapp-web-prod.yml` (Portainer id 157).
 > Runbook de rollback canônico: `docs/PORTAINER_ZAPP_FOOTPRINT.md §4`.
+
+## Stack runner-janitor (AUD-22D, 2026-09-05)
+
+| Arquivo | Stack (id) | O que faz |
+|---|---|---|
+| `runner-janitor.yml` | runner-janitor (281, criado 2026-09-05) | Reinicia (`service update --force --detach=false`) runners `github-actions-runner_*` ociosos cuja camada gravável passa de 2,5 GB — causa raiz do disco a 98 % em 05/09 (`/root/.cache` + `/root/.bun` crescem por job e não são cobertos pelo housekeeping). v1.0.2 encerra o processo se `docker ps` falhar (Swarm reinicia) e pula containers sem `SizeRw` no inspect |
