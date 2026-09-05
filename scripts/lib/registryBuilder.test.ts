@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { buildRegistry, sortedUiFiles } from './generate-component-registry';
+import { buildRegistry, sortedUiFiles } from './registryBuilder';
 
 const CVA_FIXTURE = (variant: string) => `
 import { cva } from 'class-variance-authority';
