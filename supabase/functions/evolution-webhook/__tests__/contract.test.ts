@@ -33,8 +33,11 @@ Deno.test("[C-9] HMAC primário: checagem inline de x-webhook-secret removida (v
 
 Deno.test("[C-9] Gate EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET presente e wireado no validador", () => {
   assertMatch(SOURCE, /EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET/);
-  // default true (compat temporária); false => HMAC-only
-  assertMatch(SOURCE, /\?\? 'true'\)\.toLowerCase\(\) !== 'false'/);
+  // default false (HMAC-only; set 'true' para opt-in shared-secret)
+  assertMatch(SOURCE, /\.toLowerCase\(\) === 'true'/);
+  // Garante que regressão para ?? 'true' (fail-open) não passa no contrato
+  assert(!/\(Deno\.env\.get\('EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET'\) \?\? 'true'\)/.test(SOURCE),
+    "default deve ser fail-closed: sem fallback '?? true' no gate ALLOW_SHARED_SECRET");
 });
 
 Deno.test("[C-9] Fallback plaintext DEPRECATED loga warning e expõe sharedSecretValid", () => {
