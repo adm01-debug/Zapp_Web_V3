@@ -1,69 +1,4 @@
 {
-  "dialog": {
-    "name": "dialog",
-    "variants": {
-      "size": [
-        "sm",
-        "default",
-        "lg",
-        "xl",
-        "full"
-      ]
-    }
-  },
-  "icon-button": {
-    "name": "icon-button",
-    "variants": {
-      "variant": [
-        "default",
-        "hover",
-        "hover",
-        "secondary",
-        "hover",
-        "ghost",
-        "hover",
-        "hover",
-        "outline",
-        "hover",
-        "hover",
-        "destructive",
-        "hover",
-        "muted",
-        "hover"
-      ],
-      "size": [
-        "sm",
-        "default",
-        "lg",
-        "xl"
-      ]
-    }
-  },
-  "card": {
-    "name": "card",
-    "variants": {
-      "variant": [
-        "default",
-        "elevated",
-        "hover",
-        "hover",
-        "interactive",
-        "hover",
-        "hover",
-        "selected",
-        "ghost",
-        "glass",
-        "neon",
-        "gradient"
-      ],
-      "padding": [
-        "none",
-        "sm",
-        "default",
-        "lg"
-      ]
-    }
-  },
   "alert": {
     "name": "alert",
     "variants": {
@@ -85,12 +20,26 @@
       ]
     }
   },
-  "toast": {
-    "name": "toast",
+  "badge": {
+    "name": "badge",
     "variants": {
       "variant": [
         "default",
-        "destructive"
+        "hover",
+        "secondary",
+        "hover",
+        "destructive",
+        "hover",
+        "outline",
+        "hover",
+        "subtle",
+        "success",
+        "warning",
+        "info",
+        "whatsapp",
+        "hover",
+        "glowPurple",
+        "hover"
       ]
     }
   },
@@ -100,32 +49,6 @@
       "side": [
         "sent",
         "received"
-      ]
-    }
-  },
-  "input": {
-    "name": "input",
-    "variants": {
-      "variant": [
-        "default",
-        "visible",
-        "glow",
-        "visible",
-        "visible",
-        "neon",
-        "visible",
-        "visible",
-        "ghost",
-        "visible",
-        "visible",
-        "underline",
-        "visible",
-        "visible"
-      ],
-      "inputSize": [
-        "sm",
-        "default",
-        "lg"
       ]
     }
   },
@@ -190,6 +113,119 @@
       ]
     }
   },
+  "card": {
+    "name": "card",
+    "variants": {
+      "variant": [
+        "default",
+        "elevated",
+        "hover",
+        "hover",
+        "interactive",
+        "hover",
+        "hover",
+        "selected",
+        "ghost",
+        "glass",
+        "neon",
+        "gradient"
+      ],
+      "padding": [
+        "none",
+        "sm",
+        "default",
+        "lg"
+      ]
+    }
+  },
+  "dialog": {
+    "name": "dialog",
+    "variants": {
+      "size": [
+        "sm",
+        "default",
+        "lg",
+        "xl",
+        "full"
+      ]
+    }
+  },
+  "icon-button": {
+    "name": "icon-button",
+    "variants": {
+      "variant": [
+        "default",
+        "hover",
+        "hover",
+        "secondary",
+        "hover",
+        "ghost",
+        "hover",
+        "hover",
+        "outline",
+        "hover",
+        "hover",
+        "destructive",
+        "hover",
+        "muted",
+        "hover"
+      ],
+      "size": [
+        "sm",
+        "default",
+        "lg",
+        "xl"
+      ]
+    }
+  },
+  "input": {
+    "name": "input",
+    "variants": {
+      "variant": [
+        "default",
+        "visible",
+        "glow",
+        "visible",
+        "visible",
+        "neon",
+        "visible",
+        "visible",
+        "ghost",
+        "visible",
+        "visible",
+        "underline",
+        "visible",
+        "visible"
+      ],
+      "inputSize": [
+        "sm",
+        "default",
+        "lg"
+      ]
+    }
+  },
+  "sheet": {
+    "name": "sheet",
+    "variants": {
+      "side": [
+        "top",
+        "bottom",
+        "left",
+        "sm",
+        "right",
+        "sm"
+      ]
+    }
+  },
+  "toast": {
+    "name": "toast",
+    "variants": {
+      "variant": [
+        "default",
+        "destructive"
+      ]
+    }
+  },
   "toggle": {
     "name": "toggle",
     "variants": {
@@ -222,42 +258,6 @@
         "sm",
         "default",
         "lg"
-      ]
-    }
-  },
-  "badge": {
-    "name": "badge",
-    "variants": {
-      "variant": [
-        "default",
-        "hover",
-        "secondary",
-        "hover",
-        "destructive",
-        "hover",
-        "outline",
-        "hover",
-        "subtle",
-        "success",
-        "warning",
-        "info",
-        "whatsapp",
-        "hover",
-        "glowPurple",
-        "hover"
-      ]
-    }
-  },
-  "sheet": {
-    "name": "sheet",
-    "variants": {
-      "side": [
-        "top",
-        "bottom",
-        "left",
-        "sm",
-        "right",
-        "sm"
       ]
     }
   }
