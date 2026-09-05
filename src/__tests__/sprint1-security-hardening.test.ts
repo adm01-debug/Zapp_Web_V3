@@ -53,6 +53,59 @@ function latestDefinition(sql: string, fnName: string): string {
 }
 
 /**
+ * Retorna TODAS as ocorrências de CREATE FUNCTION para um nome, na ordem em que
+ * aparecem no arquivo concatenado. `latestDefinition()` pega só a última — para
+ * uma função com múltiplas sobrecargas (assinaturas diferentes, mesmo nome), a
+ * última ocorrência é sempre a mesma sobrecarga (a que aparece por último no
+ * arquivo que a declarou), então uma regressão introduzida só na sobrecarga
+ * anterior no arquivo nunca seria pega. Achado do cubic (confiança 10, PR #1483):
+ * `manage_department_member` tem 2 sobrecargas (4 e 5 argumentos) na mesma
+ * migration — `latestDefinition` só valida a de 5 args.
+ */
+function allDefinitions(sql: string, fnName: string): string[] {
+  const re = new RegExp(
+    `CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+(?:public|zapp|evo)\\.${fnName}\\b[\\s\\S]*?\\$(?:fn|function|\\w*)\\$\\s*;`,
+    'gi'
+  );
+  return sql.match(re) ?? [];
+}
+
+/**
+ * Como allDefinitions(), mas agrupado por sobrecarga (assinatura completa dos
+ * parâmetros, não só a quantidade — Postgres distingue overloads pelo tipo de
+ * cada parâmetro, não pela aridade; achado do cubic, confiança 7, review da PR
+ * #1525: chavear só por aridade colapsaria 2 sobrecargas de mesma quantidade
+ * mas tipos diferentes numa única entrada) e mantendo só a definição mais
+ * recente de CADA sobrecarga — não as últimas N textuais. Isso continua
+ * correto mesmo se uma sobrecarga futura for adicionada ou uma existente for
+ * redefinida em ordem diferente no arquivo concatenado (achado do Copilot,
+ * review da PR #1525: hardcodar "últimas 2 ocorrências" quebraria
+ * silenciosamente se surgisse uma 3ª sobrecarga ou uma redefinição fora de
+ * ordem).
+ *
+ * Limitação conhecida, não corrigida aqui (achado do cubic, confiança 7,
+ * mesma review): "última vence" assume que a ordem de concatenação de
+ * allMigrationsSql() é cronológica, mas essa função ordena migrations/ por
+ * nome de arquivo e SÓ DEPOIS concatena archive/ no final — se um dia
+ * archive/ voltar a existir (já existiu nesta base, ver comentário de
+ * ARCHIVE_DIR acima) e tiver uma definição da mesma sobrecarga que uma
+ * migration ativa mais nova, essa definição arquivada (mais antiga) venceria
+ * incorretamente. Hoje é inofensivo porque supabase/migrations/archive/ não
+ * existe neste repo (confirmado) — nenhuma função tem definição lá.
+ */
+function latestDefinitionPerOverload(sql: string, fnName: string): string[] {
+  const bySignature = new Map<string, string>();
+  for (const def of allDefinitions(sql, fnName)) {
+    const params = def.match(/FUNCTION\s+(?:public|zapp|evo)\.\w+\s*\(([^)]*)\)/i)?.[1] ?? '';
+    // Normaliza espaços para não distinguir sobrecargas idênticas só por
+    // formatação (ex.: "uuid,text" vs "uuid, text").
+    const signature = params.replace(/\s+/g, ' ').trim();
+    bySignature.set(signature, def); // ordem de iteração = ordem no arquivo -> última vence
+  }
+  return Array.from(bySignature.values());
+}
+
+/**
  * Definição no canonical squash (20260804000000) — espelha o schema APLICADO em
  * produção. (Removida do HIGH-3 no merge #1095: o teste passou a validar a
  * função REAL evo.fn_notify_sicoob_on_reply via allMigrationsSql + regex evo.*;
@@ -90,6 +143,37 @@ describe('Sprint 1 · HIGH-1 · RPC SECURITY DEFINER guards', () => {
       expect(def).toMatch(/RAISE\s+EXCEPTION/i);
     }
   });
+});
+
+describe('Sprint 1 · HIGH-1b · manage_department_member — todas as sobrecargas', () => {
+  // Achado do cubic (confiança 10, review do PR #1483, endereçado nesta sessão):
+  // o teste acima usa latestDefinition(), que só valida a ÚLTIMA ocorrência
+  // textual — para manage_department_member (2 sobrecargas: 4 e 5 argumentos,
+  // ambas em 20260902170000_harden_unguarded_crm_rpcs.sql) isso significa que
+  // só a sobrecarga de 5 args é coberta. Uma regressão futura que reintroduza
+  // o padrão vulnerável (_admin_user_id como parâmetro livre) só na sobrecarga
+  // de 4 args passaria despercebida. Este teste valida a definição mais
+  // recente de CADA sobrecarga (agrupada por aridade via
+  // latestDefinitionPerOverload) — não hardcoda quantas sobrecargas existem,
+  // então continua correto se uma 3ª for adicionada no futuro.
+  const sql = allMigrationsSql();
+  const defs = latestDefinitionPerOverload(sql, 'manage_department_member');
+
+  it('encontra pelo menos as 2 sobrecargas conhecidas (4 e 5 argumentos)', () => {
+    expect(defs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(defs.map((def, i) => [i, def] as const))(
+    'a sobrecarga #%i contém o guard de sessão + is_admin_or_supervisor',
+    (i, def) => {
+      expect(def, `sobrecarga #${i} não encontrada`).toBeDefined();
+      expect(def).toMatch(/PERFORM\s+zapp\.fn_require_app_user\(\)/);
+      expect(def).toMatch(/is_admin_or_supervisor\(/);
+      // Nenhuma sobrecarga pode voltar a confiar em _admin_user_id como fonte de
+      // autorização — só como parâmetro de payload, nunca lido antes do guard.
+      expect(def).not.toMatch(/v_admin_role\s+NOT\s+IN\s*\(/);
+    }
+  );
 });
 
 describe('Sprint 1 · HIGH-2 · prevent_role_escalation', () => {
