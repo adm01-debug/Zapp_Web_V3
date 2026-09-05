@@ -71,6 +71,25 @@ function allDefinitions(sql: string, fnName: string): string[] {
 }
 
 /**
+ * Como allDefinitions(), mas agrupado por sobrecarga (aridade dos parâmetros)
+ * e mantendo só a definição mais recente de CADA sobrecarga — não as últimas N
+ * textuais. Isso continua correto mesmo se uma sobrecarga futura for adicionada
+ * ou uma existente for redefinida em ordem diferente no arquivo concatenado
+ * (achado do Copilot, review da PR #1525: hardcodar "últimas 2 ocorrências"
+ * quebraria silenciosamente se surgisse uma 3ª sobrecarga ou uma redefinição
+ * fora de ordem).
+ */
+function latestDefinitionPerOverload(sql: string, fnName: string): string[] {
+  const bySignature = new Map<number, string>();
+  for (const def of allDefinitions(sql, fnName)) {
+    const params = def.match(/FUNCTION\s+(?:public|zapp|evo)\.\w+\s*\(([^)]*)\)/i)?.[1] ?? '';
+    const arity = params.trim() === '' ? 0 : params.split(',').length;
+    bySignature.set(arity, def); // ordem de iteração = ordem no arquivo -> última vence
+  }
+  return Array.from(bySignature.values());
+}
+
+/**
  * Definição no canonical squash (20260804000000) — espelha o schema APLICADO em
  * produção. (Removida do HIGH-3 no merge #1095: o teste passou a validar a
  * função REAL evo.fn_notify_sicoob_on_reply via allMigrationsSql + regex evo.*;
@@ -117,27 +136,28 @@ describe('Sprint 1 · HIGH-1b · manage_department_member — todas as sobrecarg
   // ambas em 20260902170000_harden_unguarded_crm_rpcs.sql) isso significa que
   // só a sobrecarga de 5 args é coberta. Uma regressão futura que reintroduza
   // o padrão vulnerável (_admin_user_id como parâmetro livre) só na sobrecarga
-  // de 4 args passaria despercebida. Este teste valida CADA definição
-  // encontrada, não só a última.
+  // de 4 args passaria despercebida. Este teste valida a definição mais
+  // recente de CADA sobrecarga (agrupada por aridade via
+  // latestDefinitionPerOverload) — não hardcoda quantas sobrecargas existem,
+  // então continua correto se uma 3ª for adicionada no futuro.
   const sql = allMigrationsSql();
-  const defs = allDefinitions(sql, 'manage_department_member');
+  const defs = latestDefinitionPerOverload(sql, 'manage_department_member');
 
-  it('encontra as 2 sobrecargas conhecidas (4 e 5 argumentos)', () => {
+  it('encontra pelo menos as 2 sobrecargas conhecidas (4 e 5 argumentos)', () => {
     expect(defs.length).toBeGreaterThanOrEqual(2);
   });
 
-  it.each(
-    // Índice só para identificar qual ocorrência falhou no relatório do teste.
-    Array.from({ length: 2 }, (_, i) => i)
-  )('a sobrecarga #%i contém o guard de sessão + is_admin_or_supervisor', (i) => {
-    const def = defs[defs.length - 2 + i];
-    expect(def, `sobrecarga #${i} não encontrada`).toBeDefined();
-    expect(def).toMatch(/PERFORM\s+zapp\.fn_require_app_user\(\)/);
-    expect(def).toMatch(/is_admin_or_supervisor\(/);
-    // Nenhuma sobrecarga pode voltar a confiar em _admin_user_id como fonte de
-    // autorização — só como parâmetro de payload, nunca lido antes do guard.
-    expect(def).not.toMatch(/v_admin_role\s+NOT\s+IN\s*\(/);
-  });
+  it.each(defs.map((def, i) => [i, def] as const))(
+    'a sobrecarga #%i contém o guard de sessão + is_admin_or_supervisor',
+    (i, def) => {
+      expect(def, `sobrecarga #${i} não encontrada`).toBeDefined();
+      expect(def).toMatch(/PERFORM\s+zapp\.fn_require_app_user\(\)/);
+      expect(def).toMatch(/is_admin_or_supervisor\(/);
+      // Nenhuma sobrecarga pode voltar a confiar em _admin_user_id como fonte de
+      // autorização — só como parâmetro de payload, nunca lido antes do guard.
+      expect(def).not.toMatch(/v_admin_role\s+NOT\s+IN\s*\(/);
+    }
+  );
 });
 
 describe('Sprint 1 · HIGH-2 · prevent_role_escalation', () => {
