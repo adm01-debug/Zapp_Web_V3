@@ -8,6 +8,7 @@ um redeploy pela UI do Portainer com estes conteúdos NÃO reverte nenhuma corre
 | Arquivo | Stack (id) | O que mudou na sessão 5 |
 |---|---|---|
 | `glitchtip.yml` | glitchtip (41) | + serviço `glitchtip-valkey` (Redis/fila Celery que faltava → ingestão dava HTTP 500) + `REDIS_URL` no web/worker |
+| `runner-janitor.yml` | runner-janitor (281, criado 2026-09-05, AUD-22D) | Reinicia (`service update --force`) runners `github-actions-runner_*` ociosos cuja camada gravável passa de 2,5 GB — causa raiz do disco a 98 % em 05/09 (`/root/.cache` + `/root/.bun` crescem por job e não são cobertos pelo housekeeping) |
 | `supabase-db-mcp.yml` | supabase-db-mcp (128) | `DATABASE_URL` saiu do env em texto puro → Docker secret `supabase_db_url_v1` + wrapper de entrypoint; healthcheck em `127.0.0.1` |
 | `postgres-backup-daily.yml` | postgres-backup-daily (112) | MinIO→R2 fixado no arquivo + credenciais via secrets |
 | `postgres-backup-weekly.yml` | postgres-backup-weekly (84) | idem + removido o one-shot `source-backfill-exporter` (obsoleto) |
