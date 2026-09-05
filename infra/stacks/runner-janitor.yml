@@ -1,0 +1,123 @@
+version: "3.8"
+
+# =============================================================================
+# RUNNER-JANITOR v1.0.2 — AtomicaBR — 2026-09-05 (AUD-22D) — Portainer stack "runner-janitor"
+# Causa raiz do disco a 98% em 2026-09-05: a camada gravavel dos containers
+# github-actions-runner_* cresce a cada job (/root/.cache ~1,8 GB de browsers
+# Playwright + /root/.bun ~1,2 GB de cache + externals do runner) e NAO e coberta
+# pelo docker-housekeeping (que so trata imagens, cache de build e volumes
+# anonimos). Medido: 7 runners somavam ~34 GB; 6 h apos o reset ja tinham 14 GB.
+#
+# A cada INTERVAL_S, para cada container de runner:
+#   - le SizeRw (bytes da camada gravavel) via `docker inspect -s`
+#   - se SizeRw > MAX_RW_GB e o runner esta ocioso (sem processo Runner.Worker),
+#     faz `docker service update --force` no servico: o container volta zerado e
+#     o registro no GitHub persiste no volume runner-work-* (stack 210 v4.7+)
+#   - se ocupado, pula e tenta no proximo ciclo
+# Alerta (n8n warroom) so no boot, quando reinicia algum runner ou quando falha.
+# v1.0.2 (review do PR #1523): `docker ps` com falha (socket/API) encerra o processo
+# (restart_policy on-failure reinicia o servico) em vez de tratar lista vazia como
+# saudavel; `inspect` sem SizeRw pula o container em vez de assumir 0; o
+# `service update` roda com --detach=false para so contar como reiniciado depois
+# de o Swarm convergir. Janela conhecida (aceita): entre o `pgrep` e o update um
+# job pode ser atribuido ao runner — drenar via API do GitHub exigiria PAT no stack.
+# =============================================================================
+
+services:
+  janitor:
+    image: docker:28-cli
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: "America/Sao_Paulo"
+      INTERVAL_S: "1800"
+      MAX_RW_GB: "2.5"
+      RUNNER_FILTER: "github-actions-runner_"
+      ALERT_WEBHOOK_URL: "https://n8n.atomicabr.com.br/webhook/warroom-alert"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "=== RUNNER-JANITOR v1.0.2 boot $$(date -u +%FT%TZ) max_rw=$${MAX_RW_GB}GB interval=$${INTERVAL_S}s ==="
+        alert() {
+          _MSG="$$1"; _TS=$$(date -u +%FT%TZ)
+          echo "[ALERT] $$_MSG"
+          wget -q --post-data="{\"service\":\"runner-janitor\",\"msg\":\"$$_MSG\",\"ts\":\"$$_TS\"}" \
+            --header="Content-Type: application/json" "$$ALERT_WEBHOOK_URL" -O /dev/null 2>/dev/null || true
+        }
+        # Comparacao em MB: busybox awk trunca printf "%d" acima de 2^31 (2,5 GB em bytes
+        # virava negativo e TODO runner era reiniciado — bug do v1.0.0, corrigido no v1.0.1).
+        MAX_MB=$$(awk -v g="$$MAX_RW_GB" 'BEGIN { printf "%d", g * 1024 }')
+        CYCLE=0
+        while true; do
+          CYCLE=$$((CYCLE+1)); TS=$$(date -u +%FT%TZ)
+          DISK=$$(df -P / 2>/dev/null | awk 'NR==2 {gsub("%","",$$5); print $$5+0}')
+          RESTARTED=""; SKIPPED=0; TOTAL_GB=0; INSPECT_FAIL=0
+          if ! CIDS=$$(docker ps -q --filter "name=$$RUNNER_FILTER"); then
+            alert "runner-janitor: docker ps falhou (socket/API indisponivel) — encerrando para o Swarm reiniciar"
+            exit 1
+          fi
+          for CID in $$CIDS; do
+            NAME=$$(docker inspect --format '{{.Name}}' "$$CID" 2>/dev/null | sed 's#^/##')
+            SVC=$$(docker inspect --format '{{index .Config.Labels "com.docker.swarm.service.name"}}' "$$CID" 2>/dev/null)
+            RW=$$(docker inspect -s --format '{{.SizeRw}}' "$$CID" 2>/dev/null | tr -d ' ')
+            if [ -z "$$RW" ]; then
+              echo "[$$TS] $${NAME:-$$CID} — inspect sem SizeRw (falha de API?), pula"
+              INSPECT_FAIL=$$((INSPECT_FAIL+1))
+              continue
+            fi
+            RW_MB=$$((RW / 1048576))
+            RW_GB=$$(awk -v b="$$RW" 'BEGIN { printf "%.2f", b / 1024 / 1024 / 1024 }')
+            TOTAL_GB=$$(awk -v a="$$TOTAL_GB" -v b="$$RW_GB" 'BEGIN { printf "%.2f", a + b }')
+            if [ "$$RW_MB" -gt "$$MAX_MB" ]; then
+              if docker exec "$$CID" pgrep -f Runner.Worker >/dev/null 2>&1; then
+                echo "[$$TS] $$NAME rw=$${RW_GB}GB > max — OCUPADO (Runner.Worker), pula"
+                SKIPPED=$$((SKIPPED+1))
+              elif [ -n "$$SVC" ]; then
+                if timeout 180 docker service update --force --detach=false "$$SVC" >/dev/null 2>&1; then
+                  echo "[$$TS] $$NAME rw=$${RW_GB}GB > max — ocioso, service update --force em $$SVC"
+                  RESTARTED="$$RESTARTED $$SVC($${RW_GB}GB)"
+                else
+                  echo "[$$TS] $$NAME rw=$${RW_GB}GB — FALHA no service update de $$SVC"
+                  alert "runner-janitor: falha ao reiniciar $$SVC (rw=$${RW_GB}GB)"
+                fi
+              fi
+            else
+              echo "[$$TS] $$NAME rw=$${RW_GB}GB ok"
+            fi
+          done
+          echo "[$$TS] cycle #$$CYCLE disk=$${DISK}% runners_rw_total=$${TOTAL_GB}GB restarted=[$${RESTARTED# }] busy_skipped=$$SKIPPED inspect_fail=$$INSPECT_FAIL"
+          if [ "$$INSPECT_FAIL" -gt 0 ]; then
+            alert "runner-janitor: $$INSPECT_FAIL container(s) sem SizeRw no inspect (ciclo #$$CYCLE) — verificar API do Docker"
+          fi
+          if [ -n "$$RESTARTED" ]; then
+            alert "runner-janitor: disco $${DISK}% — runners reiniciados (camada gravavel > $${MAX_RW_GB}GB):$$RESTARTED"
+          fi
+          if [ "$$CYCLE" -eq 1 ]; then
+            alert "runner-janitor v1.0.2 online: disco $${DISK}%, runners rw total $${TOTAL_GB}GB, max $${MAX_RW_GB}GB/runner"
+          fi
+          sleep "$$INTERVAL_S"
+        done
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 30s
+        max_attempts: 0
+        window: 120s
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 128M
+        reservations:
+          memory: 16M
+      labels:
+        - traefik.enable=false
+        - com.centurylinklabs.watchtower.enable=false
+        - com.atomicabr.audit=runner-janitor-v1.0.2-aud22d-2026-09-05
+        - com.atomicabr.requires-docker-sock=true
+        - com.atomicabr.tier=critical

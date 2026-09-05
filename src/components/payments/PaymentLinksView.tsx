@@ -71,7 +71,8 @@ export function PaymentLinksView() {
 
   const createLink = async () => {
     if (!formTitle.trim() || !formAmount) return;
-    // Normaliza para centavos: evita 19.999999 em float64 chegar ao NUMERIC do banco.
+    // Arredonda a 2 casas (valor em reais, não em centavos inteiros): evita 19.999999
+    // em float64 chegar ao NUMERIC do banco; entrada inválida vira NaN e cai no guard abaixo.
     const amount = normalizeMoney(formAmount);
     if (isNaN(amount) || amount <= 0) return;
 
