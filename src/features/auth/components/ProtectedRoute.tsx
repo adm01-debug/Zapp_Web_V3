@@ -10,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useUserRole, type AppRole } from '../hooks/useUserRole';
 import { useRouteRoles } from '../hooks/useRouteRoles';
+import { needsMfaChallenge } from '../hooks/mfaAssurance';
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -79,13 +80,45 @@ export function ProtectedRoute({
   const [permissionChecking, setPermissionChecking] = useState(false);
   const [loadingElapsed, setLoadingElapsed] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
+  // E71: sessão pode estar em aal1 (2FA cadastrado, não elevado nesta sessão)
+  // mesmo tendo pulado a tela /auth (ex.: sessão persistida, deep link direto).
+  // mfaChecked=false trava o loading para nunca renderizar children antes de
+  // saber se o desafio de 2FA é exigido.
+  const [mfaChecked, setMfaChecked] = useState(false);
+  const [mfaChallengeRequired, setMfaChallengeRequired] = useState(false);
 
   // Dynamic override from route_permissions table.
   // Skip lookup while unauthenticated — RLS forbids anon SELECT and would spam
   // "permission denied" warnings on the /auth screen.
   const overrideRoles = useRouteRoles(user ? (routePath ?? location.pathname) : undefined);
 
-  const loading = authLoading || (rolesLoading && roles.length === 0) || permissionChecking;
+  const loading =
+    authLoading ||
+    (rolesLoading && roles.length === 0) ||
+    permissionChecking ||
+    (!!user && !mfaChecked);
+
+  // E71: verifica se a sessão precisa completar o desafio de 2FA (aal1→aal2)
+  // antes de liberar qualquer rota protegida — cobre o caso em que o usuário
+  // nunca passou pelo useEffect de /auth (sessão persistida, deep link,
+  // reload direto numa rota protegida). needsMfaChallenge() é fail-closed
+  // condicional: só bloqueia quem tem fator TOTP verified.
+  useEffect(() => {
+    if (authLoading || !user) {
+      setMfaChecked(false);
+      setMfaChallengeRequired(false);
+      return;
+    }
+    let isMounted = true;
+    void needsMfaChallenge().then((required) => {
+      if (!isMounted) return;
+      setMfaChallengeRequired(required);
+      setMfaChecked(true);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoading, user]);
 
   // Safety timer: se loading persistir >10s, força fallback para /auth
   useEffect(() => {
@@ -308,6 +341,12 @@ export function ProtectedRoute({
   if (!user || timedOut) {
     recordAuthzFailure({ route: location.pathname, reason: 'unauthenticated' });
     return <Navigate to="/auth" state={redirectState} replace />;
+  }
+
+  // E71: 2FA pendente tem precedência sobre role/permissão — identidade
+  // insuficientemente assegurada não deve nem chegar a essas checagens.
+  if (mfaChallengeRequired) {
+    return <Navigate to="/2fa" state={redirectState} replace />;
   }
 
   // Resolve effective required roles: DB override wins when present
