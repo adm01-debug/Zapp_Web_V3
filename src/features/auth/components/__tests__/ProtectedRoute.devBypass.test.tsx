@@ -46,8 +46,13 @@ const mockAppMetrics = vi.hoisted(() => ({
   recordAuthzFailure: vi.fn(),
 }));
 
+const mockMfaAssurance = vi.hoisted(() => ({
+  needsMfaChallenge: vi.fn(),
+}));
+
 vi.mock('@/features/auth/hooks/useAuth', () => mockUseAuth);
 vi.mock('@/features/auth/hooks/useRouteRoles', () => mockUseRouteRoles);
+vi.mock('@/features/auth/hooks/mfaAssurance', () => mockMfaAssurance);
 vi.mock('@/integrations/supabase/client', () => mockSupabase);
 vi.mock('@/lib/appMetrics', () => mockAppMetrics);
 
@@ -105,6 +110,7 @@ beforeEach(() => {
   authState.roles = ['dev'];
   applyAuthState();
   mockUseRouteRoles.useRouteRoles.mockReturnValue(null);
+  mockMfaAssurance.needsMfaChallenge.mockResolvedValue(false);
   mockSupabase.supabase.rpc.mockResolvedValue({ data: false, error: null });
   mockSupabase.supabase.auth.getSession.mockResolvedValue({
     data: { session: { user: { id: 'user-1' } } },
