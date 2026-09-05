@@ -71,20 +71,36 @@ function allDefinitions(sql: string, fnName: string): string[] {
 }
 
 /**
- * Como allDefinitions(), mas agrupado por sobrecarga (aridade dos parâmetros)
- * e mantendo só a definição mais recente de CADA sobrecarga — não as últimas N
- * textuais. Isso continua correto mesmo se uma sobrecarga futura for adicionada
- * ou uma existente for redefinida em ordem diferente no arquivo concatenado
- * (achado do Copilot, review da PR #1525: hardcodar "últimas 2 ocorrências"
- * quebraria silenciosamente se surgisse uma 3ª sobrecarga ou uma redefinição
- * fora de ordem).
+ * Como allDefinitions(), mas agrupado por sobrecarga (assinatura completa dos
+ * parâmetros, não só a quantidade — Postgres distingue overloads pelo tipo de
+ * cada parâmetro, não pela aridade; achado do cubic, confiança 7, review da PR
+ * #1525: chavear só por aridade colapsaria 2 sobrecargas de mesma quantidade
+ * mas tipos diferentes numa única entrada) e mantendo só a definição mais
+ * recente de CADA sobrecarga — não as últimas N textuais. Isso continua
+ * correto mesmo se uma sobrecarga futura for adicionada ou uma existente for
+ * redefinida em ordem diferente no arquivo concatenado (achado do Copilot,
+ * review da PR #1525: hardcodar "últimas 2 ocorrências" quebraria
+ * silenciosamente se surgisse uma 3ª sobrecarga ou uma redefinição fora de
+ * ordem).
+ *
+ * Limitação conhecida, não corrigida aqui (achado do cubic, confiança 7,
+ * mesma review): "última vence" assume que a ordem de concatenação de
+ * allMigrationsSql() é cronológica, mas essa função ordena migrations/ por
+ * nome de arquivo e SÓ DEPOIS concatena archive/ no final — se um dia
+ * archive/ voltar a existir (já existiu nesta base, ver comentário de
+ * ARCHIVE_DIR acima) e tiver uma definição da mesma sobrecarga que uma
+ * migration ativa mais nova, essa definição arquivada (mais antiga) venceria
+ * incorretamente. Hoje é inofensivo porque supabase/migrations/archive/ não
+ * existe neste repo (confirmado) — nenhuma função tem definição lá.
  */
 function latestDefinitionPerOverload(sql: string, fnName: string): string[] {
-  const bySignature = new Map<number, string>();
+  const bySignature = new Map<string, string>();
   for (const def of allDefinitions(sql, fnName)) {
     const params = def.match(/FUNCTION\s+(?:public|zapp|evo)\.\w+\s*\(([^)]*)\)/i)?.[1] ?? '';
-    const arity = params.trim() === '' ? 0 : params.split(',').length;
-    bySignature.set(arity, def); // ordem de iteração = ordem no arquivo -> última vence
+    // Normaliza espaços para não distinguir sobrecargas idênticas só por
+    // formatação (ex.: "uuid,text" vs "uuid, text").
+    const signature = params.replace(/\s+/g, ' ').trim();
+    bySignature.set(signature, def); // ordem de iteração = ordem no arquivo -> última vence
   }
   return Array.from(bySignature.values());
 }
