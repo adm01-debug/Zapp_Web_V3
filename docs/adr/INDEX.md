@@ -10,7 +10,7 @@
 | ADR-004 | [`docs/ADR-004_REVOGA_BUCKET_PUBLICO.md`](../../docs/ADR-004_REVOGA_BUCKET_PUBLICO.md) | ADR-004: Revogação do Bucket Público — whatsapp-media |
 | ADR-001 | [`docs/adr/ADR-001-media-url-storage.md`](../../docs/adr/ADR-001-media-url-storage.md) | ADR-001 — Proibir URL absoluta em campos de mídia |
 | ADR-002 | [`docs/adr/ADR-002-bucket-public.md`](../../docs/adr/ADR-002-bucket-public.md) | ADR-002 — Bucket `whatsapp-media` deve ser PÚBLICO |
-| ADR-003 | [`docs/adr/ADR-003-reverter-bucket-whatsapp-media.md`](../../docs/adr/ADR-003-reverter-bucket-whatsapp-media.md) |  |
+| ADR-003 | [`docs/adr/ADR-003-reverter-bucket-whatsapp-media.md`](../../docs/adr/ADR-003-reverter-bucket-whatsapp-media.md) | ADR-003: Reverter bucket whatsapp-media para Privado |
 | ADR-004 | [`docs/adr/ADR-004-remover-modulo-bpm.md`](../../docs/adr/ADR-004-remover-modulo-bpm.md) | ADR-004: Remoção do módulo BPM |
 | ADR-005 | [`docs/adr/ADR-005-implementar-pwa-offline.md`](../../docs/adr/ADR-005-implementar-pwa-offline.md) | ADR-005: Implementação de PWA e fila offline |
 | ADR-006 | [`docs/adr/ADR-006-arquitetura-sla-canonica.md`](../../docs/adr/ADR-006-arquitetura-sla-canonica.md) | ADR-006: Arquitetura canônica de SLA |

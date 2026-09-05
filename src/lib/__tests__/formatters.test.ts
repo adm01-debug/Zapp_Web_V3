@@ -275,8 +275,16 @@ describe('normalizeMoney (regressão AUD-22D 2026-09-05 — payment links em flo
     expect(normalizeMoney(1.1 * 3)).toBe(3.3);
   });
 
-  it('devolve NaN para entrada inválida (chamador decide)', () => {
+  it('aceita vírgula decimal (entrada pt-BR) e espaços nas pontas', () => {
+    expect(normalizeMoney('0,01')).toBe(0.01);
+    expect(normalizeMoney(' 1234,5 ')).toBe(1234.5);
+  });
+
+  it('devolve NaN para entrada inválida, inclusive prefixo numérico (fail-closed)', () => {
     expect(Number.isNaN(normalizeMoney('abc'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney('10abc'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney('R$ 10'))).toBe(true);
+    expect(Number.isNaN(normalizeMoney('1.234,56'))).toBe(true);
     expect(Number.isNaN(normalizeMoney(''))).toBe(true);
     expect(Number.isNaN(normalizeMoney(Infinity))).toBe(true);
   });
