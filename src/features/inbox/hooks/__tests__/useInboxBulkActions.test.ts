@@ -64,7 +64,12 @@ vi.mock('@/features/inbox', () => ({
 }));
 
 vi.mock('sonner', () => ({
-  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }),
+  toast: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    dismiss: vi.fn(),
+  }),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -96,9 +101,10 @@ function selectIds(result: { current: HookResult }, ids: string[]) {
  */
 function mockDbFromChain(result: { data?: unknown; error?: unknown } = { error: null }) {
   const eq = vi.fn(() => Promise.resolve(result));
-  const inFilter = vi.fn(() => ({ eq }));
+  const select = vi.fn(() => Promise.resolve(result));
+  const inFilter = vi.fn(() => ({ eq, select }));
   const update = vi.fn(() => ({ in: inFilter }));
-  return { update, in: inFilter, eq };
+  return { update, in: inFilter, eq, select };
 }
 
 beforeEach(() => {
@@ -298,7 +304,7 @@ describe('useInboxBulkActions — regressão bulkMarkAsRead / bulkTransfer (não
 
   it('bulkTransfer(agent): atualiza contacts.assigned_to via dbFrom e limpa seleção', async () => {
     const { result, refetch } = setup();
-    const chain = mockDbFromChain();
+    const chain = mockDbFromChain({ data: [{ id: UUID_2 }], error: null });
     mockDbFrom.mockReturnValue(chain);
     selectIds(result, [UUID_2]);
 
@@ -309,6 +315,7 @@ describe('useInboxBulkActions — regressão bulkMarkAsRead / bulkTransfer (não
     expect(mockDbFrom).toHaveBeenCalledWith('contacts');
     expect(chain.update).toHaveBeenCalledWith({ assigned_to: TARGET_UUID });
     expect(chain.in).toHaveBeenCalledWith('id', [UUID_2]);
+    expect(chain.select).toHaveBeenCalledWith('id');
     expect(toast.success).toHaveBeenCalledWith('1 contato(s) transferido(s)');
     expect(result.current.selectedIds.size).toBe(0);
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -317,7 +324,7 @@ describe('useInboxBulkActions — regressão bulkMarkAsRead / bulkTransfer (não
 
   it('bulkTransfer(queue): atualiza contacts.queue_id via dbFrom', async () => {
     const { result } = setup();
-    const chain = mockDbFromChain();
+    const chain = mockDbFromChain({ data: [{ id: UUID_1 }], error: null });
     mockDbFrom.mockReturnValue(chain);
     selectIds(result, [UUID_1]);
 
@@ -328,5 +335,39 @@ describe('useInboxBulkActions — regressão bulkMarkAsRead / bulkTransfer (não
     expect(mockDbFrom).toHaveBeenCalledWith('contacts');
     expect(chain.update).toHaveBeenCalledWith({ queue_id: QUEUE_ID });
     expect(chain.in).toHaveBeenCalledWith('id', [UUID_1]);
+  });
+
+  it('bulkTransfer: zero linhas afetadas (RLS/IDs inexistentes) → toast.error, nunca toast.success (regressão de falso sucesso)', async () => {
+    const { result, refetch } = setup();
+    const chain = mockDbFromChain({ data: [], error: null });
+    mockDbFrom.mockReturnValue(chain);
+    selectIds(result, [UUID_1]);
+
+    await act(async () => {
+      await result.current.bulkTransfer('agent', TARGET_UUID);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith('Erro ao transferir contatos');
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+    // Falha real: seleção preservada, sem refetch (nada foi commitado de verdade).
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  it('bulkTransfer: sucesso parcial (menos linhas afetadas que selecionadas) → toast.warning honesto', async () => {
+    const { result, refetch } = setup();
+    const chain = mockDbFromChain({ data: [{ id: UUID_1 }], error: null });
+    mockDbFrom.mockReturnValue(chain);
+    selectIds(result, [UUID_1, UUID_2]);
+
+    await act(async () => {
+      await result.current.bulkTransfer('agent', TARGET_UUID);
+    });
+
+    expect(toast.warning).toHaveBeenCalledWith(
+      '1 de 2 contato(s) transferido(s) — os demais não puderam ser atualizados.'
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
