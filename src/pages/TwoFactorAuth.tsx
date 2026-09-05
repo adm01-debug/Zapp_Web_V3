@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from '@/components/ui/motion';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/features/auth';
-import { useMFA } from '@/features/auth';
 import { MFAVerify } from '@/features/auth';
 import { needsMfaChallenge } from '@/features/auth/hooks/mfaAssurance';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,6 @@ export default function TwoFactorAuth() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading } = useAuth();
-  const { fetchFactors } = useMFA();
   const [needsVerification, setNeedsVerification] = useState(false);
 
   // E71: preserva o destino original (ProtectedRoute/redirectAfterAuth chegam
@@ -44,10 +42,6 @@ export default function TwoFactorAuth() {
 
     let cancelled = false;
     const checkMFAStatus = async () => {
-      // fetchFactors() popula o estado 'factors' consumido pelo <MFAVerify> abaixo.
-      await fetchFactors();
-      if (cancelled) return;
-
       // needsMfaChallenge() é a MESMA checagem fail-closed condicional usada por
       // ProtectedRoute e useAuthForm (mfaAssurance.ts) — antes desta correção,
       // esta tela tinha sua própria checagem via useMFA().getAssuranceLevel(),
@@ -55,7 +49,16 @@ export default function TwoFactorAuth() {
       // instabilidade sustentada anulasse o gate: o ProtectedRoute barrava
       // corretamente (fail-closed) e redirecionava pra cá, mas esta tela então
       // liberava o usuário sem pedir o código, sob a mesma instabilidade.
-      const required = await needsMfaChallenge();
+      let required: boolean;
+      try {
+        required = await needsMfaChallenge();
+      } catch {
+        // needsMfaChallenge() nunca rejeita hoje (try/catch interno cobre as
+        // duas chamadas de rede) — este catch é defesa em profundidade: se
+        // isso mudar no futuro, falha FECHADA (exige o desafio) em vez de
+        // deixar a tela presa para sempre em "Verificando..." sem feedback.
+        required = true;
+      }
       if (cancelled) return;
 
       if (required) {
@@ -71,7 +74,7 @@ export default function TwoFactorAuth() {
     return () => {
       cancelled = true;
     };
-  }, [user, loading, navigate, fetchFactors, destination]);
+  }, [user, loading, navigate, destination]);
 
   if (!needsVerification) {
     return (

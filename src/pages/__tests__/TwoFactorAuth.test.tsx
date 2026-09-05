@@ -18,7 +18,6 @@ import TwoFactorAuth from '../TwoFactorAuth';
  */
 
 const mockUseAuth = vi.hoisted(() => ({ useAuth: vi.fn() }));
-const mockUseMFA = vi.hoisted(() => ({ useMFA: vi.fn() }));
 const mockMfaAssurance = vi.hoisted(() => ({ needsMfaChallenge: vi.fn() }));
 const navigateMock = vi.hoisted(() => vi.fn());
 
@@ -29,7 +28,6 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/features/auth', () => ({
   useAuth: mockUseAuth.useAuth,
-  useMFA: mockUseMFA.useMFA,
   MFAVerify: ({ onSuccess }: { onSuccess: () => void }) => (
     <div>
       MFA_VERIFY_SCREEN
@@ -57,11 +55,8 @@ vi.mock('@/components/ui/motion', () => ({
   },
 }));
 
-const fetchFactorsMock = vi.fn().mockResolvedValue([]);
-
 function applyDefaults() {
   mockUseAuth.useAuth.mockReturnValue({ user: { id: 'user-1' }, loading: false });
-  mockUseMFA.useMFA.mockReturnValue({ fetchFactors: fetchFactorsMock, getAssuranceLevel: vi.fn() });
 }
 
 function renderWithState(state?: unknown) {
@@ -145,5 +140,14 @@ describe('TwoFactorAuth — usa needsMfaChallenge (fail-closed condicional) em v
     await vi.waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
     });
+  });
+
+  it('defesa em profundidade: se needsMfaChallenge() rejeitar (hoje nunca acontece em produção), falha FECHADA e exige o desafio em vez de travar ou liberar', async () => {
+    mockMfaAssurance.needsMfaChallenge.mockRejectedValue(new Error('falha inesperada'));
+
+    renderWithState();
+
+    expect(await screen.findByText('MFA_VERIFY_SCREEN')).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalledWith(expect.anything(), expect.anything());
   });
 });
