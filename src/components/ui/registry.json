@@ -1,4 +1,29 @@
 {
+  "card": {
+    "name": "card",
+    "variants": {
+      "variant": [
+        "default",
+        "elevated",
+        "hover",
+        "hover",
+        "interactive",
+        "hover",
+        "hover",
+        "selected",
+        "ghost",
+        "glass",
+        "neon",
+        "gradient"
+      ],
+      "padding": [
+        "none",
+        "sm",
+        "default",
+        "lg"
+      ]
+    }
+  },
   "dialog": {
     "name": "dialog",
     "variants": {
@@ -8,6 +33,15 @@
         "lg",
         "xl",
         "full"
+      ]
+    }
+  },
+  "bubble": {
+    "name": "bubble",
+    "variants": {
+      "side": [
+        "sent",
+        "received"
       ]
     }
   },
@@ -39,49 +73,26 @@
       ]
     }
   },
-  "card": {
-    "name": "card",
+  "badge": {
+    "name": "badge",
     "variants": {
       "variant": [
         "default",
-        "elevated",
         "hover",
+        "secondary",
         "hover",
-        "interactive",
+        "destructive",
         "hover",
+        "outline",
         "hover",
-        "selected",
-        "ghost",
-        "glass",
-        "neon",
-        "gradient"
-      ],
-      "padding": [
-        "none",
-        "sm",
-        "default",
-        "lg"
-      ]
-    }
-  },
-  "alert": {
-    "name": "alert",
-    "variants": {
-      "variant": [
-        "default",
-        "destructive"
-      ]
-    }
-  },
-  "avatar": {
-    "name": "avatar",
-    "variants": {
-      "size": [
-        "xs",
-        "sm",
-        "default",
-        "lg",
-        "xl"
+        "subtle",
+        "success",
+        "warning",
+        "info",
+        "whatsapp",
+        "hover",
+        "glowPurple",
+        "hover"
       ]
     }
   },
@@ -94,37 +105,27 @@
       ]
     }
   },
-  "bubble": {
-    "name": "bubble",
-    "variants": {
-      "side": [
-        "sent",
-        "received"
-      ]
-    }
-  },
-  "input": {
-    "name": "input",
+  "alert": {
+    "name": "alert",
     "variants": {
       "variant": [
         "default",
-        "visible",
-        "glow",
-        "visible",
-        "visible",
-        "neon",
-        "visible",
-        "visible",
-        "ghost",
-        "visible",
-        "visible",
-        "underline",
-        "visible",
-        "visible"
-      ],
-      "inputSize": [
-        "sm",
+        "destructive"
+      ]
+    }
+  },
+  "toggle": {
+    "name": "toggle",
+    "variants": {
+      "variant": [
         "default",
+        "outline",
+        "hover",
+        "hover"
+      ],
+      "size": [
+        "default",
+        "sm",
         "lg"
       ]
     }
@@ -190,19 +191,15 @@
       ]
     }
   },
-  "toggle": {
-    "name": "toggle",
+  "avatar": {
+    "name": "avatar",
     "variants": {
-      "variant": [
-        "default",
-        "outline",
-        "hover",
-        "hover"
-      ],
       "size": [
-        "default",
+        "xs",
         "sm",
-        "lg"
+        "default",
+        "lg",
+        "xl"
       ]
     }
   },
@@ -225,26 +222,29 @@
       ]
     }
   },
-  "badge": {
-    "name": "badge",
+  "input": {
+    "name": "input",
     "variants": {
       "variant": [
         "default",
-        "hover",
-        "secondary",
-        "hover",
-        "destructive",
-        "hover",
-        "outline",
-        "hover",
-        "subtle",
-        "success",
-        "warning",
-        "info",
-        "whatsapp",
-        "hover",
-        "glowPurple",
-        "hover"
+        "visible",
+        "glow",
+        "visible",
+        "visible",
+        "neon",
+        "visible",
+        "visible",
+        "ghost",
+        "visible",
+        "visible",
+        "underline",
+        "visible",
+        "visible"
+      ],
+      "inputSize": [
+        "sm",
+        "default",
+        "lg"
       ]
     }
   },
