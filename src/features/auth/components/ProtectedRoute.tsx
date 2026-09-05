@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { getLogger } from '@/lib/logger';
 import { markTimeToMainScreen, recordAuthzFailure } from '@/lib/appMetrics';
 import { getAppEnv, isDevBypassAllowed } from '@/lib/auth/devBypass';
+import { buildAuthRedirectTarget } from '@/features/auth/postAuthRedirect';
 
 const log = getLogger('ProtectedRoute');
 import { Navigate, useLocation } from 'react-router-dom';
@@ -168,7 +169,7 @@ export function ProtectedRoute({
               }
             })
             .finally(() => {
-              window.location.replace('/auth');
+              window.location.replace(buildAuthRedirectTarget(location));
             });
         }
       })
@@ -242,7 +243,7 @@ export function ProtectedRoute({
                   /* noop */
                 }
                 void signOut().finally(() => {
-                  window.location.href = '/auth';
+                  window.location.href = buildAuthRedirectTarget(location);
                 });
               }}
               className="rounded-md border border-border bg-card px-4 py-2 text-sm text-foreground hover:bg-accent"
@@ -266,7 +267,13 @@ export function ProtectedRoute({
     // E51 51.6 (anti-loop): se já estamos em /auth, redirecionar para
     // /auth?reason=timeout recairia na mesma tela → loop. Renderiza saída.
     if (location.pathname !== '/auth') {
-      return <Navigate to="/auth?reason=timeout" state={{ from: location }} replace />;
+      return (
+        <Navigate
+          to={buildAuthRedirectTarget(location, 'timeout')}
+          state={{ from: location }}
+          replace
+        />
+      );
     }
     return (
       <div
@@ -321,7 +328,7 @@ export function ProtectedRoute({
                 type="button"
                 onClick={() => {
                   void signOut().finally(() => {
-                    window.location.href = '/auth';
+                    window.location.href = buildAuthRedirectTarget(location);
                   });
                 }}
                 className="rounded-md border border-border bg-card px-4 py-2 text-sm text-foreground hover:bg-accent"
@@ -337,7 +344,7 @@ export function ProtectedRoute({
 
   if (!user || timedOut) {
     recordAuthzFailure({ route: location.pathname, reason: 'unauthenticated' });
-    return <Navigate to="/auth" state={{ from: location }} replace />;
+    return <Navigate to={buildAuthRedirectTarget(location)} state={{ from: location }} replace />;
   }
 
   // Resolve effective required roles: DB override wins when present
@@ -353,17 +360,20 @@ export function ProtectedRoute({
   const devBypassAllowed = isDevBypassAllowed();
   if (isDevUser && devBypassAllowed) {
     // F3-02: registra bypass no log de auditoria com throttle por sessão
-    void supabase.rpc('log_security_event', {
-      p_event_type: 'dev_bypass_used',
-      p_resource: location.pathname,
-      p_action: 'route_access',
-      p_status: 'bypassed',
-      p_details: { roles },
-    }).then(({ error }) => {
-      if (error) log.warn('Failed to log dev bypass', { error: error.message });
-    }).then(undefined, (err: unknown) => {
-      log.warn('[ProtectedRoute] Falha ao registrar dev bypass (audit log):', err);
-    });
+    void supabase
+      .rpc('log_security_event', {
+        p_event_type: 'dev_bypass_used',
+        p_resource: location.pathname,
+        p_action: 'route_access',
+        p_status: 'bypassed',
+        p_details: { roles },
+      })
+      .then(({ error }) => {
+        if (error) log.warn('Failed to log dev bypass', { error: error.message });
+      })
+      .then(undefined, (err: unknown) => {
+        log.warn('[ProtectedRoute] Falha ao registrar dev bypass (audit log):', err);
+      });
     markTimeToMainScreen(location.pathname);
     return <>{children}</>;
   }

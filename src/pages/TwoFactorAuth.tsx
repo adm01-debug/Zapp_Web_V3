@@ -8,6 +8,10 @@ import { MFAVerify } from '@/features/auth';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { log } from '@/lib/logger';
+import {
+  clearStoredPostAuthTarget,
+  readStoredPostAuthTarget,
+} from '@/features/auth/postAuthRedirect';
 
 /** Two Factor Auth. */
 export default function TwoFactorAuth() {
@@ -15,6 +19,7 @@ export default function TwoFactorAuth() {
   const { user, loading } = useAuth();
   const { getAssuranceLevel, fetchFactors } = useMFA();
   const [needsVerification, setNeedsVerification] = useState(false);
+  const nextPath = readStoredPostAuthTarget() ?? '/';
 
   useEffect(() => {
     // Aguarda o bootstrap de sessão antes de decidir (evita bounce falso para /auth).
@@ -38,11 +43,13 @@ export default function TwoFactorAuth() {
         } else {
           // Already verified (aal2) OR no MFA configured (aal1→aal1):
           // nothing to verify — go to home instead of spinning forever.
-          navigate('/', { replace: true });
+          clearStoredPostAuthTarget();
+          navigate(nextPath, { replace: true });
         }
       } else {
         // Falha ao obter assurance level — não bloquear o usuário.
-        navigate('/', { replace: true });
+        clearStoredPostAuthTarget();
+        navigate(nextPath, { replace: true });
       }
     };
 
@@ -50,7 +57,7 @@ export default function TwoFactorAuth() {
     return () => {
       cancelled = true;
     };
-  }, [user, loading, navigate, getAssuranceLevel, fetchFactors]);
+  }, [user, loading, navigate, getAssuranceLevel, fetchFactors, nextPath]);
 
   if (!needsVerification) {
     return (
@@ -73,18 +80,31 @@ export default function TwoFactorAuth() {
         <MFAVerify
           title="Verificação Necessária"
           description="Para continuar, verifique sua identidade com 2FA"
-          onSuccess={() => navigate('/')}
+          onSuccess={() => {
+            clearStoredPostAuthTarget();
+            navigate(nextPath, { replace: true });
+          }}
           onCancel={() => {
             // Sign out and go back to login
             supabase.auth
               .signOut()
-              .then(() => navigate('/auth'))
+              .then(() => {
+                clearStoredPostAuthTarget();
+                navigate('/auth');
+              })
               .catch((err) => log.warn('[2FA] signOut failed:', err));
           }}
         />
 
         <div className="mt-4 text-center">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/auth')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              clearStoredPostAuthTarget();
+              navigate('/auth');
+            }}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Voltar para login
           </Button>

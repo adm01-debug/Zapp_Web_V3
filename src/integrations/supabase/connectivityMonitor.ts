@@ -8,7 +8,7 @@
  *
  * O caso 2 NÃO é coberto por `navigator.onLine` e era o buraco do F19: o app
  * ficava mudo quando o Supabase caía. O monitor faz um heartbeat periódico em
- * `${SUPABASE_RESOLVED_URL}/auth/v1/health` com timeout curto e considera
+ * `${SUPABASE_RESOLVED_URL}/functions/v1/health-check` com timeout curto e considera
  * "alcançável" QUALQUER resolução do fetch. O probe usa `mode: 'no-cors'` SEM
  * headers custom (GET simples, sem preflight CORS): a resposta é opaca (status
  * 0, invisível para o JS), mas se o fetch resolveu, a rede/back-end respondeu,
@@ -126,11 +126,11 @@ export async function pingSupabaseBackend(force = false): Promise<boolean> {
     // reiniciando rotas) = alcançável. TypeError só ocorre em falha real de
     // rede/DNS/timeout. Isso elimina o falso backend-down de produção causado
     // pelo preflight do header apikey durante o restart do Kong.
-    // NOTA (fix 2026-08-24): o 401 visível em logs de producao NAO vem deste
-    // probe (modo no-cors retorna resposta opaca — status HTTP invisivel ao
-    // browser). A fonte real era supabase.auth.getUser() chamado a cada montagem
-    // de useMessageSignature.ts; corrigido para useAuth().user (sem HTTP).
-    await fetch(`${url}/auth/v1/health`, {
+    // 2026-08-27: o probe saiu de /auth/v1/health para uma rota pública 200.
+    // Motivo: embora o JS ignore o status em no-cors, o browser ainda exibia
+    // 401 no console, confundindo a triagem. `health-check` preserva o objetivo
+    // do heartbeat e elimina esse ruído visual.
+    await fetch(`${url}/functions/v1/health-check`, {
       method: 'GET',
       mode: 'no-cors',
       cache: 'no-store',

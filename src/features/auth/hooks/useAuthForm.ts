@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useWebAuthn } from '@/hooks/useWebAuthn';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { getLogger } from '@/lib/logger';
+import {
+  clearStoredPostAuthTarget,
+  readStoredPostAuthTarget,
+  sanitizePostAuthTarget,
+} from '@/features/auth/postAuthRedirect';
 import {
   checkAccountLock,
   recordFailedLogin,
@@ -50,11 +55,21 @@ export interface LockStatus {
 /** Hook: use Auth Form. */
 export function useAuthForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   // Preserve OAuth consent redirect (or any post-login target) across sign-in
   // flows. Only accept same-origin relative paths ("/...") to avoid open-redirect.
-  const rawNext = searchParams.get('next');
-  const nextPath = rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
+  const stateFrom = location.state as {
+    from?: { pathname?: string; search?: string; hash?: string };
+  } | null;
+  const nextFromState = stateFrom?.from?.pathname
+    ? `${stateFrom.from.pathname}${stateFrom.from.search ?? ''}${stateFrom.from.hash ?? ''}`
+    : null;
+  const nextPath =
+    sanitizePostAuthTarget(searchParams.get('next')) ??
+    sanitizePostAuthTarget(nextFromState) ??
+    readStoredPostAuthTarget() ??
+    '/';
   const { user, signIn, signUp } = useAuth();
   const {
     isSupported,
@@ -117,14 +132,19 @@ export function useAuthForm() {
           const { data: factors } = await supabase.auth.mfa.listFactors();
           const hasVerifiedTotp = (factors?.totp ?? []).some((f) => f.status === 'verified');
           if (hasVerifiedTotp) {
-            log.warn('[useAuthForm] MFA exception com fator verified — exigindo /2fa (E52)', { err });
+            log.warn('[useAuthForm] MFA exception com fator verified — exigindo /2fa (E52)', {
+              err,
+            });
             navigate('/2fa', { replace: true });
             return;
           }
         } catch {
-          log.warn('[useAuthForm] MFA check indisponível sem fatores — seguindo fluxo (E52)', { err });
+          log.warn('[useAuthForm] MFA check indisponível sem fatores — seguindo fluxo (E52)', {
+            err,
+          });
         }
       }
+      clearStoredPostAuthTarget();
       navigate(path, { replace: true });
     },
     [navigate]

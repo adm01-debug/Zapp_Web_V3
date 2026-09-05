@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ProtectedRoute, __resetDevBypassBlockLogForTest } from '../ProtectedRoute';
 
 /**
@@ -78,13 +78,23 @@ function applyAuthState() {
   });
 }
 
+function AuthPageProbe() {
+  const location = useLocation();
+  return (
+    <div>
+      <div>AUTH_PAGE</div>
+      <div data-testid="auth-location">{`${location.pathname}${location.search}${location.hash}`}</div>
+    </div>
+  );
+}
+
 function renderProtected(ui: ReactElement, initialPath = '/admin') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/admin" element={ui} />
         <Route path="/access-denied" element={<div>PAGE_ACCESS_DENIED</div>} />
-        <Route path="/auth" element={<div>AUTH_PAGE</div>} />
+        <Route path="/auth" element={<AuthPageProbe />} />
       </Routes>
     </MemoryRouter>
   );
@@ -122,6 +132,29 @@ function findSecurityEvent(predicate: (args: Record<string, unknown>) => boolean
 }
 
 describe('ProtectedRoute — contrato RBAC do bypass dev (E51)', () => {
+  it('usuário sem sessão redireciona para /auth preservando a rota original em ?next=', async () => {
+    authState.user = null;
+    authState.roles = [];
+    applyAuthState();
+    mockSupabase.supabase.auth.getSession.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+
+    renderProtected(
+      <ProtectedRoute>
+        <div>SECRET_CHILDREN</div>
+      </ProtectedRoute>,
+      '/admin?tab=roles#members'
+    );
+
+    expect(await screen.findByText('AUTH_PAGE')).toBeInTheDocument();
+    expect(screen.queryByText('SECRET_CHILDREN')).not.toBeInTheDocument();
+    expect(screen.getByTestId('auth-location').textContent).toBe(
+      '/auth?next=%2Fadmin%3Ftab%3Droles%23members'
+    );
+  });
+
   describe('produção (VITE_APP_ENV=production)', () => {
     beforeEach(() => {
       vi.stubEnv('VITE_APP_ENV', 'production');
@@ -277,7 +310,7 @@ describe('ProtectedRoute — contrato RBAC do bypass dev (E51)', () => {
       }
     });
 
-    it('em rota protegida com loading eterno redireciona para /auth?reason=timeout (comportamento histórico)', () => {
+    it('em rota protegida com loading eterno redireciona para /auth?reason=timeout preservando ?next=', () => {
       vi.useFakeTimers();
       try {
         authState.loading = true;
@@ -296,6 +329,9 @@ describe('ProtectedRoute — contrato RBAC do bypass dev (E51)', () => {
 
         expect(screen.getByText('AUTH_PAGE')).toBeInTheDocument();
         expect(screen.queryByText('CHILDREN')).not.toBeInTheDocument();
+        expect(screen.getByTestId('auth-location').textContent).toBe(
+          '/auth?reason=timeout&next=%2Fadmin'
+        );
       } finally {
         vi.useRealTimers();
       }

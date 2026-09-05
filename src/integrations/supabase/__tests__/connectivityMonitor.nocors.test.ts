@@ -65,8 +65,8 @@ describe('connectivityMonitor — probe no-cors (falso backend-down por CORS)', 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
 
-    // GET simples no health endpoint.
-    expect(url).toContain('/auth/v1/health');
+    // GET simples no health endpoint público.
+    expect(url).toContain('/functions/v1/health-check');
     expect(init.method).toBe('GET');
 
     // Sem preflight: mode no-cors e NENHUM header custom (nem apikey, nem
