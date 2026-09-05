@@ -1,7 +1,9 @@
 # 📊 Diagrama ER — ZAPP WEB (Supabase Self-Hosted)
 
-> **Schemas reais**: `zapp` (315 tabelas) e `evo` (193 tabelas).
-> Auditado via MCP em 2026-07-15. Versão anterior usava nomes sem prefixo de schema.
+> **Schemas reais (medidos ao vivo em 2026-09-05, `pg_class`)**: `zapp` **387** tabelas base · `evo` **76**.
+> As contagens antigas deste arquivo (315/193, auditoria de 2026-07-15) estavam desatualizadas —
+> o catálogo completo e atual (tabelas, colunas, comments) é gerado em
+> [`DICIONARIO-BANCO.md`](./DICIONARIO-BANCO.md); este diagrama cobre só as entidades centrais.
 
 ## Schema `evo` — Evolution API (fonte de mensagens)
 

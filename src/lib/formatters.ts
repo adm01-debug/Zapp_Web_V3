@@ -78,6 +78,17 @@ export function formatBRL(value: number): string {
   }).format(value);
 }
 
+/**
+ * Normaliza um valor monetário digitado pelo usuário para centavos (2 casas),
+ * evitando que artefatos de float64 (ex.: "19.999999", 0.1 + 0.2) cheguem ao
+ * NUMERIC do banco. Retorna NaN para entrada inválida — o chamador decide.
+ */
+export function normalizeMoney(value: string | number): number {
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * 100) / 100;
+}
+
 // ─── Text Formatting ────────────────────────────────────────────────
 
 /**
