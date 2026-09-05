@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# commit-msg — aplica .commitlintrc.json (config-conventional + regras do repo).
+# AUD-22D 2026-09-05: antes o commitlint estava instalado e configurado mas nenhum hook o chamava.
+bunx commitlint --edit "$1"

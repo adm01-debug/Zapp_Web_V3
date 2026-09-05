@@ -2,19 +2,24 @@
 
 **Última verificação:** 2026-09-05 (re-auditoria técnica 22 dimensões — `docs/audits/AUDITORIA-TECNICA-22D-20260905.md`; anterior: 2026-09-02)
 **Follow-up 2026-09-03:** item #5 do top-10 ROI da auditoria (lint-staged sem `exit 0`) resolvido — PR #1509.
-**Follow-up 2026-09-05:** itens #2 (CI verde), #3 (testes reconnect), #6 (paginação, PR #1514) e #1 (wpp2 religado) da auditoria de 02/09 confirmados resolvidos; migration `20260903210000` aplicada no banco **sem registro** em `schema_migrations`.
+**Follow-up 2026-09-05:** itens #2 (CI verde), #3 (testes reconnect), #6 (paginação, PR #1514) e #1 (wpp2 religado) da auditoria de 02/09 confirmados resolvidos; migration `20260903210000` aplicada no banco **sem registro** em `schema_migrations` → registrada na mesma sessão (+ duplicatas sicoob removidas; as 3 versões de 20/08 seguem só no banco, documentadas na auditoria). Também nesta sessão: `quality-gate` virou required check, typecheck bloqueante, `commit-msg` hook, `evolution-webhook` fail-closed, `GOTRUE_PASSWORD_MIN_LENGTH=8` no `supabase_auth`, `bun.lock` deduplicado + `xlsx` via npm.
 → Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
 
-## 🔴 DISCO DA VPS A 98 % — detectado 2026-09-05 (P0 operacional, ação pendente)
+## 🟡 DISCO DA VPS — 98 % em 2026-09-05 03:20Z → **80 % após ação** (03:40Z)
 
-Medido ao vivo (`df` no host via `/dev/sda1`): **194 GB, 189 GB usados, 5,3 GB livres**.
+Medido ao vivo (`df` no host via `/dev/sda1`): **194 GB, 189 GB usados, 5,3 GB livres** às 03:20Z.
+**Ação executada na mesma sessão:** `docker service update --force` nos 7 runners do stack
+`github-actions-runner` (todos ociosos no GitHub) → **154 GB usados, 40 GB livres (80 %)**;
+4 registros de runner órfãos (offline) removidos no GitHub. Causa raiz permanece: a camada
+gravável dos runners cresce ~1 GB/dia por workspaces de build; `docker-housekeeping` não a
+cobre. Defesa automática (`disk-actioner`) segue em `shadow_mode=true` — decisão do dono.
 Em 02/09 estava em 85 %. `docker system df`: imagens 39,9 GB (8,0 GB recuperáveis),
 containers 39,8 GB, volumes 60,9 GB. A camada gravável dos **7 runners self-hosted do
 GitHub Actions soma ~34 GB** (`runner6` 7,4 · `runner3` 7,3 · `runner` 6,5 · `runner4` 4,8 ·
 `runner2` 2,9 · `runner5` 2,6 · `runner-evo` 2,4) — recuperável com
 `docker service update --force` em cada runner. `disk-monitor`, `disk-deep-clean` e
 `disk-actioner` estão rodando há 10 dias e o disco continuou subindo (detecção sem ação).
-Relatório: `docs/audits/AUDITORIA-TECNICA-22D-20260905.md` §1.2.
+Relatório: `docs/audits/AUDITORIA-TECNICA-22D-20260905.md` §1.2 e §8.
 
 ## ✅ INGESTÃO WHATSAPP RESTABELECIDA — 2026-09-03 (incidente de 25/08 fechado)
 

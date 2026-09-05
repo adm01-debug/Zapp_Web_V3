@@ -31,6 +31,9 @@ version: "3.7"
 #   healthcheck curl (GET :4000/healthcheck) + cap_drop seletivo 12-cap (runtime; ALL nao validado p/ BEAM)
 # SYNC-TOTAL-2026-08-18 (Hermes): espelho do repo = file do Portainer (fonte da verdade).
 
+# PWD-MIN-2026-09-05 (Claude, AUD-22D): auth GOTRUE_PASSWORD_MIN_LENGTH=8 (policy de senha
+#   deixou de ser só do frontend; aplicado no servico supabase_auth via service update).
+
 services:
   studio:
     image: supabase/studio:2026.06.29-sha-20290c7
@@ -252,6 +255,7 @@ services:
       - GOTRUE_SESSIONS_MAX_USER_SESSIONS=10
       - GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED=true
       - GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL=10
+      - GOTRUE_PASSWORD_MIN_LENGTH=8
       - GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED=true
     security_opt:
       - no-new-privileges:true

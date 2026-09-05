@@ -70,7 +70,8 @@ export function PaymentLinksView() {
 
   const createLink = async () => {
     if (!formTitle.trim() || !formAmount) return;
-    const amount = parseFloat(formAmount);
+    // Normaliza para centavos: evita 19.999999 em float64 chegar ao NUMERIC do banco.
+    const amount = Math.round(parseFloat(formAmount) * 100) / 100;
     if (isNaN(amount) || amount <= 0) return;
 
     // Generate a simple payment URL (in production would integrate with Stripe/payment provider)
