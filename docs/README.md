@@ -53,6 +53,7 @@
 | [AUDIT_REPORT.md](./AUDIT_REPORT.md) | Relatório de auditoria |
 | [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md) | Plano de melhorias |
 | [FORGOTTEN_FEATURES_REPORT.md](./FORGOTTEN_FEATURES_REPORT.md) | Features esquecidas |
+| [plano-evolution-2026-09/PLANO_100_ETAPAS.md](./plano-evolution-2026-09/PLANO_100_ETAPAS.md) | **Plano de correção Evolution API — 100 etapas** (auditoria 2026-09-02) |
 
 ### 📝 Procedimentos e Templates
 | Documento | Descrição |
