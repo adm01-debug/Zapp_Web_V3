@@ -30,7 +30,10 @@ interface RegistryEntry {
 
 const registry: Record<string, RegistryEntry> = {};
 
-const files = readdirSync(UI_DIR);
+// readdirSync não garante ordem estável entre SOs/filesystems — sem o sort,
+// cada ambiente (CI vs local) produz uma ordem de chaves diferente no JSON,
+// gerando diff só de reordenação a cada rebuild.
+const files = readdirSync(UI_DIR).sort();
 for (const file of files) {
   if (file.endsWith('.tsx')) {
     const content = readFileSync(join(UI_DIR, file), 'utf-8');
