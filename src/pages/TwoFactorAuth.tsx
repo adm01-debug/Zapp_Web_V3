@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from '@/components/ui/motion';
 import { Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/features/auth';
@@ -9,12 +9,29 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { log } from '@/lib/logger';
 
+/** Caminho relativo same-origin seguro para redirect pós-2FA (mesmo critério de useAuthForm). */
+function isSafeRelativePath(path: string | null | undefined): path is string {
+  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//');
+}
+
 /** Two Factor Auth. */
 export default function TwoFactorAuth() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading } = useAuth();
   const { getAssuranceLevel, fetchFactors } = useMFA();
   const [needsVerification, setNeedsVerification] = useState(false);
+
+  // E71: preserva o destino original (ProtectedRoute/redirectAfterAuth chegam
+  // aqui com state.from) — sem isso, completar o 2FA sempre jogava o usuário
+  // para "/" mesmo quando a intenção era, por exemplo, voltar para /crm.
+  const stateFrom = (
+    location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null
+  )?.from;
+  const rawDestPath = stateFrom?.pathname
+    ? `${stateFrom.pathname}${stateFrom.search ?? ''}${stateFrom.hash ?? ''}`
+    : null;
+  const destination = isSafeRelativePath(rawDestPath) ? rawDestPath : '/';
 
   useEffect(() => {
     // Aguarda o bootstrap de sessão antes de decidir (evita bounce falso para /auth).
@@ -37,12 +54,12 @@ export default function TwoFactorAuth() {
           setNeedsVerification(true);
         } else {
           // Already verified (aal2) OR no MFA configured (aal1→aal1):
-          // nothing to verify — go to home instead of spinning forever.
-          navigate('/', { replace: true });
+          // nothing to verify — segue para o destino original em vez de girar para sempre.
+          navigate(destination, { replace: true });
         }
       } else {
         // Falha ao obter assurance level — não bloquear o usuário.
-        navigate('/', { replace: true });
+        navigate(destination, { replace: true });
       }
     };
 
@@ -50,7 +67,7 @@ export default function TwoFactorAuth() {
     return () => {
       cancelled = true;
     };
-  }, [user, loading, navigate, getAssuranceLevel, fetchFactors]);
+  }, [user, loading, navigate, getAssuranceLevel, fetchFactors, destination]);
 
   if (!needsVerification) {
     return (
@@ -73,7 +90,7 @@ export default function TwoFactorAuth() {
         <MFAVerify
           title="Verificação Necessária"
           description="Para continuar, verifique sua identidade com 2FA"
-          onSuccess={() => navigate('/')}
+          onSuccess={() => navigate(destination, { replace: true })}
           onCancel={() => {
             // Sign out and go back to login
             supabase.auth
