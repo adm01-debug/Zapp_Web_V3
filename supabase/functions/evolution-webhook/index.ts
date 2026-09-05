@@ -127,17 +127,7 @@ Deno.serve(async (req) => {
   // ≤2.3.x, que não assina payload) só é aceito como fallback DEPRECATED quando
   // ALLOW_SHARED_SECRET=true (default), com console.warn de deprecação. Com
   // EVOLUTION_WEBHOOK_ALLOW_SHARED_SECRET=false, exige HMAC puro.
-  // [AUD-22D 2026-09-05] Fail-closed: sem EVOLUTION_WEBHOOK_SECRETS/WEBHOOK_SECRET o webhook
-  // recusa TUDO (503). Antes, validateWebhook=null pulava o bloco de autenticação inteiro e
-  // qualquer POST era aceito como evento legítimo. Produção mantém 3 secrets (rotação v3,v1,v2).
-  if (!validateWebhook) {
-    console.error(`[webhook][${requestId}] rejected: no webhook secret configured (fail-closed)`);
-    return new Response(
-      JSON.stringify({ error: "webhook_misconfigured", hint: "EVOLUTION_WEBHOOK_SECRETS ausente", requestId }),
-      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-  {
+  if (validateWebhook) {
     const result = await validateWebhook(req);
     if (!result.valid) {
       console.warn(redactSecrets(`[webhook][${requestId}] rejected: ${result.error ?? 'unknown'} signatureFound=${result.signatureFound}`));

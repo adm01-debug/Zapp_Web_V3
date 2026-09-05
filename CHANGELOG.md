@@ -9,7 +9,6 @@
 ### Segurança
 - RLS: bypass de DELETE em 8 tabelas de config corrigido (`20260902220000`)
 - `public.rpc_e2e_*` sem guard de auth: EXECUTE revogado (`20260903210000`, PR #1507)
-- `evolution-webhook`: fail-closed (503) quando nenhum secret HMAC está configurado
 - GoTrue: `GOTRUE_PASSWORD_MIN_LENGTH=8` (policy de senha deixou de ser só do frontend)
 
 ### CI/CD e qualidade

@@ -2,7 +2,7 @@
 
 **Última verificação:** 2026-09-05 (re-auditoria técnica 22 dimensões — `docs/audits/AUDITORIA-TECNICA-22D-20260905.md`; anterior: 2026-09-02)
 **Follow-up 2026-09-03:** item #5 do top-10 ROI da auditoria (lint-staged sem `exit 0`) resolvido — PR #1509.
-**Follow-up 2026-09-05:** itens #2 (CI verde), #3 (testes reconnect), #6 (paginação, PR #1514) e #1 (wpp2 religado) da auditoria de 02/09 confirmados resolvidos; migration `20260903210000` aplicada no banco **sem registro** em `schema_migrations` → registrada na mesma sessão (+ duplicatas sicoob removidas; as 3 versões de 20/08 seguem só no banco, documentadas na auditoria). Também nesta sessão: `quality-gate` virou required check, typecheck bloqueante, `commit-msg` hook, `evolution-webhook` fail-closed, `GOTRUE_PASSWORD_MIN_LENGTH=8` no `supabase_auth`, `bun.lock` deduplicado + `xlsx` via npm.
+**Follow-up 2026-09-05:** itens #2 (CI verde), #3 (testes reconnect), #6 (paginação, PR #1514) e #1 (wpp2 religado) da auditoria de 02/09 confirmados resolvidos; migration `20260903210000` aplicada no banco **sem registro** em `schema_migrations` → registrada na mesma sessão (+ duplicatas sicoob removidas; as 3 versões de 20/08 seguem só no banco, documentadas na auditoria). Também nesta sessão: `quality-gate` virou required check, typecheck bloqueante, `commit-msg` hook, `GOTRUE_PASSWORD_MIN_LENGTH=8` no `supabase_auth`, `bun.lock` deduplicado + `xlsx` via npm.
 → Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
 
 ## 🟡 DISCO DA VPS — 98 % em 2026-09-05 03:20Z → **80 % após ação** (03:40Z)
