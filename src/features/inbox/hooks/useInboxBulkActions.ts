@@ -88,9 +88,25 @@ export function useInboxBulkActions({ refetch, filteredConversations }: UseInbox
         } else {
           updateData.queue_id = targetId;
         }
-        const { error } = await dbFrom('contacts').update(updateData).in('id', contactIds);
+        // E71/plano-canônico 041: sem .select(), zero linhas afetadas (RLS
+        // negando ou IDs já não existentes) ainda mostrava "N contato(s)
+        // transferido(s)" — sucesso falso sobre uma escrita que não ocorreu.
+        const { data: updated, error } = await dbFrom('contacts')
+          .update(updateData)
+          .in('id', contactIds)
+          .select('id');
         if (error) throw error;
-        toast.success(`${contactIds.length} contato(s) transferido(s)`);
+        const updatedCount = updated?.length ?? 0;
+        if (updatedCount === 0) {
+          throw new Error('Nenhum contato foi atualizado — permissão negada ou IDs inexistentes.');
+        }
+        if (updatedCount < contactIds.length) {
+          toast.warning(
+            `${updatedCount} de ${contactIds.length} contato(s) transferido(s) — os demais não puderam ser atualizados.`
+          );
+        } else {
+          toast.success(`${updatedCount} contato(s) transferido(s)`);
+        }
         clearSelection();
         refetch();
       } catch {
