@@ -5,6 +5,7 @@ import { Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { useMFA } from '@/features/auth';
 import { MFAVerify } from '@/features/auth';
+import { needsMfaChallenge } from '@/features/auth/hooks/mfaAssurance';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { log } from '@/lib/logger';
@@ -19,7 +20,7 @@ export default function TwoFactorAuth() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading } = useAuth();
-  const { getAssuranceLevel, fetchFactors } = useMFA();
+  const { fetchFactors } = useMFA();
   const [needsVerification, setNeedsVerification] = useState(false);
 
   // E71: preserva o destino original (ProtectedRoute/redirectAfterAuth chegam
@@ -43,22 +44,25 @@ export default function TwoFactorAuth() {
 
     let cancelled = false;
     const checkMFAStatus = async () => {
+      // fetchFactors() popula o estado 'factors' consumido pelo <MFAVerify> abaixo.
       await fetchFactors();
       if (cancelled) return;
-      const assurance = await getAssuranceLevel();
+
+      // needsMfaChallenge() é a MESMA checagem fail-closed condicional usada por
+      // ProtectedRoute e useAuthForm (mfaAssurance.ts) — antes desta correção,
+      // esta tela tinha sua própria checagem via useMFA().getAssuranceLevel(),
+      // que era fail-OPEN em qualquer erro (rede/GoTrue). Isso permitia que uma
+      // instabilidade sustentada anulasse o gate: o ProtectedRoute barrava
+      // corretamente (fail-closed) e redirecionava pra cá, mas esta tela então
+      // liberava o usuário sem pedir o código, sob a mesma instabilidade.
+      const required = await needsMfaChallenge();
       if (cancelled) return;
 
-      if (assurance) {
-        // If user has MFA setup but hasn't verified this session
-        if (assurance.currentLevel === 'aal1' && assurance.nextLevel === 'aal2') {
-          setNeedsVerification(true);
-        } else {
-          // Already verified (aal2) OR no MFA configured (aal1→aal1):
-          // nothing to verify — segue para o destino original em vez de girar para sempre.
-          navigate(destination, { replace: true });
-        }
+      if (required) {
+        setNeedsVerification(true);
       } else {
-        // Falha ao obter assurance level — não bloquear o usuário.
+        // Já verificado (aal2) OU sem fator TOTP configurado: nada a verificar
+        // — segue para o destino original em vez de girar para sempre.
         navigate(destination, { replace: true });
       }
     };
@@ -67,7 +71,7 @@ export default function TwoFactorAuth() {
     return () => {
       cancelled = true;
     };
-  }, [user, loading, navigate, getAssuranceLevel, fetchFactors, destination]);
+  }, [user, loading, navigate, fetchFactors, destination]);
 
   if (!needsVerification) {
     return (
