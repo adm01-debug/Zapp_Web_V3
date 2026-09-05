@@ -1,1 +1,68 @@
-IyBBRFItMDAzOiBSZXZlcnRlciBidWNrZXQgd2hhdHNhcHAtbWVkaWEgcGFyYSBQcml2YWRvCgojIyBNZXRhZGFkb3MKCnwgQXRyaWJ1dG8gfCBWYWxvciB8CnwtLS0tLS0tLS0tLS0tfC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLXwKfCBTdGF0dXMgfCBBQ0VJVEEgfAp8IERhdGEgfCAyMDI2LTA3LTI2IHwKfCBEZWNpc29yZXMgfCBFcXVpcGUgZGUgU2VndXJhbsOnYSAvIFBsYW5vIDUwIEV0YXBhcyAoRTEwKSB8CnwgUmV2b2dhIHwgQURSLTAwMiAoVG9ybmFyIHdoYXRzYXBwLW1lZGlhIHDDumJsaWNvKSB8CgojIyBDb250ZXh0bwoKRW0gMjYvMDcvMjAyNiwgZHVyYW50ZSBhdWRpdG9yaWEgZGUgc2VndXJhbsOnYSwgZm9pIGlkZW50aWZpY2FkbyBxdWU6CgotIE8gYnVja2V0IGB3aGF0c2FwcC1tZWRpYWAgZXN0YXZhIGNvbmZpZ3VyYWRvIGNvbW8gUMOaQkxJQ08gZGVzZGUgYXByb3guIDE3LzA2LzIwMjYKLSA0LjY4MCBhcnF1aXZvcyBkZSBtw61kaWEgV2hhdHNBcHAgZXN0YXZhbSBhY2Vzc8OtdmVpcyBzZW0gYXV0ZW50aWNhw6fDo28KLSBFc3NlcyBhcnF1aXZvcyBjb250w6ptIG1lbnNhZ2VucywgZm90b3MsIGF1ZMOtb3MgZSBkb2N1bWVudG9zIGRlIGNvbnZlcnNhcyBkZSBjbGllbnRlcwotIFZpb2xhw6fDo28gZGEgTEdQRCBBcnQuIDQ2OiBmYWx0YSBkZSBtZWRpZGFzIGFkZXF1YWRhcyBkZSBzZWd1cmFuw6dhCgojIyBEZWNpc8OjbwoKKipSZXZlcnRlciBvIGJ1Y2tldCBgd2hhdHNhcHAtbWVkaWFgIHBhcmEgUFJJVkFETyBpbWVkaWF0YW1lbnRlKiogZSBpbXBsZW1lbnRhciBzaWduZWQgVVJMcyBjb20gY2FjaGUgZGUgNTAgbWludXRvcy4KCiMjIEp1c3RpZmljYXRpdmEKCiMjIyBDb250cmEgbWFudGVyIHDDumJsaWNvIChBRFItMDAyKToKCi0gKipMR1BEKiogOiBBcnQuIDQ2IOKAlCBvcGVyYWRvcmVzIGRlIGRhZG9zIGRldmVtIGFkb3RhciBtZWRpZGFzIGFkZXF1YWRhcyBkZSBzZWd1cmFuw6dhCi0gKipFeHBvc2nDp8OjbyBkZSBQSUkqKjogZm90b3MsIMOhdWRpb3MgZSBkb2N1bWVudG9zIGRlIGNvbnZlcnNhcyBwcml2YWRhcyBhY2Vzc8OtdmVpcyBzZW0gYXV0aCBwb3IgcXVhbHF1ZXIgcGVzc29hIGNvbSBhIFVSTAotICoqU3VwZXJmw61jaWUgZGUgYXRhcXVlKio6IFVSTHMgcMO6YmxpY2FzIHPDo28gaW5kZXhhZGFzIHBvciBtZWNhbmlzbW9zIGRlIGJ1c2NhLCBub3QgcmVjb3JkZXJzLCBldGMuCi0gKipOw6NvIG7DqWNlc3NhcmlvKio6IE8gcHJvYmxlbWEgTisxIGRlIHNpZ25lZCBVUkxzIGZvaSByZXNvbHZpZG8gY29tIGJhdGNoIHNpZ25pbmcKCiMjIyBBIGZhdm9yIGRlIHNpZ25lZCBVUkxzIChBRFItMDAzKToKCi0gKipTZWd1cmFuw6dhKio6IGFwZW5hcyB1c3XDoXJpb3MgYXV0ZW50aWNhZG9zIHBvZGVtIGFjZXNzYXIgbcOtZGlhCi0gKipQZXJmb3JtYW5jZSBlcXVpdmFsZW50ZSoqOiBiYXRjaCBzaWduaW5nID0gMSBjaGFtYWRhIHBvciBidWNrZXQgcG9yIHJlbmRlciBjeWNsZSAoNDUwIFBPU1RzIOKGkiAxIFBPU1QpCi0gKipUVEwgZGUgNjBtaW4qKjogVVJMcyBhc3NpbmFkYXMgZHVyYW0gNjBtaW47IGNhY2hlIGRlIDUwbWluIG5vIGNsaWVudGUKLSAqKlByYWTDo28gaW5kdXN0cmlhbCoqOiDDqSBhIGFycXVpdGV0dXJhIGVzcGVyYWRhIGNvbSBTdXBhYmFzZSBTdG9yYWdlCgojIyBDb25zZXF1w6puY2lhcwoKIyMjIEltZWRpYXRhcyAoMjYvMDcvMjAyNik6CgotIFtdIEV4ZWN1dGFybzogYFVQREFURSBzdG9yYWdlLmJ1Y2tldHMgU0VUIHBkYmxpYyA9IGZhbHNlIFdIRVJFIGlkID0gJ3doYXRzYXBwLW1lZGlhJzsgYCDigJQgKipGRUlUTyoqCi0gW10gQXR1YWxpemFyIGBQVUJMSUNfQlVDS0VUU2AgZW0gYHVzZU1lZGlhVXJsLnRzYCAtICoqRkVJVE8qKgotIFtdIEltcGxlbWVudGFyIGB1c2VTaWduZWRNZWRpYVVybEJhdGNoKClgIC0gKipGRUlUTyoqCgojIyMgRnV0dXJhcyAocGFyYSBvIHRpbWUpOgoKLSBbIF0gQXR1YWxpemFyIGNhbGxlcnMgZG8gYHJlc29sdmVQdWJsaWNNZWRpYVVybCgpYCBwYXJhIHVzYXIgYHVzZVNpZ25lZE1lZGlhVXJsQmF0Y2goKWAgbm8gbsOtdmVsIGRhIGxpc3RhCi0gWyBdIFRlc3RhciBxdWUgbcOtZGlhcyByZW5kZXJpemFtIGNvcnJldGFtZW50ZSBjb20gc2lnbmVkIFVSTHMKLSBbIF0gQXZhbGlhciBub3RpZmljYcOnw6NvIExHUEQgYW9zIHVzdcOhcmlvcyBhZmV0YWRvcyAoMzkgZGlhcyBkZSBleHBvc2nDp8OzZXMpCgojIyBBZMOqbmRvIGRlIFJlZ2lzdHJvCgp8IERhdGEgfCBFdmVudG8gfAp8LS0tLS0tLS0tLS0tLS18LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS18CnwgMTcvMDYvMjAyNiB8IEJ1Y2tldCB0b3JuYWRvIHDDumJsaWNvIChBRFItMDAyIC0gcGVyZm9ybWFuY2UpIHwKfCAyNi8wNy8yMDI2IHwgQXVkaXRvcmlhIGRldGVjdGEgdmlvbGHDp8OjbyBMR1BEIHwKfCAyNi8wNy8yMDI2IHwgYnVja2V0IHJldmVydGlkbyBwYXJhIHByaXZhZG8gKEFEUi0wMDMpIHwKfCAyNi8wNy8yMDI2IHwgYHVzZVNpZ25lZE1lZGlhVXJsQmF0Y2goKWAgaW1wbGVtZW50YWRvIHwKCiMjIFJlZmVyw6puY2lhcwoKLSBQbGFubyA1MCBFdGFwYXMg4oCUIEV0YXBhIDEwCi0gYGRvY3Mvc2VjdXJpdHkvQ1JFREVOVElBTC1ST1RBVElPTi1SVU5CT09LLm1kYAotIGBzcmMvbGliL3VzZU1lZGlhVXJsLnRzYCAgKGltcGxlbWVudGHDp8OjbyBkbyBiYXRjaCBzaWduaW5nKQo="
+# ADR-003: Reverter bucket whatsapp-media para Privado
+
+## Metadados
+
+| Atributo  | Valor                                       |
+| --------- | ------------------------------------------- |
+| Status    | ACEITA                                      |
+| Data      | 2026-07-26                                  |
+| Decisores | Equipe de Segurança / Plano 50 Etapas (E10) |
+| Revoga    | ADR-002 (Tornar whatsapp-media público)     |
+
+## Contexto
+
+Em 26/07/2026, durante auditoria de segurança, foi identificado que:
+
+- O bucket `whatsapp-media` estava configurado como PÚBLICO desde aprox. 17/06/2026
+- 4.680 arquivos de mídia WhatsApp estavam acessíveis sem autenticação
+- Esses arquivos contêm mensagens, fotos, áudios e documentos de conversas de clientes
+- Violação da LGPD Art. 46: falta de medidas adequadas de segurança
+
+## Decisão
+
+**Reverter o bucket `whatsapp-media` para PRIVADO imediatamente** e implementar signed URLs com cache de 50 minutos.
+
+## Justificativa
+
+### Contra manter público (ADR-002):
+
+- **LGPD** : Art. 46 — operadores de dados devem adotar medidas adequadas de segurança
+- **Exposição de PII**: fotos, áudios e documentos de conversas privadas acessíveis sem auth por qualquer pessoa com a URL
+- **Superfície de ataque**: URLs públicas são indexadas por mecanismos de busca, not recorders, etc.
+- **Não necessário**: O problema N+1 de signed URLs foi resolvido com batch signing
+
+### A favor de signed URLs (ADR-003):
+
+- **Segurança**: apenas usuários autenticados podem acessar mídia
+- **Performance equivalente**: batch signing = 1 chamada por bucket por render cycle (450 POSTs → 1 POST)
+- **TTL de 60min**: URLs assinadas duram 60min; cache de 50min no cliente
+- **Padrão industrial**: é a arquitetura esperada com Supabase Storage
+
+## Consequências
+
+### Imediatas (26/07/2026):
+
+- [x] Executar: `UPDATE storage.buckets SET public = false WHERE id = 'whatsapp-media'; ` — **FEITO**
+- [x] Atualizar `PUBLIC_BUCKETS` em `useMediaUrl.ts` - **FEITO**
+- [x] Implementar `useSignedMediaUrlBatch()` - **FEITO**
+
+### Futuras (para o time):
+
+- [ ] Atualizar callers do `resolvePublicMediaUrl()` para usar `useSignedMediaUrlBatch()` no nível da lista
+- [ ] Testar que mídias renderizam corretamente com signed URLs
+- [ ] Avaliar notificação LGPD aos usuários afetados (39 dias de exposições)
+
+## Adendo de Registro
+
+| Data       | Evento                                         |
+| ---------- | ---------------------------------------------- |
+| 17/06/2026 | Bucket tornado público (ADR-002 - performance) |
+| 26/07/2026 | Auditoria detecta violação LGPD                |
+| 26/07/2026 | bucket revertido para privado (ADR-003)        |
+| 26/07/2026 | `useSignedMediaUrlBatch()` implementado        |
+
+## Referências
+
+- Plano 50 Etapas — Etapa 10
+- `docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`
+- `src/lib/useMediaUrl.ts` (implementação do batch signing)

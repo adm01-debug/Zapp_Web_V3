@@ -12,7 +12,11 @@ Medido ao vivo (`df` no host via `/dev/sda1`): **194 GB, 189 GB usados, 5,3 GB l
 `github-actions-runner` (todos ociosos no GitHub) → **154 GB usados, 40 GB livres (80 %)**;
 4 registros de runner órfãos (offline) removidos no GitHub. Causa raiz permanece: a camada
 gravável dos runners cresce ~1 GB/dia por workspaces de build; `docker-housekeeping` não a
-cobre. Defesa automática (`disk-actioner`) segue em `shadow_mode=true` — decisão do dono.
+cobre. **Fix da causa raiz (05/09 ~10:50Z):** stack `runner-janitor` (Portainer id 281; arquivo
+`infra/stacks/runner-janitor.yml`) reinicia a cada 30 min os runners ociosos com camada
+gravável > 2,5 GB (`/root/.cache` 1,8 GB de Playwright + `/root/.bun` 1,2 GB por runner;
+6 h após o reset o disco já tinha voltado a 86 %). Defesa automática (`disk-actioner`)
+segue em `shadow_mode=true` — decisão do dono.
 Em 02/09 estava em 85 %. `docker system df`: imagens 39,9 GB (8,0 GB recuperáveis),
 containers 39,8 GB, volumes 60,9 GB. A camada gravável dos **7 runners self-hosted do
 GitHub Actions soma ~34 GB** (`runner6` 7,4 · `runner3` 7,3 · `runner` 6,5 · `runner4` 4,8 ·
