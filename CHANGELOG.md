@@ -14,7 +14,7 @@
 ### CI/CD e qualidade
 - `quality-gate` passou a required check da `main`; typecheck global bloqueante
 - lint-staged bloqueante (PR #1509) + hook `commit-msg` com commitlint
-- `bun.lock` regenerado (14 chaves duplicadas removidas; `--frozen-lockfile` volta a funcionar); `xlsx` via alias npm `@e965/xlsx@0.20.3` em vez de tarball CDN
+- `bun.lock` deduplicado (13 chaves duplicadas removidas; `--frozen-lockfile` volta a funcionar); `xlsx` via alias npm `@e965/xlsx@0.20.3` em vez de tarball CDN — o pacote `xlsx` do npm parou em 0.18.5 (SheetJS distribui 0.19+ só pelo CDN próprio); `@e965/xlsx` é o espelho publicado no npm da mesma versão 0.20.3, pinado exato, e o nome `xlsx` no código não muda
 
 ### Frontend
 - Paginação incremental + patch em memória no realtime (`useZappMessages`/`useZappConversations`, PR #1514)
