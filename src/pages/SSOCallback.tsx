@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from '@/components/ui/motion';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { needsMfaChallenge } from '@/features/auth/hooks/mfaAssurance';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -32,17 +33,14 @@ export default function SSOCallback() {
 
     // SEGURANCA-01: pós-SSO o usuário com 2FA verificado mas sem challenge na
     // sessão (aal1 → aal2) vai para /2fa em vez de pular direto para '/'.
+    // needsMfaChallenge() (mfaAssurance.ts) é a mesma fonte de verdade usada
+    // por ProtectedRoute/useAuthForm/TwoFactorAuth — mesmo se esta checagem
+    // falhasse silenciosamente, a rota '/' é reguardada por ProtectedRoute
+    // (que roda a mesma checagem de novo), mas reaproveitar aqui evita ter
+    // uma quarta implementação divergente do mesmo gate.
     const redirectAfterAuth = async () => {
-      try {
-        const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (!error && data?.currentLevel === 'aal1' && data?.nextLevel === 'aal2') {
-          navigate('/2fa', { replace: true });
-          return;
-        }
-      } catch {
-        // Falha na checagem — segue o fluxo normal.
-      }
-      navigate('/', { replace: true });
+      const required = await needsMfaChallenge();
+      navigate(required ? '/2fa' : '/', { replace: true });
     };
 
     const handleCallback = async () => {

@@ -133,4 +133,17 @@ describe('ProtectedRoute — gate de 2FA/AAL2 (E71)', () => {
 
     expect(await screen.findByText('TWOFA_FROM:/crm')).toBeInTheDocument();
   });
+
+  it('defesa em profundidade: se needsMfaChallenge() rejeitar (hoje nunca acontece em produção), falha FECHADA e redireciona para /2fa em vez de travar mfaChecked para sempre', async () => {
+    mockMfaAssurance.needsMfaChallenge.mockRejectedValue(new Error('falha inesperada'));
+
+    renderProtected(
+      <ProtectedRoute>
+        <div>CRM_CHILDREN</div>
+      </ProtectedRoute>
+    );
+
+    expect(await screen.findByText('TWOFA_FROM:/crm')).toBeInTheDocument();
+    expect(screen.queryByText('CRM_CHILDREN')).not.toBeInTheDocument();
+  });
 });

@@ -110,11 +110,23 @@ export function ProtectedRoute({
       return;
     }
     let isMounted = true;
-    void needsMfaChallenge().then((required) => {
-      if (!isMounted) return;
-      setMfaChallengeRequired(required);
-      setMfaChecked(true);
-    });
+    void needsMfaChallenge().then(
+      (required) => {
+        if (!isMounted) return;
+        setMfaChallengeRequired(required);
+        setMfaChecked(true);
+      },
+      () => {
+        // needsMfaChallenge() nunca rejeita hoje (try/catch interno cobre as
+        // duas chamadas de rede) — defesa em profundidade: se isso mudar no
+        // futuro, falha FECHADA (exige o desafio) em vez de deixar mfaChecked
+        // travado em false para sempre (o safety-timer de 10s abaixo eventualmente
+        // redireciona pra /auth, mas isso converge mais rápido e falha fechado).
+        if (!isMounted) return;
+        setMfaChallengeRequired(true);
+        setMfaChecked(true);
+      }
+    );
     return () => {
       isMounted = false;
     };
