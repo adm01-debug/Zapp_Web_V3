@@ -1,25 +1,28 @@
 # ESTADO.md — Registro do que esta LIGADO
 
-**Última verificação:** 2026-09-02 (auditoria técnica 22 dimensões — sessão remota; anterior: 2026-08-25, pós-sprint feat/chat-ui-100 P01–P50)
+**Última verificação:** 2026-09-05 (re-auditoria técnica 22 dimensões — `docs/audits/AUDITORIA-TECNICA-22D-20260905.md`; anterior: 2026-09-02)
 **Follow-up 2026-09-03:** item #5 do top-10 ROI da auditoria (lint-staged sem `exit 0`) resolvido — PR #1509.
+**Follow-up 2026-09-05:** itens #2 (CI verde), #3 (testes reconnect), #6 (paginação, PR #1514) e #1 (wpp2 religado) da auditoria de 02/09 confirmados resolvidos; migration `20260903210000` aplicada no banco **sem registro** em `schema_migrations`.
 → Ver também: [docs/team-chat/ESTADO.md](./docs/team-chat/ESTADO.md)
 
-## ⚠️ INGESTÃO WHATSAPP PARADA — detectado 2026-09-02 (decisão do dono pendente)
+## 🔴 DISCO DA VPS A 98 % — detectado 2026-09-05 (P0 operacional, ação pendente)
 
-Fatos verificados ao vivo (Evolution API + banco V3):
+Medido ao vivo (`df` no host via `/dev/sda1`): **194 GB, 189 GB usados, 5,3 GB livres**.
+Em 02/09 estava em 85 %. `docker system df`: imagens 39,9 GB (8,0 GB recuperáveis),
+containers 39,8 GB, volumes 60,9 GB. A camada gravável dos **7 runners self-hosted do
+GitHub Actions soma ~34 GB** (`runner6` 7,4 · `runner3` 7,3 · `runner` 6,5 · `runner4` 4,8 ·
+`runner2` 2,9 · `runner5` 2,6 · `runner-evo` 2,4) — recuperável com
+`docker service update --force` em cada runner. `disk-monitor`, `disk-deep-clean` e
+`disk-actioner` estão rodando há 10 dias e o disco continuou subindo (detecção sem ação).
+Relatório: `docs/audits/AUDITORIA-TECNICA-22D-20260905.md` §1.2.
 
-- `wpp2` é a **única instância** na Evolution. `connectionStatus=connecting`,
-  `isHealthy=false` desde **2026-08-25T17:22:43Z** (reason 408, `ETIMEDOUT` WebSocket).
-- Última mensagem gravada em `evo.evolution_messages`: **2026-08-25T17:19:16Z**
-  (63.654 msgs nos 30 dias anteriores ao corte — o fluxo era alto até parar).
-- **RabbitMQ publisher da instância: `enabled=false` desde 2026-08-27T19:46** —
-  mesmo reconectando o WhatsApp, eventos NÃO voltam a fluir sem reabilitar.
-- Consumer (2 réplicas) healthy, 18/18 filas, zero erros — ocioso por falta de eventos.
-- O app segue vivo por outras fontes (logins, sicoob-bridge, conversas novas em 02/09).
+## ✅ INGESTÃO WHATSAPP RESTABELECIDA — 2026-09-03 (incidente de 25/08 fechado)
 
-Religar depende de dois atos, ambos decisão do dono (pode ser desligamento
-deliberado): reconectar a instância `wpp2` (possível re-pareamento QR após 8
-dias) e reabilitar o publisher RabbitMQ da instância.
+Verificado ao vivo em 2026-09-05: `wpp2` `connectionStatus=open`, publisher RabbitMQ
+`enabled=true` (reabilitado 2026-09-03T16:12Z). Primeira mensagem após o corte:
+**2026-09-03T09:57Z**; 03/09 = 1.315 msgs, 04/09 = 3.556, última em 05/09T02:42Z.
+Janela sem ingestão: 25/08 17:19 → 03/09 09:57 (**8,7 dias**). Reconexão `device_removed`
+(401) em 03/09 18:05 recuperou sozinha.
 
 
 > **Nota pós-desacoplamento (2026-08-12):** A infraestrutura da Evolution API (servidor, consumer, stacks Swarm)
