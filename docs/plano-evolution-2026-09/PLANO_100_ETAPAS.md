@@ -53,7 +53,7 @@ Congelar o estado atual antes de qualquer intervenção, para post-mortem e comp
 - [ ] E001.6 Registrar profundidade das filas RabbitMQ (`wpp2.*`, `wpp2.dlq`) via management/`rabbitmqctl list_queues`
 - [ ] E001.7 Registrar `zapp.evolution_alerts` abertos por tipo (baseline de alertas)
 - [ ] E001.8 Verificar espaço em disco da VPS e do volume `evolution_instances` antes de restart
-- [ ] E001.9 Confirmar que o snapshot NÃO inclui secrets (revisar arquivos de evidência)
+- [ ] E001.9 Confirmar que o snapshot NÃO inclui secrets nem PII (JIDs, números de telefone, e-mails, API keys) — redigir antes de salvar em evidências
 - [ ] E001.10 Commitar evidências no repo (`docs/plano-evolution-2026-09/evidencias/`)
 
 ## E002 — Análise dos logs do container evolution
@@ -79,7 +79,7 @@ Primeira intervenção, a menos invasiva: restart da instância via Evolution AP
 - [ ] E003.6 Verificar se o WhatsApp exige novo pareamento (evento QR nos logs / `evo_instance_connect` retorna QR)
 - [ ] E003.7 Registrar cada tentativa com timestamp em evidências (máx. 3 tentativas de restart de instância)
 - [ ] E003.8 NÃO usar `evo_instance_logout`/`evo_instance_delete` nesta etapa (destrutivo — só na E005 com decisão explícita)
-- [ ] E003.9 Se aberto: confirmar `ownerJid=551146375517@s.whatsapp.net` e perfil "Promo Brindes"
+- [ ] E003.9 Se aberto: confirmar `ownerJid=<NUMERO_WPP>@s.whatsapp.net` e perfil "Promo Brindes" — **não registrar o JID real em evidências públicas**
 - [ ] E003.10 Atualizar `zapp.instance_registry`/`whatsapp_connections` refletindo o estado real
 
 ## E004 — Validação pós-reconexão
@@ -100,7 +100,7 @@ Runbook `Evolution_Api_Stack/runbooks/recover-baileys-session.sql` + decisão de
 - [ ] E005.1 Ler o runbook completo e conferir se as tabelas/paths citados ainda existem no PG14 atual
 - [ ] E005.2 Backup da sessão atual: dump das tabelas de sessão/creds do PG14 + snapshot do volume `evolution_instances`
 - [ ] E005.3 Executar diagnóstico do runbook (verificar creds corrompidas/pre-keys esgotadas)
-- [ ] E005.4 **Decisão com o dono (Joaquim):** limpar sessão = exige novo QR no aparelho +55 11 4637-5517
+- [ ] E005.4 **Decisão com o dono (Joaquim):** limpar sessão = exige novo QR no aparelho `<NUMERO_WPP>` — confirmar com o responsável antes de prosseguir
 - [ ] E005.5 Executar limpeza de sessão conforme runbook (somente após aprovação registrada)
 - [ ] E005.6 Reiniciar instância e capturar QR via `evo_instance_connect`
 - [ ] E005.7 Parear no aparelho físico e confirmar `state=open`
@@ -252,7 +252,7 @@ Garantir que, com tráfego de volta, os eventos NÃO serão rejeitados por assin
 ## E017 — Replay/recuperação de eventos perdidos (23–27/08)
 - [ ] E017.1 Delimitar a janela real de perda de eventos downstream (últimos processados vs. PG14)
 - [ ] E017.2 Como o PG14 tem as mensagens até 25/08: verificar se `evo.evolution_messages` (Supabase) tem TODAS até 25/08
-- [ ] E017.3 Rodar reconcile FDW na janela 20/08–28/08 (mecânica da F-002: delta PG14 × evo)
+- [ ] E017.3 Rodar reconcile FDW na janela definida por E017.1 (datas do último evento PG14 downstream até o último evento válido pré-outage — não usar janela hardcoded 20/08–28/08 que pode ficar obsoleta; mecânica: delta PG14 × evo, conforme F-002)
 - [ ] E017.4 Para deltas >0: reimportar via caminho de reconcile existente (`whatsapp_reconcile_apply`)
 - [ ] E017.5 Verificar eventos não-message perdidos (contacts/chats update) — impacto e recuperação via sync
 - [ ] E017.6 Confirmar `evo.evolution_contacts` sem buracos (count e updated_at na janela)
@@ -287,7 +287,7 @@ Garantir que, com tráfego de volta, os eventos NÃO serão rejeitados por assin
 
 ## E020 — Watchdog de consumer parado (novo)
 A falha "stats param mas ninguém percebe" não pode se repetir.
-- [ ] E020.1 Criar função SQL `zapp.fn_consumer_stats_stale_alert()` — alerta se `max(collected_at) < now()-interval '15 min'`
+- [ ] E020.1 Criar função SQL `zapp.fn_consumer_stats_stale_alert()` — alerta se `max(collected_at) IS NULL OR max(collected_at) < now()-interval '15 min'` (cobre tanto ausência total de linhas quanto dados estagnados)
 - [ ] E020.2 Criar cron job (padrão dos watchdogs existentes) a cada 10 min
 - [ ] E020.3 Inserir em `zapp.evolution_alerts` com `alert_type='consumer_stats_stale'`, severity high
 - [ ] E020.4 Integrar ao canal warroom N8N (`https://n8n.atomicabr.com.br/webhook/warroom-alert`)
@@ -515,7 +515,7 @@ A fila está morta desde 10/08 e o ESTADO.md diz "religar é decisão do dono" �
 - [ ] E037.10 Documentar o contrato do probe
 
 ## E038 — Proxy de mídia e URLs assinadas no frontend
-- [ ] E038.1 Auditar `src/lib/useMediaUrl.ts` e `mediaUrl.ts` (ADR-004): signed URL TTL 1h — funcionando pós-outage?
+- [ ] E038.1 Auditar `src/lib/useMediaUrl.ts` e `mediaUrl.ts` (ADR-004): **signed URL TTL 1h** (para acesso imediato via Supabase Storage) vs. **`mediaUrl` com validade 7 dias** (URL pré-assinada gravada no banco pelo consumer, servida pelo proxy permanente `zapp-media-proxy`) — verificar que ambas as rotas funcionam pós-outage e que o frontend usa a rota correta por contexto
 - [ ] E038.2 Testar `zapp-media-proxy.adm01.workers.dev` com um path real do R2 (200 + content-type correto)
 - [ ] E038.3 Verificar autenticação/limites do worker (não pode ser open proxy do bucket)
 - [ ] E038.4 Conferir CORS do worker para os domínios do zapp
@@ -568,7 +568,7 @@ A fila está morta desde 10/08 e o ESTADO.md diz "religar é decisão do dono" �
 
 ## E042 — Offsite real do PG14
 - [ ] E042.1 Decidir destino offsite: repo2 do pgbackrest no R2 (bucket dedicado) — proposta padrão
-- [ ] E042.2 Criar bucket R2 dedicado a backups com token write-only
+- [ ] E042.2 Criar bucket R2 dedicado a backups com token operacional mínimo: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` (write-only puro impede `pgbackrest verify` e restore — token read+write é necessário; escopo = bucket único de backups)
 - [ ] E042.3 Configurar repo2 s3 no pgbackrest (endpoint R2, região auto)
 - [ ] E042.4 Rodar full backup para o repo2 e cronometrar
 - [ ] E042.5 Validar `pgbackrest verify` no repo2
@@ -756,7 +756,7 @@ O webhook nativo da wpp2 aponta para `https://tnnnlkbymytvtqngbbqh.supabase.co/f
 - [ ] E057.2 Identificar versões obsoletas (v1/v2 substituídas por v3/v7) ainda existentes no Swarm
 - [ ] E057.3 Confirmar que nenhum stack referencia as obsoletas antes de remover
 - [ ] E057.4 Remover obsoletas (com aprovação; uma por vez, validando serviços após cada)
-- [ ] E057.5 Verificar idade da `evolution_api_key_v7_20260814` (jun+2 meses) — política de rotação: definir prazo
+- [ ] E057.5 Verificar idade da `evolution_api_key_v7_20260814` (criada em 14/08/2026 — ~3 semanas ao momento da auditoria) — política de rotação: definir prazo (sugestão: 90 dias → próxima rotação ~14/11/2026)
 - [ ] E057.6 Verificar tokens R2 (E040.4/E040.5) e credencial `d1f6dd90...` usada nas URLs pré-assinadas
 - [ ] E057.7 Verificar secrets do Vault Supabase (37) × uso real
 - [ ] E057.8 Confirmar `bundle-secret-guard.yml` (CI) verde e cobrindo anon key
@@ -810,7 +810,7 @@ Os 12 `401 Missing webhook signature`/hora são o probe do stack `supabase-funct
 - [ ] E061.3 Ajustar `v_kpi_webhook_saude` para excluir o probe do contador `invalid_signature`
 - [ ] E061.4 Manter contador separado `probe_ok` (liveness visível como métrica própria)
 - [ ] E061.5 Alertar `invalid_signature > 0` REAL (agora que o ruído saiu, qualquer 401 real é sinal)
-- [ ] E061.6 Testar: probe roda → não conta; POST sem HMAC de outra origem → conta e alerta
+- [ ] E061.6 Testar dois cenários separados: (a) **sem assinatura** — POST de origem desconhecida sem header HMAC → conta em `invalid_signature` e dispara alerta; (b) **assinatura inválida** — POST com `X-Hub-Signature-256` corrompido → idem; (c) **probe legítimo** com `X-Probe: liveness` → registra em `probe_ok`, NÃO incrementa `invalid_signature`
 - [ ] E061.7 Atualizar YML do stack liveness no repo evolution-stack
 - [ ] E061.8 Migration da view versionada
 - [ ] E061.9 Validar 48h de KPI limpo
