@@ -5,7 +5,10 @@
 # ATENÇÃO: o runtime self-hosted NÃO lê verify_jwt deste arquivo.
 # A fonte de verdade é a allowlist em supabase/functions/main/index.ts.
 # Este bloco só tem efeito em deploys para Supabase Cloud.
-project_id = "default"
+project_id = "uqysyzndkfiwfztbqvsl"
+
+[functions.migrate-helper]
+verify_jwt = false
 
 [functions.ai-conversation-summary]
 verify_jwt = true
