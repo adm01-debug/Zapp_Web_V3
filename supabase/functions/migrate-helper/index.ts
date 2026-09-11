@@ -1,7 +1,7 @@
 // Edge function temporária para migração de banco.
 // Após a migração, remova esta função.
 
-const ACCESS_KEY = "zw3m8x9p2k5n7q4r1v6t0u";
+const ACCESS_KEY = "recover2026v3key9x";
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-access-key",
