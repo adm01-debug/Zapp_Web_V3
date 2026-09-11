@@ -8,8 +8,9 @@ const validateWebhookPayload = (payload: unknown): boolean => {
   if (!p.id || typeof p.id !== 'string') return false;
   // Use the most basic UUID format check (hex-hex-hex-hex-hex)
   const uuidParts = p.id.split('-');
-  if (uuidParts.length !== 5) return false;
-  if (uuidParts[0].length !== 8 || uuidParts[1].length !== 4 || uuidParts[2].length !== 4 || uuidParts[3].length !== 4 || uuidParts[4].length !== 12) return false;
+  const expectedLengths = [8, 4, 4, 4, 12];
+  if (uuidParts.length !== expectedLengths.length) return false;
+  if (!expectedLengths.every((length, index) => uuidParts[index]?.length === length)) return false;
 
   const isHex = (h: string) => /^[0-9a-f]+$/i.test(h);
   return uuidParts.every(isHex);
