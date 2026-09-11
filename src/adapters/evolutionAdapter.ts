@@ -80,7 +80,10 @@ function mapStatus(evoStatus: string): 'sent' | 'delivered' | 'read' | 'failed' 
     sending: null, // in-flight; client shows pending indicator
     deleted: null, // deleted messages carry no delivery status
   };
-  return Object.prototype.hasOwnProperty.call(mapping, evoStatus) ? mapping[evoStatus] : 'sent';
+  // Chave conhecida devolve o valor mapeado (que pode ser null, para estados
+  // em trânsito); qualquer status desconhecido cai no padrão 'sent'.
+  if (!Object.prototype.hasOwnProperty.call(mapping, evoStatus)) return 'sent';
+  return mapping[evoStatus] ?? null;
 }
 
 /** derive Contacts From Messages function. */
@@ -186,8 +189,7 @@ export function buildExternalConversations(
       .map(evolutionToRealtimeMessage)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const unreadCount = realtimeMessages.filter((m) => !m.is_read && m.sender === 'contact').length;
-    const lastMessage =
-      realtimeMessages.length > 0 ? realtimeMessages[realtimeMessages.length - 1] : null;
+    const lastMessage = realtimeMessages[realtimeMessages.length - 1] ?? null;
     return {
       contact,
       messages: realtimeMessages,
