@@ -18,6 +18,15 @@ updates:
       prefix: "chore(deps)"
       include: "scope"
     groups:
+      vitest-family:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@storybook/addon-vitest"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
       minor-and-patch:
         patterns:
           - "*"
