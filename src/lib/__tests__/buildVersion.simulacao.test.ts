@@ -49,6 +49,12 @@ const getRegistrationsMock =
 let replaceSpy: MockInstance<typeof window.location.replace>;
 let dispatchSpy: MockInstance<typeof window.dispatchEvent>;
 
+// vitest 5: vi.restoreAllMocks() in afterEach now clears mock.results for vi.fn() from
+// manual mocks (breaking change vs v4). Capture the logger instance once at module load
+// (buildVersion.ts calls getLogger once at import, before any test runs).
+// The object ref stays valid after restoreAllMocks — only call history is cleared.
+let _buildVersionLog: ReturnType<typeof getLogger> | undefined;
+
 beforeEach(() => {
   vi.useFakeTimers();
   // Import.meta.env.DEV é true no modo test do vitest; o watcher pula ambientes
@@ -79,6 +85,11 @@ beforeEach(() => {
 
   replaceSpy = vi.spyOn(window.location, 'replace').mockImplementation(() => undefined);
   dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+  // Capture logger instance once (subsequent tests reuse same ref with cleared call history).
+  if (!_buildVersionLog) {
+    const r = vi.mocked(getLogger).mock.results[0];
+    if (r?.value) _buildVersionLog = r.value as ReturnType<typeof getLogger>;
+  }
 });
 
 afterEach(() => {
@@ -90,10 +101,11 @@ afterEach(() => {
 });
 
 // O módulo chama getLogger('buildVersion') uma única vez, no import.
+// vitest 5: _buildVersionLog é capturado no primeiro beforeEach e reutilizado;
+// mock.results[0] fica vazio após vi.restoreAllMocks() mas a referência ao objeto persiste.
 function buildVersionLog(): ReturnType<typeof getLogger> {
-  const result = vi.mocked(getLogger).mock.results[0];
-  if (!result) throw new Error('getLogger não foi chamado — mock do logger não ativo');
-  return result.value as ReturnType<typeof getLogger>;
+  if (!_buildVersionLog) throw new Error('getLogger não foi chamado — mock do logger não ativo');
+  return _buildVersionLog;
 }
 
 function jsonResponse(payload: unknown, contentType = 'application/json'): Response {
@@ -312,8 +324,9 @@ describe('checkVersion (via startBuildVersionWatcher + fake timers)', () => {
   it('buildId diferente + content-type application/json → aviso + reload após a janela de cortesia (UPDATE_GRACE_MS)', async () => {
     // Response NOVO por chamada — mockResolvedValue compartilharia o MESMO
     // body e o 2º res.json() (poll de 60s) lançaria "body already consumed".
+    // entry necessário para prefetchNewBundle e isBundleReachable dispararem (senão retornam cedo).
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ buildId: 'buildB' }, 'application/json'))
+      Promise.resolve(jsonResponse({ buildId: 'buildB', entry: 'index-buildB.js' }, 'application/json'))
     );
 
     const { stop } = startWatcherAndStop();
@@ -323,7 +336,10 @@ describe('checkVersion (via startBuildVersionWatcher + fake timers)', () => {
       // ao fim da janela de cortesia UPDATE_GRACE_MS — não mais imediatamente.
       // Com o poll consolidado de 60s, o tick de t=90s coincide com a janela
       // de cortesia.
-      await vi.advanceTimersByTimeAsync(30_000 + __TEST__.UPDATE_GRACE_MS);
+      // Avança em 2 passos (vitest 5): permite que Promise.allSettled fire-and-forget
+      // do prefetchNewBundle se resolva antes da janela de cortesia.
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(__TEST__.UPDATE_GRACE_MS);
       // Poll e cortesia andam em lockstep (ambos 60s a partir do mismatch):
       // o poll do mesmo tick NÃO cancela o timer pendente (guard same-target);
       // o poll seguinte re-agenda. Fetch calls: 2× version.json (t=30 kickoff +

@@ -858,32 +858,33 @@ describe('useEvolutionAutoReconnect — circuit breaker 2a abertura usa CIRCUIT_
   });
 
   it('apos 2 ciclos de CIRCUIT_THRESHOLD falhas, delay nao ultrapassa CIRCUIT_MAX_MS', async () => {
-    // Todas as tentativas de conexao falham
-    connectInstance.mockRejectedValue(new Error('timeout'));
+    // O circuit breaker de checkStatus abre quando getInstanceStatus lança erros
+    // consecutivos (5xx/rede). connectInstance não influencia consecutiveFailsRef.
+    // Refs: useEvolutionAutoReconnect.ts ~444 (checkStatus catch) e ~528.
+    getInstanceStatus.mockRejectedValue(new Error('network error'));
 
     renderHook(() => useEvolutionAutoReconnect('wpp2'));
 
-    // Deixa o circuit abrir pela 1a vez (CIRCUIT_THRESHOLD falhas)
-    await advance(300_000); // 5 min — suficiente para CIRCUIT_THRESHOLD tentativas + backoff
+    // 5 min: checkStatus roda a cada 30s; >= CIRCUIT_THRESHOLD falhas (3) abrem o circuit.
+    await advance(300_000);
 
-    const emitCallsAfter1stCircuit = emit.mock.calls.filter(
-      (c) => c[0] === 'connection:circuit-open',
+    const circuitWarnAfter1st = logWarn.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('Circuit breaker opened'),
     ).length;
-    expect(emitCallsAfter1stCircuit).toBeGreaterThanOrEqual(1);
+    expect(circuitWarnAfter1st).toBeGreaterThanOrEqual(1);
 
     // Avanca alem do CIRCUIT_MAX_MS — o circuit deve reabrir dentro desse teto
     await advance(CIRCUIT_MAX_MS + 10_000);
 
     // Apos CIRCUIT_MAX_MS, o hook tenta novamente (circuit semi-aberto) e, com mais
-    // falhas, deve reabrir — mas o delay da 2a abertura nao pode ultrapassar CIRCUIT_MAX_MS
-    const emitCallsAfter2ndCircuit = emit.mock.calls.filter(
-      (c) => c[0] === 'connection:circuit-open',
+    // falhas de rede, deve reabrir — delay da 2a abertura nao pode ultrapassar CIRCUIT_MAX_MS
+    const circuitWarnAfter2nd = logWarn.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('Circuit breaker opened'),
     ).length;
     // Pelo menos uma abertura adicional apos o 1o ciclo
-    expect(emitCallsAfter2ndCircuit).toBeGreaterThanOrEqual(emitCallsAfter1stCircuit);
+    expect(circuitWarnAfter2nd).toBeGreaterThanOrEqual(circuitWarnAfter1st);
 
-    // O circuit nunca ficou mais que CIRCUIT_MAX_MS fechado para novas tentativas
-    // Verificado indiretamente: connectInstance foi chamado novamente apos o 1o circuit
-    expect(connectInstance.mock.calls.length).toBeGreaterThan(CIRCUIT_THRESHOLD);
+    // getInstanceStatus foi chamado > CIRCUIT_THRESHOLD vezes ao longo dos 2 ciclos
+    expect(getInstanceStatus.mock.calls.length).toBeGreaterThan(CIRCUIT_THRESHOLD);
   });
 });
