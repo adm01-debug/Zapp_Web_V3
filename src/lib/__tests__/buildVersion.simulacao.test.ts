@@ -29,9 +29,26 @@ import {
 } from '@/lib/buildVersion';
 import { getLogger } from '@/lib/logger';
 
-// Mock manual (src/lib/__mocks__/logger.ts) — permite assertar log.warn do
-// módulo sob teste.
-vi.mock('@/lib/logger');
+// vitest 5: vi.hoisted() cria o singleton ANTES de qualquer import e mock.
+// Mesmo objeto: buildVersion.ts (via getLogger) e asserções nos testes.
+// vi.restoreAllMocks() limpa historico de chamadas mas NAO a referência.
+const { _buildVersionLogger } = vi.hoisted(() => {
+  const makeFns = () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() });
+  return { _buildVersionLogger: { ...makeFns(), child: vi.fn(), withCorrelation: vi.fn(() => makeFns()) } };
+});
+
+vi.mock('@/lib/logger', () => ({
+  getLogger: vi.fn(() => _buildVersionLogger),
+  createLogger: vi.fn(() => _buildVersionLogger),
+  makeLogger: vi.fn(() => _buildVersionLogger),
+  log: _buildVersionLogger,
+  logger: _buildVersionLogger,
+  rootLogger: _buildVersionLogger,
+  generateCorrelationId: vi.fn((prefix = 'req') => `${prefix}_test_0`),
+  getSessionId: vi.fn(() => 'test-session'),
+  logPerformance: vi.fn((_label, fn) => fn()),
+  logAsyncPerformance: vi.fn(async (_label, fn) => fn()),
+}));
 
 // ── Globals / spies ──────────────────────────────────────────────────────────
 
@@ -48,12 +65,6 @@ const getRegistrationsMock =
 
 let replaceSpy: MockInstance<typeof window.location.replace>;
 let dispatchSpy: MockInstance<typeof window.dispatchEvent>;
-
-// vitest 5: vi.restoreAllMocks() in afterEach now clears mock.results for vi.fn() from
-// manual mocks (breaking change vs v4). Capture the logger instance once at module load
-// (buildVersion.ts calls getLogger once at import, before any test runs).
-// The object ref stays valid after restoreAllMocks — only call history is cleared.
-let _buildVersionLog: ReturnType<typeof getLogger> | undefined;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -85,11 +96,6 @@ beforeEach(() => {
 
   replaceSpy = vi.spyOn(window.location, 'replace').mockImplementation(() => undefined);
   dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-  // Capture logger instance once (subsequent tests reuse same ref with cleared call history).
-  if (!_buildVersionLog) {
-    const r = vi.mocked(getLogger).mock.results[0];
-    if (r?.value) _buildVersionLog = r.value as ReturnType<typeof getLogger>;
-  }
 });
 
 afterEach(() => {
@@ -100,12 +106,9 @@ afterEach(() => {
   __TEST__.setRemoteEntryCss(undefined); // evita vazamento de entryCss entre testes
 });
 
-// O módulo chama getLogger('buildVersion') uma única vez, no import.
-// vitest 5: _buildVersionLog é capturado no primeiro beforeEach e reutilizado;
-// mock.results[0] fica vazio após vi.restoreAllMocks() mas a referência ao objeto persiste.
+// buildVersionLog(): retorna o singleton hoisted — mesma ref que buildVersion.ts usa.
 function buildVersionLog(): ReturnType<typeof getLogger> {
-  if (!_buildVersionLog) throw new Error('getLogger não foi chamado — mock do logger não ativo');
-  return _buildVersionLog;
+  return _buildVersionLogger;
 }
 
 function jsonResponse(payload: unknown, contentType = 'application/json'): Response {

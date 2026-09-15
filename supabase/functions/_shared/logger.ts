@@ -95,14 +95,4 @@ export const rootLogger = createLogger({ service: 'edge-function' });
  */
 export function getLogger(service: string, ctx: LogContext = {}): Logger {
   return createLogger({ service, ...ctx });
-=======
- * Compat: `getLogger(service)` era a API anterior a este arquivo (rewrite em
- * 20260906 via PR #1533) — 77 arquivos em supabase/functions/_shared ainda
- * chamam `getLogger('nome-do-servico')` no top-level do módulo. Sem este
- * export, o import falha com SyntaxError no boot do main worker das edge
- * functions (achado do Gate 6 — todo módulo com `import { getLogger }`
- * quebra o boot inteiro, não só o próprio módulo).
- */
-export function getLogger(service: string): Logger {
-  return makeLogger({ service });
 }
