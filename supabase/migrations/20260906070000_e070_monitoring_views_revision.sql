@@ -5,7 +5,16 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. v_db_health_overview — versão enriquecida
 -- ─────────────────────────────────────────────────────────────────────────────
-CREATE OR REPLACE VIEW monitoring.v_db_health_overview AS
+-- Correção 2026-09-17 (auditoria Local×GitHub×DB): a view existente em produção
+-- tem layout de colunas diferente (coluna "coletado_em" em posição intermediária)
+-- e o CREATE OR REPLACE falhava com "cannot change name of view column
+-- 'coletado_em' to 'ultimo_wal_arquivado_em'" (run #77, linha 61). O PostgreSQL
+-- não permite renomear/reordenar colunas via CREATE OR REPLACE VIEW. Como não há
+-- dependentes no repo (verificado) e é view interna de monitoring (consumo via
+-- owner/funções SECURITY DEFINER), recriamos com DROP IF EXISTS + CREATE.
+DROP VIEW IF EXISTS monitoring.v_db_health_overview;
+
+CREATE VIEW monitoring.v_db_health_overview AS
 SELECT
   -- ── Tamanho e objetos ──────────────────────────────────────────────────────
   pg_size_pretty(pg_database_size(current_database()))                    AS tamanho_total,

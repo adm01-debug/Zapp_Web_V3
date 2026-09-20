@@ -5381,6 +5381,66 @@ $$;
 
 
 
+CREATE OR REPLACE FUNCTION zapp.fn_check_real_invalid_signatures() RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'zapp', 'public'
+    AS $$
+DECLARE
+  v_count   int;
+  v_open    int;
+  v_alert_id uuid;
+BEGIN
+  SELECT invalid_signature INTO v_count FROM zapp.v_kpi_webhook_saude;
+
+  IF v_count > 0 THEN
+    SELECT count(*) INTO v_open
+      FROM zapp.evolution_alerts
+     WHERE alert_type = 'invalid_webhook_signature'
+       AND resolved_at IS NULL;
+
+    IF v_open = 0 THEN
+      INSERT INTO zapp.evolution_alerts (
+        alert_type, severity, title, detail, instance_name, created_at
+      ) VALUES (
+        'invalid_webhook_signature',
+        'critical',
+        format('Webhook: %s requisições com assinatura inválida (últimas 24h)', v_count),
+        'Possível tentativa de acesso não autorizado ao endpoint de webhook. Investigar origem.',
+        'wpp2',
+        now()
+      ) RETURNING id INTO v_alert_id;
+
+      PERFORM net.http_post(
+        url     := 'https://n8n.atomicabr.com.br/webhook/warroom-alert',
+        headers := '{"Content-Type":"application/json"}'::jsonb,
+        body    := json_build_object(
+          'alert_type', 'invalid_webhook_signature',
+          'severity',   'critical',
+          'message',    format('🚨 SEGURANÇA: %s requests com assinatura inválida nas últimas 24h', v_count),
+          'alert_id',   v_alert_id,
+          'source',     'fn_check_real_invalid_signatures',
+          'ts',         now()
+        )::text::jsonb
+      );
+    END IF;
+
+    RETURN format('ALERTA: %s assinaturas inválidas reais (excluídas probes)', v_count);
+  ELSE
+    -- Auto-resolve se zerou
+    UPDATE zapp.evolution_alerts
+       SET resolved_at = now(),
+           resolved_by = 'fn_check_real_invalid_signatures_auto'
+     WHERE alert_type = 'invalid_webhook_signature'
+       AND resolved_at IS NULL;
+
+    RETURN format('OK: zero assinaturas inválidas reais');
+  END IF;
+END;
+$$;
+
+
+
+
 CREATE OR REPLACE FUNCTION zapp.fn_check_restore_validation_health() RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
@@ -7889,6 +7949,85 @@ CREATE OR REPLACE FUNCTION zapp.fn_dispatch_scheduled_messages() RETURNS SETOF z
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'zapp'
     AS $$ UPDATE zapp.scheduled_messages SET status = 'sent', sent_at = now(), updated_at = now() WHERE status = 'pending' AND scheduled_at <= now() RETURNING *; $$;
+
+
+
+
+CREATE OR REPLACE FUNCTION zapp.fn_dispatch_unnotified_alerts() RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'zapp', 'public'
+    AS $$
+DECLARE
+  v_alert   RECORD;
+  v_count   int := 0;
+  v_skipped int := 0;
+  -- Cooldown: não renotificar o mesmo alert_type se já notificou há < 30 min
+  -- (evita spam de 37 alertas license_heartbeat)
+  v_last_notif timestamptz;
+BEGIN
+  FOR v_alert IN
+    SELECT id, alert_type, severity, title, detail, instance_name, created_at
+      FROM zapp.evolution_alerts
+     WHERE resolved_at IS NULL
+       AND notified_at IS NULL
+     ORDER BY
+       CASE severity
+         WHEN 'critical' THEN 1
+         WHEN 'high'     THEN 2
+         WHEN 'medium'   THEN 3
+         ELSE 4
+       END,
+       created_at ASC
+     LIMIT 20  -- lote máximo por execução (evita timeout)
+  LOOP
+    -- Cooldown por tipo: checar se outro alerta do mesmo tipo já foi notificado há < 30 min
+    SELECT max(notified_at)
+      INTO v_last_notif
+      FROM zapp.evolution_alerts
+     WHERE alert_type  = v_alert.alert_type
+       AND notified_at IS NOT NULL
+       AND notified_at > now() - interval '30 minutes';
+
+    IF v_last_notif IS NOT NULL THEN
+      -- Marca como notificado (via cooldown) para não tentar novamente neste ciclo
+      UPDATE zapp.evolution_alerts
+         SET notified_at = now()
+       WHERE id = v_alert.id;
+      v_skipped := v_skipped + 1;
+      CONTINUE;
+    END IF;
+
+    -- Enviar ao warroom N8N
+    PERFORM net.http_post(
+      url     := 'https://n8n.atomicabr.com.br/webhook/warroom-alert',
+      headers := '{"Content-Type":"application/json"}'::jsonb,
+      body    := json_build_object(
+        'alert_type',    v_alert.alert_type,
+        'severity',      v_alert.severity,
+        'title',         v_alert.title,
+        'message',       format('[%s] %s: %s',
+                                upper(v_alert.severity),
+                                v_alert.alert_type,
+                                v_alert.title),
+        'detail',        v_alert.detail,
+        'instance_name', v_alert.instance_name,
+        'alert_id',      v_alert.id,
+        'created_at',    v_alert.created_at,
+        'source',        'fn_dispatch_unnotified_alerts',
+        'ts',            now()
+      )::text::jsonb
+    );
+
+    UPDATE zapp.evolution_alerts
+       SET notified_at = now()
+     WHERE id = v_alert.id;
+
+    v_count := v_count + 1;
+  END LOOP;
+
+  RETURN format('dispatched=%s, cooldown_skipped=%s', v_count, v_skipped);
+END;
+$$;
 
 
 
@@ -29117,6 +29256,148 @@ COMMENT ON FUNCTION zapp.rpc_set_whatsapp_mode(p_mode text) IS 'NULL NOT IN (...
 
 
 
+CREATE OR REPLACE FUNCTION zapp.rpc_sla_dashboard(p_period text DEFAULT 'today'::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'zapp', 'pg_temp'
+    AS $$
+DECLARE
+  v_start_at timestamptz;
+  v_overall  jsonb;
+  v_by_agent jsonb;
+
+  -- overall counts
+  v_fr_on_time   int;
+  v_fr_breached  int;
+  v_res_on_time  int;
+  v_res_breached int;
+  v_total        int;
+BEGIN
+  PERFORM zapp.fn_require_app_user();
+
+  -- Compute start date on the server (UTC clock)
+  v_start_at := CASE p_period
+    WHEN 'today'  THEN date_trunc('day',  NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    WHEN 'week'   THEN date_trunc('week', NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    WHEN 'month'  THEN date_trunc('month',NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    ELSE NOW() - INTERVAL '365 days'
+  END;
+
+  -- Overall SLA aggregation
+  SELECT
+    COUNT(*) FILTER (WHERE s.first_response_at IS NOT NULL AND s.first_response_breached = false),
+    COUNT(*) FILTER (WHERE s.first_response_breached = true),
+    COUNT(*) FILTER (WHERE s.resolved_at IS NOT NULL AND s.resolution_breached = false),
+    COUNT(*) FILTER (WHERE s.resolution_breached = true),
+    COUNT(*)
+  INTO
+    v_fr_on_time,
+    v_fr_breached,
+    v_res_on_time,
+    v_res_breached,
+    v_total
+  FROM zapp.conversation_sla s
+  WHERE s.created_at >= v_start_at;
+
+  v_overall := jsonb_build_object(
+    'firstResponse', jsonb_build_object(
+      'total',    v_fr_on_time + v_fr_breached,
+      'onTime',   v_fr_on_time,
+      'breached', v_fr_breached,
+      'rate',     CASE WHEN (v_fr_on_time + v_fr_breached) > 0
+                    THEN ROUND((v_fr_on_time::numeric / (v_fr_on_time + v_fr_breached)) * 100, 2)
+                    ELSE 100
+                  END
+    ),
+    'resolution', jsonb_build_object(
+      'total',    v_res_on_time + v_res_breached,
+      'onTime',   v_res_on_time,
+      'breached', v_res_breached,
+      'rate',     CASE WHEN (v_res_on_time + v_res_breached) > 0
+                    THEN ROUND((v_res_on_time::numeric / (v_res_on_time + v_res_breached)) * 100, 2)
+                    ELSE 100
+                  END
+    ),
+    'totalConversations', v_total,
+    'overallRate', CASE
+      WHEN (v_fr_on_time + v_fr_breached + v_res_on_time + v_res_breached) > 0
+      THEN ROUND(
+        ((v_fr_on_time + v_res_on_time)::numeric
+         / (v_fr_on_time + v_fr_breached + v_res_on_time + v_res_breached)) * 100, 2)
+      ELSE 100
+    END
+  );
+
+  -- Per-agent aggregation joined with profiles
+  SELECT jsonb_agg(
+    jsonb_build_object(
+      'agentId',   p.id,
+      'agentName', COALESCE(p.name, 'Agente'),
+      'avatarUrl', p.avatar_url,
+      'firstResponse', jsonb_build_object(
+        'total',    ag.fr_on + ag.fr_br,
+        'onTime',   ag.fr_on,
+        'breached', ag.fr_br,
+        'rate',     CASE WHEN (ag.fr_on + ag.fr_br) > 0
+                      THEN ROUND((ag.fr_on::numeric / (ag.fr_on + ag.fr_br)) * 100, 2)
+                      ELSE 100 END
+      ),
+      'resolution', jsonb_build_object(
+        'total',    ag.res_on + ag.res_br,
+        'onTime',   ag.res_on,
+        'breached', ag.res_br,
+        'rate',     CASE WHEN (ag.res_on + ag.res_br) > 0
+                      THEN ROUND((ag.res_on::numeric / (ag.res_on + ag.res_br)) * 100, 2)
+                      ELSE 100 END
+      ),
+      'overallRate', CASE
+        WHEN (ag.fr_on + ag.fr_br + ag.res_on + ag.res_br) > 0
+        THEN ROUND(
+          ((ag.fr_on + ag.res_on)::numeric
+           / (ag.fr_on + ag.fr_br + ag.res_on + ag.res_br)) * 100, 2)
+        ELSE 100
+      END
+    )
+    ORDER BY
+      CASE WHEN (ag.fr_on + ag.fr_br + ag.res_on + ag.res_br) > 0
+        THEN ((ag.fr_on + ag.res_on)::numeric / (ag.fr_on + ag.fr_br + ag.res_on + ag.res_br))
+        ELSE 1 END DESC
+  )
+  INTO v_by_agent
+  FROM (
+    SELECT
+      c.assigned_to                                                          AS agent_id,
+      COUNT(*) FILTER (WHERE s.first_response_at IS NOT NULL
+                         AND s.first_response_breached = false)              AS fr_on,
+      COUNT(*) FILTER (WHERE s.first_response_breached = true)               AS fr_br,
+      COUNT(*) FILTER (WHERE s.resolved_at IS NOT NULL
+                         AND s.resolution_breached = false)                  AS res_on,
+      COUNT(*) FILTER (WHERE s.resolution_breached = true)                   AS res_br
+    FROM zapp.conversation_sla s
+    LEFT JOIN zapp.contacts c ON c.id = s.contact_id
+    WHERE s.created_at >= v_start_at
+      AND c.assigned_to IS NOT NULL
+    GROUP BY c.assigned_to
+  ) ag
+  JOIN zapp.profiles p ON p.id = ag.agent_id;
+
+  RETURN jsonb_build_object(
+    'overall',  v_overall,
+    'byAgent',  COALESCE(v_by_agent, '[]'::jsonb),
+    'startAt',  v_start_at,
+    'period',   p_period,
+    'computedAt', NOW()
+  );
+END;
+$$;
+
+
+
+
+COMMENT ON FUNCTION zapp.rpc_sla_dashboard(p_period text) IS 'Dim-11 fix: SLA dashboard aggregation computed server-side with UTC clock (NOW()). Eliminates browser-side new Date() timezone dependency in useSLAMetrics.ts. period: today|week|month|all. Returns jsonb compatible with SLADashboardData.';
+
+
+
+
 CREATE OR REPLACE FUNCTION zapp.rpc_sla_timeline_aggregate(p_remote_jid text, p_instance text DEFAULT NULL::text) RETURNS TABLE(first_inbound_at timestamp with time zone, first_outbound_at timestamp with time zone, last_message_at timestamp with time zone, total_messages bigint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'pg_temp'
@@ -36094,108 +36375,6 @@ CREATE TABLE IF NOT EXISTS zapp.conversation_transfers (
 
 
 COMMENT ON TABLE zapp.conversation_transfers IS 'Historico de transferencias de conversa entre agentes/departamentos. RLS: lockdown - apenas service_role. Aplicado em 2026-05-12 (Tarefa 0.5b - LOTE 1B).';
-
-
-
-
-CREATE TABLE IF NOT EXISTS zapp.cookies_config (
-    id integer NOT NULL,
-    servico text NOT NULL,
-    cookie text NOT NULL,
-    token text,
-    cnpj text,
-    csrf_token text,
-    atualizado_em timestamp with time zone DEFAULT now(),
-    expires_at timestamp with time zone,
-    is_healthy boolean DEFAULT true,
-    last_health_check_at timestamp with time zone,
-    health_status text DEFAULT 'unknown'::text,
-    health_error text,
-    alerta_dias_antes integer DEFAULT 7,
-    nota text,
-    linkedin_cookie text,
-    CONSTRAINT cookies_config_health_status_check CHECK ((health_status = ANY (ARRAY['unknown'::text, 'healthy'::text, 'expiring_soon'::text, 'expired'::text, 'error'::text, 'challenged'::text, 'rate_limited'::text])))
-);
-
-
-
-
-COMMENT ON TABLE zapp.cookies_config IS 'Third-party integration session state (LinkedIn/Lusha cookies, tokens). SERVICE_ROLE ONLY — never grant to anon/authenticated. Hardened 2026-07-02.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.id IS 'PK (integer).';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.servico IS 'Servico monitorado/relacionado.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.cookie IS 'Segredo/token de seguranca (nao expor em logs).';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.token IS 'Token secreto de acesso/validacao.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.cnpj IS 'CNPJ da empresa.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.csrf_token IS 'Segredo/token de seguranca (nao expor em logs).';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.atualizado_em IS 'Timestamp da ultima atualizacao do registro.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.expires_at IS 'Estimativa de expiração do cookie. NULL = desconhecido.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.is_healthy IS 'Resultado do último health check. NULL = nunca checado.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.last_health_check_at IS 'Quando o último health check foi realizado.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.health_status IS 'Estado do cookie: unknown|healthy|expired|expiring_soon|error';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.health_error IS 'Erro/motivo reportado pelo health check.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.alerta_dias_antes IS 'Quantos dias antes de expires_at enviar alerta.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.nota IS 'Observações sobre o serviço ou o cookie.';
-
-
-
-
-COMMENT ON COLUMN zapp.cookies_config.linkedin_cookie IS 'Cookie do LinkedIn (li_at) usado pelo LeadContact findPhone.';
 
 
 
@@ -48733,6 +48912,108 @@ COMMENT ON COLUMN zapp.cookie_probe_pending.probe_auth IS 'Dado do probe de moni
 
 
 
+CREATE TABLE IF NOT EXISTS zapp.cookies_config (
+    id integer NOT NULL,
+    servico text NOT NULL,
+    cookie text NOT NULL,
+    token text,
+    cnpj text,
+    csrf_token text,
+    atualizado_em timestamp with time zone DEFAULT now(),
+    expires_at timestamp with time zone,
+    is_healthy boolean DEFAULT true,
+    last_health_check_at timestamp with time zone,
+    health_status text DEFAULT 'unknown'::text,
+    health_error text,
+    alerta_dias_antes integer DEFAULT 7,
+    nota text,
+    linkedin_cookie text,
+    CONSTRAINT cookies_config_health_status_check CHECK ((health_status = ANY (ARRAY['unknown'::text, 'healthy'::text, 'expiring_soon'::text, 'expired'::text, 'error'::text, 'challenged'::text, 'rate_limited'::text])))
+);
+
+
+
+
+COMMENT ON TABLE zapp.cookies_config IS 'Third-party integration session state (LinkedIn/Lusha cookies, tokens). SERVICE_ROLE ONLY — never grant to anon/authenticated. Hardened 2026-07-02.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.id IS 'PK (integer).';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.servico IS 'Servico monitorado/relacionado.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.cookie IS 'Segredo/token de seguranca (nao expor em logs).';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.token IS 'Token secreto de acesso/validacao.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.cnpj IS 'CNPJ da empresa.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.csrf_token IS 'Segredo/token de seguranca (nao expor em logs).';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.atualizado_em IS 'Timestamp da ultima atualizacao do registro.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.expires_at IS 'Estimativa de expiração do cookie. NULL = desconhecido.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.is_healthy IS 'Resultado do último health check. NULL = nunca checado.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.last_health_check_at IS 'Quando o último health check foi realizado.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.health_status IS 'Estado do cookie: unknown|healthy|expired|expiring_soon|error';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.health_error IS 'Erro/motivo reportado pelo health check.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.alerta_dias_antes IS 'Quantos dias antes de expires_at enviar alerta.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.nota IS 'Observações sobre o serviço ou o cookie.';
+
+
+
+
+COMMENT ON COLUMN zapp.cookies_config.linkedin_cookie IS 'Cookie do LinkedIn (li_at) usado pelo LeadContact findPhone.';
+
+
+
+
 CREATE SEQUENCE IF NOT EXISTS zapp.cookies_config_id_seq
     AS integer
     START WITH 1
@@ -53293,6 +53574,55 @@ CREATE OR REPLACE VIEW zapp.v_integration_dashboard WITH (security_invoker='on')
             WHEN 'ai'::text THEN 3
             ELSE 10
         END, ir.name;
+
+
+
+
+CREATE OR REPLACE VIEW zapp.v_kpi_alertas_mudos WITH (security_invoker='true') AS
+ SELECT evolution_alerts.alert_type,
+    evolution_alerts.severity,
+    count(*) AS total_abertos,
+    count(*) FILTER (WHERE (evolution_alerts.notified_at IS NULL)) AS sem_notificacao,
+    count(*) FILTER (WHERE (evolution_alerts.notified_at IS NOT NULL)) AS notificados,
+    min(evolution_alerts.created_at) AS mais_antigo,
+    max(evolution_alerts.created_at) AS mais_recente
+   FROM zapp.evolution_alerts
+  WHERE (evolution_alerts.resolved_at IS NULL)
+  GROUP BY evolution_alerts.alert_type, evolution_alerts.severity
+  ORDER BY (count(*) FILTER (WHERE (evolution_alerts.notified_at IS NULL))) DESC, (count(*)) DESC;
+
+
+
+
+CREATE OR REPLACE VIEW zapp.v_kpi_webhook_saude WITH (security_invoker='true') AS
+ WITH base AS (
+         SELECT webhook_audit_log.webhook_source,
+            webhook_audit_log.status_code,
+            webhook_audit_log.created_at,
+                CASE
+                    WHEN ((webhook_audit_log.webhook_source = 'external'::text) AND (webhook_audit_log.status_code = 401)) THEN true
+                    ELSE false
+                END AS is_invalid_signature,
+                CASE
+                    WHEN ((webhook_audit_log.webhook_source = 'liveness-probe'::text) AND (webhook_audit_log.status_code = ANY (ARRAY[200, 204]))) THEN true
+                    ELSE false
+                END AS is_probe_ok,
+                CASE
+                    WHEN ((webhook_audit_log.webhook_source = 'liveness-probe'::text) AND (webhook_audit_log.status_code <> ALL (ARRAY[200, 204]))) THEN true
+                    ELSE false
+                END AS is_probe_fail
+           FROM zapp.webhook_audit_log
+          WHERE (webhook_audit_log.created_at > (now() - '24:00:00'::interval))
+        )
+ SELECT count(*) FILTER (WHERE (base.webhook_source = 'external'::text)) AS total_externo_24h,
+    count(*) FILTER (WHERE base.is_invalid_signature) AS invalid_signature,
+    count(*) FILTER (WHERE base.is_probe_ok) AS probe_ok,
+    count(*) FILTER (WHERE base.is_probe_fail) AS probe_fail,
+    count(*) FILTER (WHERE ((base.webhook_source = 'external'::text) AND ((base.status_code >= 200) AND (base.status_code <= 299)))) AS externo_ok,
+    count(*) FILTER (WHERE ((base.webhook_source = 'external'::text) AND (base.status_code >= 500))) AS externo_5xx,
+    round(((100.0 * (count(*) FILTER (WHERE ((base.webhook_source = 'external'::text) AND ((base.status_code >= 200) AND (base.status_code <= 299)))))::numeric) / (NULLIF(count(*) FILTER (WHERE (base.webhook_source = 'external'::text)), 0))::numeric), 2) AS taxa_sucesso_pct,
+    now() AS calculado_em
+   FROM base;
 
 
 
@@ -63327,6 +63657,11 @@ CREATE INDEX IF NOT EXISTS idx_webhook_audit_log_processed_at ON zapp.webhook_au
 
 
 
+CREATE INDEX IF NOT EXISTS idx_webhook_audit_log_security ON zapp.webhook_audit_log USING btree (created_at, status_code) WHERE (webhook_source = 'external'::text);
+
+
+
+
 CREATE INDEX IF NOT EXISTS idx_webhook_audit_log_success_at ON zapp.webhook_audit_log USING btree (created_at DESC) WHERE (status = 'success'::text);
 
 
@@ -71856,10 +72191,6 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END
 $pol1142$;
 
-
-
-
-ALTER TABLE zapp.cookies_config ENABLE ROW LEVEL SECURITY;
 
 
 
