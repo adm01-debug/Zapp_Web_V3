@@ -145,16 +145,9 @@ SELECT cron.schedule(
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Registro em schema_migrations (workaround self-hosted)
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+INSERT INTO supabase_migrations.schema_migrations (version, name)
 VALUES (
   '20260906021000',
-  'e061_liveness_probe_kpi_separation',
-  ARRAY[
-    'ALTER TABLE zapp.webhook_audit_log ADD COLUMN IF NOT EXISTS webhook_source text',
-    'CREATE INDEX IF NOT EXISTS idx_webhook_audit_log_security',
-    'CREATE OR REPLACE VIEW zapp.v_kpi_webhook_saude',
-    'CREATE OR REPLACE FUNCTION zapp.fn_check_real_invalid_signatures()',
-    'SELECT cron.schedule e061-check-real-invalid-signatures'
-  ]
+  'e061_liveness_probe_kpi_separation'
 )
 ON CONFLICT (version) DO NOTHING;

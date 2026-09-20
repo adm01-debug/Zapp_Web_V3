@@ -3,6 +3,12 @@
 -- A coluna profile_id é UUID do schema zapp (profiles.id), não o UUID do auth.users.
 -- A função zapp.get_profile_id_for_user() faz a resolução correta.
 -- Sem essa correção, usuários não-admin recebem 0 linhas ao consultar seu próprio histórico XP.
+--
+-- Correção do corpo 2026-09-17 (auditoria Local×GitHub×DB, antes da 1ª aplicação):
+--   (1) zapp.user_roles NÃO tem coluna profile_id (tem user_id → auth.users);
+--       a subquery admin usava ur.profile_id e falharia com "column does not exist";
+--   (2) 'super_admin' NÃO existe no enum zapp.app_role
+--       (admin|manager|supervisor|agent|special_agent|dev) → IN ('admin','dev').
 
 DO $fix$
 BEGIN
@@ -18,8 +24,8 @@ BEGIN
       profile_id = zapp.get_profile_id_for_user(auth.uid())
       OR EXISTS (
         SELECT 1 FROM zapp.user_roles ur
-        WHERE ur.profile_id = zapp.get_profile_id_for_user(auth.uid())
-          AND ur.role IN ('admin', 'super_admin')
+        WHERE ur.user_id = auth.uid()
+          AND ur.role IN ('admin', 'dev')
       )
     );
 

@@ -1,4 +1,8 @@
 -- Migration: dim-6 — State machine guard for evolution_conversations.status
+-- Data: 2026-09-06 · Re-versionada 2026-09-17 (era 20260906130000)
+-- Re-versionamento: irmã colidente de 20260906130000_fix_sicoob_bridge_concurrency
+--   (o aplicador registra por versão — irmãs colidentes eram puladas para sempre).
+--   Corpo idempotente (CREATE OR REPLACE FUNCTION + DROP TRIGGER IF EXISTS).
 -- Aplica BEFORE UPDATE trigger que bloqueia transições inválidas.
 --
 -- Máquina de estados de evolution_conversations:
@@ -112,7 +116,7 @@ CREATE TRIGGER trg_guard_conversation_status
 
 COMMENT ON TRIGGER trg_guard_conversation_status ON evo.evolution_conversations IS
   'Dim-6 state machine guard: bloqueia transições de status inválidas. '
-  'Criado em 2026-09-06 — migration 20260906130000.';
+  'Criado em 2026-09-06 — migration 20260917121200 (re-versionada de 20260906130000).';
 
 -- ──────────────────────────────────────────────────────────────────────────────
 -- 3. Smoke test — não falha em produção, apenas loga

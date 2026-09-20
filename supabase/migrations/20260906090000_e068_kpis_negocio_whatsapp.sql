@@ -366,10 +366,9 @@ $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Registro em schema_migrations (workaround self-hosted)
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+INSERT INTO supabase_migrations.schema_migrations (version, name)
 VALUES (
   '20260906090000',
-  'e068_kpis_negocio_whatsapp',
-  7
+  'e068_kpis_negocio_whatsapp'
 )
 ON CONFLICT (version) DO NOTHING;

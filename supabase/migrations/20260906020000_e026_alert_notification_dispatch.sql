@@ -147,15 +147,9 @@ ORDER BY sem_notificacao DESC, total_abertos DESC;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Registro em schema_migrations (workaround self-hosted)
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+INSERT INTO supabase_migrations.schema_migrations (version, name)
 VALUES (
   '20260906020000',
-  'e026_alert_notification_dispatch',
-  ARRAY[
-    'ALTER TABLE zapp.evolution_alerts ADD COLUMN IF NOT EXISTS notified_at timestamptz',
-    'CREATE OR REPLACE FUNCTION zapp.fn_dispatch_unnotified_alerts()',
-    'SELECT cron.schedule e026-alert-notification-dispatch',
-    'CREATE OR REPLACE VIEW zapp.v_kpi_alertas_mudos'
-  ]
+  'e026_alert_notification_dispatch'
 )
 ON CONFLICT (version) DO NOTHING;
