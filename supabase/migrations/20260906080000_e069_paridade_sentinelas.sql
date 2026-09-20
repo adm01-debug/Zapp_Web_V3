@@ -394,10 +394,9 @@ $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Registro em schema_migrations (workaround self-hosted)
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+INSERT INTO supabase_migrations.schema_migrations (version, name)
 VALUES (
   '20260906080000',
-  'e069_paridade_sentinelas',
-  7
+  'e069_paridade_sentinelas'
 )
 ON CONFLICT (version) DO NOTHING;

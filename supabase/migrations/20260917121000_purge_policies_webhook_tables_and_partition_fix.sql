@@ -1,5 +1,10 @@
 -- Migration: purge_policies_webhook_tables_and_partition_fix
--- Data: 2026-09-06
+-- Data: 2026-09-06 · Re-versionada 2026-09-17 (era 20260906010000)
+-- Re-versionamento: irmã colidente de 20260906010000_e020_consumer_stats_stale_watchdog
+--   (o aplicador registra por versão — irmãs colidentes eram puladas para sempre).
+--   Conteúdo permanece idempotente (CREATE OR REPLACE + cron.schedule ... WHERE NOT EXISTS).
+--   NOTA: evo.fn_purge_old_webhook_event_partitions já existe na produção (aplicada
+--   fora do pipeline em 06/09); esta migration realinha repo↔DB e registra a versão.
 -- Contexto: Disco a 87% — três tabelas de monitoramento sem política de retenção.
 --   webhook_events_processed (301 MB, idempotência): retenção 7 dias
 --   webhook_audit_log (60 MB, auditoria): retenção 30 dias
@@ -9,7 +14,9 @@
 
 -- 1. Função de purge de partições (corrigida: DROP ... CASCADE)
 CREATE OR REPLACE FUNCTION evo.fn_purge_old_webhook_event_partitions(retention_days int DEFAULT 60)
-RETURNS TABLE(dropped text) LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS TABLE(dropped text) LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = evo, pg_catalog
+AS $$
 DECLARE
   v_partition text;
   v_year int;

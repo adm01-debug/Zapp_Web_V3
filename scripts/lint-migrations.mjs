@@ -82,6 +82,40 @@ function addViolation(file, line, rule, message) {
   violations.push({ file: basename(file), line, rule, message });
 }
 
+// ML-009: Duplicate migration version (directory-level).
+// Always scans the WHOLE directory, even in CHANGED_FILES (CI) mode, because a
+// new file can collide with an untouched existing one. The applicator
+// (infra/db-migrate/apply-migrations.sh) tracks "applied" by version string:
+// once one sibling of a colliding version is registered, the others are
+// silently skipped forever (drift repo × DB with no error).
+{
+  const ALL_TIMESTAMPS_RE = /^\d{14}_.*\.sql$/;
+  let allNames;
+  try {
+    allNames = readdirSync(MIGRATION_DIR).filter(f => ALL_TIMESTAMPS_RE.test(f)).sort();
+  } catch {
+    allNames = files.map(f => basename(f));
+  }
+  const byVersion = new Map();
+  for (const name of allNames) {
+    const ver = name.slice(0, 14);
+    if (!byVersion.has(ver)) byVersion.set(ver, []);
+    byVersion.get(ver).push(name);
+  }
+  for (const [ver, names] of byVersion) {
+    if (names.length > 1) {
+      for (const name of names) {
+        addViolation(
+          join(MIGRATION_DIR, name), 1, 'ML-009',
+          `Versão de migration duplicada: ${ver} usada por ${names.length} arquivos (${names.join(', ')}). ` +
+          `O aplicador registra por versão — irmãos colidentes são silenciosamente pulados para sempre. ` +
+          `Renomear para versão única (14 dígitos YYYYMMDDHHMMSS).`
+        );
+      }
+    }
+  }
+}
+
 for (const filePath of files) {
   let src;
   try {
@@ -261,7 +295,7 @@ console.error(`❌ lint-migrations: ${violations.length} violation(s) in ${files
 
 for (const v of violations) {
   // ML-004 and ML-005 are blocking; ML-001, ML-002, ML-003, ML-007 are blocking
-  const isBlocking = ['ML-001', 'ML-002', 'ML-003', 'ML-004', 'ML-005', 'ML-007', 'ML-008'].includes(v.rule);
+  const isBlocking = ['ML-001', 'ML-002', 'ML-003', 'ML-004', 'ML-005', 'ML-007', 'ML-008', 'ML-009'].includes(v.rule);
   if (isBlocking) hasBlocker = true;
   const prefix = isBlocking ? '🔴' : '🟡';
   console.error(`${prefix} [${v.rule}] ${v.file}:${v.line}`);

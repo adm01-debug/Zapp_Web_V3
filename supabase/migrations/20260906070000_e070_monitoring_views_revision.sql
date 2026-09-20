@@ -91,10 +91,9 @@ $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Registro em schema_migrations (workaround self-hosted)
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+INSERT INTO supabase_migrations.schema_migrations (version, name)
 VALUES (
   '20260906070000',
-  'e070_monitoring_views_revision',
-  2
+  'e070_monitoring_views_revision'
 )
 ON CONFLICT (version) DO NOTHING;
