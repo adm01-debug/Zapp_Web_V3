@@ -1,0 +1,142 @@
+name: TypeSafe PR Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gate semântico em MODO COMENTÁRIO (nunca falha o job, nunca bloqueia merge).
+#
+# Envia o diff de supabase/migrations/ e supabase/functions/ para o TypeSafe
+# Jev (System One) e comenta quando algum check passa do limiar:
+#   - RLS desabilitado        - policy USING/WITH CHECK (true)
+#   - SQL destrutivo          - segredo hardcoded
+#
+# Perguntas e limiares calibrados em 40 PRs mergeados deste repo (2026-09-21):
+# 0 falso positivo em 40 nas 4 perguntas. Recall NÃO foi medido (amostra sem
+# positivos reais de RLS off / segredo). Limitação conhecida: SQL dinâmico
+# (EXECUTE format('DROP TABLE ...')) não é detectado.
+#
+# Modelo pinado (jev-1.13.0): o alias jev-latest muda sem aviso e invalidaria
+# os limiares. Só o diff no escopo sai do repo; custo medido ~US$ 0,0004/PR.
+# ─────────────────────────────────────────────────────────────────────────
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typesafe-gate:
+    name: TypeSafe PR Gate
+    # ubuntu-latest: só API do GitHub (github-script) + HTTPS para api.typesafe.ai, sem DB/VPS.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask Jev and comment
+        uses: actions/github-script@v9
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        with:
+          script: |
+            const KEY = process.env.TYPESAFE_API_KEY;
+            const MARKER = '<!-- typesafe-pr-gate -->';
+            const MODEL = 'jev-1.13.0';
+            const CAP = 60000;
+            const SCOPE = /^supabase\/(migrations|functions)\//;
+            const HIGH = 0.8, LOW = 0.5;
+
+            if (!KEY) { core.notice('TYPESAFE_API_KEY ausente (fork/dependabot?) — gate pulado.'); return; }
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const Q = {
+              rls_disabled: { type: 'noul',
+                instructions: "At least one added line (a line starting with '+') in `diff` is a SQL statement that turns Row Level Security OFF for a table, such as ALTER TABLE ... DISABLE ROW LEVEL SECURITY.",
+                criteria: { true: 'An added line explicitly disables RLS on a table.', false: "No added line disables RLS. Dropping, renaming or replacing a policy does NOT count. ENABLE ROW LEVEL SECURITY does NOT count. Removed lines (starting with '-') do NOT count. Diffs with no SQL are false." } },
+              permissive_policy: { type: 'noul',
+                instructions: "At least one added line (starting with '+') in `diff` creates or alters a Postgres RLS policy whose USING or WITH CHECK expression is literally (true), granting access to every row unconditionally.",
+                criteria: { true: 'An added CREATE POLICY / ALTER POLICY has USING (true) or WITH CHECK (true).', false: 'No added policy is unconditional. Policies that compare auth.uid(), a role, a tenant or any column are false. Diffs with no SQL are false.' } },
+              destructive: { type: 'noul',
+                instructions: "At least one added line (starting with '+') in `diff` is a destructive SQL statement: DROP TABLE, DROP COLUMN, TRUNCATE, or DELETE FROM without a WHERE clause.",
+                criteria: { true: 'An added SQL line drops a table or column, truncates a table, or deletes all rows.', false: 'No such added statement. DROP POLICY, DROP INDEX, DROP FUNCTION, DROP TRIGGER, DROP VIEW and DELETE with a WHERE clause do NOT count. JavaScript/TypeScript array or object deletes do NOT count.' } },
+              secret: { type: 'noul',
+                instructions: "At least one added line (starting with '+') in `diff` hardcodes a real credential as a string literal in source code: an API key, access token, JWT, password or connection string with password.",
+                criteria: { true: 'A literal secret value is written directly in an added line.', false: "No literal secret. Reading from environment variables (process.env, Deno.env.get, import.meta.env), secret NAMES without values, placeholders like 'your-key-here' or '<TOKEN>', test fixtures with obviously fake values, and public anon/publishable keys do NOT count." } },
+            };
+            const LABEL = { rls_disabled: 'RLS desabilitado em tabela', permissive_policy: 'Policy `USING`/`WITH CHECK (true)`', destructive: 'SQL destrutivo (DROP TABLE/COLUMN, TRUNCATE, DELETE sem WHERE)', secret: 'Segredo hardcoded' };
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            async function ask(state) {
+              let last = 0;
+              for (let i = 0; i < 4; i++) {
+                const r = await fetch('https://api.typesafe.ai/v1/systemone', { method: 'POST', headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ state, model: MODEL, questions: Q }) });
+                last = r.status;
+                if (r.status === 429 || r.status === 529 || r.status >= 500) { await sleep(1000 * 2 ** i); continue; }
+                if (r.status !== 200) throw new Error('TypeSafe HTTP ' + r.status);
+                return r.json();
+              }
+              throw new Error('TypeSafe indisponivel (HTTP ' + last + ')');
+            }
+
+            try {
+              const files = [];
+              for (let page = 1; ; page++) {
+                const { data } = await github.rest.pulls.listFiles({ owner, repo, pull_number: issue_number, per_page: 100, page });
+                files.push(...data);
+                if (data.length < 100) break;
+              }
+              const scoped = files.filter((f) => SCOPE.test(f.filename) && f.status !== 'removed');
+              const noPatch = scoped.filter((f) => !f.patch).map((f) => f.filename);
+              const parts = scoped.filter((f) => f.patch).map((f) => {
+                const t = 'diff --git a/' + f.filename + ' b/' + f.filename + '\n--- a/' + f.filename + '\n+++ b/' + f.filename + '\n' + f.patch;
+                return t.length > CAP ? t.slice(0, CAP) + '\n[truncated]' : t;
+              });
+
+              const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+              const existing = comments.find((c) => c.body && c.body.startsWith(MARKER));
+              const upsert = async (body) => existing
+                ? github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+                : github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+              if (!parts.length) {
+                core.info('Sem arquivos com patch em supabase/migrations|functions — nada a avaliar.');
+                if (existing) await upsert(MARKER + '\n## TypeSafe PR Gate\n\n✅ PR não tem mais arquivos no escopo (`supabase/migrations/`, `supabase/functions/`).');
+                return;
+              }
+
+              const chunks = []; let cur = [], len = 0;
+              for (const t of parts) { if (len + t.length > CAP && cur.length) { chunks.push(cur.join('\n')); cur = []; len = 0; } cur.push(t); len += t.length; }
+              if (cur.length) chunks.push(cur.join('\n'));
+
+              const pr_title = (context.payload.pull_request && context.payload.pull_request.title) || '';
+              const ans = {}; let tokens = 0, model = MODEL;
+              for (const diff of chunks) {
+                const j = await ask({ pr_title, diff });
+                tokens += (j.usage && j.usage.input_tokens) || 0; model = j.model || model;
+                for (const [k, v] of Object.entries(j.answers || {})) ans[k] = Math.max(ans[k] ?? 0, v.noul ?? 0);
+              }
+
+              const rows = Object.keys(Q).map((k) => {
+                const p = ans[k] ?? 0;
+                const icon = p >= HIGH ? '🔴 provável' : p >= LOW ? '🟡 incerto' : '✅';
+                return '| ' + LABEL[k] + ' | ' + p.toFixed(2) + ' | ' + icon + ' |';
+              });
+              const flagged = Object.keys(Q).filter((k) => (ans[k] ?? 0) >= LOW);
+              let body = MARKER + '\n## TypeSafe PR Gate — ' + (flagged.length ? flagged.length + ' alerta(s)' : 'limpo') + '\n\n'
+                + '_Modo comentário: não bloqueia merge. Probabilidade do modelo, não veredito — confira a linha antes de agir._\n\n'
+                + '| Check | Prob. | |\n|---|---|---|\n' + rows.join('\n') + '\n\n'
+                + 'Escopo: ' + parts.length + ' arquivo(s) de `supabase/migrations/` e `supabase/functions/` · ' + chunks.length + ' chamada(s) · ' + tokens + ' tokens · `' + model + '`';
+              if (noPatch.length) body += '\n\n⚠️ Sem patch na API do GitHub (grandes demais), **não avaliados**: ' + noPatch.map((n) => '`' + n + '`').join(', ');
+              body += '\n\n<sub>Limitação conhecida: SQL dinâmico (`EXECUTE format(\'DROP TABLE ...\')`) não é detectado.</sub>';
+
+              await core.summary.addRaw(body.replace(MARKER + '\n', '')).write();
+              if (flagged.length || existing) await upsert(body);
+              else core.info('Nenhum check >= ' + LOW + ' — sem comentário (ver job summary).');
+            } catch (e) {
+              core.warning('typesafe-pr-gate falhou (não bloqueia): ' + e.message);
+            }
