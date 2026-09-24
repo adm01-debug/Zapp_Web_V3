@@ -377,7 +377,11 @@ export default function AdminConnectionsPage() {
             >
               <Activity className="h-4 w-4" /> Diagnóstico
             </Button>
-            <Button className="bg-primary hover:bg-primary/90">
+            <Button
+              className="bg-primary hover:bg-primary/90"
+              disabled
+              title="Cadastro de novas conexões ainda não implementado"
+            >
               <Plus className="mr-2 h-4 w-4" /> Nova Conexão
             </Button>
           </div>
@@ -587,15 +591,22 @@ export default function AdminConnectionsPage() {
                   <CardDescription>Sincronização bidirecional de Leads e Negócios</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Integração ainda não implementada nesta tela — os campos abaixo não persistem
+                    nada.
+                  </p>
                   <div className="space-y-2">
                     <Label>Webhook URL (Inbound)</Label>
-                    <Input placeholder="https://sua-empresa.bitrix24.com.br/rest/1/abc..." />
+                    <Input
+                      placeholder="https://sua-empresa.bitrix24.com.br/rest/1/abc..."
+                      disabled
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Access Token / Key</Label>
-                    <Input type="password" placeholder="Digite o token de acesso" />
+                    <Input type="password" placeholder="Digite o token de acesso" disabled />
                   </div>
-                  <Button className="w-full gap-2">
+                  <Button className="w-full gap-2" disabled title="Ainda não implementado">
                     <Save className="h-4 w-4" /> Salvar Integração Bitrix
                   </Button>
                 </CardContent>
@@ -614,15 +625,24 @@ export default function AdminConnectionsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Integração ainda não implementada nesta tela — os campos abaixo não persistem
+                    nada.
+                  </p>
                   <div className="space-y-2">
                     <Label>URL de Produção</Label>
-                    <Input placeholder="https://n8n.sua-vps.com/webhook/..." />
+                    <Input placeholder="https://n8n.sua-vps.com/webhook/..." disabled />
                   </div>
                   <div className="space-y-2">
                     <Label>Auth Header (API Key)</Label>
-                    <Input type="password" placeholder="Header X-N8N-API-KEY" />
+                    <Input type="password" placeholder="Header X-N8N-API-KEY" disabled />
                   </div>
-                  <Button className="w-full gap-2" variant="secondary">
+                  <Button
+                    className="w-full gap-2"
+                    variant="secondary"
+                    disabled
+                    title="Ainda não implementado"
+                  >
                     <Save className="h-4 w-4" /> Conectar n8n
                   </Button>
                 </CardContent>
@@ -648,6 +668,10 @@ export default function AdminConnectionsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Gestão de webhooks inter-app ainda não implementada — a linha abaixo é um
+                    exemplo ilustrativo, não um dado real.
+                  </p>
                   <div className="rounded-md border border-secondary/20">
                     <table className="w-full text-sm">
                       <thead className="border-b bg-muted/50">
@@ -660,7 +684,7 @@ export default function AdminConnectionsPage() {
                       </thead>
                       <tbody>
                         <tr className="border-b last:border-0">
-                          <td className="px-4 py-3 font-medium">CRM-Integrator-App</td>
+                          <td className="px-4 py-3 font-medium">CRM-Integrator-App (exemplo)</td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
                               <Badge variant="secondary" className="text-[10px]">
@@ -672,19 +696,27 @@ export default function AdminConnectionsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <Badge className="border-success/20 bg-success/10 text-success">
-                              Ativo
-                            </Badge>
+                            <Badge variant="outline">Pendente</Badge>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label="Configurações da instância"
+                                disabled
+                                title="Ainda não implementado"
+                              >
                                 <Settings className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 text-destructive"
+                                aria-label="Excluir instância"
+                                disabled
+                                title="Ainda não implementado"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -694,7 +726,12 @@ export default function AdminConnectionsPage() {
                       </tbody>
                     </table>
                   </div>
-                  <Button className="mt-4 gap-2" variant="outline">
+                  <Button
+                    className="mt-4 gap-2"
+                    variant="outline"
+                    disabled
+                    title="Ainda não implementado"
+                  >
                     <Plus className="h-4 w-4" /> Gerar Novo Webhook de Entrada
                   </Button>
                 </CardContent>
@@ -734,22 +771,33 @@ export default function AdminConnectionsPage() {
                     </p>
                     <div className="flex items-center gap-2">
                       <Input readOnly value={MCP_SERVER_URL} className="font-mono text-[10px]" />
-                      <Button size="icon" variant="ghost">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Abrir endpoint MCP em nova aba"
+                        onClick={() => window.open(MCP_SERVER_URL, '_blank', 'noopener,noreferrer')}
+                      >
                         <ExternalLink className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
 
                   <div className="space-y-4">
+                    <p className="text-xs text-muted-foreground">
+                      Controle de acesso e rotação de token via UI ainda não implementados — os
+                      controles abaixo são ilustrativos.
+                    </p>
                     <div className="flex items-center justify-between">
                       <Label>Habilitar Acesso MCP</Label>
-                      <Switch defaultChecked />
+                      <Switch checked disabled title="Ainda não implementado" />
                     </div>
                     <div className="space-y-2">
                       <Label>Token de Segurança MCP</Label>
                       <div className="flex gap-2">
                         <Input type="password" value="sk_mcp_zapp_********************" readOnly />
-                        <Button variant="outline">Regerar</Button>
+                        <Button variant="outline" disabled title="Ainda não implementado">
+                          Regerar
+                        </Button>
                       </div>
                     </div>
                   </div>

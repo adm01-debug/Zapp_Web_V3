@@ -28,13 +28,15 @@ import { QueueCard } from './QueueCard';
 /** Queues View component for the queues section. */
 export function QueuesView() {
   const navigate = useNavigate();
-  const { queues, loading, createQueue, deleteQueue, addMember, removeMember } = useQueues();
+  const { queues, loading, createQueue, updateQueue, deleteQueue, addMember, removeMember } =
+    useQueues();
   const { goals: goalsList } = useQueueGoals();
   const goals = useMemo<Record<string, (typeof goalsList)[number]>>(
     () => Object.fromEntries(goalsList.map((g) => [g.queue_id, g])),
     [goalsList]
   );
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editingQueue, setEditingQueue] = useState<QueueWithMembers | null>(null);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
   const [selectedQueue, setSelectedQueue] = useState<QueueWithMembers | null>(null);
@@ -64,8 +66,7 @@ export function QueuesView() {
             queueName: queue.name,
             queueColor: queue.color,
             message: `${queue.waiting_count} contatos aguardando atendimento`,
-            severity:
-              queue.waiting_count > maxWaiting * 1.5 ? 'critical' : 'warning',
+            severity: queue.waiting_count > maxWaiting * 1.5 ? 'critical' : 'warning',
             currentValue: queue.waiting_count,
             threshold: maxWaiting,
           });
@@ -106,6 +107,10 @@ export function QueuesView() {
   const handleSetGoals = useCallback((q: QueueWithMembers) => {
     setSelectedQueue(q);
     setGoalsDialogOpen(true);
+  }, []);
+
+  const handleEditQueue = useCallback((q: QueueWithMembers) => {
+    setEditingQueue(q);
   }, []);
 
   const handleDeleteQueue = useCallback((q: QueueWithMembers) => {
@@ -155,9 +160,7 @@ export function QueuesView() {
               // E67 (67.7): rota SLA única — navegação view-based dentro do
               // shell (antes: navegação direta para a página standalone).
               onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('navigate-view', { detail: 'sla' })
-                )
+                window.dispatchEvent(new CustomEvent('navigate-view', { detail: 'sla' }))
               }
             >
               <Clock className="mr-2 h-4 w-4" />
@@ -207,6 +210,7 @@ export function QueuesView() {
             onAddMember={handleAddMember}
             onRemoveMember={handleRemoveMember}
             onSetGoals={handleSetGoals}
+            onEdit={handleEditQueue}
             onDelete={handleDeleteQueue}
           />
         ))}
@@ -232,6 +236,12 @@ export function QueuesView() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSubmit={createQueue}
+      />
+      <CreateQueueDialog
+        open={!!editingQueue}
+        onOpenChange={(open) => !open && setEditingQueue(null)}
+        initialQueue={editingQueue}
+        onSubmit={(q) => (editingQueue ? updateQueue(editingQueue.id, q) : false)}
       />
       {selectedQueue && (
         <AddMemberDialog

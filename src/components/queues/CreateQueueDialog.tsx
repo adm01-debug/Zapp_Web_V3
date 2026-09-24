@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,8 @@ interface CreateQueueDialogProps {
     description: string;
     color: string;
   }) => void | boolean | Promise<void | boolean>;
+  /** Quando presente, o dialog abre em modo de edição pré-preenchido com esses valores. */
+  initialQueue?: { name: string; description: string | null; color: string } | null;
 }
 
 const COLORS = [
@@ -32,12 +34,27 @@ const COLORS = [
   '#84CC16', // lime
 ];
 
-/** Create Queue Dialog component for the queues section. */
-export function CreateQueueDialog({ open, onOpenChange, onSubmit }: CreateQueueDialogProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [color, setColor] = useState(COLORS[0]);
+/** Create Queue Dialog component for the queues section. Also handles edit mode via `initialQueue`. */
+export function CreateQueueDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  initialQueue,
+}: CreateQueueDialogProps) {
+  const isEditMode = !!initialQueue;
+  const [name, setName] = useState(initialQueue?.name ?? '');
+  const [description, setDescription] = useState(initialQueue?.description ?? '');
+  const [color, setColor] = useState(initialQueue?.color ?? COLORS[0]);
   const [loading, setLoading] = useState(false);
+
+  // Re-sincroniza os campos sempre que o dialog abre para uma fila diferente
+  // (ou para o modo de criação, quando initialQueue é null).
+  useEffect(() => {
+    if (!open) return;
+    setName(initialQueue?.name ?? '');
+    setDescription(initialQueue?.description ?? '');
+    setColor(initialQueue?.color ?? COLORS[0]);
+  }, [open, initialQueue]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,9 +65,11 @@ export function CreateQueueDialog({ open, onOpenChange, onSubmit }: CreateQueueD
       const result = await onSubmit({ name, description, color });
       // Keep the dialog open when the mutation explicitly reported a failure.
       if (result === false) return;
-      setName('');
-      setDescription('');
-      setColor(COLORS[0]);
+      if (!isEditMode) {
+        setName('');
+        setDescription('');
+        setColor(COLORS[0]);
+      }
       onOpenChange(false);
     } finally {
       setLoading(false);
@@ -59,38 +78,44 @@ export function CreateQueueDialog({ open, onOpenChange, onSubmit }: CreateQueueD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-card border-border/30">
+      <DialogContent className="border-border/30 bg-card sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-foreground">Nova Fila</DialogTitle>
+          <DialogTitle className="text-foreground">
+            {isEditMode ? 'Editar Fila' : 'Nova Fila'}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name" className="text-foreground">Nome</Label>
+            <Label htmlFor="name" className="text-foreground">
+              Nome *
+            </Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Suporte Técnico"
-              className="bg-muted/20 border-border/30"
+              className="border-border/30 bg-muted/20"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description" className="text-foreground">Descrição</Label>
+            <Label htmlFor="description" className="text-foreground">
+              Descrição (opcional)
+            </Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Descreva o propósito desta fila..."
-              className="bg-muted/20 border-border/30 resize-none"
+              className="resize-none border-border/30 bg-muted/20"
               rows={3}
             />
           </div>
 
           <div className="space-y-2">
             <Label className="text-foreground">Cor</Label>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-wrap gap-2">
               {COLORS.map((c) => (
                 <button
                   key={c}
@@ -98,8 +123,10 @@ export function CreateQueueDialog({ open, onOpenChange, onSubmit }: CreateQueueD
                   onClick={() => setColor(c)}
                   aria-label={`Selecionar cor ${c}`}
                   aria-pressed={color === c}
-                  className={`w-8 h-8 rounded-full transition-all ${
-                    color === c ? 'ring-2 ring-offset-2 ring-offset-card ring-primary scale-110' : 'hover:scale-105'
+                  className={`h-8 w-8 rounded-full transition-all ${
+                    color === c
+                      ? 'scale-110 ring-2 ring-primary ring-offset-2 ring-offset-card'
+                      : 'hover:scale-105'
                   }`}
                   style={{ backgroundColor: c }}
                 />
@@ -117,7 +144,13 @@ export function CreateQueueDialog({ open, onOpenChange, onSubmit }: CreateQueueD
               Cancelar
             </Button>
             <Button type="submit" disabled={loading || !name.trim()}>
-              {loading ? 'Criando...' : 'Criar Fila'}
+              {isEditMode
+                ? loading
+                  ? 'Salvando...'
+                  : 'Salvar Alterações'
+                : loading
+                  ? 'Criando...'
+                  : 'Criar Fila'}
             </Button>
           </DialogFooter>
         </form>
