@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useTicketStatus } from '@/features/inbox';
 import { useAuth } from '@/features/auth';
@@ -108,6 +109,7 @@ export function TicketActionsBar({ contactId, onOpenHistory }: TicketActionsBarP
       await atribuirAuto();
     } catch (err) {
       console.error('[TicketActionsBar] atribuirAuto failed:', err);
+      toast.error('Não foi possível atribuir automaticamente. Tente novamente.');
     } finally {
       if (mountedRef.current) setIsRouting(false);
     }

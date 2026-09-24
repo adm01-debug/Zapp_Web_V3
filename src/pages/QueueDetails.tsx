@@ -21,7 +21,9 @@ export default function QueueDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { queue, members, contacts, metrics, loading } = useQueueDetails(user ? id : undefined);
+  const { queue, members, contacts, metrics, loading, error, refetch } = useQueueDetails(
+    user ? id : undefined
+  );
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/auth');
@@ -47,12 +49,31 @@ export default function QueueDetails() {
   }
 
   if (!queue) {
+    // Fase 9 da auditoria UX (2026-09-24): antes, uma falha de rede/RLS na
+    // busca da fila (error != null) caía na mesma tela de "não encontrada"
+    // de um ID inexistente — o usuário não tinha como saber que devia
+    // tentar de novo em vez de desistir e voltar.
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
           <AlertCircle className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-          <h2 className="mb-2 text-xl font-semibold text-foreground">Fila não encontrada</h2>
-          <Button onClick={() => navigate('/')}>Voltar</Button>
+          <h2 className="mb-2 text-xl font-semibold text-foreground">
+            {error ? 'Erro ao carregar a fila' : 'Fila não encontrada'}
+          </h2>
+          {error && (
+            <p className="mb-4 max-w-sm text-sm text-muted-foreground">
+              Não foi possível carregar os dados desta fila. Verifique sua conexão e tente
+              novamente.
+            </p>
+          )}
+          <div className="flex justify-center gap-2">
+            {error && (
+              <Button variant="outline" onClick={refetch}>
+                Tentar novamente
+              </Button>
+            )}
+            <Button onClick={() => navigate('/')}>Voltar</Button>
+          </div>
         </div>
       </div>
     );
@@ -72,7 +93,13 @@ export default function QueueDetails() {
           { label: queue.name },
         ]}
         actions={
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled
+            title="Configurações da fila ainda não disponíveis nesta tela"
+          >
             <Settings className="h-4 w-4" />
             Configurar
           </Button>

@@ -1,6 +1,17 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Pencil, Trash2, Users, Pause, Play, Radio } from 'lucide-react';
 import { ALGO_LABEL, type Queue } from '@/hooks/admin/useAdminQueues';
 
@@ -62,6 +73,7 @@ export function QueueCard({
   const qChannels = channelQueues.filter((cq) => cq.queue_id === queue.id && cq.is_active);
   const defaultIn = channels.filter((c) => c.default_queue_id === queue.id);
   const isPaused = queue.status === 'paused';
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   return (
     <Card className={isPaused ? 'border-warning/40 opacity-70' : undefined}>
@@ -122,12 +134,33 @@ export function QueueCard({
             aria-label="Excluir fila"
             size="icon"
             variant="ghost"
-            onClick={() => onRemove(queue.id)}
+            onClick={() => setConfirmDeleteOpen(true)}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir fila "{queue.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Membros, habilidades e canais vinculados a esta fila
+              perderão essa associação.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => onRemove(queue.id)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <CardContent>
         {/* Capacity & channel badges */}

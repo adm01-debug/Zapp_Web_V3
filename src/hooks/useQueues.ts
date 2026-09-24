@@ -42,6 +42,12 @@ interface CreateQueueInput {
   color?: string;
 }
 
+interface UpdateQueueInput {
+  name: string;
+  description?: string | null;
+  color?: string;
+}
+
 interface UseQueuesResult {
   loading: boolean;
   mutating: boolean;
@@ -49,13 +55,21 @@ interface UseQueuesResult {
   queues: QueueWithMembers[];
   refetch: () => void;
   createQueue: (queue: CreateQueueInput) => Promise<boolean>;
+  updateQueue: (queueId: string, queue: UpdateQueueInput) => Promise<boolean>;
   deleteQueue: (queueId: string) => Promise<boolean>;
   addMember: (queueId: string, profileId: string) => Promise<boolean>;
   removeMember: (queueId: string, profileId: string) => Promise<boolean>;
 }
 
 /** Re-exported module members. */
-export type { Queue, QueueMember, QueueWithMembers, CreateQueueInput, UseQueuesResult };
+export type {
+  Queue,
+  QueueMember,
+  QueueWithMembers,
+  CreateQueueInput,
+  UpdateQueueInput,
+  UseQueuesResult,
+};
 
 // ── Cache module-level (TTL 5min) ─────────────────────────────────────────
 // queues/queue_members são catálogo quase-estático (mudam via admin ou
@@ -227,6 +241,21 @@ export function useQueues(): UseQueuesResult {
     [runMutation]
   );
 
+  const updateQueue = useCallback(
+    (queueId: string, queue: UpdateQueueInput) =>
+      runMutation('updateQueue', () =>
+        supabase
+          .from('queues')
+          .update({
+            name: queue.name,
+            description: queue.description ?? null,
+            color: queue.color ?? 'bg-primary',
+          })
+          .eq('id', queueId)
+      ),
+    [runMutation]
+  );
+
   const deleteQueue = useCallback(
     (queueId: string) =>
       runMutation('deleteQueue', () => supabase.from('queues').delete().eq('id', queueId)),
@@ -258,6 +287,7 @@ export function useQueues(): UseQueuesResult {
     queues,
     refetch,
     createQueue,
+    updateQueue,
     deleteQueue,
     addMember,
     removeMember,
