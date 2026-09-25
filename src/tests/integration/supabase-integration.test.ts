@@ -8,7 +8,7 @@ const mockSupabase = {
     signInWithPassword: vi.fn(),
     signOut: vi.fn(),
   },
-  from: vi.fn(() => ({
+  from: vi.fn((_table: string) => ({
     select: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
@@ -42,7 +42,7 @@ describe('Auth & Data Integration', () => {
     const session = { user: { id: '123' } };
     mockSupabase.auth.getSession.mockResolvedValueOnce({ data: { session }, error: null });
 
-    const authResult = await mockSupabase.auth.getSession() as unknown as MockSessionResult;
+    const authResult = (await mockSupabase.auth.getSession()) as unknown as MockSessionResult;
     const { data } = authResult;
     expect(data.session?.user?.id).toBe('123');
   });

@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { queryKeys } from '@/services/api/queryKeys';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database, Json } from '@/integrations/supabase/schema';
 import { toRecordOrNull } from './monitoringSchemas';
+
+// E60: tipos gerados não modelam RPC — assinatura manual em types-manual.ts
+// (rpc_list_dispatch_error_logs_cursor). Args sao todos opcionais no Postgres
+// (DEFAULT NULL::text / DEFAULT 50), widen documentado no boundary.
+type _DispatchCursorArgs =
+  Database['zapp']['Functions']['rpc_list_dispatch_error_logs_cursor']['Args'];
 
 /** Dispatch Error Log Row interface definition. */
 export interface DispatchErrorLogRow {
@@ -90,10 +97,18 @@ export function useDispatchErrorLogs(filters: DispatchErrorLogFilters = {}) {
         p_search: search ?? undefined,
         p_limit: pageSize,
         p_cursor_id: currentPageCursor ?? undefined,
-      });
+      } satisfies _DispatchCursorArgs);
       if (error) throw error;
-      // E60: RPC tipada nos tipos gerados (com total_count) — mapping sem cast.
-      const list = data ?? [];
+      // E60: types-manual.ts documenta a assinatura real (RPC não modelada em
+      // types.ts gerado — zapp não existe lá, ver types-manual.ts linha 1-15).
+      // O client cai em `any` estrutural para esse schema; anotamos o Row real
+      // aqui no boundary para reter type-safety no resto do hook.
+      type _DispatchCursorRow = Omit<DispatchErrorLogRow, 'payload' | 'context'> & {
+        payload: Json | null;
+        context: Json | null;
+        total_count: number | null;
+      };
+      const list = (data ?? []) as _DispatchCursorRow[];
       const total = list[0]?.total_count != null ? Number(list[0].total_count) : 0;
       const rows: DispatchErrorLogRow[] = list.map((r) => ({
         id: r.id,

@@ -103,8 +103,8 @@ export function ChurnPredictionDashboard() {
 
           return {
             contactId: contact.id,
-            contactName: contact.name,
-            phone: contact.phone,
+            contactName: contact.name ?? contact.phone ?? 'Contato sem nome',
+            phone: contact.phone ?? '',
             riskScore: score,
             riskLevel,
             daysSinceLastMessage: daysSinceUpdate,

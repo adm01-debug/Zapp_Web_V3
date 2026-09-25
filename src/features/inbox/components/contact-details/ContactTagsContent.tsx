@@ -36,7 +36,10 @@ export function ContactTagsContent({ contact, conversation }: ContactTagsContent
   const legacyConversationTags = validContact ? [] : conversation.tags;
 
   const availableTags = (allTags ?? []).filter(
-    (t) => !contactTags.some((ct) => (typeof ct === 'string' ? ct : ct.id) === t.id)
+    (t) =>
+      !contactTags.some(
+        (ct: string | { id: string }) => (typeof ct === 'string' ? ct : ct.id) === t.id
+      )
   );
 
   return (
@@ -59,7 +62,7 @@ export function ContactTagsContent({ contact, conversation }: ContactTagsContent
           </motion.div>
         ))}
 
-      {contactTags.map((tag, i) => {
+      {contactTags.map((tag: string | { id: string; name: string }, i: number) => {
         // contactTags pode conter string (tag legada) ou Tag (DB) — normaliza.
         const tagId = typeof tag === 'string' ? undefined : tag.id;
         const tagName = typeof tag === 'string' ? tag : tag.name;

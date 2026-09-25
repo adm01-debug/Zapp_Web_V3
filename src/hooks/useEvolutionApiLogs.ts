@@ -70,7 +70,7 @@ export function useEvolutionApiLogs({
         final_http_status: row.final_http_status,
         retry_reasons: Array.isArray(row.retry_reasons)
           ? row.retry_reasons
-              .map((r) => {
+              .map((r: unknown) => {
                 if (typeof r !== 'object' || r === null) return null;
                 const obj = r as Record<string, unknown>;
                 return {
@@ -79,7 +79,11 @@ export function useEvolutionApiLogs({
                   status: typeof obj.status === 'number' ? obj.status : undefined,
                 };
               })
-              .filter((r): r is NonNullable<typeof r> => r !== null)
+              .filter(
+                (
+                  r: { attempt: number; reason: string; status: number | undefined } | null
+                ): r is NonNullable<typeof r> => r !== null
+              )
           : [],
         total_duration_ms: row.total_duration_ms,
         created_at: row.created_at ?? '',

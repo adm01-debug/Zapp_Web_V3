@@ -42,13 +42,84 @@ export type ManualZappTables = Record<never, never>;
  */
 export type ManualZappFunctions = {
   rpc_list_failed_messages_cursor: {
-    Args: { p_cursor_id?: string; p_error_code?: string; p_from: string; p_instance: string; p_limit: number; p_search: string; p_status: string[]; p_to: string };
+    Args: {
+      p_cursor_id?: string;
+      p_error_code?: string;
+      p_from: string;
+      p_instance: string;
+      p_limit: number;
+      p_search: string;
+      p_status: string[];
+      p_to: string;
+    };
     Returns: {
-      id: string; instance_name: string | null; remote_jid: string | null; payload: Json | null;
-      error_code: string | null; error_message: string | null; http_status: number | null;
-      retry_count: number | null; max_retries: number | null; status: string | null;
-      last_attempt_at: string | null; next_attempt_at: string | null; succeeded_at: string | null;
-      created_at: string | null; updated_at: string | null; total_count: number | null;
+      id: string;
+      instance_name: string | null;
+      remote_jid: string | null;
+      payload: Json | null;
+      error_code: string | null;
+      error_message: string | null;
+      http_status: number | null;
+      retry_count: number | null;
+      max_retries: number | null;
+      status: string | null;
+      last_attempt_at: string | null;
+      next_attempt_at: string | null;
+      succeeded_at: string | null;
+      created_at: string | null;
+      updated_at: string | null;
+      total_count: number | null;
+    }[];
+  };
+  /**
+   * Auditoria imutavel de dispatch_error_logs (distinto da fila viva DLQ de
+   * failed_messages). SECURITY DEFINER, restrito a admin/supervisor.
+   */
+  rpc_list_dispatch_error_logs_cursor: {
+    Args: {
+      p_from?: string;
+      p_to?: string;
+      p_instance?: string;
+      p_agent?: string;
+      p_error_code?: string;
+      p_search?: string;
+      p_limit?: number;
+      p_cursor_id?: string;
+    };
+    Returns: {
+      id: string;
+      failed_message_id: string | null;
+      instance_name: string;
+      remote_jid: string | null;
+      channel_type: string | null;
+      agent_email: string | null;
+      agent_user_id: string | null;
+      error_code: string | null;
+      error_message: string | null;
+      http_status: number | null;
+      retry_count: number;
+      payload: Json | null;
+      context: Json | null;
+      occurred_at: string;
+      total_count: number | null;
+    }[];
+  };
+  /**
+   * rpc_dlq_list_audit existe fisicamente em zapp (confirmado via introspecao
+   * 25/09/2026), mas types.ts gerado a colocou em public (drift de geracao).
+   * Assinatura correspondente a chamada real do hook (p_action/p_limit/p_offset).
+   */
+  rpc_dlq_list_audit: {
+    Args: { p_action?: string; p_limit: number; p_offset: number };
+    Returns: {
+      action: string;
+      created_at: string;
+      details: Json;
+      entity_id: string;
+      id: string;
+      user_email: string;
+      user_id: string;
+      user_name: string;
     }[];
   };
   rpc_schema_tables: {

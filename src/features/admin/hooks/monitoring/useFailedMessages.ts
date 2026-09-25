@@ -2,7 +2,7 @@ import { queryKeys } from '@/services/api/queryKeys';
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/schema';
+import type { Database, Json } from '@/integrations/supabase/schema';
 
 import { useUserRole } from '@/features/auth';
 import { getLogger } from '@/lib/logger';
@@ -98,14 +98,37 @@ export function useFailedMessages(filters: FailedMessagesFilters = {}) {
         p_cursor_id: currentPageCursor,
         p_error_code: errorCode ?? null,
       };
-      const { data, error } = await supabase.rpc('rpc_list_failed_messages_cursor', args as _CursorArgs);
+      const { data, error } = await supabase.rpc(
+        'rpc_list_failed_messages_cursor',
+        args as _CursorArgs
+      );
       if (error) {
         if (isRlsDeniedError(error)) {
           return { rows: [], total: 0, deniedReason: formatAdminError(error, 'a DLQ') };
         }
         throw error;
       }
-      const list = data ?? [];
+      // E60: `zapp` ausente de types.ts gerado (ver types-manual.ts linha 1-15)
+      // faz o client cair em `any` estrutural — anotamos o Row real no boundary.
+      type _FailedMessageCursorRow = {
+        error_code: string | null;
+        error_message: string | null;
+        http_status: number | null;
+        id: string;
+        instance_name: string | null;
+        last_attempt_at: string | null;
+        max_retries: number | null;
+        next_attempt_at: string | null;
+        payload: Json;
+        remote_jid: string | null;
+        retry_count: number | null;
+        status: string | null;
+        succeeded_at: string | null;
+        total_count: number | null;
+        created_at: string;
+        updated_at: string;
+      };
+      const list = (data ?? []) as _FailedMessageCursorRow[];
       // errorCode is now filtered server-side via p_error_code.
       // rootCause classification is a multi-field heuristic — filtered client-side.
       const filtered = list.filter((r) => {
@@ -296,7 +319,9 @@ export function useFailedMessages(filters: FailedMessagesFilters = {}) {
 
   const triggerReprocess = useMutation({
     mutationFn: async () => {
-      const { error: triggerErr } = await supabase.rpc('rpc_dlq_log_reprocess_trigger', { p_source: 'panel' });
+      const { error: triggerErr } = await supabase.rpc('rpc_dlq_log_reprocess_trigger', {
+        p_source: 'panel',
+      });
       if (triggerErr) log.warn('Failed to log reprocess trigger', { error: triggerErr.message });
       const { data, error } = await supabase.functions.invoke('reprocess-failed-messages', {
         method: 'POST',

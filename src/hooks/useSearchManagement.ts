@@ -65,7 +65,18 @@ export function useKnowledgeBaseSearchManagement(query: string) {
         log.error('Knowledge base search error:', err);
         return [] as SearchResult[];
       }
-      return (data || []).map((row) => ({
+      // E60: `zapp` ausente de types.ts gerado (ver types-manual.ts linha 1-15)
+      // faz o client cair em `any` estrutural — anotamos o Row real no boundary
+      // (assinatura já existe em types.ts sob `public`, replicada aqui).
+      type _KbSearchRow = {
+        category: string;
+        content: string;
+        id: string;
+        rank: number;
+        tags: string[];
+        title: string;
+      };
+      return ((data ?? []) as _KbSearchRow[]).map((row) => ({
         id: row.id,
         title: row.title,
         content: row.content,
