@@ -65,15 +65,16 @@ export function useKnowledgeBaseSearchManagement(query: string) {
         log.error('Knowledge base search error:', err);
         return [] as SearchResult[];
       }
-      // E60: `zapp` ausente de types.ts gerado (ver types-manual.ts linha 1-15)
-      // faz o client cair em `any` estrutural — anotamos o Row real no boundary
-      // (assinatura já existe em types.ts sob `public`, replicada aqui).
+      // E60-audit (25/09): banco real confirma via pg_get_functiondef que
+      // zapp.search_knowledge_base retorna `tags text` (coluna simples), NAO
+      // string[] como a assinatura sob `public` no types.ts gerado sugeria —
+      // so existe UMA search_knowledge_base no banco e ela vive em `zapp`.
       type _KbSearchRow = {
         category: string;
         content: string;
         id: string;
         rank: number;
-        tags: string[];
+        tags: string;
         title: string;
       };
       return ((data ?? []) as _KbSearchRow[]).map((row) => ({
