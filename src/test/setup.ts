@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 
 // framer-motion usa Element.animate() — no happy-dom, cancelar a animação
 // durante o teardown rejeita a Promise `finished` com AbortError. Substituímos
