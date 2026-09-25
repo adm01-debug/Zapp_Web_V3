@@ -67,12 +67,12 @@ async function resolveLocalContactId(
   const safePhone = sanitizePostgrestFilter(phone);
 
   // Try exact match first, then trailing-digits fallback for stored numbers with country code variations
-  const { data, error } = await dbFrom('contacts')
+  let queryBuilder = dbFrom('contacts')
     .select('id')
     .or(`phone.eq.${safePhone},phone.eq.+${safePhone},phone.ilike.%${safePhone.slice(-8)}`)
-    .limit(1)
-    .abortSignal(signal)
-    .maybeSingle();
+    .limit(1);
+  if (signal) queryBuilder = queryBuilder.abortSignal(signal);
+  const { data, error } = await queryBuilder.maybeSingle();
 
   if (error) {
     log.warn('resolveLocalContactId lookup failed', { phone, error: error.message });
@@ -98,7 +98,9 @@ export function useContactEnrichedData(contactId: string) {
     queryFn: async ({ signal }) => {
       if (!localId) return null;
       const { data, error } = await dbFrom('contacts')
-        .select('company, job_title, nickname, surname, contact_type, ai_sentiment, ai_priority, channel_type')
+        .select(
+          'company, job_title, nickname, surname, contact_type, ai_sentiment, ai_priority, channel_type'
+        )
         .eq('id', localId)
         .abortSignal(signal)
         .maybeSingle(); // ✅ fix: maybeSingle evita PGRST116;

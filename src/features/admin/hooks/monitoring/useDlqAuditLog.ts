@@ -1,9 +1,24 @@
+import type { Json } from '@/integrations/supabase/schema';
 import { queryKeys } from '@/services/api/queryKeys';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/features/auth';
 import { toRecordOrNull } from './monitoringSchemas';
+
+// E60: rpc_dlq_list_audit existe fisicamente em zapp mas types.ts gerado a
+// colocou em public (schema zapp inteiro ausente do gerado — ver
+// types-manual.ts linha 1-15). Anotamos o Row real no boundary.
+type _DlqAuditRow = {
+  action: string;
+  created_at: string;
+  details: Json;
+  entity_id: string;
+  id: string;
+  user_email: string;
+  user_id: string;
+  user_name: string;
+};
 
 /**
  * Histórico de auditoria das operações da DLQ (Dead-Letter Queue).
@@ -64,8 +79,8 @@ export function useDlqAuditLog(opts: UseDlqAuditLogOptions = {}) {
         p_offset: currentPage * limit,
       });
       if (error) throw error;
-      // E60: RPC tipada (rpc_dlq_list_audit) — mapping sem cast; Json → Record via guard.
-      const list = data ?? [];
+      // E60: RPC tipada via anotacao no boundary (ver comentario no topo do arquivo).
+      const list = (data ?? []) as _DlqAuditRow[];
       return list.map((r): DlqAuditEntry => ({
         id: r.id,
         action: r.action,

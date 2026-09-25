@@ -59,23 +59,47 @@ export function useGoalNotifications() {
 
   const checkGoalProgress = useCallback(async () => {
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (authError || !user) return;
 
       const { data: goals, error: goalsError } = await supabase
         .from('queue_goals')
-        .select('id, queue_id, alerts_enabled, max_waiting_contacts, max_avg_wait_minutes, min_assignment_rate, max_messages_pending');
+        .select(
+          'id, queue_id, alerts_enabled, max_waiting_contacts, max_avg_wait_minutes, min_assignment_rate, max_messages_pending'
+        );
 
-      if (goalsError) { log.error('Error fetching goals:', goalsError); return; }
+      if (goalsError) {
+        log.error('Error fetching goals:', goalsError);
+        return;
+      }
       if (!goals || goals.length === 0) return; // sem metas configuradas → nada a medir
 
       const enabledGoals = (goals as GoalRow[]).filter((g) => g.alerts_enabled);
       if (enabledGoals.length === 0) return; // sem metas com alerta → nada a medir
 
-      const { data: metricsRows, error: metricsError } = await supabase.rpc('rpc_queue_goal_metrics');
-      if (metricsError) { log.error('Error fetching queue goal metrics:', metricsError); return; }
+      const { data: metricsRows, error: metricsError } =
+        await supabase.rpc('rpc_queue_goal_metrics');
+      if (metricsError) {
+        log.error('Error fetching queue goal metrics:', metricsError);
+        return;
+      }
 
-      const metricsByQueue = new Map((metricsRows ?? []).map((m) => [m.queue_id, m]));
+      // E60: `zapp` ausente de types.ts gerado (ver types-manual.ts linha 1-15)
+      // faz o client cair em `any` estrutural — anotamos o Row real no boundary
+      // (assinatura documentada em types-manual.ts linha 119-129).
+      type _GoalMetricRow = {
+        queue_id: string;
+        waiting_contacts: number;
+        avg_wait_minutes: number;
+        assignment_rate: number | null;
+        messages_pending: number | null;
+        coverage: string;
+      };
+      const metricsList = (metricsRows ?? []) as _GoalMetricRow[];
+      const metricsByQueue = new Map(metricsList.map((m) => [m.queue_id, m]));
       const queueNames = await fetchQueueNames();
 
       for (const goal of enabledGoals) {
@@ -87,11 +111,36 @@ export function useGoalNotifications() {
 
         // Check each configured threshold against the REAL metric; fire a toast
         // when a new band is crossed. `null` = sem base de dados → nunca disparar.
-        const checks: Array<{ label: string; value: number | null; limit: number | null; invert: boolean }> = [
-          { label: 'Espera (contatos)', value: metrics.waiting_contacts, limit: goal.max_waiting_contacts, invert: false },
-          { label: 'Espera (min)', value: metrics.coverage === 'sem_posicoes' ? null : metrics.avg_wait_minutes, limit: goal.max_avg_wait_minutes, invert: false },
-          { label: 'Taxa de atribuição', value: metrics.assignment_rate, limit: goal.min_assignment_rate, invert: true },
-          { label: 'Msgs pendentes', value: metrics.messages_pending, limit: goal.max_messages_pending, invert: false },
+        const checks: Array<{
+          label: string;
+          value: number | null;
+          limit: number | null;
+          invert: boolean;
+        }> = [
+          {
+            label: 'Espera (contatos)',
+            value: metrics.waiting_contacts,
+            limit: goal.max_waiting_contacts,
+            invert: false,
+          },
+          {
+            label: 'Espera (min)',
+            value: metrics.coverage === 'sem_posicoes' ? null : metrics.avg_wait_minutes,
+            limit: goal.max_avg_wait_minutes,
+            invert: false,
+          },
+          {
+            label: 'Taxa de atribuição',
+            value: metrics.assignment_rate,
+            limit: goal.min_assignment_rate,
+            invert: true,
+          },
+          {
+            label: 'Msgs pendentes',
+            value: metrics.messages_pending,
+            limit: goal.max_messages_pending,
+            invert: false,
+          },
         ];
 
         for (const check of checks) {
@@ -106,9 +155,7 @@ export function useGoalNotifications() {
 
           const thresholds = check.invert ? INVERTED_THRESHOLDS : NOTIFY_THRESHOLDS;
           const crossed = thresholds.filter((t) =>
-            check.invert
-              ? value <= limit * (1 - t / 100)
-              : value >= limit * (t / 100)
+            check.invert ? value <= limit * (1 - t / 100) : value >= limit * (t / 100)
           );
           if (crossed.length === 0) continue;
           const band = crossed[crossed.length - 1]; // só o band mais alto cruzado

@@ -65,7 +65,19 @@ export function useKnowledgeBaseSearchManagement(query: string) {
         log.error('Knowledge base search error:', err);
         return [] as SearchResult[];
       }
-      return (data || []).map((row) => ({
+      // E60-audit (25/09): banco real confirma via pg_get_functiondef que
+      // zapp.search_knowledge_base retorna `tags text` (coluna simples), NAO
+      // string[] como a assinatura sob `public` no types.ts gerado sugeria —
+      // so existe UMA search_knowledge_base no banco e ela vive em `zapp`.
+      type _KbSearchRow = {
+        category: string;
+        content: string;
+        id: string;
+        rank: number;
+        tags: string;
+        title: string;
+      };
+      return ((data ?? []) as _KbSearchRow[]).map((row) => ({
         id: row.id,
         title: row.title,
         content: row.content,

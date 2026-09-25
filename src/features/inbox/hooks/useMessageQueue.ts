@@ -99,7 +99,7 @@ const MAX_PROCESSED_DELIVERIES = 1000;
 function isRetryableSendError(error: unknown): boolean {
   const status =
     typeof (error as { status?: unknown } | null)?.status === 'number'
-      ? ((error as { status: number }).status)
+      ? (error as { status: number }).status
       : undefined;
 
   if (status !== undefined) {
@@ -227,11 +227,12 @@ export function useMessageQueue(
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueToSave));
     } catch (e) {
       const isQuota =
-        e instanceof DOMException &&
-        (e.name === 'QuotaExceededError' || e.code === 22);
+        e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22);
       if (isQuota) {
         // QuotaExceededError — broadcast so the listener below can surface the warning.
-        window.dispatchEvent(new CustomEvent('zapp:storage-quota-exceeded', { detail: { key: QUEUE_STORAGE_KEY } }));
+        window.dispatchEvent(
+          new CustomEvent('zapp:storage-quota-exceeded', { detail: { key: QUEUE_STORAGE_KEY } })
+        );
         log.warn('[useMessageQueue] localStorage quota exceeded — queue not persisted', e);
       } else {
         log.error('[useMessageQueue] localStorage.setItem failed unexpectedly', e);
@@ -435,8 +436,7 @@ export function useMessageQueue(
             // (1 envio + maxRetries-1 retries). Antes (rc < maxRetries) o hook
             // fazia 1 envio + 3 retries = 4 tentativas com maxRetries=3.
             const retryable = isRetryableSendError(err);
-            const shouldAutoRetry =
-              retryable && itemToProcess.retryCount < config.maxRetries - 1;
+            const shouldAutoRetry = retryable && itemToProcess.retryCount < config.maxRetries - 1;
             const delay = shouldAutoRetry
               ? calculateNextRetryDelay(itemToProcess.retryCount, config)
               : 0;
@@ -478,39 +478,36 @@ export function useMessageQueue(
                 variant: 'destructive',
               });
               // Persistir no banco para rastreamento e possivel reprocessamento via DLQ
-              dbFrom('failed_messages')
-                .insert({
-                  id: uuidv4(),
-                  instance_name: 'client-queue',
-                  remote_jid: contactId,
-                  status: 'abandoned',
-                  payload: { content: itemToProcess.content, type: itemToProcess.type },
-                  error_message: errorMsg,
-                  retry_count: itemToProcess.retryCount,
-                  max_retries: config.maxRetries,
-                  last_attempt_at: new Date().toISOString(),
-                })
-                // F4-14: .select() + tratamento estruturado — sem .select() o
-                // erro do PostgREST (ex.: RLS bloqueando o insert) era engolido
-                // e a falha ficava silenciosa (zapp.failed_messages vazia).
-                .select()
-                .then(
-                  ({
-                    error,
-                  }: {
-                    error: { message: string; code?: string | null } | null;
-                  }) => {
-                    if (error) {
-                      log.warn('[failed_messages] insert failed', {
-                        code: error.code ?? null,
-                        message: error.message,
-                      });
-                    } else {
-                      log.debug('Failed message persisted to zapp.failed_messages');
+              Promise.resolve(
+                dbFrom('failed_messages')
+                  .insert({
+                    id: uuidv4(),
+                    instance_name: 'client-queue',
+                    remote_jid: contactId,
+                    status: 'abandoned',
+                    payload: { content: itemToProcess.content, type: itemToProcess.type },
+                    error_message: errorMsg,
+                    retry_count: itemToProcess.retryCount,
+                    max_retries: config.maxRetries,
+                    last_attempt_at: new Date().toISOString(),
+                  })
+                  // F4-14: .select() + tratamento estruturado — sem .select() o
+                  // erro do PostgREST (ex.: RLS bloqueando o insert) era engolido
+                  // e a falha ficava silenciosa (zapp.failed_messages vazia).
+                  .select()
+                  .then(
+                    ({ error }: { error: { message: string; code?: string | null } | null }) => {
+                      if (error) {
+                        log.warn('[failed_messages] insert failed', {
+                          code: error.code ?? null,
+                          message: error.message,
+                        });
+                      } else {
+                        log.debug('Failed message persisted to zapp.failed_messages');
+                      }
                     }
-                  }
-                )
-                .catch((e: unknown) => log.warn('Failed to persist failed_message to DB', e));
+                  )
+              ).catch((e: unknown) => log.warn('Failed to persist failed_message to DB', e));
             } else {
               log.info(`Scheduled retry for ${itemToProcess.id} in ${Math.round(delay / 1000)}s`);
             }
