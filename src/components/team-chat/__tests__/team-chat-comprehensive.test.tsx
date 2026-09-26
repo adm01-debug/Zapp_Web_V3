@@ -997,6 +997,78 @@ describe('Team Chat — useTeamConversations', () => {
     expect(result.current.data?.[0].unread_count).toBe(2);
   });
 
+  it('pina a semântica do unread: janela de 30d, limite estrito do last_read_at e autor', async () => {
+    // Um ÚNICO instante base: "exatamente igual ao last_read_at" exige timestamp
+    // idêntico — chamar minutesAgo() duas vezes devolve milissegundos diferentes.
+    const DAY = 24 * 60 * 60_000;
+    const now = Date.now();
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const lastRead = now - 60 * 60_000; // li até 60 min atrás
+
+    // c1 isola a JANELA (last_read_at null → conta pelo corte de 30 dias).
+    // c2 isola o LIMITE ESTRITO do comparador e o filtro de autor.
+    tableData['team_conversations'] = [
+      baseConv('c1', 'direct', 'Janela'),
+      baseConv('c2', 'direct', 'Limite'),
+    ];
+    tableData['team_conversation_members'] = [
+      { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: null },
+      { conversation_id: 'c2', profile_id: 'profile-1', last_read_at: iso(lastRead) },
+    ];
+    tableData['team_messages'] = [
+      // c1 — 29 dias atrás: DENTRO da janela → conta
+      {
+        id: 'c1-inside',
+        conversation_id: 'c1',
+        content: 'x',
+        sender_id: 'other-1',
+        created_at: iso(now - 29 * DAY),
+      },
+      // c1 — 31 dias atrás: FORA da janela → não conta
+      {
+        id: 'c1-outside',
+        conversation_id: 'c1',
+        content: 'x',
+        sender_id: 'other-1',
+        created_at: iso(now - 31 * DAY),
+      },
+      // c2 — exatamente no last_read_at → NÃO conta (o comparador é estrito: >)
+      {
+        id: 'c2-eq',
+        conversation_id: 'c2',
+        content: 'x',
+        sender_id: 'other-1',
+        created_at: iso(lastRead),
+      },
+      // c2 — 1s depois do last_read_at → CONTA
+      {
+        id: 'c2-after',
+        conversation_id: 'c2',
+        content: 'x',
+        sender_id: 'other-1',
+        created_at: iso(lastRead + 1000),
+      },
+      // c2 — mensagem minha depois → NUNCA conta
+      {
+        id: 'c2-mine',
+        conversation_id: 'c2',
+        content: 'x',
+        sender_id: 'profile-1',
+        created_at: iso(lastRead + 2000),
+      },
+    ];
+
+    const { result } = renderHook(() => useTeamConversations(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+
+    const byId = new Map((result.current.data ?? []).map((conv) => [conv.id, conv]));
+    // Quebra se a janela mudar de 30 dias (31d passaria a contar / 29d deixaria de contar).
+    expect(byId.get('c1')?.unread_count).toBe(1);
+    // Quebra se o comparador virar '<' ou '>=' (c2-eq passaria a contar) ou se o
+    // .neq('sender_id') cair (c2-mine contaria).
+    expect(byId.get('c2')?.unread_count).toBe(1);
+  });
+
   it('fetches in batch queries: single recent-messages query (limit N*2) and single unread query (no N+1)', async () => {
     seedConversations();
     renderHook(() => useTeamConversations(), { wrapper: createWrapper() });

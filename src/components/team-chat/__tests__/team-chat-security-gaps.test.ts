@@ -300,7 +300,10 @@ describe('Team Chat — Data Integrity', () => {
   function seedConversations() {
     tableData['team_conversations'] = [baseConv('c1', 'direct', null)];
     tableData['team_conversation_members'] = [
-      { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: '2026-08-17T09:00:00Z' },
+      // li até 90min atrás → m1 (30min) conta como não lida; m2 (180min) não.
+      // Datas RELATIVAS: o unread é filtrado por `.gte('created_at', now-30d)`,
+      // então data absoluta aqui vira time-bomb (a antiga 2026-08-17 já caiu fora).
+      { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: minutesAgo(90) },
       { conversation_id: 'c1', profile_id: 'other-1', last_read_at: null },
     ];
     tableData['team_messages'] = [
@@ -309,14 +312,14 @@ describe('Team Chat — Data Integrity', () => {
         conversation_id: 'c1',
         content: 'oi',
         sender_id: 'other-1',
-        created_at: '2026-08-17T10:00:00Z',
+        created_at: minutesAgo(30),
       },
       {
         id: 'm2',
         conversation_id: 'c1',
         content: 'antigo',
         sender_id: 'other-1',
-        created_at: '2026-08-17T08:00:00Z',
+        created_at: minutesAgo(180),
       },
     ];
   }
