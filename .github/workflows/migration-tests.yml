@@ -1,0 +1,86 @@
+name: 🦕 Migration Tests — supabase/migrations/__tests__
+
+# As migrations versionadas deste repo carregam testes de regressão em
+# supabase/migrations/__tests__/ (assertivas estaticas sobre o proprio SQL:
+# esta view e security_invoker? este revoke cobre os 3 papeis? a policy tem
+# guarda?). Ate 2026-09-26 NENHUM workflow executava esses testes: o
+# deno-contract-tests.yml varre apenas supabase/functions/**, entao o
+# `deno test` desses arquivos so rodava na mao de quem escreveu. Pior: o gate
+# E46 (check-fix-regression-test) conta um arquivo de teste no diff como
+# "regression test" satisfeito, entao a protecao parecia existir e nao existia.
+# Este workflow fecha essa lacuna.
+#
+# Escopo: a suite inteira e estatica (le os .sql com Deno.readTextFile) — 0
+# referencias a rede, banco, Deno.env ou fetch nos 8 arquivos. Por isso roda
+# sem servicos e sem secrets, com --allow-read apenas.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/migration-tests.yml'
+  pull_request:
+  # Varredura diaria: migration pode quebrar um teste sem PR tocando a pasta
+  # (ex.: renomear/limpar migration antiga referenciada por assertiva).
+  schedule:
+    - cron: '15 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  checks: write
+
+# Mesmo desenho do deno-contract-tests.yml: chave por PR cancela run obsoleta
+# do MESMO PR; por sha (push/schedule) cada commit tem seu grupo.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Sem paths filter em pull_request: o job decide, para que o check SEMPRE
+  # reporte (PR que nao toca migrations reporta "skipped" em vez de ficar
+  # pendente bloqueando o merge).
+  check-paths:
+    name: Check paths (PR only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          CHANGED=$(git diff --name-only origin/main...HEAD | grep -E '^supabase/migrations/' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "Migration paths touched — running migration tests"
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No migration paths touched — skipping"
+            echo "should-run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  migration-tests:
+    name: Deno migration tests
+    needs: check-paths
+    if: always() && (github.event_name != 'pull_request' || needs.check-paths.outputs.should-run == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Rodar os testes de regressao das migrations
+        run: |
+          set -euo pipefail
+          # --allow-read so: a suite le os .sql e nada mais. Sem allow-net e
+          # sem allow-env de proposito — se um teste futuro precisar de banco,
+          # ele falha aqui em vez de silenciosamente virar teste de integracao.
+          deno test --allow-read supabase/migrations/__tests__/ || {
+            echo "::error title=Migration test failed::ha teste de migration falhando em supabase/migrations/__tests__/"
+            exit 1
+          }
