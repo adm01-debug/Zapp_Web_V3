@@ -111,6 +111,28 @@ describe('useSLAMetrics', () => {
     expect(result.current.data).toBeNull();
   });
 
+  it('rejects malformed RPC payload via runtime guard', async () => {
+    // Payload sem `overall` objeto e com `byAgent` não-array — o guard deve
+    // rejeitar e a query deve falhar em vez de vazar dados incompletos.
+    mockRpc.mockResolvedValue({ data: { overall: null, byAgent: 'not-an-array' }, error: null });
+
+    const { result } = renderHook(() => useSLAMetrics(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data).toBeNull();
+  });
+
+  it('rejects null RPC payload via runtime guard', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    const { result } = renderHook(() => useSLAMetrics(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data).toBeNull();
+  });
+
   it('returns overall metrics from RPC result', async () => {
     const { result } = renderHook(() => useSLAMetrics('week'), { wrapper: createWrapper() });
 
