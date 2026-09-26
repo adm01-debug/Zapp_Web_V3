@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { dbFrom } from '@/integrations/datasource/db';
 import { ticketStore } from '@/lib/inbox/ticketStore';
 
 const RESOLVED_CONTACT_IDS_QUERY_KEY = ['inbox', 'resolved-contact-ids'] as const;
@@ -20,9 +20,7 @@ export function useResolvedTicketsHydration() {
     queryKey: RESOLVED_CONTACT_IDS_QUERY_KEY,
     staleTime: 60_000,
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from('conversation_closures')
-        .select('contact_id');
+      const { data: rows, error } = await dbFrom('conversation_closures').select('contact_id');
       if (error) throw error;
       return Array.from(new Set((rows ?? []).map((r) => r.contact_id).filter(Boolean)));
     },
