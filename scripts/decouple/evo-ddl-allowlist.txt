@@ -37,3 +37,10 @@
 20260820192000_f007_extra_dup_idx_fk_indexes.sql
 20260820193000_f002_fdw_delta_sentinel.sql
 20260820194000_f008_comments_evo_staging_e_meta.sql
+# --- Fix group_category (2026-09-26): falso positivo do regex — DDL 100% em zapp
+# --- (CREATE OR REPLACE VIEW zapp.contacts cujo corpo faz FROM evo.evolution_contacts,
+# --- apenas leitura). Mesma classe dos precedentes 20260818210102/210103/20260820193000.
+# --- Justificativa: docs/decouple/ALLOWLIST-E42-GROUP-CATEGORY-20260926.md
+# --- ATENCAO: o filtro do workflow usa `grep -qxF` (linha inteira == basename);
+# --- nao acrescentar " | justificativa" nesta linha — usar as linhas # acima.
+20260926170000_contact_group_category_derive_from_whatsapp_groups.sql
