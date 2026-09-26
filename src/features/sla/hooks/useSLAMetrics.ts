@@ -41,6 +41,15 @@ interface RPCResult {
   computedAt: string;
 }
 
+/** Valida o shape do JSONB em runtime — substitui o cast cego (`as unknown as`)
+ *  para que um payload malformado do postgrest vire erro tratável, e não dados
+ *  silenciosamente incompletos na UI. */
+function isRPCResult(value: unknown): value is RPCResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.overall === 'object' && v.overall !== null && Array.isArray(v.byAgent);
+}
+
 async function fetchSLAMetrics(period: PeriodFilter): Promise<SLADashboardData> {
   // Dates are computed server-side via NOW() (UTC clock) — not browser new Date().
   // This eliminates timezone drift and makes the filter reproducible regardless
@@ -49,11 +58,13 @@ async function fetchSLAMetrics(period: PeriodFilter): Promise<SLADashboardData> 
 
   if (error) throw error;
 
-  const result = data as unknown as RPCResult;
+  if (!isRPCResult(data)) {
+    throw new Error('rpc_sla_dashboard retornou um formato inesperado');
+  }
 
   return {
-    overall: result.overall,
-    byAgent: result.byAgent ?? [],
+    overall: data.overall,
+    byAgent: data.byAgent ?? [],
   };
 }
 
