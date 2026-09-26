@@ -125,6 +125,49 @@ describe('useFallbackContact — external mode synthetic fallback', () => {
   });
 });
 
+// Regressão do painel de conversa (2026-09-26). O chamador de produção
+// (useRealtimeInbox) passa `useExternalDb = false` desde a remoção do banco
+// FATOR X (#732). Até então a Estratégia C — contato sintético, que NÃO usa
+// banco externo nenhum — estava gated por essa flag, então todo clique que o
+// lookup local não resolvia virava null: `legacyConversation` null →
+// RealtimeInboxView monta InboxEmptyChat → "clico no contato e o painel não
+// abre". O teste anterior só cobria o modo externo (default true), que a
+// produção não usa — por isso a regressão passou despercebida.
+describe('useFallbackContact — modo de produção (useExternalDb=false)', () => {
+  it('monta contato sintético quando o lookup local não acha (JID)', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: null, error: null }) // contacts por phone
+      .mockResolvedValueOnce({ data: null, error: null }); // evolution_contacts por remote_jid
+
+    const { result } = renderHook(() => useFallbackContact(MOCK_JID, null, false));
+
+    await waitFor(() => {
+      expect(result.current).not.toBeNull();
+      expect(result.current?.contact.id).toBe(MOCK_JID);
+      expect(result.current?.contact.remote_jid).toBe(MOCK_JID);
+    });
+
+    expect(mockFrom).toHaveBeenCalledWith('contacts');
+    expect(mockFrom).toHaveBeenCalledWith('evolution_contacts');
+  });
+
+  it('monta contato sintético para grupo, sem poisonar o campo phone com o JID', async () => {
+    const grupo = '120363000000000000@g.us';
+    mockMaybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+
+    const { result } = renderHook(() => useFallbackContact(grupo, null, false));
+
+    await waitFor(() => {
+      expect(result.current).not.toBeNull();
+      expect(result.current?.contact.id).toBe(grupo);
+    });
+
+    expect(result.current?.contact.phone).not.toBe(grupo);
+  });
+});
+
 describe('useFallbackContact — early returns', () => {
   it('skips DB call when selectedConversation is already available', () => {
     const existing = {
