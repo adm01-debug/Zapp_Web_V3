@@ -782,6 +782,14 @@ describe('Team Chat — Media & File Handling', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('Team Chat — useTeamConversations', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime('2026-08-18T00:00:00Z');
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const baseConv = (id: string, type: 'direct' | 'group' | 'department', name: string | null) => ({
     id,
     type,
