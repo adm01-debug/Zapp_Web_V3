@@ -51,4 +51,19 @@ describe('testes de migration ligados no CI', () => {
       ).not.toMatch(/allow-net|createClient|postgres:\/\/|Deno\.env|fetch\(/);
     }
   });
+
+  it('acoes de terceiros ficam pinadas por SHA (gate action-pin-check)', () => {
+    // Deixei passar uma tag mutavel na primeira versao e o gate
+    // action-pin-check.yml pegou no CI: denoland/setup-deno@v2 e acao de
+    // TERCEIRO (actions/* e github/* sao isentos) e precisa de SHA de 40 hex.
+    const usos = [...workflow.matchAll(/uses:\s+(?!actions\/|github\/)([^\s#]+)@([^\s#]+)/g)];
+    expect(usos.length).toBeGreaterThan(0);
+
+    for (const [, acao, ref] of usos) {
+      expect(
+        ref,
+        `${acao}@${ref}: acao de terceiro precisa de SHA de 40 hex — tag mutavel e bloqueada pelo action-pin-check`,
+      ).toMatch(/^[0-9a-f]{40}$/i);
+    }
+  });
 });
