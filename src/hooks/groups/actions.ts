@@ -52,13 +52,21 @@ export function useGroupActions({
         try {
           let data: unknown;
           let error: unknown;
-          try { data = await listGroups({ instanceName: evoName, getParticipants: false }); } catch (err) { error = err; }
+          try {
+            data = await listGroups({ instanceName: evoName, getParticipants: false });
+          } catch (err) {
+            error = err;
+          }
           if (error) {
             totalErrors++;
             continue;
           }
 
-          const apiGroups = Array.isArray(data) ? data : (data as { data?: unknown[]; groups?: unknown[] } | null | undefined)?.data || (data as { data?: unknown[]; groups?: unknown[] } | null | undefined)?.groups || [];
+          const apiGroups = Array.isArray(data)
+            ? data
+            : (data as { data?: unknown[]; groups?: unknown[] } | null | undefined)?.data ||
+              (data as { data?: unknown[]; groups?: unknown[] } | null | undefined)?.groups ||
+              [];
           const now = new Date().toISOString();
           type GroupRow = {
             group_id: string;
@@ -200,7 +208,11 @@ export function useGroupActions({
         try {
           let error: unknown;
           try {
-            await sendText({ remoteJid: group.group_id, text: broadcastMessage, instance: evoName });
+            await sendText({
+              remoteJid: group.group_id,
+              text: broadcastMessage,
+              instance: evoName,
+            });
           } catch (err) {
             error = err;
           }
@@ -234,8 +246,9 @@ export function useGroupActions({
       if (group) {
         const { error: catErr } = await dbFrom('contacts')
           .update({ group_category: category })
-          .like('phone', `%${group.group_id.replace('@g.us', '')}%`);
-        if (catErr) log.warn('Failed to update group_category on contacts', { error: catErr.message });
+          .eq('remote_jid', group.group_id);
+        if (catErr)
+          log.warn('Failed to update group_category on contacts', { error: catErr.message });
       }
       setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, category } : g)));
     },
