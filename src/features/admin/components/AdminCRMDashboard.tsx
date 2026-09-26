@@ -27,6 +27,7 @@ function MetricCard({ label, table, icon: Icon, color }: {
     staleTime: 15 * 60 * 1000,
   });
   const count = data?.meta?.record_count ?? 0;
+  const isUnavailable = data?.meta?.unavailable === true;
   return (
     <Card className="border-border/50">
       <CardContent className="p-4 flex items-center gap-3">
@@ -36,7 +37,7 @@ function MetricCard({ label, table, icon: Icon, color }: {
         <div>
           {isLoading ? <Skeleton className="h-6 w-14" /> : (
             <p className="text-xl font-bold">
-              {count > 1000 ? `${(count / 1000).toFixed(1)}k` : count.toLocaleString('pt-BR')}
+              {isUnavailable ? '—' : (count > 1000 ? `${(count / 1000).toFixed(1)}k` : count.toLocaleString('pt-BR'))}
             </p>
           )}
           <p className="text-xs text-muted-foreground">{label}</p>
@@ -65,6 +66,8 @@ function TopCustomers() {
       <CardContent className="pb-3">
         {isLoading ? (
           <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>
+        ) : data?.meta?.unavailable ? (
+          <p className="text-xs text-muted-foreground text-center py-4">Dados não disponíveis</p>
         ) : (
           <div className="space-y-1.5">
             {(data?.data || []).map((c, i) => (
@@ -122,7 +125,9 @@ function RFMDistribution() {
         </CardTitle>
       </CardHeader>
       <CardContent className="pb-3">
-        {isLoading ? <Skeleton className="h-32" /> : (
+        {isLoading ? <Skeleton className="h-32" /> : data?.meta?.unavailable ? (
+          <p className="text-xs text-muted-foreground text-center py-4">Dados não disponíveis</p>
+        ) : (
           <div className="space-y-1.5">
             {sorted.slice(0, 8).map(([seg, count]) => (
               <div key={seg} className="flex items-center gap-2 text-xs">
@@ -161,6 +166,8 @@ function RecentSales() {
       <CardContent className="pb-3">
         {isLoading ? (
           <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>
+        ) : data?.meta?.unavailable ? (
+          <p className="text-xs text-muted-foreground text-center py-4">Dados não disponíveis</p>
         ) : (
           <div className="space-y-1.5">
             {(data?.data || []).map((s, i) => (
