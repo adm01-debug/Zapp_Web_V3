@@ -35,7 +35,7 @@ const mockProfile = {
   is_active: true,
 };
 
-let authProfile: (typeof mockProfile) | null = mockProfile;
+let authProfile: typeof mockProfile | null = mockProfile;
 
 const tableData: Record<string, unknown> = {};
 const tableErrors: Record<string, unknown> = {};
@@ -45,6 +45,13 @@ const removeChannelCalls: unknown[] = [];
 function getTableData(table: string): unknown {
   return tableData[table] ?? [];
 }
+
+/**
+ * Data relativa em ISO. O unread de useTeamConversations é filtrado com
+ * `.gte('created_at', now - 30d)`, então datas ABSOLUTAS nos fixtures viram
+ * time-bomb: o teste passa hoje e quebra ~30 dias depois de escrito.
+ */
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
 function makeChain(table: string) {
   const raw = getTableData(table);
@@ -79,7 +86,13 @@ function makeChain(table: string) {
   );
   chain['ilike'] = vi.fn((col: string, pattern: string) => {
     const needle = pattern.replace(/%/g, '').toLowerCase();
-    return apply((rs) => rs.filter((r) => String(r[col] ?? '').toLowerCase().includes(needle)));
+    return apply((rs) =>
+      rs.filter((r) =>
+        String(r[col] ?? '')
+          .toLowerCase()
+          .includes(needle)
+      )
+    );
   });
   chain['limit'] = vi.fn((n: number) => apply((rs) => rs.slice(0, n)));
   chain['order'] = vi.fn((col: string, opts?: { ascending?: boolean }) =>
@@ -94,8 +107,20 @@ function makeChain(table: string) {
     )
   );
   const noopMethods = [
-    'select', 'insert', 'update', 'delete', 'not', 'is', 'or', 'maybeSingle',
-    'single', 'filter', 'returns', 'throwOnError', 'abortSignal', 'range',
+    'select',
+    'insert',
+    'update',
+    'delete',
+    'not',
+    'is',
+    'or',
+    'maybeSingle',
+    'single',
+    'filter',
+    'returns',
+    'throwOnError',
+    'abortSignal',
+    'range',
   ];
   for (const m of noopMethods) {
     chain[m] = vi.fn(() => chain);
@@ -130,7 +155,8 @@ function getOrCreateChannel(topic: string): FakeChannel {
     topic,
     subscribed: false,
     on: vi.fn(() => {
-      if (instance.subscribed) throw new Error('cannot add postgres_changes callbacks after subscribe()');
+      if (instance.subscribed)
+        throw new Error('cannot add postgres_changes callbacks after subscribe()');
       return instance;
     }),
     subscribe: vi.fn(() => {
@@ -190,7 +216,8 @@ function teamChannels(): FakeChannel[] {
 }
 
 function createWrapper(qc?: QueryClient) {
-  const client = qc ?? new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const client =
+    qc ?? new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
 }
@@ -228,12 +255,16 @@ describe('Team Chat — RLS Policy Gaps', () => {
   it('GAP real: team_conversation_members INSERT is NOT allowed by any policy (default deny)', () => {
     // O teste antigo afirmava "INSERT só checa auth.uid() IS NOT NULL".
     // Estado REAL: não existe policy de INSERT — inserção é negada por padrão.
-    expect(migrationsSql).toContain('CREATE POLICY team_members_select ON zapp.team_conversation_members FOR SELECT');
+    expect(migrationsSql).toContain(
+      'CREATE POLICY team_members_select ON zapp.team_conversation_members FOR SELECT'
+    );
     expect(migrationsSql).not.toMatch(/CREATE POLICY[^;]*team_conversation_members FOR INSERT/);
   });
 
   it('GAP real: no DELETE policy on team_conversations', () => {
-    expect(migrationsSql).toContain('CREATE POLICY team_conversations_select ON zapp.team_conversations FOR SELECT');
+    expect(migrationsSql).toContain(
+      'CREATE POLICY team_conversations_select ON zapp.team_conversations FOR SELECT'
+    );
     expect(migrationsSql).not.toMatch(/CREATE POLICY[^;]*team_conversations FOR DELETE/);
   });
 
@@ -244,7 +275,9 @@ describe('Team Chat — RLS Policy Gaps', () => {
   it('GAP real: no role-based admin/moderator column for group conversations', () => {
     // Sem coluna admin_role/role em team_conversation_members (nenhuma policy UPDATE/DELETE de membros)
     expect(migrationsSql).not.toMatch(/team_conversation_members[^;]*admin_role/);
-    expect(migrationsSql).not.toMatch(/CREATE POLICY[^;]*team_conversation_members FOR (INSERT|UPDATE|DELETE)/);
+    expect(migrationsSql).not.toMatch(
+      /CREATE POLICY[^;]*team_conversation_members FOR (INSERT|UPDATE|DELETE)/
+    );
   });
 });
 
@@ -271,8 +304,20 @@ describe('Team Chat — Data Integrity', () => {
       { conversation_id: 'c1', profile_id: 'other-1', last_read_at: null },
     ];
     tableData['team_messages'] = [
-      { id: 'm1', conversation_id: 'c1', content: 'oi', sender_id: 'other-1', created_at: '2026-08-17T10:00:00Z' },
-      { id: 'm2', conversation_id: 'c1', content: 'antigo', sender_id: 'other-1', created_at: '2026-08-17T08:00:00Z' },
+      {
+        id: 'm1',
+        conversation_id: 'c1',
+        content: 'oi',
+        sender_id: 'other-1',
+        created_at: '2026-08-17T10:00:00Z',
+      },
+      {
+        id: 'm2',
+        conversation_id: 'c1',
+        content: 'antigo',
+        sender_id: 'other-1',
+        created_at: '2026-08-17T08:00:00Z',
+      },
     ];
   }
 
@@ -299,9 +344,27 @@ describe('Team Chat — Data Integrity', () => {
       { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: null },
     ];
     tableData['team_messages'] = [
-      { id: 'm1', conversation_id: 'c1', content: 'a', sender_id: 'other-1', created_at: '2026-08-17T10:00:00Z' },
-      { id: 'm2', conversation_id: 'c1', content: 'b', sender_id: 'other-1', created_at: '2026-08-17T08:00:00Z' },
-      { id: 'm3', conversation_id: 'c1', content: 'eu', sender_id: 'profile-1', created_at: '2026-08-17T11:00:00Z' },
+      {
+        id: 'm1',
+        conversation_id: 'c1',
+        content: 'a',
+        sender_id: 'other-1',
+        created_at: minutesAgo(30),
+      },
+      {
+        id: 'm2',
+        conversation_id: 'c1',
+        content: 'b',
+        sender_id: 'other-1',
+        created_at: minutesAgo(180),
+      },
+      {
+        id: 'm3',
+        conversation_id: 'c1',
+        content: 'eu',
+        sender_id: 'profile-1',
+        created_at: minutesAgo(20),
+      },
     ];
     const { result } = renderHook(() => useTeamConversations(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.data).toHaveLength(1));
@@ -471,8 +534,8 @@ describe('Team Chat — UX & Accessibility Gaps (current state)', () => {
   it('FIXED: textarea auto-resize via ComposerCore + textareaRef (gap anterior era rows=1 + resize-none)', () => {
     // E52: TeamChatInputArea agora usa ComposerCore com textareaRef e auto-grow
     const input = read('TeamChatInputArea.tsx');
-    expect(input).toContain('textareaRef');    // ref para auto-grow
-    expect(input).toContain('ComposerCore');   // componente que wraps o textarea
+    expect(input).toContain('textareaRef'); // ref para auto-grow
+    expect(input).toContain('ComposerCore'); // componente que wraps o textarea
   });
 
   it('FIXED: keyboard navigation between conversations exists (ArrowUp/ArrowDown + Cmd/Ctrl+F)', () => {
@@ -498,7 +561,16 @@ describe('Team Chat — Performance Concerns', () => {
 
   it('GAP real: subscription de conversas é table-wide (evento * sem filtro)', async () => {
     tableData['team_conversations'] = [
-      { id: 'c1', type: 'direct', name: null, avatar_url: null, created_by: 'x', created_at: 'x', updated_at: 'x', metadata: null },
+      {
+        id: 'c1',
+        type: 'direct',
+        name: null,
+        avatar_url: null,
+        created_by: 'x',
+        created_at: 'x',
+        updated_at: 'x',
+        metadata: null,
+      },
     ];
     tableData['team_conversation_members'] = [];
     tableData['team_messages'] = [];
@@ -624,16 +696,50 @@ describe('Team Chat — Integration Validation', () => {
   it('useTeamConversations returns the enriched shape (id, type, name, avatar_url, created_by, members, last_message, unread_count)', async () => {
     tableData['team_conversations'] = [
       {
-        id: 'c1', type: 'direct', name: null, avatar_url: null, created_by: 'profile-1',
-        created_at: '2026-08-17T10:00:00Z', updated_at: '2026-08-17T10:00:00Z', metadata: null,
+        id: 'c1',
+        type: 'direct',
+        name: null,
+        avatar_url: null,
+        created_by: 'profile-1',
+        created_at: '2026-08-17T10:00:00Z',
+        updated_at: '2026-08-17T10:00:00Z',
+        metadata: null,
       },
     ];
     tableData['team_conversation_members'] = [
-      { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: null, id: 'mem1', joined_at: 'x', is_muted: false, profile: { id: 'profile-1', name: 'João Teste', email: null, avatar_url: null, is_active: true } },
-      { conversation_id: 'c1', profile_id: 'other-1', last_read_at: null, id: 'mem2', joined_at: 'x', is_muted: false, profile: { id: 'other-1', name: 'Maria', email: null, avatar_url: null, is_active: true } },
+      {
+        conversation_id: 'c1',
+        profile_id: 'profile-1',
+        last_read_at: null,
+        id: 'mem1',
+        joined_at: 'x',
+        is_muted: false,
+        profile: {
+          id: 'profile-1',
+          name: 'João Teste',
+          email: null,
+          avatar_url: null,
+          is_active: true,
+        },
+      },
+      {
+        conversation_id: 'c1',
+        profile_id: 'other-1',
+        last_read_at: null,
+        id: 'mem2',
+        joined_at: 'x',
+        is_muted: false,
+        profile: { id: 'other-1', name: 'Maria', email: null, avatar_url: null, is_active: true },
+      },
     ];
     tableData['team_messages'] = [
-      { id: 'm1', conversation_id: 'c1', content: 'oi', sender_id: 'other-1', created_at: '2026-08-17T10:00:00Z' },
+      {
+        id: 'm1',
+        conversation_id: 'c1',
+        content: 'oi',
+        sender_id: 'other-1',
+        created_at: minutesAgo(30),
+      },
     ];
     const { result } = renderHook(() => useTeamConversations(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.data).toHaveLength(1));
@@ -653,7 +759,10 @@ describe('Team Chat — Integration Validation', () => {
   it('useTeamMessages returns messages with sender populated (join na query)', async () => {
     tableData['team_messages'] = [
       {
-        id: 'm1', conversation_id: 'c1', sender_id: 'other-1', content: 'oi',
+        id: 'm1',
+        conversation_id: 'c1',
+        sender_id: 'other-1',
+        content: 'oi',
         created_at: '2026-08-17T10:00:00Z',
         sender: { id: 'other-1', name: 'Maria', avatar_url: null },
       },
@@ -662,15 +771,26 @@ describe('Team Chat — Integration Validation', () => {
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
     expect(result.current.messages[0].sender?.name).toBe('Maria');
     const selectArg = chainMethodCalls('team_messages', 0, 'select')[0]?.[0] as string;
-    expect(selectArg).toContain('sender:profiles!team_messages_sender_id_fkey(id, name, avatar_url)');
+    expect(selectArg).toContain(
+      'sender:profiles!team_messages_sender_id_fkey(id, name, avatar_url)'
+    );
   });
 
   it('useSendTeamMessage also updates conversation updated_at (touch)', async () => {
     tableData['team_messages'] = {
-      id: 'm1', conversation_id: 'c1', sender_id: 'profile-1', content: 'oi',
-      message_type: 'text', media_url: null, media_type: null,
-      media_bucket: null, media_path: null, reply_to_id: null,
-      is_edited: false, created_at: '2026-08-17T10:00:00Z', updated_at: '2026-08-17T10:00:00Z',
+      id: 'm1',
+      conversation_id: 'c1',
+      sender_id: 'profile-1',
+      content: 'oi',
+      message_type: 'text',
+      media_url: null,
+      media_type: null,
+      media_bucket: null,
+      media_path: null,
+      reply_to_id: null,
+      is_edited: false,
+      created_at: '2026-08-17T10:00:00Z',
+      updated_at: '2026-08-17T10:00:00Z',
     };
     const { result } = renderHook(() => useSendTeamMessage(), { wrapper: createWrapper() });
     await act(async () => {
@@ -713,12 +833,23 @@ describe('Team Chat — Integration Validation', () => {
 
   it('realtime: conversas assinam team_messages; painel assina filtrado por conversation_id; cleanup no unmount', async () => {
     tableData['team_conversations'] = [
-      { id: 'c1', type: 'direct', name: null, avatar_url: null, created_by: 'x', created_at: 'x', updated_at: 'x', metadata: null },
+      {
+        id: 'c1',
+        type: 'direct',
+        name: null,
+        avatar_url: null,
+        created_by: 'x',
+        created_at: 'x',
+        updated_at: 'x',
+        metadata: null,
+      },
     ];
     tableData['team_conversation_members'] = [];
     tableData['team_messages'] = [];
 
-    const conversationsHook = renderHook(() => useTeamConversations(), { wrapper: createWrapper() });
+    const conversationsHook = renderHook(() => useTeamConversations(), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(teamChannels().length).toBeGreaterThan(0));
     const convChannel = teamChannels().find((c) => c.topic.startsWith('team-chat-updates:'));
     expect(convChannel).toBeDefined();

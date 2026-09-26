@@ -130,9 +130,7 @@ function mockSupabaseForMutations(opts: { insertError?: unknown; updateError?: u
       return {
         insert: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
-            maybeSingle: vi
-              .fn()
-              .mockResolvedValue({ data: null, error: opts.insertError ?? null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: opts.insertError ?? null }),
           }),
         }),
         update: vi.fn().mockReturnValue({
@@ -205,11 +203,15 @@ describe('E65 [C1] RLS 403 vira toast de erro real (sem 403 silencioso)', () => 
         contactId: 'c1',
         content: 'Follow up agendado',
         scheduledAt: futureDate(),
-      }),
+      })
     ).rejects.toThrow();
 
     expect(toast).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(toast).mock.calls[0][0] as unknown as { variant?: string; title?: string; description?: string };
+    const call = vi.mocked(toast).mock.calls[0][0] as unknown as {
+      variant?: string;
+      title?: string;
+      description?: string;
+    };
     expect(call.variant).toBe('destructive');
     expect(call.title).toBe('Erro ao agendar mensagem');
     // Contrato: mensagem amigável citando permissão — NUNCA o texto cru do Postgres.
@@ -227,7 +229,11 @@ describe('E65 [C1] RLS 403 vira toast de erro real (sem 403 silencioso)', () => 
     await expect(result.current.cancelMessage('sm1')).rejects.toThrow();
 
     expect(toast).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(toast).mock.calls[0][0] as unknown as { variant?: string; title?: string; description?: string };
+    const call = vi.mocked(toast).mock.calls[0][0] as unknown as {
+      variant?: string;
+      title?: string;
+      description?: string;
+    };
     expect(call.variant).toBe('destructive');
     expect(call.title).toBe('Erro ao cancelar');
     expect(call.description).toMatch(/permiss/i);
@@ -246,10 +252,12 @@ describe('E65 [C1] RLS 403 vira toast de erro real (sem 403 silencioso)', () => 
         contactId: 'c1',
         content: 'x',
         scheduledAt: futureDate(),
-      }),
+      })
     ).rejects.toThrow();
 
-    const titles = vi.mocked(toast).mock.calls.map((c) => (c[0] as unknown as { title?: string }).title);
+    const titles = vi
+      .mocked(toast)
+      .mock.calls.map((c) => (c[0] as unknown as { title?: string }).title);
     expect(titles).not.toContain('Mensagem agendada com sucesso!');
     expect(titles).toContain('Erro ao agendar mensagem');
   });
@@ -269,7 +277,9 @@ describe('E65 [C1] RLS 403 vira toast de erro real (sem 403 silencioso)', () => 
       });
     });
 
-    const titles = vi.mocked(toast).mock.calls.map((c) => (c[0] as unknown as { title?: string }).title);
+    const titles = vi
+      .mocked(toast)
+      .mock.calls.map((c) => (c[0] as unknown as { title?: string }).title);
     expect(titles).toContain('Mensagem agendada com sucesso!');
   });
 });
@@ -278,13 +288,18 @@ describe('E65 [C1] RLS 403 vira toast de erro real (sem 403 silencioso)', () => 
 // [C2] fn_dispatch pega devidas e marca 'sent' (contrato estático das migrations)
 // ---------------------------------------------------------------------------
 describe('E65 [C2] fn_dispatch: pega due e marca sent (migration versionada)', () => {
-  const DISPATCH_FN = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:zapp\.)?(?:fn|rpc)_dispatch[a-z_]*\s*\(/i;
+  // Restrito ao dispatcher de AGENDADAS: o padrão largo `(?:fn|rpc)_dispatch[a-z_]*`
+  // também casava `fn_dispatch_unnotified_alerts` (E026) e
+  // `fn_dispatch_critical_alert_emails`, cobrando deles o contrato de
+  // scheduled_messages — falso positivo (essas migrations não têm esse UPDATE).
+  const DISPATCH_FN =
+    /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:zapp\.)?(?:fn|rpc)_dispatch[a-z_]*scheduled_messages\s*\(/i;
 
   it('existe função de dispatch (fn_/rpc_ dispatch*) em migration versionada', () => {
     const files = migrationsContaining(DISPATCH_FN);
     expect(
       files,
-      `Nenhuma migration define o dispatcher (${DISPATCH_FN}). O executor precisa criar a migration E65 com zapp.fn_dispatch_scheduled_messages().`,
+      `Nenhuma migration define o dispatcher (${DISPATCH_FN}). O executor precisa criar a migration E65 com zapp.fn_dispatch_scheduled_messages().`
     ).not.toHaveLength(0);
     // Nome de arquivo versionado: YYYYMMDDHHMMSS_*.sql
     for (const f of files) {
@@ -300,7 +315,7 @@ describe('E65 [C2] fn_dispatch: pega due e marca sent (migration versionada)', (
       const stmt = extractDispatchUpdate(sql);
       expect(
         stmt,
-        `Migration ${file}: dispatcher não contém UPDATE zapp.scheduled_messages. Contrato: UPDATE ... SET status='sent' ... RETURNING *`,
+        `Migration ${file}: dispatcher não contém UPDATE zapp.scheduled_messages. Contrato: UPDATE ... SET status='sent' ... RETURNING *`
       ).not.toBeNull();
       expect(stmt!).toMatch(/SET\s+status\s*=\s*'sent'/i);
       expect(stmt!).toMatch(/RETURNING/i);
@@ -323,7 +338,7 @@ describe('E65 [C3] idempotência do dispatcher (2 runs não duplicam)', () => {
   /** Modelo de execução do contrato [C2b]: claim e envio no MESMO UPDATE. */
   function runDispatch(
     messages: { id: string; status: string; scheduled_at: string }[],
-    now: Date,
+    now: Date
   ): { sent: string[]; remaining: typeof messages } {
     const sent: string[] = [];
     const remaining = messages.map((m) => {
@@ -338,11 +353,11 @@ describe('E65 [C3] idempotência do dispatcher (2 runs não duplicam)', () => {
 
   it('a migration guarda o UPDATE com WHERE status= pending (claim atômica)', () => {
     const files = migrationsContaining(
-      /UPDATE\s+(?:zapp\.)?scheduled_messages\b[\s\S]*?status\s*=\s*'pending'/i,
+      /UPDATE\s+(?:zapp\.)?scheduled_messages\b[\s\S]*?status\s*=\s*'pending'/i
     );
     expect(
       files,
-      'Contrato [C3]: o UPDATE do dispatcher DEVE filtrar status=\'pending\' — sem esse guard, 2 runs reenviam a mesma mensagem.',
+      "Contrato [C3]: o UPDATE do dispatcher DEVE filtrar status='pending' — sem esse guard, 2 runs reenviam a mesma mensagem."
     ).not.toHaveLength(0);
 
     for (const file of files) {
@@ -351,7 +366,9 @@ describe('E65 [C3] idempotência do dispatcher (2 runs não duplicam)', () => {
       const stmt = extractDispatchUpdate(sql);
       expect(stmt).not.toBeNull();
       expect(stmt!).toMatch(/status\s*=\s*'pending'/i);
-      expect(stmt!).toMatch(/scheduled_at\s*<=\s*(?:now\(\)|clock_timestamp\(\)|current_timestamp)/i);
+      expect(stmt!).toMatch(
+        /scheduled_at\s*<=\s*(?:now\(\)|clock_timestamp\(\)|current_timestamp)/i
+      );
     }
   });
 
@@ -374,9 +391,7 @@ describe('E65 [C3] idempotência do dispatcher (2 runs não duplicam)', () => {
 
   it('mensagem futura NÃO é disparada antes do tempo (relógio fake)', () => {
     const now = new Date('2026-08-17T12:00:00Z');
-    const dueLater = [
-      { id: 'm5', status: 'pending', scheduled_at: '2026-08-17T12:00:01Z' },
-    ];
+    const dueLater = [{ id: 'm5', status: 'pending', scheduled_at: '2026-08-17T12:00:01Z' }];
     const run = runDispatch(dueLater, now);
     expect(run.sent).toEqual([]);
   });
@@ -390,12 +405,12 @@ describe('E65 [C4] policies INSERT/UPDATE/DELETE em zapp.scheduled_messages', ()
     it(`policy scheduled_messages_${op} existe em migration versionada`, () => {
       const pattern = new RegExp(
         `CREATE\\s+POLICY\\s+(?:"|')?scheduled_messages_${op}(?:"|')?\\s+ON\\s+(?:zapp\\.)?scheduled_messages`,
-        'i',
+        'i'
       );
       const files = migrationsContaining(pattern);
       expect(
         files,
-        `Contrato [C4]: falta CREATE POLICY scheduled_messages_${op} ON zapp.scheduled_messages (hoje só existe scheduled_messages_select → mutações dão 403).`,
+        `Contrato [C4]: falta CREATE POLICY scheduled_messages_${op} ON zapp.scheduled_messages (hoje só existe scheduled_messages_select → mutações dão 403).`
       ).not.toHaveLength(0);
       for (const f of files) {
         expect(f).toMatch(/^\d{14}_[a-z0-9_]+\.sql$/);
@@ -410,11 +425,11 @@ describe('E65 [C4] policies INSERT/UPDATE/DELETE em zapp.scheduled_messages', ()
 describe('E65 [C5] índice (scheduled_at, status)', () => {
   it('CREATE INDEX com as duas colunas (ordem aceita: (scheduled_at, status) ou (status, scheduled_at))', () => {
     const files = migrationsContaining(
-      /CREATE\s+(?:UNIQUE\s+)?INDEX\s+[^;]*?\bON\s+(?:zapp\.)?scheduled_messages\b[^;]*?\([^)]*scheduled_at[^)]*status[^)]*\)/is,
+      /CREATE\s+(?:UNIQUE\s+)?INDEX\s+[^;]*?\bON\s+(?:zapp\.)?scheduled_messages\b[^;]*?\([^)]*scheduled_at[^)]*status[^)]*\)/is
     );
     expect(
       files,
-      'Contrato [C5]: falta índice em zapp.scheduled_messages (scheduled_at, status) — polling do dispatcher sem índice varre a tabela.',
+      'Contrato [C5]: falta índice em zapp.scheduled_messages (scheduled_at, status) — polling do dispatcher sem índice varre a tabela.'
     ).not.toHaveLength(0);
   });
 });

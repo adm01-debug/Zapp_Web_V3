@@ -95,6 +95,23 @@ export interface SLATimelineAggregateRow {
   total_messages: number;
 }
 
+interface SlaDashboardParams {
+  /**
+   * Janela de cálculo resolvida no SERVIDOR via NOW() (evita drift de timezone do browser).
+   * Default do banco: 'today'.
+   */
+  p_period?: 'today' | 'week' | 'month' | 'all';
+}
+
+/** JSONB único de zapp.rpc_sla_dashboard — ver supabase/migrations/20260906001000_rpc_sla_dashboard.sql. */
+export interface SLADashboardRow {
+  overall: Record<string, unknown>;
+  byAgent: Record<string, unknown>[];
+  startAt: string;
+  period: string;
+  computedAt: string;
+}
+
 interface ListConversationsParams {
   /** Omitir (null) para retornar conversas de TODAS as instâncias. */
   p_instance?: string | null;
@@ -468,6 +485,12 @@ export const RPC = {
     name: 'rpc_sla_timeline_aggregate',
     client: 'lovable',
     // sem default — passe p_instance do contexto da conversa quando quiser pruning
+  }),
+
+  slaDashboard: def<SlaDashboardParams, SLADashboardRow>({
+    name: 'rpc_sla_dashboard',
+    client: 'lovable',
+    // default do banco: p_period = 'today'
   }),
 
   inboxPreviewBatch: def<InboxPreviewBatchParams, unknown>({

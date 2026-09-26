@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor, renderHook, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  renderHook,
+  within,
+} from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
@@ -8,7 +16,12 @@ import path from 'node:path';
 import { supabase } from '@/integrations/supabase/client';
 import { queryKeys } from '@/services/api/queryKeys';
 import { SOUND_CONFIGS } from '@/utils/soundConfigs';
-import { formatTime, formatDateSep, MediaContent, MediaTypeIcon } from '@/components/team-chat/teamChatParts';
+import {
+  formatTime,
+  formatDateSep,
+  MediaContent,
+  MediaTypeIcon,
+} from '@/components/team-chat/teamChatParts';
 import { TeamFileUploader } from '@/components/team-chat/TeamFileUploader';
 import { useTeamConversations } from '@/features/inbox/hooks/team-chat/useTeamConversations';
 import { useTeamMessages } from '@/features/inbox/hooks/team-chat/useTeamMessages';
@@ -21,7 +34,11 @@ import {
   useTransferTeamConversation,
   useUpdateTeamMessageStatus,
 } from '@/features/inbox/hooks/team-chat/useTeamChatMutations';
-import type { TeamConversation, TeamMember, TeamMessage } from '@/features/inbox/hooks/team-chat/teamChatTypes';
+import type {
+  TeamConversation,
+  TeamMember,
+  TeamMessage,
+} from '@/features/inbox/hooks/team-chat/teamChatTypes';
 
 /**
  * Team Chat — Suite de testes REAIS (replaces the phantom-assertion registry).
@@ -51,7 +68,7 @@ const mockProfile = {
   is_active: true,
 };
 
-let authProfile: (typeof mockProfile) | null = mockProfile;
+let authProfile: typeof mockProfile | null = mockProfile;
 
 const tableData: Record<string, unknown> = {};
 const tableErrors: Record<string, unknown> = {};
@@ -97,7 +114,13 @@ function makeChain(table: string) {
   );
   chain['ilike'] = vi.fn((col: string, pattern: string) => {
     const needle = pattern.replace(/%/g, '').toLowerCase();
-    return apply((rs) => rs.filter((r) => String(r[col] ?? '').toLowerCase().includes(needle)));
+    return apply((rs) =>
+      rs.filter((r) =>
+        String(r[col] ?? '')
+          .toLowerCase()
+          .includes(needle)
+      )
+    );
   });
   chain['limit'] = vi.fn((n: number) => apply((rs) => rs.slice(0, n)));
   // order() emula ORDER BY composto do PostgREST: cada .order() adiciona uma
@@ -120,8 +143,19 @@ function makeChain(table: string) {
     );
   });
   const noopMethods = [
-    'select', 'insert', 'update', 'delete', 'not', 'is', 'or', 'single',
-    'filter', 'returns', 'throwOnError', 'abortSignal', 'range',
+    'select',
+    'insert',
+    'update',
+    'delete',
+    'not',
+    'is',
+    'or',
+    'single',
+    'filter',
+    'returns',
+    'throwOnError',
+    'abortSignal',
+    'range',
   ];
   for (const m of noopMethods) {
     chain[m] = vi.fn(() => chain);
@@ -160,7 +194,8 @@ function getOrCreateChannel(topic: string): FakeChannel {
     subscribed: false,
     on: vi.fn(() => {
       // Semântica do supabase-js: .on() após .subscribe() na mesma instância lança.
-      if (instance.subscribed) throw new Error('cannot add postgres_changes callbacks after subscribe()');
+      if (instance.subscribed)
+        throw new Error('cannot add postgres_changes callbacks after subscribe()');
       return instance;
     }),
     subscribe: vi.fn(() => {
@@ -173,7 +208,12 @@ function getOrCreateChannel(topic: string): FakeChannel {
   return instance;
 }
 
-const supabaseStorageUpload = vi.fn((..._args: unknown[]) => Promise.resolve({ data: null as { path: string } | null, error: null as { message: string } | null }));
+const supabaseStorageUpload = vi.fn((..._args: unknown[]) =>
+  Promise.resolve({
+    data: null as { path: string } | null,
+    error: null as { message: string } | null,
+  })
+);
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -242,7 +282,8 @@ function teamChannels(): FakeChannel[] {
 function createWrapper(qc?: QueryClient) {
   // gcTime: 60000 — gcTime: 0 GC'aria entries pré-seedadas via setQueryData
   // (sem observers ativos) antes da mutation rodar, quebrando os testes de cache.
-  const client = qc ?? new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60000 } } });
+  const client =
+    qc ?? new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 60000 } } });
   return ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
 }
@@ -263,7 +304,9 @@ beforeEach(() => {
   supabaseFromMock.mockClear();
   supabaseChannelMock.mockClear();
   supabaseStorageUpload.mockClear();
-  supabaseStorageUpload.mockImplementation(() => Promise.resolve({ data: { path: 'uploaded' }, error: null }));
+  supabaseStorageUpload.mockImplementation(() =>
+    Promise.resolve({ data: { path: 'uploaded' }, error: null })
+  );
   URL.createObjectURL = vi.fn(() => 'blob:mock-url') as unknown as typeof URL.createObjectURL;
   URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
 });
@@ -382,7 +425,12 @@ describe('Team Chat — Notification System', () => {
   });
 
   describe('Browser Notifications', () => {
-    let notificationInstances: Array<{ close: ReturnType<typeof vi.fn>; onclick: unknown; title: string; options: NotificationOptions }>;
+    let notificationInstances: Array<{
+      close: ReturnType<typeof vi.fn>;
+      onclick: unknown;
+      title: string;
+      options: NotificationOptions;
+    }>;
     let permissionValue: NotificationPermission;
     let requestPermissionSpy: ReturnType<typeof vi.fn>;
 
@@ -417,7 +465,10 @@ describe('Team Chat — Notification System', () => {
       stubNotification();
       vi.resetModules();
       const { showBrowserNotification } = await import('@/utils/notificationSounds');
-      showBrowserNotification('💬 Chat Interno — Maria', 'Oi!', { tag: 'team-msg-c1', icon: '/icon.png' });
+      showBrowserNotification('💬 Chat Interno — Maria', 'Oi!', {
+        tag: 'team-msg-c1',
+        icon: '/icon.png',
+      });
       expect(notificationInstances).toHaveLength(1);
       expect(notificationInstances[0].title).toBe('💬 Chat Interno — Maria');
       expect(notificationInstances[0].options.tag).toBe('team-msg-c1');
@@ -500,7 +551,15 @@ describe('Team Chat — Data Format Validation', () => {
     };
     expect(['direct', 'group', 'department']).toContain(conv.type);
     expect(Object.keys(conv)).toEqual(
-      expect.arrayContaining(['id', 'type', 'name', 'avatar_url', 'created_by', 'created_at', 'updated_at'])
+      expect.arrayContaining([
+        'id',
+        'type',
+        'name',
+        'avatar_url',
+        'created_by',
+        'created_at',
+        'updated_at',
+      ])
     );
   });
 
@@ -523,8 +582,17 @@ describe('Team Chat — Data Format Validation', () => {
     };
     expect(Object.keys(msg)).toEqual(
       expect.arrayContaining([
-        'id', 'conversation_id', 'sender_id', 'content', 'message_type',
-        'media_url', 'media_type', 'reply_to_id', 'is_edited', 'created_at', 'updated_at',
+        'id',
+        'conversation_id',
+        'sender_id',
+        'content',
+        'message_type',
+        'media_url',
+        'media_type',
+        'reply_to_id',
+        'is_edited',
+        'created_at',
+        'updated_at',
       ])
     );
     expect(msg.sender?.name).toBe('João Teste');
@@ -538,7 +606,13 @@ describe('Team Chat — Data Format Validation', () => {
       joined_at: '2026-08-17T10:00:00Z',
       last_read_at: null,
       is_muted: false,
-      profile: { id: 'profile-1', name: 'João Teste', email: null, avatar_url: null, is_active: true },
+      profile: {
+        id: 'profile-1',
+        name: 'João Teste',
+        email: null,
+        avatar_url: null,
+        is_active: true,
+      },
     };
     expect(Object.keys(member.profile ?? {})).toEqual(
       expect.arrayContaining(['id', 'name', 'email', 'avatar_url', 'is_active'])
@@ -550,7 +624,9 @@ describe('Team Chat — Data Format Validation', () => {
     expect(mediaTypes).toHaveLength(7);
     // MediaContent (código real) renderiza exatamente esses tipos
     for (const t of mediaTypes) {
-      expect(['image', 'video', 'audio', 'audio_meme', 'document', 'sticker', 'emoji']).toContain(t);
+      expect(['image', 'video', 'audio', 'audio_meme', 'document', 'sticker', 'emoji']).toContain(
+        t
+      );
     }
   });
 
@@ -599,13 +675,21 @@ describe('Team Chat — Media & File Handling', () => {
     }
 
     it('image/sticker/emoji renders <img> (emoji/sticker fixed h-24 w-24)', () => {
-      const { container } = render(createElement(MediaContent, { msg: mediaMsg('image'), resolvedUrl: 'https://cdn.test/x.png' }));
+      const { container } = render(
+        createElement(MediaContent, {
+          msg: mediaMsg('image'),
+          resolvedUrl: 'https://cdn.test/x.png',
+        })
+      );
       const img = container.querySelector('img');
       expect(img).not.toBeNull();
       expect(img?.getAttribute('alt')).toBe('Imagem da mensagem');
 
       const { container: stickerC } = render(
-        createElement(MediaContent, { msg: mediaMsg('sticker', '🎨 Figurinha'), resolvedUrl: 'https://cdn.test/s.png' })
+        createElement(MediaContent, {
+          msg: mediaMsg('sticker', '🎨 Figurinha'),
+          resolvedUrl: 'https://cdn.test/s.png',
+        })
       );
       const stickerImg = stickerC.querySelector('img');
       expect(stickerImg?.getAttribute('alt')).toBe('Figurinha');
@@ -614,7 +698,12 @@ describe('Team Chat — Media & File Handling', () => {
     });
 
     it('video renders <video> with controls', () => {
-      const { container } = render(createElement(MediaContent, { msg: mediaMsg('video'), resolvedUrl: 'https://cdn.test/v.mp4' }));
+      const { container } = render(
+        createElement(MediaContent, {
+          msg: mediaMsg('video'),
+          resolvedUrl: 'https://cdn.test/v.mp4',
+        })
+      );
       const video = container.querySelector('video');
       expect(video).not.toBeNull();
       expect(video?.hasAttribute('controls')).toBe(true);
@@ -636,7 +725,12 @@ describe('Team Chat — Media & File Handling', () => {
     });
 
     it('document renders as link with file icon and content', () => {
-      const { container } = render(<MediaContent msg={mediaMsg('document', 'relatorio.pdf')} resolvedUrl="https://cdn.test/d.pdf" />);
+      const { container } = render(
+        <MediaContent
+          msg={mediaMsg('document', 'relatorio.pdf')}
+          resolvedUrl="https://cdn.test/d.pdf"
+        />
+      );
       const link = container.querySelector('a');
       expect(link).not.toBeNull();
       expect(link?.getAttribute('href')).toBe('https://cdn.test/d.pdf');
@@ -645,7 +739,9 @@ describe('Team Chat — Media & File Handling', () => {
     });
 
     it('unknown media_type returns null', () => {
-      const { container } = render(<MediaContent msg={mediaMsg('weird')} resolvedUrl="https://cdn.test/x" />);
+      const { container } = render(
+        <MediaContent msg={mediaMsg('weird')} resolvedUrl="https://cdn.test/x" />
+      );
       expect(container.firstChild).toBeNull();
     });
 
@@ -688,17 +784,25 @@ describe('Team Chat — Media & File Handling', () => {
     it('rejects files exceeding size limit with toast and no preview', () => {
       render(createElement(TeamFileUploader, { conversationId: 'c1', onFileSent: vi.fn() }));
       const input = screen.getByLabelText('Selecionar arquivo para enviar');
-      const big = new File([new ArrayBuffer(10 * 1024 * 1024 + 1)], 'big.pdf', { type: 'application/pdf' });
+      const big = new File([new ArrayBuffer(10 * 1024 * 1024 + 1)], 'big.pdf', {
+        type: 'application/pdf',
+      });
       fireEvent.change(input, { target: { files: [big] } });
-      expect(sonnerCalls.some((c) => c[0] === 'error' && String(c[1]).includes('Arquivo muito grande'))).toBe(true);
+      expect(
+        sonnerCalls.some((c) => c[0] === 'error' && String(c[1]).includes('Arquivo muito grande'))
+      ).toBe(true);
       expect(screen.queryByRole('dialog')).toBeNull();
     });
 
     it('rejects empty files with toast', () => {
       render(createElement(TeamFileUploader, { conversationId: 'c1', onFileSent: vi.fn() }));
       const input = screen.getByLabelText('Selecionar arquivo para enviar');
-      fireEvent.change(input, { target: { files: [new File([], 'vazio.pdf', { type: 'application/pdf' })] } });
-      expect(sonnerCalls.some((c) => c[0] === 'error' && String(c[1]).includes('Arquivo vazio'))).toBe(true);
+      fireEvent.change(input, {
+        target: { files: [new File([], 'vazio.pdf', { type: 'application/pdf' })] },
+      });
+      expect(
+        sonnerCalls.some((c) => c[0] === 'error' && String(c[1]).includes('Arquivo vazio'))
+      ).toBe(true);
     });
 
     it('shows image preview for image files', () => {
@@ -715,7 +819,9 @@ describe('Team Chat — Media & File Handling', () => {
       render(createElement(TeamFileUploader, { conversationId: 'c1', onFileSent: vi.fn() }));
       const input = screen.getByLabelText('Selecionar arquivo para enviar');
       fireEvent.change(input, {
-        target: { files: [new File([new ArrayBuffer(2048)], 'relatorio.pdf', { type: 'application/pdf' })] },
+        target: {
+          files: [new File([new ArrayBuffer(2048)], 'relatorio.pdf', { type: 'application/pdf' })],
+        },
       });
       expect(screen.getByRole('dialog')).not.toBeNull();
       expect(screen.getByText('relatorio.pdf')).not.toBeNull();
@@ -759,7 +865,9 @@ describe('Team Chat — Media & File Handling', () => {
     });
 
     it('shows upload error toast and keeps preview', async () => {
-      supabaseStorageUpload.mockImplementationOnce(() => Promise.resolve({ data: null, error: { message: 'boom' } }));
+      supabaseStorageUpload.mockImplementationOnce(() =>
+        Promise.resolve({ data: null, error: { message: 'boom' } })
+      );
       render(createElement(TeamFileUploader, { conversationId: 'c1', onFileSent: vi.fn() }));
       const input = screen.getByLabelText('Selecionar arquivo para enviar');
       fireEvent.change(input, {
@@ -769,7 +877,11 @@ describe('Team Chat — Media & File Handling', () => {
       // /enviar/i — o botão de submit do preview é o único "Enviar" dentro do dialog.
       fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Enviar' }));
       await waitFor(() =>
-        expect(sonnerCalls.some((c) => c[0] === 'error' && String(c[1]).includes('Erro ao enviar arquivo'))).toBe(true)
+        expect(
+          sonnerCalls.some(
+            (c) => c[0] === 'error' && String(c[1]).includes('Erro ao enviar arquivo')
+          )
+        ).toBe(true)
       );
       // Preview não é limpo no erro (permite retry)
       expect(screen.getByRole('dialog')).not.toBeNull();
@@ -793,22 +905,51 @@ describe('Team Chat — useTeamConversations', () => {
     metadata: null,
   });
 
+  /** Data relativa em ISO — o hook corta o unread em `now - 30d` (ver .gte abaixo). */
+  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+
   function seedConversations() {
     tableData['team_conversations'] = [
       baseConv('c1', 'direct', null),
       baseConv('c2', 'group', 'Grupo A'),
     ];
     tableData['team_conversation_members'] = [
-      { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: '2026-08-17T09:00:00Z' },
+      // c1: li até 90min atrás → m1 (30min) conta como não lida; m2 (180min) não
+      { conversation_id: 'c1', profile_id: 'profile-1', last_read_at: minutesAgo(90) },
       { conversation_id: 'c1', profile_id: 'other-1', last_read_at: null },
+      // c2: nunca li (null) → todas as mensagens de outros contam
       { conversation_id: 'c2', profile_id: 'profile-1', last_read_at: null },
       { conversation_id: 'c2', profile_id: 'other-2', last_read_at: null },
     ];
     tableData['team_messages'] = [
-      { id: 'm1', conversation_id: 'c1', content: 'oi', sender_id: 'other-1', created_at: '2026-08-17T10:00:00Z' },
-      { id: 'm2', conversation_id: 'c1', content: 'antigo', sender_id: 'other-1', created_at: '2026-08-17T08:00:00Z' },
-      { id: 'm3', conversation_id: 'c2', content: 'grupo', sender_id: 'other-2', created_at: '2026-08-17T10:30:00Z' },
-      { id: 'm4', conversation_id: 'c2', content: 'eu', sender_id: 'profile-1', created_at: '2026-08-17T10:31:00Z' },
+      {
+        id: 'm1',
+        conversation_id: 'c1',
+        content: 'oi',
+        sender_id: 'other-1',
+        created_at: minutesAgo(30),
+      },
+      {
+        id: 'm2',
+        conversation_id: 'c1',
+        content: 'antigo',
+        sender_id: 'other-1',
+        created_at: minutesAgo(180),
+      },
+      {
+        id: 'm3',
+        conversation_id: 'c2',
+        content: 'grupo',
+        sender_id: 'other-2',
+        created_at: minutesAgo(60),
+      },
+      {
+        id: 'm4',
+        conversation_id: 'c2',
+        content: 'eu',
+        sender_id: 'profile-1',
+        created_at: minutesAgo(59),
+      },
     ];
   }
 
@@ -864,7 +1005,10 @@ describe('Team Chat — useTeamConversations', () => {
     // recent messages: 1 query com .in + .limit(convIds.length * 2)
     const recentChain = chainsFor('team_messages')[0];
     expect(recentChain).toBeDefined();
-    expect(chainMethodCalls('team_messages', 0, 'in')[0]).toEqual(['conversation_id', ['c1', 'c2']]);
+    expect(chainMethodCalls('team_messages', 0, 'in')[0]).toEqual([
+      'conversation_id',
+      ['c1', 'c2'],
+    ]);
     expect(chainMethodCalls('team_messages', 0, 'limit')[0]).toEqual([4]);
 
     // unread: 1 query agregada com neq(sender) + gte(cutoff 30 dias)
@@ -874,7 +1018,10 @@ describe('Team Chat — useTeamConversations', () => {
     expect(chainMethodCalls('team_messages', 1, 'gte')[0][0]).toBe('created_at');
 
     // membros: 1 query batch .in(conversation_id, convIds)
-    expect(chainMethodCalls('team_conversation_members', 0, 'in')[0]).toEqual(['conversation_id', ['c1', 'c2']]);
+    expect(chainMethodCalls('team_conversation_members', 0, 'in')[0]).toEqual([
+      'conversation_id',
+      ['c1', 'c2'],
+    ]);
   });
 
   it('subscribes to zapp.team_messages/team_conversations/team_conversation_members changes and invalidates on event', async () => {
@@ -954,7 +1101,9 @@ describe('Team Chat — useTeamMessages', () => {
     expect(chainMethodCalls('team_messages', 0, 'eq')[0]).toEqual(['conversation_id', 'c1']);
     expect(chainMethodCalls('team_messages', 0, 'limit')[0]).toEqual([50]);
     const selectArg = chainMethodCalls('team_messages', 0, 'select')[0]?.[0] as string;
-    expect(selectArg).toContain('sender:profiles!team_messages_sender_id_fkey(id, name, avatar_url)');
+    expect(selectArg).toContain(
+      'sender:profiles!team_messages_sender_id_fkey(id, name, avatar_url)'
+    );
   });
 
   it('applies ilike search filter with sanitized query', async () => {
@@ -964,7 +1113,9 @@ describe('Team Chat — useTeamMessages', () => {
     tableData['team_messages'] = (tableData['team_messages'] as Array<Record<string, unknown>>).map(
       (m, i) => ({ ...m, content: `msg ${i + 1} urgente` })
     );
-    const { result } = renderHook(() => useTeamMessages('c1', '  urgente  '), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useTeamMessages('c1', '  urgente  '), {
+      wrapper: createWrapper(),
+    });
     await waitFor(() => expect(result.current.messages).toHaveLength(5));
     expect(chainMethodCalls('team_messages', 0, 'ilike')[0]).toEqual(['content', '%urgente%']);
   });
@@ -989,7 +1140,12 @@ describe('Team Chat — useTeamMessages', () => {
     expect(filter.filter).toBe('conversation_id=eq.c1');
 
     const callback = onCall[2] as (payload: { new: unknown }) => void;
-    const novo = { id: 'm-novo', conversation_id: 'c1', content: 'chegou', created_at: '2026-08-17T11:00:00Z' };
+    const novo = {
+      id: 'm-novo',
+      conversation_id: 'c1',
+      content: 'chegou',
+      created_at: '2026-08-17T11:00:00Z',
+    };
     // Espelha o INSERT no DB simulado: o invalidateQueries do hook refetcha e
     // clobberaria o append otimista se a row nova não existisse no tableData.
     (tableData['team_messages'] as Array<Record<string, unknown>>).push(novo);
@@ -1033,10 +1189,19 @@ describe('Team Chat — Mutations', () => {
 
     it('inserts correct fields and touches conversation updated_at', async () => {
       tableData['team_messages'] = {
-        id: 'm1', conversation_id: 'c1', sender_id: 'profile-1', content: 'oi',
-        message_type: 'text', media_url: null, media_type: null,
-        media_bucket: null, media_path: null, reply_to_id: null,
-        is_edited: false, created_at: '2026-08-17T10:00:00Z', updated_at: '2026-08-17T10:00:00Z',
+        id: 'm1',
+        conversation_id: 'c1',
+        sender_id: 'profile-1',
+        content: 'oi',
+        message_type: 'text',
+        media_url: null,
+        media_type: null,
+        media_bucket: null,
+        media_path: null,
+        reply_to_id: null,
+        is_edited: false,
+        created_at: '2026-08-17T10:00:00Z',
+        updated_at: '2026-08-17T10:00:00Z',
       };
       const { result } = renderHook(() => useSendTeamMessage(), { wrapper: createWrapper() });
       await act(async () => {
@@ -1073,17 +1238,30 @@ describe('Team Chat — Mutations', () => {
       tableErrors['team_messages'] = { message: 'insert failed' };
       const { result } = renderHook(() => useSendTeamMessage(), { wrapper: createWrapper() });
       await act(async () => {
-        await result.current.mutateAsync({ conversationId: 'c1', content: 'oi' }).catch(() => undefined);
+        await result.current
+          .mutateAsync({ conversationId: 'c1', content: 'oi' })
+          .catch(() => undefined);
       });
-      expect(toastCalls.some((c) => (c[0] as { title?: string }).title === 'Erro ao enviar mensagem')).toBe(true);
+      expect(
+        toastCalls.some((c) => (c[0] as { title?: string }).title === 'Erro ao enviar mensagem')
+      ).toBe(true);
     });
 
     it('performs optimistic cache append on success (no optimistic-update gap)', async () => {
       tableData['team_messages'] = {
-        id: 'm1', conversation_id: 'c1', sender_id: 'profile-1', content: 'oi',
-        message_type: 'text', media_url: null, media_type: null,
-        media_bucket: null, media_path: null, reply_to_id: null,
-        is_edited: false, created_at: '2026-08-17T10:00:00Z', updated_at: '2026-08-17T10:00:00Z',
+        id: 'm1',
+        conversation_id: 'c1',
+        sender_id: 'profile-1',
+        content: 'oi',
+        message_type: 'text',
+        media_url: null,
+        media_type: null,
+        media_bucket: null,
+        media_path: null,
+        reply_to_id: null,
+        is_edited: false,
+        created_at: '2026-08-17T10:00:00Z',
+        updated_at: '2026-08-17T10:00:00Z',
       };
       const qc = newQueryClient();
       qc.setQueryData(queryKeys.teamChat.messages('c1', ''), {
@@ -1117,15 +1295,26 @@ describe('Team Chat — Mutations', () => {
       tableErrors['team_messages'] = { message: 'denied' };
       const { result: r2 } = renderHook(() => useDeleteTeamMessage(), { wrapper: createWrapper() });
       await act(async () => {
-        await r2.current.mutateAsync({ messageId: 'm1', conversationId: 'c1' }).catch(() => undefined);
+        await r2.current
+          .mutateAsync({ messageId: 'm1', conversationId: 'c1' })
+          .catch(() => undefined);
       });
-      expect(toastCalls.some((c) => (c[0] as { title?: string }).title === 'Erro ao excluir mensagem')).toBe(true);
+      expect(
+        toastCalls.some((c) => (c[0] as { title?: string }).title === 'Erro ao excluir mensagem')
+      ).toBe(true);
     });
 
     it('removes the message from the messages cache on success', async () => {
       const qc = newQueryClient();
       qc.setQueryData(queryKeys.teamChat.messages('c1', ''), {
-        pages: [{ messages: [{ id: 'm1', conversation_id: 'c1', content: 'x' }, { id: 'm2', conversation_id: 'c1', content: 'y' }] }],
+        pages: [
+          {
+            messages: [
+              { id: 'm1', conversation_id: 'c1', content: 'x' },
+              { id: 'm2', conversation_id: 'c1', content: 'y' },
+            ],
+          },
+        ],
         pageParams: [null],
       });
       const { result } = renderHook(() => useDeleteTeamMessage(), { wrapper: createWrapper(qc) });
@@ -1145,9 +1334,16 @@ describe('Team Chat — Mutations', () => {
       const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
       const { result } = renderHook(() => useEditTeamMessage(), { wrapper: createWrapper(qc) });
       await act(async () => {
-        await result.current.mutateAsync({ messageId: 'm1', content: 'novo', conversationId: 'c1' });
+        await result.current.mutateAsync({
+          messageId: 'm1',
+          content: 'novo',
+          conversationId: 'c1',
+        });
       });
-      const updateArg = chainMethodCalls('team_messages', 0, 'update')[0]?.[0] as Record<string, unknown>;
+      const updateArg = chainMethodCalls('team_messages', 0, 'update')[0]?.[0] as Record<
+        string,
+        unknown
+      >;
       expect(updateArg.content).toBe('novo');
       expect(updateArg.is_edited).toBe(true);
       expect(updateArg.updated_at).toEqual(expect.any(String));
@@ -1161,9 +1357,13 @@ describe('Team Chat — Mutations', () => {
       tableErrors['team_messages'] = { message: 'denied' };
       const { result } = renderHook(() => useEditTeamMessage(), { wrapper: createWrapper() });
       await act(async () => {
-        await result.current.mutateAsync({ messageId: 'm1', content: 'x', conversationId: 'c1' }).catch(() => undefined);
+        await result.current
+          .mutateAsync({ messageId: 'm1', content: 'x', conversationId: 'c1' })
+          .catch(() => undefined);
       });
-      expect(toastCalls.some((c) => (c[0] as { title?: string }).title === 'Erro ao editar mensagem')).toBe(true);
+      expect(
+        toastCalls.some((c) => (c[0] as { title?: string }).title === 'Erro ao editar mensagem')
+      ).toBe(true);
     });
   });
 
@@ -1174,12 +1374,24 @@ describe('Team Chat — Mutations', () => {
         { conversation_id: 'c1', profile_id: 'other-1' },
       ];
       tableData['team_conversations'] = [
-        { id: 'c1', type: 'direct', name: null, created_by: 'profile-1', created_at: 'x', updated_at: 'x' },
+        {
+          id: 'c1',
+          type: 'direct',
+          name: null,
+          created_by: 'profile-1',
+          created_at: 'x',
+          updated_at: 'x',
+        },
       ];
-      const { result } = renderHook(() => useCreateTeamConversation(), { wrapper: createWrapper() });
+      const { result } = renderHook(() => useCreateTeamConversation(), {
+        wrapper: createWrapper(),
+      });
       let returned: { id: string } | null = null;
       await act(async () => {
-        returned = (await result.current.mutateAsync({ type: 'direct', memberIds: ['other-1'] })) as unknown as { id: string };
+        returned = (await result.current.mutateAsync({
+          type: 'direct',
+          memberIds: ['other-1'],
+        })) as unknown as { id: string };
       });
       expect((returned as { id: string } | null)?.id).toBe('c1');
       // Nenhum INSERT em team_conversations aconteceu
@@ -1189,9 +1401,18 @@ describe('Team Chat — Mutations', () => {
     it('creates a new direct chat adding self + deduplicated members', async () => {
       tableData['team_conversation_members'] = [];
       tableData['team_conversations'] = [
-        { id: 'novo-1', type: 'direct', name: null, created_by: 'profile-1', created_at: 'x', updated_at: 'x' },
+        {
+          id: 'novo-1',
+          type: 'direct',
+          name: null,
+          created_by: 'profile-1',
+          created_at: 'x',
+          updated_at: 'x',
+        },
       ];
-      const { result } = renderHook(() => useCreateTeamConversation(), { wrapper: createWrapper() });
+      const { result } = renderHook(() => useCreateTeamConversation(), {
+        wrapper: createWrapper(),
+      });
       let returned: { id: string } | null = null;
       await act(async () => {
         returned = (await result.current.mutateAsync({
@@ -1200,7 +1421,11 @@ describe('Team Chat — Mutations', () => {
         })) as unknown as { id: string };
       });
       expect((returned as { id: string } | null)?.id).toBe('novo-1');
-      const insertArgs = chainMethodCalls('team_conversation_members', 0, 'insert')[0]?.[0] as Array<Record<string, string>>;
+      const insertArgs = chainMethodCalls(
+        'team_conversation_members',
+        0,
+        'insert'
+      )[0]?.[0] as Array<Record<string, string>>;
       expect(insertArgs).toHaveLength(2);
       expect(insertArgs[0]).toEqual({ conversation_id: 'novo-1', profile_id: 'profile-1' });
       expect(insertArgs[1]).toEqual({ conversation_id: 'novo-1', profile_id: 'other-1' });
@@ -1212,32 +1437,52 @@ describe('Team Chat — Mutations', () => {
       // persiste). department_id 'd2' ≠ 'd1' faz o lookup de reuso (única por
       // departamento) NÃO encontrar nada — o fluxo de criação segue até o INSERT.
       tableData['team_conversations'] = [
-        { id: 'dept-1', type: 'department', name: 'Financeiro', created_by: 'profile-1', created_at: 'x', updated_at: 'x', department_id: 'd2' },
+        {
+          id: 'dept-1',
+          type: 'department',
+          name: 'Financeiro',
+          created_by: 'profile-1',
+          created_at: 'x',
+          updated_at: 'x',
+          department_id: 'd2',
+        },
       ];
-      const { result } = renderHook(() => useCreateTeamConversation(), { wrapper: createWrapper() });
+      const { result } = renderHook(() => useCreateTeamConversation(), {
+        wrapper: createWrapper(),
+      });
       await act(async () => {
         await result.current.mutateAsync({ type: 'department', departmentId: 'd1' });
       });
-      const insertArgs = chainMethodCalls('team_conversation_members', 0, 'insert')[0]?.[0] as Array<Record<string, string>>;
+      const insertArgs = chainMethodCalls(
+        'team_conversation_members',
+        0,
+        'insert'
+      )[0]?.[0] as Array<Record<string, string>>;
       expect(insertArgs).toEqual([{ conversation_id: 'dept-1', profile_id: 'profile-1' }]);
     });
 
     it('throws when profile is missing', async () => {
       authProfile = null;
-      const { result } = renderHook(() => useCreateTeamConversation(), { wrapper: createWrapper() });
-      await expect(result.current.mutateAsync({ type: 'direct', memberIds: ['x'] })).rejects.toThrow(
-        'Not authenticated'
-      );
+      const { result } = renderHook(() => useCreateTeamConversation(), {
+        wrapper: createWrapper(),
+      });
+      await expect(
+        result.current.mutateAsync({ type: 'direct', memberIds: ['x'] })
+      ).rejects.toThrow('Not authenticated');
     });
   });
 
   describe('useToggleMuteConversation', () => {
     it('updates is_muted for the current profile membership', async () => {
-      const { result } = renderHook(() => useToggleMuteConversation(), { wrapper: createWrapper() });
+      const { result } = renderHook(() => useToggleMuteConversation(), {
+        wrapper: createWrapper(),
+      });
       await act(async () => {
         await result.current.mutateAsync({ conversationId: 'c1', muted: true });
       });
-      expect(chainMethodCalls('team_conversation_members', 0, 'update')[0]?.[0]).toEqual({ is_muted: true });
+      expect(chainMethodCalls('team_conversation_members', 0, 'update')[0]?.[0]).toEqual({
+        is_muted: true,
+      });
       expect(chainMethodCalls('team_conversation_members', 0, 'eq')).toEqual([
         ['conversation_id', 'c1'],
         ['profile_id', 'profile-1'],
@@ -1246,25 +1491,40 @@ describe('Team Chat — Mutations', () => {
 
     it('throws when profile is missing', async () => {
       authProfile = null;
-      const { result } = renderHook(() => useToggleMuteConversation(), { wrapper: createWrapper() });
-      await expect(result.current.mutateAsync({ conversationId: 'c1', muted: true })).rejects.toThrow(
-        'Not authenticated'
-      );
+      const { result } = renderHook(() => useToggleMuteConversation(), {
+        wrapper: createWrapper(),
+      });
+      await expect(
+        result.current.mutateAsync({ conversationId: 'c1', muted: true })
+      ).rejects.toThrow('Not authenticated');
     });
   });
 
   describe('useTransferTeamConversation', () => {
     it('updates department_id + metadata and toasts success', async () => {
       tableData['team_conversations'] = [{ id: 'c1', department_id: 'd2', metadata: { ok: true } }];
-      const { result } = renderHook(() => useTransferTeamConversation(), { wrapper: createWrapper() });
-      await act(async () => {
-        await result.current.mutateAsync({ conversationId: 'c1', departmentId: 'd2', metadata: { ok: true } });
+      const { result } = renderHook(() => useTransferTeamConversation(), {
+        wrapper: createWrapper(),
       });
-      const updateArg = chainMethodCalls('team_conversations', 0, 'update')[0]?.[0] as Record<string, unknown>;
+      await act(async () => {
+        await result.current.mutateAsync({
+          conversationId: 'c1',
+          departmentId: 'd2',
+          metadata: { ok: true },
+        });
+      });
+      const updateArg = chainMethodCalls('team_conversations', 0, 'update')[0]?.[0] as Record<
+        string,
+        unknown
+      >;
       expect(updateArg.department_id).toBe('d2');
       expect(updateArg.metadata).toEqual({ ok: true });
       expect(chainMethodCalls('team_conversations', 0, 'eq')[0]).toEqual(['id', 'c1']);
-      expect(toastCalls.some((c) => (c[0] as { title?: string }).title === 'Conversa transferida com sucesso')).toBe(true);
+      expect(
+        toastCalls.some(
+          (c) => (c[0] as { title?: string }).title === 'Conversa transferida com sucesso'
+        )
+      ).toBe(true);
     });
   });
 
@@ -1275,7 +1535,9 @@ describe('Team Chat — Mutations', () => {
         pages: [{ messages: [{ id: 'm1', conversation_id: 'c1', content: 'x', status: 'sent' }] }],
         pageParams: [null],
       });
-      const { result } = renderHook(() => useUpdateTeamMessageStatus(), { wrapper: createWrapper(qc) });
+      const { result } = renderHook(() => useUpdateTeamMessageStatus(), {
+        wrapper: createWrapper(qc),
+      });
       await act(async () => {
         await result.current.mutateAsync({ messageId: 'm1', status: 'read', conversationId: 'c1' });
       });
@@ -1305,7 +1567,9 @@ describe('Team Chat — RLS & Database Contract (migrations)', () => {
   });
 
   it('team_messages SELECT is restricted to conversation members (or admin/owner)', () => {
-    expect(migrationsSql).toContain('CREATE POLICY team_messages_select ON zapp.team_messages FOR SELECT');
+    expect(migrationsSql).toContain(
+      'CREATE POLICY team_messages_select ON zapp.team_messages FOR SELECT'
+    );
     expect(migrationsSql).toContain('EXISTS (SELECT 1 FROM zapp.team_conversation_members tcm');
   });
 
@@ -1318,21 +1582,28 @@ describe('Team Chat — RLS & Database Contract (migrations)', () => {
     // 20260817260016 dropou team_messages_insert_v2 (identidade apenas) e
     // recriou como team_messages_insert com identidade via zapp.profiles.
     expect(migrationsSql).toContain('CREATE POLICY team_messages_insert ON zapp.team_messages');
-    expect(migrationsSql).toMatch(/sender_id = \(SELECT p\.id FROM zapp\.profiles p WHERE p\.user_id = auth\.uid\(\)\)/);
+    expect(migrationsSql).toMatch(
+      /sender_id = \(SELECT p\.id FROM zapp\.profiles p WHERE p\.user_id = auth\.uid\(\)\)/
+    );
   });
 
   it('gap FECHADO (20260817260016): team_messages INSERT verifica membership server-side', () => {
     // Guard-rail da correção E11/fase-08: o WITH CHECK exige membership na
     // conversa ALVO (conversation_id qualificado — sem a tautologia antiga
     // tcm.conversation_id = tcm.conversation_id). Não reintroduzir INSERT sem join.
-    const insertBlock = migrationsSql.match(/CREATE POLICY team_messages_insert ON zapp\.team_messages[\s\S]*?;/)?.[0] ?? '';
+    const insertBlock =
+      migrationsSql.match(
+        /CREATE POLICY team_messages_insert ON zapp\.team_messages[\s\S]*?;/
+      )?.[0] ?? '';
     expect(insertBlock).toContain('sender_id');
     expect(insertBlock).toContain('team_conversation_members');
     expect(insertBlock).toContain('tcm.conversation_id = team_messages.conversation_id');
   });
 
   it('team_messages UPDATE policy exists (own messages or admin)', () => {
-    expect(migrationsSql).toMatch(/CREATE POLICY team_messages_update ON zapp\.team_messages\s+FOR UPDATE/);
+    expect(migrationsSql).toMatch(
+      /CREATE POLICY team_messages_update ON zapp\.team_messages\s+FOR UPDATE/
+    );
   });
 
   it('gap FECHADO: team_messages DELETE policy agora versionada (20260821003000)', () => {
@@ -1340,17 +1611,25 @@ describe('Team Chat — RLS & Database Contract (migrations)', () => {
     // FOR DELETE existia no banco (squash de 133 migrations não a incorporou)
     // mas não em nenhuma migration versionada — materializada em
     // 20260821003000_materializa_policies_team_messages_dml.sql.
-    expect(migrationsSql).toMatch(/CREATE POLICY team_messages_delete ON zapp\.team_messages\s+FOR DELETE/);
+    expect(migrationsSql).toMatch(
+      /CREATE POLICY team_messages_delete ON zapp\.team_messages\s+FOR DELETE/
+    );
   });
 
   it('gap parcialmente fechado (20260817260016): team_conversations tem DELETE admin-only; INSERT/UPDATE seguem sem policy', () => {
-    expect(migrationsSql).toContain('CREATE POLICY team_conversations_select ON zapp.team_conversations FOR SELECT');
-    expect(migrationsSql).toMatch(/CREATE POLICY team_conversations_delete ON zapp\.team_conversations\s+FOR DELETE/);
+    expect(migrationsSql).toContain(
+      'CREATE POLICY team_conversations_select ON zapp.team_conversations FOR SELECT'
+    );
+    expect(migrationsSql).toMatch(
+      /CREATE POLICY team_conversations_delete ON zapp\.team_conversations\s+FOR DELETE/
+    );
     expect(migrationsSql).not.toMatch(/CREATE POLICY[^;]*team_conversations\s+FOR (INSERT|UPDATE)/);
   });
 
   it('GAP real: team_conversation_members has NO INSERT policy (default deny)', () => {
-    expect(migrationsSql).toContain('CREATE POLICY team_members_select ON zapp.team_conversation_members FOR SELECT');
+    expect(migrationsSql).toContain(
+      'CREATE POLICY team_members_select ON zapp.team_conversation_members FOR SELECT'
+    );
     expect(migrationsSql).not.toMatch(/CREATE POLICY[^;]*team_conversation_members FOR INSERT/);
   });
 
@@ -1361,7 +1640,7 @@ describe('Team Chat — RLS & Database Contract (migrations)', () => {
     // git mv de volta para supabase/migrations/ nesta sessão. Valida também o
     // owner-path (storage.foldername(name))[1] = auth.uid()::text.
     expect(migrationsSql).toContain('CREATE POLICY auth_rw_teamfiles ON storage.objects');
-    expect(migrationsSql).toContain("(storage.foldername(name))[1] = auth.uid()::text");
+    expect(migrationsSql).toContain('(storage.foldername(name))[1] = auth.uid()::text');
   });
 
   it('GAP real: no message content length limit at DB level', () => {
