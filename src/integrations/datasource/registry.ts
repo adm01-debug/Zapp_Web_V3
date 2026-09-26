@@ -48,6 +48,7 @@ export type LogicalEntity =
   | 'whisper_messages'
   | 'failed_messages'
   | 'conversation_closures'
+  | 'conversation_events'
   | 'conversation_snoozes'
   | 'pinned_conversations'
   | 'contact_notes'
@@ -93,6 +94,7 @@ export const ENTITY_MAP = {
   failed_messages: { client: 'lovable', table: 'failed_messages' },
   // ── Slash commands (BUG-03): tabelas reais usadas pelos callbacks ────────
   conversation_closures: { client: 'lovable', table: 'conversation_closures' },
+  conversation_events: { client: 'lovable', table: 'conversation_events' },
   conversation_snoozes: { client: 'lovable', table: 'conversation_snoozes' },
   pinned_conversations: { client: 'lovable', table: 'pinned_conversations' },
   contact_notes: { client: 'lovable', table: 'contact_notes' },
