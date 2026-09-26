@@ -35850,7 +35850,7 @@ CREATE OR REPLACE VIEW zapp.contacts WITH (security_invoker='on') AS
     'neutral'::text AS ai_sentiment,
     'whatsapp'::text AS channel_type,
     NULL::uuid AS channel_connection_id,
-    NULL::text AS group_category,
+    wg.category AS group_category,
     0 AS risk_score,
     (ec.lead_source)::text AS lead_origin,
         CASE
@@ -35862,7 +35862,8 @@ CREATE OR REPLACE VIEW zapp.contacts WITH (security_invoker='on') AS
     'whatsapp'::text AS channel,
     ec.last_message_at AS last_seen_at,
     zapp.get_default_workspace_id() AS workspace_id
-   FROM evo.evolution_contacts ec
+   FROM (evo.evolution_contacts ec
+     LEFT JOIN zapp.whatsapp_groups wg ON ((wg.group_id = (ec.remote_jid)::text)))
   WHERE (ec.deleted_at IS NULL);
 
 
