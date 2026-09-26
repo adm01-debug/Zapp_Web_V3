@@ -340,6 +340,12 @@ const MIGRATION_HISTORICAL_ALLOWLIST = new Set([
   '20260804000000_canonical_schema_squash_133_migrations.sql',
   '20260813230000_fix_notify_and_analyze_cron.sql',
   '20260814050000_fix_notify_v6_pending_view.sql',
+  // Onda console 2026-09-06: net.http_post para N8N warroom (não Evolution API).
+  // Já aplicadas em produção; egresso é para n8n.atomicabr.com.br, fora do escopo
+  // da regra I4 (que cobre Evolution API). Allowlist histórica — não regressão.
+  '20260906010000_e020_consumer_stats_stale_watchdog.sql',
+  '20260906020000_e026_alert_notification_dispatch.sql',
+  '20260906021000_e061_liveness_probe_kpi_separation.sql',
 ]);
 
 function scanMigrations(migrationsDir) {
