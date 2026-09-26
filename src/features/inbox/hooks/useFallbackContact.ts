@@ -132,8 +132,15 @@ export function useFallbackContact(
         }
       }
 
-      // ── Strategy C: synthetic fallback (last resort, useExternalDb) ─────
-      if (!localResult && useExternalDb) {
+      // ── Strategy C: synthetic fallback (last resort, SEMPRE) ────────────
+      // NÃO gated por useExternalDb: não consulta banco nenhum — monta um
+      // contato mínimo em memória a partir do próprio id clicado. O gate
+      // original veio junto com a remoção do banco FATOR X (#732), que trocou
+      // USE_EXTERNAL_DB por `false` no chamador (useRealtimeInbox). Isso
+      // derrubou junto a última instância do guarda: todo clique que o lookup
+      // local não resolvia ficava em estado vazio para sempre (ChatPanel nunca
+      // montava: legacyConversation null → InboxEmptyChat).
+      if (!localResult) {
         // For groups/broadcast (phone === null), store null — not the JID string — to avoid
         // poisoning the phone field with a JID like "120363@g.us"
         const syntheticPhone = ref.kind === 'jid' ? ref.phone : null;
@@ -151,7 +158,13 @@ export function useFallbackContact(
 
       if (cancelled) return;
 
-      setSelectedContactFallback(localResult as ConversationContact | null);
+      // `localResult` é sempre um registro cru (linha do PostgREST) ou o
+      // objeto sintético montado acima — nenhum dos dois é um
+      // ConversationContact completo. O cast passa por `unknown` de propósito:
+      // é a conversão consciente de "registro cru" para o tipo consumido pelo
+      // ChatPanel, que só lê id/name/phone/remote_jid/avatar_url/company/tags e
+      // tolera o resto como undefined (foi assim que funcionou antes do #732).
+      setSelectedContactFallback(localResult as unknown as ConversationContact | null);
     };
     void loadSelectedContact();
     return () => {
@@ -162,6 +175,12 @@ export function useFallbackContact(
   return useMemo<ConversationWithMessages | null>(() => {
     if (selectedConversation) return selectedConversation;
     if (!selectedContactFallback) return null;
-    return { contact: selectedContactFallback, messages: [], unreadCount: 0, lastMessage: null, isArchived: Boolean(selectedContactFallback.deleted_at) };
+    return {
+      contact: selectedContactFallback,
+      messages: [],
+      unreadCount: 0,
+      lastMessage: null,
+      isArchived: Boolean(selectedContactFallback.deleted_at),
+    };
   }, [selectedConversation, selectedContactFallback]);
 }
