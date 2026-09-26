@@ -107,5 +107,5 @@ export function useSLADelivery({ contactId, messages }: UseSLADeliveryProps) {
     const interval = setInterval(checkDeliveryDelay, 60000);
     checkDeliveryDelay();
     return () => clearInterval(interval);
-  }, [contactId, messages, messages.length, activeRule]);
+  }, [contactId, messages, activeRule]);
 }
