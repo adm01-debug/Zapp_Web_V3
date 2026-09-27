@@ -190,7 +190,16 @@ for fn in "${REPO_FNS[@]}"; do
   fi
 done
 
+# Funções RETIRADAS de propósito: continuam no volume como zumbis inertes — não são
+# roteadas (saíram do registry) e respondem 404. Sem esta lista o gate acusaria ORPHAN
+# para sempre, treinando o time a ignorar o vermelho. Qualquer OUTRO órfão continua
+# sendo reportado normalmente. Evidência de cada uma: ADR em docs/_archive/.
+RETIRED_FUNCTIONS=(email-health zapp-google-calendar-sync)
+
 for name in "${!REMOTE_FNS[@]}"; do
+  if printf '%s\n' "${RETIRED_FUNCTIONS[@]}" | grep -qx "$name"; then
+    continue
+  fi
   if ! printf '%s\n' "${REPO_FNS[@]}" | grep -qx "$name"; then
     ORPHAN=$((ORPHAN+1)); ORPHAN_LIST+=("$name")
   fi
@@ -296,6 +305,21 @@ if [[ -d "$SHARED_DIR" ]]; then
       ! -name '*.spec.ts' \
       -printf '%P\n' | sort
   )
+
+  # Lista para o teste de ÓRFÃO — precisa ser SIMÉTRICA com o snapshot remoto, que
+  # lista TODOS os arquivos regulares (não só *.ts, por design: "lixo sem extensão
+  # fica visível"). Comparar com REPO_SHARED (só *.ts) fazia arquivos VERSIONADOS
+  # aparecerem como órfãos — medido em 2026-09-27: _shared/README.md e
+  # _shared/evolution-event-types.json, ambos no repo, acusados como ORPHAN.
+  # O sync continua mandando apenas os *.ts (REPO_SHARED).
+  mapfile -t REPO_SHARED_ALL < <(
+    find "$SHARED_DIR" -type f \
+      ! -path '*/__tests__/*' \
+      ! -path '*/__fixtures__/*' \
+      ! -name '*.test.ts' \
+      ! -name '*.spec.ts' \
+      -printf '%P\n' | sort
+  )
   # Snapshot remoto RECURSIVO: "caminho_relativo<TAB>hash" por arquivo (1
   # chamada). Fix 2026-08-15 (BUG-1/3): saída TAB-delimitada (path com ESPAÇO
   # não quebra o parse) e TODOS os arquivos regulares, não só *.ts (lixo sem
@@ -334,7 +358,7 @@ if [[ -d "$SHARED_DIR" ]]; then
     case "${name##*/}" in
       *.test.ts|*.spec.ts) continue ;;
     esac
-    if ! printf '%s\n' "${REPO_SHARED[@]}" | grep -qx "$name"; then
+    if ! printf '%s\n' "${REPO_SHARED_ALL[@]}" | grep -qx "$name"; then
       SHARED_ORPHAN=$((SHARED_ORPHAN+1)); SHARED_ORPHAN_LIST+=("$name")
     fi
   done
