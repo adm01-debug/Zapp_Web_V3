@@ -189,11 +189,28 @@ jobs:
           # ausente — policy sem RLS é decorativa, e um grep não responde
           # "a tabela está protegida hoje?".
           #
-          # Separação deliberada entre falha de INFRA e falha de INVARIANTE:
-          # sem secret, sem psql ou sem conectividade -> avisa e passa (não há o
-          # que afirmar). Com conexão de pé -> o check é BLOQUEANTE.
+          # ROTA: este Postgres NÃO é publicado fora da malha do Swarm (por
+          # desenho). Medido no run 36334628364: `psql "$SUPABASE_DB_URL"` de
+          # fora dá "sem conectividade" e o passo terminava em warning + exit 0
+          # em TODA execução — invariante que nunca verificava nada. A rota que
+          # funciona é a mesma do drift-check: `docker exec` no container.
+          #
+          # Separação entre falha de INFRA e falha de INVARIANTE: sem docker,
+          # sem psql e sem conectividade -> avisa e passa (não há o que
+          # afirmar). Com uma rota de pé -> BLOQUEANTE.
+          if command -v docker >/dev/null 2>&1; then
+            CONTAINER="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 -E '^supabase_db' || true)"
+            if [ -n "$CONTAINER" ]; then
+              echo "Rota 1 (docker exec em $CONTAINER) — invariante BLOQUEANTE."
+              docker exec -i "$CONTAINER" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
+                < scripts/sql/check-rls-coverage.sql
+              exit $?
+            fi
+            echo "::warning title=INV-7 rota 1 indisponivel::container supabase_db nao encontrado; tentando psql direto."
+          fi
+
           if [ -z "${SUPABASE_DB_URL:-}" ]; then
-            echo "::notice title=INV-7 nao executou::secret SUPABASE_DB_URL ausente. Cobertura de RLS nao verificada."
+            echo "::notice title=INV-7 nao executou::sem docker e sem secret SUPABASE_DB_URL. Cobertura de RLS nao verificada."
             exit 0
           fi
 
@@ -210,7 +227,7 @@ jobs:
             exit 0
           fi
 
-          echo "Conectividade OK — rodando o invariante em modo bloqueante."
+          echo "Rota 2 (psql direto) — invariante BLOQUEANTE."
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/sql/check-rls-coverage.sql
 
       - name: Summary
