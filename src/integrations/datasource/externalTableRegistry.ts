@@ -16,17 +16,18 @@ export interface ExternalTableEntry {
 
 const registry: Record<string, ExternalTableEntry> = {
   // ── Tabelas CRM 360 — ausentes do banco (PGRST205 confirmado ao vivo) ──
-  customers:          { exists: false },
-  sales:              { exists: false },
-  suppliers:          { exists: false },
-  carriers:           { exists: false },
+  customers: { exists: false },
+  sales: { exists: false },
+  suppliers: { exists: false },
+  carriers: { exists: false },
   company_rfm_scores: { exists: false },
-  leads:              { exists: false },
-  orders:             { exists: false },
-  deals:              { exists: false },
-  quotations:         { exists: false },
-  sales_activities:   { exists: false },
-  salespeople:        { exists: false },
+  leads: { exists: false },
+  orders: { exists: false },
+  deals: { exists: false },
+  quotations: { exists: false },
+  sales_activities: { exists: false },
+  salespeople: { exists: false },
+  interactions: { exists: false },
 };
 
 /**
