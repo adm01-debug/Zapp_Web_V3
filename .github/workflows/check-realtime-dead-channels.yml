@@ -23,11 +23,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   check-dead-channels:
     name: Detect dead realtime subscriptions
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): grep estático local, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v7

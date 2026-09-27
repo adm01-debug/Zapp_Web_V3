@@ -8,7 +8,7 @@ on:
       - 'src/integrations/supabase/**'
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * 1'  # Monday 8am UTC
+    - cron: '33 10 * * 1'  # Etapa 95: deslocado de 08:00 para 10:33 (seg) — evita colisão com db-reference-integrity (08:00 diário, mesmo pool vps-zapp)
 
 permissions:
   contents: read
@@ -21,6 +21,7 @@ jobs:
   check-security-invoker:
     name: Verify security_invoker on all views
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     env:
       META_URL: ${{ secrets.ZAPP_META_URL }}
       META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
@@ -33,8 +34,8 @@ jobs:
       - name: D-8 — Fail gate if v_security_audit has ⚠ rows (schema evo)
         run: |
           if [ -z "$META_URL" ] || [ -z "$META_TOKEN" ]; then
-            echo "⚠ Secrets not configured — skipping security audit gate"
-            exit 0
+            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN não configurados — FAIL-CLOSED: secrets ausentes impedem verificação de segurança (D-8)"
+            exit 1
           fi
           echo "→ Querying evo.v_security_audit for ⚠ rows..."
           RESPONSE=$(curl -sS "$META_URL/query" \
@@ -64,9 +65,10 @@ jobs:
 
       - name: Check security_invoker via postgres-meta
         run: |
+          # shellcheck disable=SC2016
           if [ -z "$META_URL" ] || [ -z "$META_TOKEN" ]; then
-            echo "⚠ Secrets not configured — skipping live check"
-            exit 0
+            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN não configurados — FAIL-CLOSED: secrets ausentes impedem verificação de security_invoker"
+            exit 1
           fi
 
           echo "→ Querying views without security_invoker..."
@@ -95,6 +97,7 @@ jobs:
             exit 1
           fi
 
+          # shellcheck disable=SC2016
           COUNT=$(echo "$RESULT" | node -e "
             let d='';
             process.stdin.on('data',c=>d+=c);
@@ -108,7 +111,7 @@ jobs:
 
           if [ "$COUNT" = "api-error" ]; then
             echo "::error::postgres-meta returned unexpected format (HTTP $HTTP_CODE) — security_invoker gate cannot be verified; failing to prevent blind spot"
-            echo "Response preview: $(echo "$RESULT" | head -c 200)"
+            echo "Response preview: $(echo \"$RESULT\" | head -c 200)"
             exit 1
           fi
 
@@ -123,9 +126,10 @@ jobs:
 
       - name: Check no anon-executable functions
         run: |
+          # shellcheck disable=SC2016
           if [ -z "$META_URL" ] || [ -z "$META_TOKEN" ]; then
-            echo "⚠ Secrets not configured — skipping live check"
-            exit 0
+            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN não configurados — FAIL-CLOSED: secrets ausentes impedem verificação de funções anon"
+            exit 1
           fi
 
           RESPONSE=$(curl -sS "$META_URL/query" \
@@ -153,6 +157,7 @@ jobs:
             exit 1
           fi
 
+          # shellcheck disable=SC2016
           COUNT=$(echo "$RESULT" | node -e "
             let d='';
             process.stdin.on('data',c=>d+=c);
@@ -162,14 +167,14 @@ jobs:
                 if (!Array.isArray(a)) { console.log('api-error'); return; }
                 const row = a.length === 1 ? a[0] : null;
                 const raw = (row && typeof row === 'object' && !Array.isArray(row) && Object.prototype.hasOwnProperty.call(row,'c')) ? String(row.c) : '';
-                if (!/^\d+$/.test(raw)) { console.log('api-error'); return; }
+                if (!/^\\d+$/.test(raw)) { console.log('api-error'); return; }
                 console.log(raw.replace(/^0+/,'') || '0');
               } catch { console.log('api-error'); }
             })" 2>/dev/null || echo "api-error")
 
           if [ "$COUNT" = "api-error" ]; then
             echo "::error::postgres-meta returned unexpected format (HTTP $HTTP_CODE) — anon-function gate cannot be verified; failing to prevent blind spot"
-            echo "Response preview: $(echo "$RESULT" | head -c 200)"
+            echo "Response preview: $(echo \"$RESULT\" | head -c 200)"
             exit 1
           fi
 

@@ -8,11 +8,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   regression-test-gate:
     name: Regression Test Requirement
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): git diff/log local, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +34,7 @@ jobs:
           # direto em script (script injection — actionlint AL-01, 2026-08-06)
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
+          # shellcheck disable=SC2129
           # PR title
           echo "pr_title=$PR_TITLE" >> "$GITHUB_OUTPUT"
 

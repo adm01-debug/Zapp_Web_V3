@@ -39,6 +39,31 @@ jobs:
           persist-credentials: false
 
       - name: Apply pending migrations
+        id: migrate
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
-        run: bash infra/db-migrate/apply-migrations.sh
+        run: |
+          bash infra/db-migrate/apply-migrations.sh 2>&1 | tee /tmp/migrate-out.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Step Summary
+        if: always()
+        run: |
+          EXIT="${{ steps.migrate.outputs.exit_code }}"
+          DRY="${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}"
+          echo "## db-migrate" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY" = "1" ]; then
+            echo "🔍 **Modo dry-run** — nenhuma migration foi aplicada." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$EXIT" = "0" ]; then
+            echo "✅ **Migrations aplicadas com sucesso.**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **Falha ao aplicar migrations** — verifique o log abaixo." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Saída completa</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          tail -100 /tmp/migrate-out.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "(sem saída)" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"

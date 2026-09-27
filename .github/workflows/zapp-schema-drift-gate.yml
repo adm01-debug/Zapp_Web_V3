@@ -18,13 +18,24 @@ on:
     paths:
       - 'supabase/migrations/**'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+# Etapa 19: contents:write apenas no job de regen (dispatch com regen=true).
+# PR/push ficam com read-only — o token não escreve no repo a não ser quando explicitamente pedido.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   drift-check:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
+    # Etapa 19: write declarado estaticamente (actionlint não aceita expressão em permissions);
+    # escrita real só ocorre no step de commit, que tem if: regen == 'true' como guarda.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:

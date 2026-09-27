@@ -22,10 +22,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     name: edge-auth-smoke
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
     env:
       SUPABASE_URL: "${{ inputs.supabase_url || secrets.SUPABASE_URL || 'https://supabase.atomicabr.com.br' }}"
       # Fix 2026-08-20 (plano-100 etapa 24): em `schedule`, `inputs` não existe e

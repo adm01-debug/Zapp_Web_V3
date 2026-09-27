@@ -1,8 +1,9 @@
 name: Security & Compliance
 
 # Secret scanning via gitleaks. Runs on schedule (weekly) AND on every PR.
-# Advisory (continue-on-error: true) so it never gates merge,
-# but results are surfaced as GitHub Check annotations.
+# Etapa 50: comentário "Advisory" removido — o job NÃO tem continue-on-error;
+# vazar credencial BLOQUEIA merge (SEM escape hatch, por design).
+# Resultados aparecem como GitHub Check annotations.
 on:
   push:
     branches: [main, master]
@@ -16,11 +17,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   gitleaks:
     name: 🔍 Secret Scan (gitleaks)
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): gitleaks sobre histórico git local, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v7
@@ -28,7 +34,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: 🔒 Run gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         # SEM continue-on-error: secret scan deve BLOQUEAR merge se vazar credencial.
         # Resultados continuam como annotations no Check.
         env:

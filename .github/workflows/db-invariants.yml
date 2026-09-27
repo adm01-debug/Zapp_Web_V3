@@ -27,10 +27,14 @@ concurrency:
   group: db-invariants-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
+permissions:
+  contents: read
+
 jobs:
   invariants:
     name: DB Invariants
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7

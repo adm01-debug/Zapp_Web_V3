@@ -1,0 +1,160 @@
+name: CI SLO Metrics
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Semanal: segunda 08:00 UTC (após os crons de db/security terem rodado)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  slo-report:
+    name: Medir SLO de CI (p95 PR→verde)
+    # ubuntu-latest: só lê API do GitHub, sem DB/VPS.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Coletar métricas de workflow runs (últimos 7 dias)
+        id: metrics
+        run: |
+          set -euo pipefail
+
+          REPO="${{ github.repository }}"
+          SINCE=$(date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -v-7d '+%Y-%m-%dT%H:%M:%SZ')
+          echo "Coletando runs de ci.yml desde $SINCE..."
+
+          # Pegar runs do ci.yml (gate principal de PR) completados na janela
+          RUNS_RAW=$(gh api \
+            "repos/$REPO/actions/workflows/ci.yml/runs?status=completed&per_page=100&created=>$SINCE" \
+            --jq '[.workflow_runs[] | select(.event == "pull_request") | {
+              id: .id,
+              conclusion: .conclusion,
+              created_at: .created_at,
+              updated_at: .updated_at,
+              head_sha: .head_sha
+            }]' 2>/dev/null || echo "[]")
+
+          COUNT=$(echo "$RUNS_RAW" | jq 'length')
+          echo "Runs de PR encontrados: $COUNT"
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "p95_seconds=N/A" >> "$GITHUB_OUTPUT"
+            echo "p50_seconds=N/A" >> "$GITHUB_OUTPUT"
+            echo "success_rate=N/A" >> "$GITHUB_OUTPUT"
+            echo "total_runs=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Calcular duração de cada run (segundos entre created_at e updated_at)
+          DURATIONS=$(echo "$RUNS_RAW" | jq -r '.[] | ((.updated_at | fromdateiso8601) - (.created_at | fromdateiso8601)) | tostring')
+
+          TOTAL=$(echo "$DURATIONS" | wc -l | tr -d ' ')
+          SUCCESS_COUNT=$(echo "$RUNS_RAW" | jq '[.[] | select(.conclusion == "success")] | length')
+
+          # p50 e p95 — ordenar e pegar percentis
+          SORTED=$(echo "$DURATIONS" | sort -n)
+          P50_IDX=$(( (TOTAL * 50 + 99) / 100 ))
+          P95_IDX=$(( (TOTAL * 95 + 99) / 100 ))
+
+          P50=$(echo "$SORTED" | sed -n "${P50_IDX}p")
+          P95=$(echo "$SORTED" | sed -n "${P95_IDX}p")
+
+          SUCCESS_RATE=$(( SUCCESS_COUNT * 100 / TOTAL ))
+
+          echo "p95_seconds=$P95" >> "$GITHUB_OUTPUT"
+          echo "p50_seconds=$P50" >> "$GITHUB_OUTPUT"
+          echo "success_rate=$SUCCESS_RATE" >> "$GITHUB_OUTPUT"
+          echo "total_runs=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "success_count=$SUCCESS_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Coletar fila do pool vps-zapp
+        id: queue
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+
+          # Runs atualmente em queued ou in_progress no pool vps-zapp (estimativa)
+          QUEUED=$(gh api "repos/$REPO/actions/runs?status=queued&per_page=30" \
+            --jq '[.workflow_runs[] | select(.runner_group_name // "" | test("vps|self"; "i"))] | length' 2>/dev/null || echo "0")
+          IN_PROGRESS=$(gh api "repos/$REPO/actions/runs?status=in_progress&per_page=30" \
+            --jq '[.workflow_runs[] | select(.runner_group_name // "" | test("vps|self"; "i"))] | length' 2>/dev/null || echo "0")
+
+          echo "queued=$QUEUED" >> "$GITHUB_OUTPUT"
+          echo "in_progress=$IN_PROGRESS" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar Step Summary (SLO semanal)
+        if: always()
+        run: |
+          P95="${{ steps.metrics.outputs.p95_seconds }}"
+          P50="${{ steps.metrics.outputs.p50_seconds }}"
+          RATE="${{ steps.metrics.outputs.success_rate }}"
+          TOTAL="${{ steps.metrics.outputs.total_runs }}"
+          SUCCESS="${{ steps.metrics.outputs.success_count }}"
+          QUEUED="${{ steps.queue.outputs.queued }}"
+          IN_PROG="${{ steps.queue.outputs.in_progress }}"
+
+          # SLO targets
+          SLO_P95=1200   # 20 min em segundos
+          SLO_RATE=90    # 90% success rate
+
+          fmt_min() {
+            if [ "$1" = "N/A" ] || [ -z "$1" ]; then echo "N/A"; return; fi
+            echo "$(( $1 / 60 ))m$(( $1 % 60 ))s"
+          }
+
+          P95_FMT=$(fmt_min "$P95")
+          P50_FMT=$(fmt_min "$P50")
+
+          # Status dos SLOs
+          if [ "$P95" = "N/A" ] || [ "$TOTAL" = "0" ]; then
+            P95_STATUS="⚪ sem dados"
+          elif [ "$P95" -le "$SLO_P95" ]; then
+            P95_STATUS="✅ dentro do SLO"
+          else
+            P95_STATUS="❌ SLO violado (limite: 20min)"
+          fi
+
+          if [ "$RATE" = "N/A" ] || [ "$TOTAL" = "0" ]; then
+            RATE_STATUS="⚪ sem dados"
+          elif [ "$RATE" -ge "$SLO_RATE" ]; then
+            RATE_STATUS="✅ dentro do SLO"
+          else
+            RATE_STATUS="❌ SLO violado (limite: ≥90%)"
+          fi
+
+          DATE_RANGE="$(date -u -d '7 days ago' '+%d/%m' 2>/dev/null || date -u -v-7d '+%d/%m') → $(date -u '+%d/%m/%Y')"
+
+          {
+            echo "## 📊 CI SLO Weekly Report — ${DATE_RANGE}"
+            echo ""
+            echo "### Gate principal: \`ci.yml\` (runs de PR)"
+            echo ""
+            echo "| Métrica | Valor | SLO | Status |"
+            echo "|---------|-------|-----|--------|"
+            echo "| p95 tempo até verde | ${P95_FMT} | < 20min | ${P95_STATUS} |"
+            echo "| p50 tempo até verde | ${P50_FMT} | — | — |"
+            echo "| Taxa de sucesso | ${RATE}% (${SUCCESS}/${TOTAL}) | ≥ 90% | ${RATE_STATUS} |"
+            echo ""
+            echo "### Pool vps-zapp (snapshot instantâneo)"
+            echo ""
+            echo "| Estado | Runs |"
+            echo "|--------|------|"
+            echo "| queued | ${QUEUED} |"
+            echo "| in_progress | ${IN_PROG} |"
+            echo ""
+            echo "> **SLOs definidos (etapa 98):** p95 PR→verde < 20min · taxa de sucesso ≥ 90%"
+            echo "> Janela: últimos 7 dias · apenas runs de pull_request no ci.yml"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "--- Relatório publicado no Step Summary ---"
+          echo "P95: ${P95_FMT} (${P95_STATUS})"
+          echo "Taxa: ${RATE}% (${RATE_STATUS})"

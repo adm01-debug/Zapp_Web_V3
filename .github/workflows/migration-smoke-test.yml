@@ -37,10 +37,14 @@ concurrency:
   group: migration-smoke-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     name: Apply migrations from scratch
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
 
 
     # Conexão ao postgres via docker exec (evita problema de rede bridge entre containers)
@@ -79,24 +83,19 @@ jobs:
       - name: Start Postgres (docker run — vps-zapp sem services:)
         run: |
           docker rm -f pg-smoke 2>/dev/null || true
-          # Guard: porta 5432 pode estar ocupada pelo Supabase da VPS (Docker-outside-of-Docker).
-          # Verificar antes de tentar subir o container para dar aviso claro ao invés de falhar.
-          if ss -ltn 2>/dev/null | grep -q ':5432 ' || netstat -ltn 2>/dev/null | grep -q ':5432 '; then
-            echo "::notice::Porta 5432 já em uso (Supabase da VPS) — pg-smoke não será iniciado. Steps dependentes serão ignorados."
-            echo "PG_SMOKE_SKIPPED=true" >> "$GITHUB_ENV"
-            exit 0
-          fi
+          # Sem -p 5432:5432: evita conflito com Supabase da VPS (porta 5432 já em uso).
+          # Todas as conexões são via `docker exec pg-smoke psql` (DooD via socket).
+          # O guard de porta e PG_SMOKE_SKIPPED foram removidos — o step nunca deve ser
+          # silencioso: se o container não subir por outra razão, o job deve falhar.
           docker run -d --name pg-smoke \
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_DB=postgres \
-            -p 5432:5432 \
             postgres:16-bullseye
           timeout 60 sh -c 'until docker exec pg-smoke pg_isready -U postgres; do sleep 1; done'
           echo "Postgres ready"
 
       - name: Apply Supabase compatibility bootstrap
-        if: env.PG_SMOKE_SKIPPED != 'true'
         run: |
           # Copia o arquivo para o container e executa via docker exec (rede bridge)
           docker cp supabase/ci/pg-bootstrap.sql pg-smoke:/tmp/pg-bootstrap.sql
@@ -171,7 +170,6 @@ jobs:
       - name: Collect and apply migrations (delta - so as que mudaram)
         # OTIMIZACAO v2: copia/aplica SOMENTE as migrations do PR/push, nao todas as 400+.
         # O linter estatico (step anterior) e a gate real de erros de sintaxe.
-        if: env.PG_SMOKE_SKIPPED != 'true'
         continue-on-error: true
         run: |
           MIGRATION_DIR="supabase/migrations"
@@ -218,7 +216,7 @@ jobs:
       - name: Verify expected schemas exist
         run: |
           if ! docker inspect pg-smoke > /dev/null 2>&1; then
-            echo "::notice::pg-smoke não iniciou (porta 5432 em uso pelo Supabase da VPS em Docker-outside-of-Docker) — verificação de schemas ignorada."
+            echo "::notice::pg-smoke não está rodando — verificação de schemas ignorada."
             exit 0
           fi
           docker exec pg-smoke psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 <<'PSQLEOF'
@@ -241,6 +239,14 @@ jobs:
             END;
             $$;
           PSQLEOF
+
+      - name: Resumo do Smoke Test
+        if: always()
+        run: |
+          echo "## Migration Smoke Test — Resumo" >> $GITHUB_STEP_SUMMARY
+          echo "- Resultado: **${{ job.status }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Gate sintaxe SQL (pglast): bloqueante" >> $GITHUB_STEP_SUMMARY
+          echo "- Apply delta (incremental): advisory (continue-on-error)" >> $GITHUB_STEP_SUMMARY
 
       - name: Stop Postgres container
         if: always()

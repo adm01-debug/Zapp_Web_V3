@@ -22,6 +22,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   e2e-nightly:
     name: E2E Nightly Full Suite
@@ -31,15 +34,19 @@ jobs:
       BASE_URL: ${{ inputs.base_url || 'https://zapp.atomicabr.com.br' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Cache Bun dependencies
+        uses: actions/cache@v6
         with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci --no-audit --no-fund
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Install Playwright
-        run: npx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium
       - name: Run full E2E suite
-        run: npx playwright test --reporter=html
+        run: bunx playwright test --reporter=html
         env:
           BASE_URL: ${{ env.BASE_URL }}
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}

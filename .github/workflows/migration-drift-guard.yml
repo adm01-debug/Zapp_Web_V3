@@ -30,6 +30,10 @@
 name: Migration Drift Guard
 
 on:
+  schedule:
+    # Etapa 47: schedule reabilitado após correção de 27/09 (check já reporta drift real).
+    # Segunda-feira 07:05 UTC (jitter para não colidir com outros crons das 07:00).
+    - cron: '5 7 * * 1'
   pull_request:
     branches: [main]
     paths:
@@ -38,8 +42,6 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/**.sql'
-  # 2026-09-27: schedule suspenso — drift de migration detectado mas nao resolvido — workflow ainda roda em push/PR com filtro de paths
-  # Para reabilitar: remover este comentario e restaurar o bloco schedule:
   workflow_dispatch:
     inputs:
       fail_on_drift:
@@ -53,10 +55,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   migration-drift-check:
     name: Drift repo ↔ banco
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
@@ -70,7 +77,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Descobrir o container do banco no Swarm
         id: db
@@ -155,11 +162,12 @@ jobs:
           exit 0
 
       - name: Comment on PR (drift detected)
+        # Etapa 42: deduplicação — atualiza comentário existente em vez de criar novo a cada push.
         if: |
           github.event_name == 'pull_request' &&
           steps.drift.outputs.drift_exit != '0' &&
           steps.drift.outputs.drift_exit != ''
-        uses: actions/github-script@v9
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const fs = require('fs');
@@ -167,8 +175,10 @@ jobs:
             const dbOnly   = '${{ steps.drift.outputs.db_only }}';
             const repoOnly = '${{ steps.drift.outputs.repo_only }}';
             const mismatch = '${{ steps.drift.outputs.mismatch }}';
+            const MARKER = '<!-- migration-drift-guard -->';
 
-            const body = `## ⚠️ Migration Drift Guard — drift detectado
+            const body = `${MARKER}
+            ## ⚠️ Migration Drift Guard — drift detectado
 
             | Tipo | Qtd |
             |------|-----|
@@ -192,23 +202,58 @@ jobs:
             > **Modo atual: WARN-ONLY** — este PR pode ser mergeado, mas o drift deve ser
             > resolvido. Runbook: \`docs/ops/RUNBOOK-MIGRATION-DRIFT.md\``;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body
+              issue_number: context.issue.number,
+              per_page: 100,
             });
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }
 
       - name: Comment on PR (clean)
+        # Etapa 42: deduplicação — atualiza comentário existente em vez de criar novo.
         if: |
           github.event_name == 'pull_request' &&
           steps.drift.outputs.drift_exit == '0'
-        uses: actions/github-script@v9
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            const MARKER = '<!-- migration-drift-guard -->';
+            const body = `${MARKER}\n## ✅ Migration Drift Guard\n\nRepo e banco em perfeita paridade — sem shadow migrations.`;
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '## ✅ Migration Drift Guard\n\nRepo e banco em perfeita paridade — sem shadow migrations.'
+              issue_number: context.issue.number,
+              per_page: 100,
             });
+            const existing = comments.find(c => c.body && c.body.includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }

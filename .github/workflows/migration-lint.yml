@@ -19,10 +19,19 @@ on:
     paths:
       - 'supabase/migrations/**.sql'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
 jobs:
   migration-lint:
     name: Lint migrations (RLS idempotency)
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write

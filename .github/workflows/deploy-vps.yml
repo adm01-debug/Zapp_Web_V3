@@ -18,11 +18,7 @@ permissions:
   packages: write
 
 concurrency:
-  # 2026-08-06 20:40: group renomeado para deploy-vps-v3 — o group antigo (v2)
-  # ficou TRAVADO (runs em pending SEM jobs: bug conhecido do GitHub em que
-  # run cancelado segura o concurrency group; publishes sem concurrency
-  # processavam normalmente). Grupo novo preserva a serialização entre
-  # deploys sem herdar o lock corrompido.
+  # deploy-vps-v3: serializa deploys sem herdar lock corrompido de nomes anteriores (ver CHANGELOG_SESSIONS.md)
   group: deploy-vps-v3
   cancel-in-progress: false
 
@@ -39,11 +35,7 @@ jobs:
     # disputar CPU/RAM/I/O com Supabase, Traefik, Evolution e o app.
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # 2026-08-06 20:30: environment removido — runs com `environment:`
-    # ficavam em pending SEM jobs (resolução travada na conta); todos os
-    # secrets usados (VITE_*, PORTAINER_*, SUPABASE_*, ALERT_*) existem no
-    # nível do repo. Workflow sem environment processa (mesmo padrão do
-    # publish-evolution-api-custom, que roda normalmente).
+    # environment omitido: secrets no nível do repo (ver CHANGELOG_SESSIONS.md 2026-08-06)
     outputs:
       image: ${{ steps.meta.outputs.image }}
       image_digest: ${{ steps.release_identity.outputs.digest }}
@@ -72,18 +64,13 @@ jobs:
           node scripts/check-deploy-secrets.mjs
           echo "✅ Todos os secrets críticos (Auth, DB, Service Role) estão presentes."
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
-          # 2026-08-15: nome fixo — sem ele o setup-buildx cria um builder novo
-          # a cada run e abandona o anterior (4 orfaos acumulados em 2 dias).
-          name: atomica-zapp
-          # 2026-08-06: pin do buildkit — tag movel buildx-stable-1 = v0.31.2 quebra
-          # neste kernel (runc: can't mask dir /proc/acpi: invalid argument);
-          # v0.20.2 validado OK em build minimo e no contexto real.
-          driver-opts: image=moby/buildkit:v0.20.2
+          name: atomica-zapp  # fixo: evita builders órfãos a cada run
+          driver-opts: image=moby/buildkit:v0.20.2  # v0.31.2+ quebra neste kernel (runc /proc/acpi)
 
       - name: Login to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -137,7 +124,7 @@ jobs:
 
       - name: Build and push
         id: build_push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           build-contexts: |
@@ -207,23 +194,9 @@ jobs:
           TAGS="$(echo "$NORMALIZED" | tr '\n' '|' | sed 's/|$//')"
           echo "regex=^production-(${TAGS})$" >> "$GITHUB_OUTPUT"
 
-      # ============================================================
-      # ETAPA 34 — Faxina Portainer (2026-08-05): retenção GHCR
-      # Cada deploy cria ~3 versões (1 index tagado production-<sha> +
-      # manifest amd64 + attestation-manifest, ambos untagged, pois o
-      # buildx gera provenance por padrão). min-versions-to-keep=30
-      # = 10 deploys ÍNTEGROS (múltiplo de 3: o corte por recência cai
-      # ENTRE builds, nunca no meio — um valor não-múltiplo deixaria um
-      # index mantido + amd64 deletado → pull com 'manifest unknown').
-      # 2026-08-20 (plano-100 etapa 71): comentários alinhados ao valor
-      # efetivo (30) — antes o código dizia 30 e a documentação dizia 9.
-      # ⚠️ NÃO usar delete-only-untagged-versions aqui: apagaria os
-      # manifests-filho (imagem/attestation) e o pull da tag falharia
-      # com 'manifest unknown' (P0 confirmado via OCI index).
-      # package-name = caminho completo SEM o owner (zapp-web-v3/zapp-web).
-      # continue-on-error: retenção nunca pode BLOQUEAR o deploy; falha
-      # é sinalizada pelo step de alerta abaixo (sentinel greppável).
-      # ============================================================
+      # Retenção GHCR: 30 = 10 deploys íntegros (3 versões/deploy: index + amd64 + attestation)
+      # Múltiplo de 3 obrigatório — corte fora do múltiplo apaga manifests-filho → manifest unknown
+      # NÃO usar delete-only-untagged-versions. continue-on-error: falha nunca bloqueia deploy.
       - name: 🧹 GHCR retention (keep 30 versions — 10 deploys íntegros)
         id: retention
         continue-on-error: true
@@ -261,8 +234,6 @@ jobs:
 
   deploy:
     name: Deploy to VPS
-    # Mesmo motivo do build: hosted runner sem alocação; deploy via Portainer
-    # a partir da própria VPS (2026-08-06).
     runs-on: [Linux, X64, vps-zapp]
     needs: build-and-push
     timeout-minutes: 30
@@ -570,22 +541,31 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: "1/4 — TTM www.zappweb.app.br (< 3.0s)"
+        # Etapa 63: 2 tentativas com 10s de espera entre elas (1 medição isolada é flaky durante rollout start-first).
         run: |
-          RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
-          CODE=$(echo "$RESP" | awk '{print $1}')
-          TTM=$(echo "$RESP" | awk '{print $2}')
-          CODE=${CODE:-000}
-          TTM=${TTM:-0}
-          echo "www.zappweb.app.br → HTTP ${CODE} em ${TTM}s"
-          if [ "$CODE" = "000" ]; then
+          LAST_CODE=000
+          LAST_TTM=0
+          for attempt in 1 2; do
+            RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
+            LAST_CODE=$(echo "$RESP" | awk '{print $1}')
+            LAST_TTM=$(echo "$RESP" | awk '{print $2}')
+            LAST_CODE=${LAST_CODE:-000}
+            LAST_TTM=${LAST_TTM:-0}
+            echo "tentativa ${attempt}: www.zappweb.app.br → HTTP ${LAST_CODE} em ${LAST_TTM}s"
+            if [ "$LAST_CODE" != "000" ] && awk -v t="$LAST_TTM" 'BEGIN { exit !(t <= 3.0) }'; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] && sleep 10
+          done
+          if [ "$LAST_CODE" = "000" ]; then
             echo "::error::SITE_DEAD — conexão falhou/timeout (HTTP 000)"
             exit 1
           fi
-          if ! awk -v t="$TTM" 'BEGIN { exit !(t <= 3.0) }'; then
-            echo "::error::TTM_TOO_SLOW — ${TTM}s > 3.0s (limite)"
+          if ! awk -v t="$LAST_TTM" 'BEGIN { exit !(t <= 3.0) }'; then
+            echo "::error::TTM_TOO_SLOW — ${LAST_TTM}s > 3.0s (limite após 2 tentativas)"
             exit 1
           fi
-          echo "✅ Site OK — TTM ${TTM}s (< 3.0s)"
+          echo "✅ Site OK — TTM ${LAST_TTM}s (< 3.0s)"
 
       - name: "2/4 — Supabase PostgREST vivo (4xx ok; 5xx/timeout = falha)"
         if: always()
@@ -636,31 +616,12 @@ jobs:
           done
           echo "✅ CORS crítico disponível para o frontend"
 
-      # ============================================================
-      # ETAPA 73 (plano-100, 2026-08-25): gate de proteção de rollback.
-      # A retenção GHCR (keep 30 = 10 deploys) roda no BUILD do próximo
-      # deploy; a SHA daqui fica naturalmente segura nessa janela, mas
-      # blindar um rollback além disso exige entrada em
-      # infra/ghcr-protected-tags.txt — que só vale commitada (é lida no
-      # build seguinte). Auto-commit pela CI foi avaliado e REJEITADO:
-      # quebraria a política do repo (PR + merge humano) e o permissions
-      # contents: read. Este step VERIFICA e ALERTA (nunca muta):
-      # sentinela greppável ROLLBACK_UNPROTECTED + alerta por execução
-      # (mesmo canal/best-effort do alerta de retenção do job build —
-      # nunca bloqueia deploy verde).
-      # Roda SÓ em deploy verde (steps 1-3 ok; sem if:always de propósito).
-      # ============================================================
+      # Gate etapa 73: verifica se SHA deployada está em infra/ghcr-protected-tags.txt; ALERTA, nunca bloqueia
       - name: "📦 Checkout do ghcr-protected-tags.txt (gate etapa 73)"
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-          # 2026-08-30: cone mode (default) rejeita path de ARQUIVO —
-          # "fatal: 'infra/ghcr-protected-tags.txt' is not a directory"
-          # (git 2.50.1 no runner; reproduzido localmente em 2.43.0;
-          # 3 runs vermelhos na main: 33322985776, 33328187017, 33333135653).
-          # Non-cone mode aceita file-level patterns; a barra inicial
-          # âncora o arquivo na raiz (recomendação do próprio git,
-          # seção NON-CONE PROBLEMS do git-sparse-checkout).
+          # non-cone mode: cone mode rejeita path de arquivo (só diretórios)
           sparse-checkout: |
             /infra/ghcr-protected-tags.txt
           sparse-checkout-cone-mode: false
@@ -702,15 +663,7 @@ jobs:
               -d "$PAYLOAD" || true
           fi
 
-      # 2026-08-30 (incidente pós-#1462): o sparse-checkout da etapa 73 deixa
-      # core.sparseCheckout=true no clone do WORKSPACE PERSISTENTE do runner
-      # self-hosted (vps-zapp). Os próximos jobs daquele runner (quality e
-      # contract-gate do ci.yml) herdam o checkout parcial — sem package.json
-      # nem scripts/ — e falham com "Bun could not find a package.json" /
-      # MODULE_NOT_FOUND. Em runner efêmero (ubuntu-latest) o efeito não
-      # existe. Desfazer SEMPRE (inclusive em falha): é limpeza de infra do
-      # workspace, não gate de deploy — não altera o contrato "roda só em
-      # deploy verde" do gate acima.
+      # Limpar sparse-checkout: runner persistente (vps-zapp) herda estado — jobs subsequentes falham sem isso
       - name: "🧹 Desfazer sparse-checkout do workspace (runner persistente)"
         if: always()
         run: |

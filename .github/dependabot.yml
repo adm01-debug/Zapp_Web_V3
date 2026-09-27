@@ -72,6 +72,14 @@ updates:
     commit-message:
       prefix: "ci(deps)"
       include: "scope"
+    # Etapa 88: agrupar updates de actions num único PR por semana
+    groups:
+      actions-all:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: docker
     directory: "/"

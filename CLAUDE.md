@@ -359,6 +359,29 @@ Consultar: `graphify explain "<no>"` · `graphify path "A" "B"`
 
 ---
 
+## CI/Workflows — Política de Nomes (2026-09-27)
+
+> Regra canônica para workflows em `.github/workflows/`. Gate ativo: `ci-workflows-lint.yml`
+> (`actionlint` + `scripts/check-workflow-run-refs.mjs`).
+
+### `name:` de Workflows
+
+1. **Sem emoji em `name:`** de qualquer workflow que seja referenciado por `workflow_run:` em outro.
+   - ✅ `name: edge-deploy` → referenciável sem risco de typo
+   - ❌ `name: 🚀 edge-deploy` → se outra workflow `workflow_run.workflows` não incluir o emoji exatamente, o gatilho fica silencioso
+   - Exceção existente aceita: `deploy-vps.yml` usa emoji; `bundle-secret-guard.yml` e `notify-ci-failure.yml` já referenciam o nome **com emoji** — congelado. Não alterar sem atualizar todos os consumidores.
+
+2. **`workflow_run` refs devem ser validadas**: `scripts/check-workflow-run-refs.mjs` verifica que cada string em `workflows:` bate com um `name:` real nos arquivos de workflow. Roda no `ci-workflows-lint.yml` em todo PR.
+
+3. **Novo workflow referenciável**: use `name: kebab-case-sem-emoji` ou `name: Nome Sem Emoji`, e atualize `scripts/check-workflow-run-refs.mjs` se adicioná-lo a alguma lista `workflow_run.workflows`.
+
+### Arquitetura de CI
+
+Mapa completo em [`docs/CI_ARCHITECTURE.md`](./docs/CI_ARCHITECTURE.md) (gatilho, runner, se bloqueia merge, dono, runbook).
+Runbook de falhas: [`docs/ops/RUNBOOK-CI.md`](./docs/ops/RUNBOOK-CI.md).
+
+---
+
 ## Estrutura de Pastas Relevante
 
 ```

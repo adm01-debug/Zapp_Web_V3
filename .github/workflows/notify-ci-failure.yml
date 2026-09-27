@@ -7,7 +7,7 @@ on:
       - "CI/CD Pipeline"
       - "E2E CRM (VPS)"
       - "E2E Inbox (VPS)"
-      - "E2E Nightly Full (VPS)"
+      - "E2E Nightly Full"
       - "Quality Gate"
       - "🚀 Build & Deploy — ZAPP web v3"
       # Bloco 1 (2026-08-21, PLANO-100-CONTRATOS-EDGE): o gate de contratos
@@ -16,20 +16,47 @@ on:
       # falhou 18/19-08 em silêncio. Alerta em toda falha real (não só
       # a cada 2 consecutivas) via o mesmo canal dos outros gates críticos.
       - "🦕 Deno Contract Tests — Edge Functions"
+      # Bloco 2 (2026-09-27, PLANO-100-FASE0): gates críticos que estavam
+      # fora do radar de alertas — falhas silenciosas detectadas na auditoria.
+      - "db-migrate"
+      - "DB Guard"
+      - "edge-deploy"
+      - "edge-drift-check"
+      - "Bundle Secret Guard"
+      - "Migration Smoke Test"
+      - "Migration Drift Guard"
     types: [completed]
     branches: [main, production]
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   notify-failure:
     name: "Email Abner via N8N"
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): curl de saída p/ webhook público, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
       - name: "POST warroom → Email + Bitrix24"
         run: |
-          curl -sf --retry 3 --retry-delay 5 --retry-all-errors \
+          # Etapa 31: payload via jq --arg (evita injeção JSON por branch/actor com caracteres especiais)
+          jq -n \
+            --arg severity   "critical" \
+            --arg alert_type "ci_failure" \
+            --arg title      "CI FAILED: ${{ github.event.workflow_run.name }}" \
+            --arg message    "Repo: ${{ github.repository }}\nBranch: ${{ github.event.workflow_run.head_branch }}\nActor: ${{ github.event.workflow_run.triggering_actor.login }}\nSHA: ${{ github.event.workflow_run.head_sha }}\nURL: ${{ github.event.workflow_run.html_url }}" \
+            --arg source     "github-actions" \
+            --argjson run_id  "${{ github.event.workflow_run.id }}" \
+            '{severity: $severity, alert_type: $alert_type, title: $title, message: $message, source: $source, run_id: $run_id}' \
+          | curl -sf --retry 3 --retry-delay 5 --retry-all-errors \
             -X POST https://n8n.atomicabr.com.br/webhook/warroom-alert \
             -H "Content-Type: application/json" \
-            -d "{\"severity\":\"critical\",\"alert_type\":\"ci_failure\",\"title\":\"CI FAILED: ${{ github.event.workflow_run.name }}\",\"message\":\"Repo: ${{ github.repository }}\nBranch: ${{ github.event.workflow_run.head_branch }}\nActor: ${{ github.event.workflow_run.triggering_actor.login }}\nSHA: ${{ github.event.workflow_run.head_sha }}\nURL: ${{ github.event.workflow_run.html_url }}\",\"source\":\"github-actions\",\"run_id\":\"${{ github.event.workflow_run.id }}\"}" \
+            -d @- \
           && echo "Alerta enviado (Email Abner + Bitrix24)"

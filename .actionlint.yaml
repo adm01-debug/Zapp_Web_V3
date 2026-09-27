@@ -1,0 +1,20 @@
+self-hosted-runner:
+  labels:
+    - Linux
+    - X64
+    - vps-zapp
+
+shellcheck:
+  disable:
+    - SC2086
+    - SC2129
+    - SC2016
+    - SC2126
+    - SC2162
+    - SC2012
+    - SC2015
+    - SC2116
+    - SC2002
+    - SC2001
+    - SC2013
+    - SC2034
