@@ -25,6 +25,7 @@ jobs:
     name: 🔍 Secret Scan (gitleaks)
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): gitleaks sobre histórico git local, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v7

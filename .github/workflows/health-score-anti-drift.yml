@@ -35,6 +35,7 @@ jobs:
   anti-drift:
     name: Health score anti-drift (F3)
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:

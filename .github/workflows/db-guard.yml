@@ -48,6 +48,7 @@ jobs:
   catalog-fresh:
     name: Catalog fresh + ACL RPC MCP
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
@@ -163,6 +164,7 @@ jobs:
     #      apagar centenas de milhares de linhas de contrato em silêncio.
     if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.regen == 'true'
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
     needs: catalog-fresh
     permissions:
       contents: write

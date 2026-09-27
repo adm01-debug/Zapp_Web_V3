@@ -18,6 +18,7 @@ jobs:
   guard:
     name: Edge guard checks
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:

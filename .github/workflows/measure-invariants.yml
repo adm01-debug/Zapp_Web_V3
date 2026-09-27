@@ -27,6 +27,7 @@ jobs:
   measure-invariants:
     name: 'Medir Score de Desacoplamento (I1-I9)'
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     continue-on-error: true
 
     steps:

@@ -16,6 +16,7 @@ jobs:
   check-ai-authors:
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): só git log local, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:

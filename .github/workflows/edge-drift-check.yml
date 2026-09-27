@@ -19,6 +19,7 @@ jobs:
   drift:
     name: edge-drift-check
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -79,6 +80,7 @@ jobs:
   e39:
     name: E39 — hash drift (volume × repo)
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 

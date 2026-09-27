@@ -12,6 +12,7 @@ jobs:
   multiplix-guards:
     name: Multiplix RLS & Realtime PII guard
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 

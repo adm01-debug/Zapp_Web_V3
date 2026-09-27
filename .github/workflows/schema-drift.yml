@@ -23,6 +23,7 @@ jobs:
   static-drift:
     name: schema-drift-guard
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     steps:
       - uses: actions/checkout@v7
@@ -71,6 +72,7 @@ jobs:
   live-drift:
     name: Live schema drift (requer DATABASE_URL)
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v7

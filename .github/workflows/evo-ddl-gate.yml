@@ -19,6 +19,7 @@ jobs:
     name: "E42 — DDL novo em schema evo bloqueado"
     # ubuntu-latest (auditoria 2026-08-21, PR #1368 piloto validado): parser regex local, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:

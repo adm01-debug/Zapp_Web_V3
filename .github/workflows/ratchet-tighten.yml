@@ -17,6 +17,7 @@ jobs:
   tighten:
     # Cálculo local + branch/PR. Nunca grava diretamente na main protegida.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Require event-capable GitHub token
         env:

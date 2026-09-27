@@ -44,6 +44,7 @@ jobs:
   smoke:
     name: Apply migrations from scratch
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 30
 
 
     # Conexão ao postgres via docker exec (evita problema de rede bridge entre containers)
