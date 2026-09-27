@@ -1,0 +1,16 @@
+name: DB Guard — Multiplix RLS & Realtime PII
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**.sql'
+
+jobs:
+  multiplix-guards:
+    name: Multiplix RLS & Realtime PII guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run multiplix DB guard
+        run: sh scripts/check-multiplix-guards.sh supabase/migrations
