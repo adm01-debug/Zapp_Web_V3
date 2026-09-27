@@ -30,8 +30,8 @@ const h = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: { rpc: (...args: unknown[]) => h.rpc(...args) },
+vi.mock('@/integrations/datasource/db', () => ({
+  dbRpc: (...args: unknown[]) => h.rpc(...args),
 }));
 
 vi.mock('@/lib/invokeEdge', () => ({ invokeEdge: vi.fn(async () => ({ ok: true })) }));
@@ -80,8 +80,8 @@ describe('CloseConversationDialog — encerramento atomico via RPC', () => {
 
     await waitFor(() => expect(h.rpc).toHaveBeenCalledTimes(1));
 
-    const [nomeFuncao, params] = h.rpc.mock.calls[0];
-    expect(nomeFuncao).toBe('rpc_close_conversation');
+    const [chamada, params] = h.rpc.mock.calls[0];
+    expect((chamada as { name?: string }).name).toBe('rpc_close_conversation');
     expect(params).toMatchObject({ p_contact_id: CONTACT_ID });
     expect(String((params as Record<string, unknown>).p_close_reason).length).toBeGreaterThan(0);
   });

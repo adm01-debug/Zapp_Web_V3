@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { dbRpc } from '@/integrations/datasource/db';
+import { RPC } from '@/integrations/datasource/rpcCatalog';
 import { invokeEdge } from '@/lib/invokeEdge';
 import { ticketStore } from '@/lib/inbox/ticketStore';
 import {
@@ -125,7 +126,7 @@ export function CloseConversationDialog({
     // admin/supervisor. O encerramento ficava parcial, em silencio.
     // A identidade (closed_by / performed_by) e resolvida no servidor a partir
     // de auth.uid(), entao nao enviamos profileId.
-    const { data, error } = await supabase.rpc('rpc_close_conversation', {
+    const { data, error } = await dbRpc(RPC.closeConversation, {
       p_contact_id: contactId,
       p_close_reason: reason,
       p_outcome: outcome || null,
@@ -154,7 +155,7 @@ export function CloseConversationDialog({
       setNotes('');
       onClosed?.();
     } else {
-      console.warn('[CloseConversationDialog] rpc_close_conversation falhou:', error.message);
+      console.warn('[CloseConversationDialog] rpc_close_conversation falhou:', error);
       toast.error('Erro ao registrar encerramento');
     }
     setSaving(false);

@@ -27,10 +27,18 @@ vi.mock('@/integrations/supabase/client', () => {
   return { supabase: { from } };
 });
 
+vi.mock('@/integrations/datasource/db', () => ({
+  // O encerramento agora e uma unica chamada de RPC (transacao no servidor).
+  // Aqui devolvemos sucesso: o foco deste teste e o CSAT pos-encerramento.
+  dbRpc: vi.fn(() =>
+    Promise.resolve({ data: { ok: true, conversations_atualizadas: 1 }, error: null })
+  ),
+}));
+
 vi.mock('@/lib/invokeEdge', () => ({ invokeEdge: vi.fn() }));
 
 vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
 import { invokeEdge } from '@/lib/invokeEdge';
