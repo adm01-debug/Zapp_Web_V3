@@ -11,8 +11,21 @@
 # Modo atual: WARN-ONLY (exit 0) — posta comentário no PR mas não bloqueia merge.
 # Para enforcer estrito: alterar exit code da step "Run drift check" de 0 para $DRIFT.
 #
-# Requer runner VPS (acesso ao Postgres de produção via DATABASE_URL secret).
-# Ref: scripts/check-migration-version-bank-drift.mjs
+# 2026-09-27 — CORREÇÕES (o check estava vermelho sem verificar nada):
+#   1. CONEXÃO. O runner self-hosted roda no MESMO Swarm do banco, mas `DATABASE_URL`
+#      aponta para o IP público e o Postgres só é alcançável pela rede do Swarm —
+#      resultado medido: `connect ECONNREFUSED 209.142.67.51:5432`. Agora o check usa a
+#      rota que funciona neste repo: `docker exec` no container `supabase_db` (a mesma de
+#      scripts/decouple/zapp-drift-check.sh, que roda verde), extraindo "version|name".
+#   2. PARSING. `DB_ONLY=$(grep -c A || grep -c B || echo 0)` produzia saída MULTI-LINHA
+#      (grep -c imprime "0" e sai com 1 quando não há match), e escrever isso em
+#      $GITHUB_OUTPUT quebrava o passo com "Invalid format '0'" — era isso que deixava o
+#      check vermelho, não o drift. Agora cada contagem tem uma linha só.
+#   3. NAME_MISMATCH passou a aparecer no summary e no comentário (antes era contado só
+#      dentro do texto e sumia).
+# Efeito: o check continua WARN-ONLY (a política é dos donos do repo), mas passa a
+# reportar o drift REAL — que existe e é grande: 688 shadow migrations e 16 nomes
+# divergentes convivem com 173 arquivos no repo. Runbook: docs/ops/RUNBOOK-MIGRATION-DRIFT.md
 
 name: Migration Drift Guard
 
@@ -59,29 +72,54 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install pg driver
-        run: npm install --no-save pg
+      - name: Descobrir o container do banco no Swarm
+        id: db
+        run: |
+          CTN=$(docker ps --filter name=supabase_db --format '{{.Names}}' | head -1)
+          echo "container=$CTN" >> "$GITHUB_OUTPUT"
+          if [ -z "$CTN" ]; then
+            echo "::warning title=Drift repo ↔ banco NAO verificado::container supabase_db nao encontrado neste runner — verificacao pulada (a rota TCP do IP publico da ECONNREFUSED)."
+          else
+            echo "container do banco: $CTN"
+          fi
+
+      - name: Extrair migrations do banco (docker exec, mesma rota do zapp-drift-check.sh)
+        if: steps.db.outputs.container != ''
+        run: |
+          echo "SELECT version || '|' || COALESCE(name,'') FROM supabase_migrations.schema_migrations ORDER BY version;" \
+            | docker exec -i "${{ steps.db.outputs.container }}" \
+                sh -c 'PGPASSWORD=$(cat /run/secrets/supabase_db_password_v1) psql -U supabase_admin -d postgres -At -f -' \
+            > db-versions.txt
+          echo "migrations extraidas do banco: $(wc -l < db-versions.txt)"
+          if [ ! -s db-versions.txt ]; then
+            echo "::error::extracao do banco veio vazia"
+            exit 1
+          fi
 
       - name: Run drift check
         id: drift
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+        if: steps.db.outputs.container != ''
         run: |
           set +e
-          node scripts/check-migration-version-bank-drift.mjs 2>&1 | tee drift-output.txt
-          DRIFT_EXIT=$?
+          node scripts/check-migration-version-bank-drift.mjs --db-versions-file db-versions.txt 2>&1 | tee drift-output.txt
+          DRIFT_EXIT=${PIPESTATUS[0]}
           set -e
 
-          # Captura contagens para o summary
-          DB_ONLY=$(grep -c "DB_ONLY\|\[?\]" drift-output.txt 2>/dev/null || grep -c "SEM arquivo no repo" drift-output.txt 2>/dev/null || echo 0)
-          REPO_ONLY=$(grep -c "REPO_ONLY\|\[ \]" drift-output.txt 2>/dev/null || grep -c "AUSENTE do banco" drift-output.txt 2>/dev/null || echo 0)
-          COLLISION=$(grep -c "PREFIX_COLLISION" drift-output.txt 2>/dev/null || echo 0)
+          # grep -c imprime "0" E sai com 1 quando não há match. Encadear com `|| echo 0`
+          # devolvia saída multi-linha (ex.: "0\n0"), e escrever isso em $GITHUB_OUTPUT
+          # abortava o passo com "Invalid format '0'". Com `| head -1` a substituição tem
+          # sempre uma linha e o pipeline sai 0.
+          count() { grep -cE "$1" drift-output.txt 2>/dev/null | head -1 || true; }
+          DB_ONLY=$(count 'DB_ONLY|\[\?\]')
+          REPO_ONLY=$(count 'REPO_ONLY|\[ \]')
+          COLLISION=$(count 'PREFIX_COLLISION|\[!\]')
+          MISMATCH=$(count 'NAME_MISMATCH|\[≠\]')
 
-          echo "drift_exit=$DRIFT_EXIT"        >> "$GITHUB_OUTPUT"
-          echo "db_only=$DB_ONLY"              >> "$GITHUB_OUTPUT"
-          echo "repo_only=$REPO_ONLY"          >> "$GITHUB_OUTPUT"
-          echo "collision=$COLLISION"          >> "$GITHUB_OUTPUT"
+          echo "drift_exit=$DRIFT_EXIT"   >> "$GITHUB_OUTPUT"
+          echo "db_only=$DB_ONLY"         >> "$GITHUB_OUTPUT"
+          echo "repo_only=$REPO_ONLY"     >> "$GITHUB_OUTPUT"
+          echo "collision=$COLLISION"     >> "$GITHUB_OUTPUT"
+          echo "mismatch=$MISMATCH"       >> "$GITHUB_OUTPUT"
 
           # Step Summary
           echo "## Migration Drift Guard" >> "$GITHUB_STEP_SUMMARY"
@@ -96,6 +134,7 @@ jobs:
             echo "| 🗄️ No banco, sem arquivo (shadow) | $DB_ONLY |" >> "$GITHUB_STEP_SUMMARY"
             echo "| 📁 No repo, sem entrada no banco | $REPO_ONLY |" >> "$GITHUB_STEP_SUMMARY"
             echo "| 💥 Colisão de prefixo | $COLLISION |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| 🏷️ Mesmo version, nome diferente | $MISMATCH |" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "<details><summary>Saída completa</summary>" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -118,7 +157,8 @@ jobs:
       - name: Comment on PR (drift detected)
         if: |
           github.event_name == 'pull_request' &&
-          steps.drift.outputs.drift_exit != '0'
+          steps.drift.outputs.drift_exit != '0' &&
+          steps.drift.outputs.drift_exit != ''
         uses: actions/github-script@v9
         with:
           script: |
@@ -126,6 +166,7 @@ jobs:
             const output = fs.readFileSync('drift-output.txt', 'utf8');
             const dbOnly   = '${{ steps.drift.outputs.db_only }}';
             const repoOnly = '${{ steps.drift.outputs.repo_only }}';
+            const mismatch = '${{ steps.drift.outputs.mismatch }}';
 
             const body = `## ⚠️ Migration Drift Guard — drift detectado
 
@@ -133,6 +174,7 @@ jobs:
             |------|-----|
             | 🗄️ No banco, sem arquivo no repo (shadow migration) | **${dbOnly}** |
             | 📁 No repo, sem entrada no banco (não aplicada) | **${repoOnly}** |
+            | 🏷️ Mesmo version com nome diferente | **${mismatch}** |
 
             **Shadow migrations** (DB_ONLY) são o risco principal: foram aplicadas manualmente
             sem passar pelo versionamento do repo. Cada uma deve ser materializada em
