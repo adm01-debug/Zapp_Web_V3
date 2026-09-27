@@ -1,0 +1,70 @@
+name: Require Secrets Guard
+description: |
+  Etapa 53 do plano de CI (2026-09-27).
+  Padroniza o comportamento quando secrets obrigatórios estão ausentes:
+  - Em PR: notice + skip (não bloqueia — secret não é disponibilizado a forks).
+  - Em push/main, schedule ou workflow_dispatch: error + exit 1 (deveria existir).
+  Evita falsos positivos em PRs de fork e falsos negativos em main sem config.
+
+inputs:
+  secrets:
+    description: |
+      Lista de nomes de secrets separados por vírgula.
+      Exemplo: "SUPABASE_ANON_KEY,ZAPP_META_TOKEN"
+    required: true
+  values:
+    description: |
+      Valores correspondentes separados por |||  (triple-pipe para evitar conflito com |).
+      Mesma ordem que `secrets`. Exemplo: "${{ secrets.SUPABASE_ANON_KEY }}|||${{ secrets.ZAPP_META_TOKEN }}"
+    required: true
+  event_name:
+    description: "github.event_name do workflow chamador"
+    required: true
+
+outputs:
+  skip:
+    description: "'true' se o job deve ser pulado (PR sem secrets); 'false' caso contrário."
+    value: ${{ steps.check.outputs.skip }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verificar presença dos secrets
+      id: check
+      shell: bash
+      env:
+        SECRET_NAMES: ${{ inputs.secrets }}
+        SECRET_VALUES: ${{ inputs.values }}
+        EVENT_NAME: ${{ inputs.event_name }}
+      run: |
+        set -euo pipefail
+        IFS=',' read -ra NAMES <<< "$SECRET_NAMES"
+        IFS='|||' read -ra VALUES <<< "$SECRET_VALUES"
+
+        MISSING=()
+        for i in "${!NAMES[@]}"; do
+          name="${NAMES[$i]}"
+          value="${VALUES[$i]:-}"
+          if [ -z "$value" ]; then
+            MISSING+=("$name")
+          fi
+        done
+
+        if [ ${#MISSING[@]} -eq 0 ]; then
+          echo "✓ Todos os ${#NAMES[@]} secrets presentes."
+          echo "skip=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        MISSING_LIST=$(IFS=', '; echo "${MISSING[*]}")
+
+        if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; then
+          echo "::notice::Secrets ausentes em PR (esperado para forks): ${MISSING_LIST} — job ignorado."
+          echo "skip=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "::error::Secrets obrigatórios ausentes em evento '${EVENT_NAME}': ${MISSING_LIST}"
+        echo "  Configure os secrets em: Settings → Secrets and variables → Actions"
+        echo "skip=false" >> $GITHUB_OUTPUT
+        exit 1

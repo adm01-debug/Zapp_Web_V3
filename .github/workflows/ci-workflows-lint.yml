@@ -3,6 +3,8 @@ name: Workflow Lint (actionlint)
 # Gate que verifica erros de sintaxe e semântica em todos os workflows GitHub Actions.
 # Usa actionlint — linter estático oficial para GitHub Actions.
 # Bloqueia PRs com workflows inválidos antes de chegarem na main.
+# Etapa 82: também verifica se toda referência workflow_run aponta para um name: real
+# (achado A4/B2 da auditoria 2026-09-27 — trigger morto por nome errado).
 
 on:
   pull_request:
@@ -37,11 +39,23 @@ jobs:
           bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.7
           echo "$PWD" >> $GITHUB_PATH
 
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
       - name: Executar actionlint em todos os workflows
         run: actionlint -color .github/workflows/*.yml
+
+      - name: Verificar referências workflow_run (etapa 82)
+        # Garante que todo `workflows:` em `workflow_run:` aponta para um name: real.
+        # Previne triggers mortos silenciosos (achado A4/B2 — bundle-secret-guard, notify-ci-failure).
+        run: node scripts/check-workflow-run-refs.mjs
 
       - name: Resumo
         if: always()
         run: |
-          echo "### Resultado actionlint" >> $GITHUB_STEP_SUMMARY
+          echo "### Resultado Workflow Lint" >> $GITHUB_STEP_SUMMARY
           echo "- Workflows verificados: $(ls .github/workflows/*.yml | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "- actionlint: verificação de sintaxe e semântica" >> $GITHUB_STEP_SUMMARY
+          echo "- workflow_run refs: verificação de nomes cruzados" >> $GITHUB_STEP_SUMMARY
