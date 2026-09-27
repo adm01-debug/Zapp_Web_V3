@@ -5,6 +5,7 @@ self-hosted-runner:
     - vps-zapp
 
 shellcheck:
-  exclude-checks:
+  exclude:
     - SC2086  # info: unquoted $VAR — prevalece em $GITHUB_OUTPUT (legado pré-etapa 82)
     - SC2129  # style: multiple redirects to same file — prevalece em blocks pré-etapa 82
+    - SC2016  # info: single quotes in node -e JS args — false positives (JS, não shell)

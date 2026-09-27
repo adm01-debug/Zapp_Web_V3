@@ -50,6 +50,7 @@ jobs:
     # estável, migrar os demais candidatos sem dependência de rede interna da
     # VPS libera o pool pros jobs que realmente precisam dela (DB live, deploy).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -182,6 +183,7 @@ jobs:
     # gates TypeScript hospedados obrigatórios para merge.
     name: Verify Lockfile
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [lockfile, typescript-gates]
     if: always()
     steps:
@@ -201,6 +203,7 @@ jobs:
     name: Quality diagnostics
     # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun node
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 20
     needs: lockfile
     steps:
       - name: Checkout code
@@ -315,6 +318,7 @@ jobs:
     # ubuntu-latest (auditoria 2026-08-21, batch 3): scan-only, sem DB — só node
     # local sobre edge functions/estrutura do repo, sem secrets.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lockfile
     steps:
       - name: Checkout code
@@ -341,6 +345,7 @@ jobs:
     name: Audit front↔DB contract (live, requires secrets)
     # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=node pg
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 20
     needs: lockfile
     if: github.event_name != 'pull_request'
     # NOTA (fix 2026-08-05): `secrets` NÃO é permitido em `if:` de job no GitHub
@@ -386,6 +391,7 @@ jobs:
     name: Contract gate (front↔DB, bloqueante em PR)
     # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=node pg
     runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 20
     needs: lockfile
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -432,6 +438,7 @@ jobs:
     # ubuntu-latest (auditoria 2026-08-21, batch 3): regex local sobre migrations
     # commitadas, sem secrets/DB.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lockfile
     steps:
       - name: Checkout code
@@ -453,6 +460,7 @@ jobs:
     # fake do topo do arquivo (VITE_SUPABASE_URL: https://example.supabase.co),
     # sem DB real.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [lockfile, quality, audit-contract-scan, contract-gate, migration-gates]
     steps:
       - name: Checkout code
@@ -533,6 +541,7 @@ jobs:
     # não sustentou — "6144 pediu mais do que o disponivel"); ubuntu-latest tem
     # ~7GB dedicados, folga real sobre o que o self-hosted já não aguentava.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [lockfile, quality, audit-contract-scan, contract-gate, migration-gates]
     steps:
       - name: Checkout code
@@ -708,6 +717,7 @@ jobs:
     # ubuntu-latest (auditoria 2026-08-21, batch 3): bun audit (registro npm
     # público) + grep local por padrões de secret em src/, sem DB/VPS.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: lockfile
     steps:
       - name: Checkout code

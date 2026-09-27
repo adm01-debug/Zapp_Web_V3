@@ -53,8 +53,8 @@ REGISTRATION_TOKEN=$(curl -sS -X POST \
 docker run -d --name emergency-runner \
   --restart unless-stopped \
   -e RUNNER_TOKEN="$REGISTRATION_TOKEN" \
-  -e RUNNER_REPO="https://github.com/adm01-debug/Zapp_Web_V3" \
-  -e RUNNER_LABELS="Linux,X64,vps-zapp" \
+  -e REPO_URL="https://github.com/adm01-debug/Zapp_Web_V3" \
+  -e LABELS="Linux,X64,vps-zapp" \
   -e RUNNER_NAME="emergency-$(date +%s)" \
   myoung34/github-runner:ubuntu-jammy
 
