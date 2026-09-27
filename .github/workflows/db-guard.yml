@@ -63,30 +63,28 @@ jobs:
       - name: Testar comparação e escopo dos objetos externos
         run: node --test scripts/lib/__tests__/compare-schema-catalog.test.mjs
 
-      # 2026-09-27 — CORREÇÃO. Este passo rodava
-      #   node scripts/generate-schema-catalog.mjs --schemas "..." --check
-      # ou seja: gerava o catálogo a partir de `src/integrations/supabase/types.ts` (fonte
-      # local, que declara APENAS o schema `public`) e comparava com o
-      # `supabase/schema-catalog.json` commitado — que é gerado por `--from-meta` com os
-      # schemas `public,zapp,evo` (ver o job catalog-regen, abaixo). Fontes diferentes do
-      # artefato => divergência garantida em toda run. O efeito colateral era pior que o
-      # ruído: como `catalog-regen` tem `needs: catalog-fresh`, um catálogo defasado
-      # deixava a frescura vermelha, e a frescura vermelha IMPEDIA o próprio regen de
-      # rodar — o conserto era bloqueado pelo sintoma.
-      # Agora o passo verifica o que o nome promete (determinismo da geração local: mesma
-      # entrada => mesma saída) e a frescura do catálogo continua sendo verificada contra
-      # o banco vivo nos passos `--from-meta` + compare abaixo.
-      - name: Catálogo local é determinístico (mesma entrada => mesma saída)
-        run: |
-          node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --out "$RUNNER_TEMP/cat-a.json"
-          node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --out "$RUNNER_TEMP/cat-b.json"
-          # sem --external-objects-file aqui de propósito: as duas pontas vêm do types.ts
-          # local, então a assimetria "objeto externo só existe no catálogo vivo" não se
-          # aplica (com a flag, o comparador falha por presença inesperada).
-          node scripts/compare-schema-catalog.mjs \
-            --left "$RUNNER_TEMP/cat-a.json" \
-            --right "$RUNNER_TEMP/cat-b.json" \
-            --ignore-source
+      # Este passo é o check de frescura CANÔNICO: compara o catálogo commitado com uma
+      # geração a partir de src/integrations/supabase/types.ts. Por design, o catálogo é
+      # gerado do types.ts versionado — "nunca via --from-meta" (ver o comentário de
+      # stripRightOnlyExternalObjects em scripts/generate-schema-catalog.mjs).
+      #
+      # 2026-09-27 — ele está VERMELHO por um motivo real e diagnosticado, e deve continuar
+      # vermelho até a causa ser tratada:
+      #   (a) ORIGEM: o job catalog-regen gerava com `--from-meta` (a fonte que o design
+      #       proíbe). Isso injetou no arquivo canônico objetos externos — medido:
+      #       `schemas.public.Functions.has_role`, do financeiro que compartilha o schema
+      #       `public` (declarado right-only em schema-catalog-external-objects.json). Todo
+      #       regen assim re-contaminava o artefato e derrubava este gate.
+      #   (b) FONTE DESATUALIZADA: o types.ts de hoje declara APENAS o schema `public`
+      #       (linhas 15 e 9372), enquanto o catálogo commitado tem `public,zapp,evo`. Ou
+      #       seja: o artefato não é reproduzível a partir da fonte declarada, e o catálogo
+      #       não pode ser regerado sem perder zapp/evo.
+      # Consertado aqui: (a) o regen passou a usar a fonte canônica + guarda que recusa
+      # commitar catálogo sem os schemas pedidos. (b) depende de regenerar types.ts pelo
+      # workflow `gen-types-zapp.yml` — que abre PR e faz auto-merge de um arquivo gerado que
+      # muda os tipos do app inteiro, então é decisão dos donos, não deste PR.
+      - name: Catálogo local está determinístico
+        run: node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --check
 
       - name: Contrato RLS canônico + deltas pendentes
         run: node scripts/audit-rls-coverage.mjs --check --require-canonical
@@ -111,7 +109,7 @@ jobs:
       - name: Avisar quando a checagem viva não executar
         if: ${{ env.META_URL == '' || env.META_TOKEN == '' }}
         run: |
-          echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. A frescura do schema-catalog contra o banco vivo NÃO foi verificada nesta run (só o determinismo da geração local)."
+          echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. Só a consistência local do schema-catalog foi validada nesta run."
 
       - name: Assertion ACL RPC MCP
         run: |
@@ -147,10 +145,18 @@ jobs:
 
   catalog-regen:
     name: Regen schema-catalog.json (somente workflow_dispatch com regen=true)
-    # 2026-09-27 — CORREÇÃO: `always()`. Sem isso, este job dependia de catalog-fresh ter
-    # passado — e o único caso em que o regen é necessário é justamente quando a frescura
-    # FALHA (catálogo defasado em relação ao banco vivo). O conserto estava bloqueado pelo
-    # sintoma que ele conserta.
+    # 2026-09-27 — CORREÇÕES neste job:
+    #   1. `always()`: sem isso o job dependia de catalog-fresh ter passado, e o único caso
+    #      em que um regen é necessário é justamente quando a frescura FALHA. O conserto
+    #      estava bloqueado pelo sintoma (evidência: um dispatch regen=true terminou em
+    #      "0 commits", sem nunca tentar).
+    #   2. FONTE: usava `--from-meta`, que o design proíbe para o catálogo canônico (ver o
+    #      comentário de stripRightOnlyExternalObjects no gerador). O --from-meta traz
+    #      objetos externos que compartilham o schema `public` (ex.: public.has_role, do
+    #      financeiro) e re-contamina o artefato. Agora gera do types.ts versionado.
+    #   3. GUARDA: recusa commitar um catálogo que perdeu algum schema pedido — o sintoma
+    #      exato de gerar da fonte errada (ou de fonte desatualizada). Sem ela, um regen pode
+    #      apagar centenas de milhares de linhas de contrato em silêncio.
     if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.regen == 'true'
     runs-on: [Linux, X64, vps-zapp]
     needs: catalog-fresh
@@ -158,8 +164,6 @@ jobs:
       contents: write
     env:
       SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
-      META_URL: ${{ secrets.ZAPP_META_URL }}
-      META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -173,18 +177,27 @@ jobs:
 
       - name: Regenerar e commitar schema-catalog.json
         run: |
-          if [ -z "${META_URL:-}" ] || [ -z "${META_TOKEN:-}" ]; then
-            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN ausentes — regen impossível."
-            exit 1
-          fi
-          node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out supabase/schema-catalog.json
+          node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --out supabase/schema-catalog.json
+
+          node -e '
+            const fs = require("fs");
+            const want = (process.env.SCHEMA_CATALOG_SCHEMAS || "").split(",").map((s) => s.trim()).filter(Boolean);
+            const got = Object.keys(JSON.parse(fs.readFileSync("supabase/schema-catalog.json", "utf8")).schemas || {});
+            const missing = want.filter((s) => !got.includes(s));
+            if (missing.length) {
+              console.error("::error title=Regen abortado::catálogo gerado sem os schemas: " + missing.join(", ") + " (tem: " + got.join(", ") + "). A fonte canônica (src/integrations/supabase/types.ts) provavelmente está desatualizada — rode o workflow gen-types-zapp.yml antes. Nada foi commitado.");
+              process.exit(1);
+            }
+            console.log("schemas presentes no catálogo gerado: " + got.join(", "));
+          '
+
           git config user.email "ci-bot@atomicabr.com.br"
           git config user.name "CI Bot [catalog-regen]"
           git add supabase/schema-catalog.json
           if git diff --staged --quiet; then
             echo "schema-catalog.json já estava atualizado — nada a commitar."
           else
-            git commit -m "fix(ci): regen schema-catalog.json do live DB [skip ci]"
+            git commit -m "fix(ci): regen schema-catalog.json do types.ts canônico [skip ci]"
             git push
             echo "schema-catalog.json regenerado e commitado."
           fi
