@@ -8,6 +8,11 @@ on:
       E2E_USER_EMAIL:            { required: true }
       E2E_USER_PASSWORD:         { required: true }
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
 permissions:
   contents: read
 

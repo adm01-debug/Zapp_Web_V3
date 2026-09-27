@@ -3,6 +3,11 @@ name: score-ratchet — advisory (E98)
 on:
   pull_request:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
 permissions:
   contents: read
   pull-requests: write

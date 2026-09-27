@@ -13,6 +13,11 @@ name: 🛠️ Ops — reparar workspace dos runners vps-zapp (sparse-checkout)
 on:
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
 permissions:
   contents: read
 

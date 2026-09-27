@@ -52,7 +52,7 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - name: Instalar dependências
-        run: bun install
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Rodar testes SEM retry (3 passadas para medir instabilidade)
         run: |

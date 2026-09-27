@@ -1,0 +1,47 @@
+name: Workflow Lint (actionlint)
+
+# Gate que verifica erros de sintaxe e semântica em todos os workflows GitHub Actions.
+# Usa actionlint — linter estático oficial para GitHub Actions.
+# Bloqueia PRs com workflows inválidos antes de chegarem na main.
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint — verificar workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instalar actionlint
+        run: |
+          # Instalação reproduzível via script oficial + versão fixada
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.7
+          echo "$PWD" >> $GITHUB_PATH
+
+      - name: Executar actionlint em todos os workflows
+        run: actionlint -color .github/workflows/*.yml
+
+      - name: Resumo
+        if: always()
+        run: |
+          echo "### Resultado actionlint" >> $GITHUB_STEP_SUMMARY
+          echo "- Workflows verificados: $(ls .github/workflows/*.yml | wc -l)" >> $GITHUB_STEP_SUMMARY
