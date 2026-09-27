@@ -562,15 +562,7 @@ jobs:
         run: bun install
 
       - name: Build for production
-        # Historico de OOM neste job (2026-08-21):
-        #   run 32443579939 sem NODE_OPTIONS: V8 "JavaScript heap out of
-        #     memory" aos ~100s de transform (heap default ~1GB nesse runner).
-        #   run 32455497422 com 6144: passou do transform (6403 modulos) e
-        #     morreu SIGKILL durante "rendering chunks" — nao e mais o soft
-        #     limit do V8, e o OOM-killer do kernel matando por falta de RAM
-        #     real do container/host. 6144 pediu mais do que o disponivel.
-        # 4096 fica entre os dois pontos medidos: acima do que sozinho ja
-        # nao bastava, com folga abaixo do que o host nao sustentou.
+        # NODE_OPTIONS 4096 MB: 3072 causa OOM no V8; 6144 causa SIGKILL por falta de RAM real (ver CHANGELOG_SESSIONS.md)
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: bun run build
