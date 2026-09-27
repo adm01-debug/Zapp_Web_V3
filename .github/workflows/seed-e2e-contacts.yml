@@ -6,6 +6,9 @@ on:
     secrets:
       SUPABASE_SERVICE_ROLE_KEY: { required: true }
 
+permissions:
+  contents: read
+
 jobs:
   seed-contacts:
     name: Semear contatos E2E em zapp.contacts

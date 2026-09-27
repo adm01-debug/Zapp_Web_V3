@@ -13,6 +13,9 @@ on:
       - 'src/**/*.tsx'
       - 'supabase/functions/**/*.ts'
 
+permissions:
+  contents: read
+
 jobs:
   schema-ownership:
     name: "Schema ownership — Zapp não grava em evo Grupo A"

@@ -29,6 +29,11 @@ env:
   VITE_EXTERNAL_SUPABASE_URL: https://example.supabase.co
   VITE_EXTERNAL_SUPABASE_ANON_KEY: test-anon-key
 
+permissions:
+  contents: read
+  statuses: write
+  checks: write
+
 jobs:
   lockfile:
     name: Lockfile e proteções da camada de dados

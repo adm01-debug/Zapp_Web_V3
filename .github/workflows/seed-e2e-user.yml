@@ -8,6 +8,9 @@ on:
       E2E_USER_EMAIL:            { required: true }
       E2E_USER_PASSWORD:         { required: true }
 
+permissions:
+  contents: read
+
 jobs:
   seed:
     name: Criar/atualizar usuário E2E (auth + profile + role agent)

@@ -11,6 +11,9 @@ name: edge-guard
 on:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   guard:
     name: Edge guard checks

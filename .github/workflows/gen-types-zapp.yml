@@ -12,6 +12,9 @@ on:
         required: false
         default: 'public,zapp,evo'
 
+permissions:
+  contents: read
+
 jobs:
   regen-types:
     runs-on: ubuntu-latest

@@ -37,6 +37,9 @@ concurrency:
   group: migration-smoke-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     name: Apply migrations from scratch

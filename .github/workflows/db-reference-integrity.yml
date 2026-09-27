@@ -30,6 +30,9 @@ concurrency:
   group: db-reference-integrity-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
+permissions:
+  contents: read
+
 jobs:
   reference-integrity:
     name: Reference Integrity (Q-1/Q-2)

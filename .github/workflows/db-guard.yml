@@ -40,6 +40,10 @@ concurrency:
   group: db-guard-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   catalog-fresh:
     name: Catalog fresh + ACL RPC MCP

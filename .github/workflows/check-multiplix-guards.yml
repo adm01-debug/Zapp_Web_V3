@@ -5,6 +5,9 @@ on:
     paths:
       - 'supabase/migrations/**.sql'
 
+permissions:
+  contents: read
+
 jobs:
   multiplix-guards:
     name: Multiplix RLS & Realtime PII guard

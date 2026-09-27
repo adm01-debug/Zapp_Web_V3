@@ -11,6 +11,9 @@ on:
       - 'scripts/decouple/evo-ddl-gate.mjs'
       - '.github/workflows/evo-ddl-gate.yml'
 
+permissions:
+  contents: read
+
 jobs:
   evo-ddl-gate:
     name: "E42 — DDL novo em schema evo bloqueado"

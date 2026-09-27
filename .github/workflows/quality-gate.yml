@@ -11,6 +11,9 @@ concurrency:
   group: quality-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
+permissions:
+  contents: read
+
 jobs:
   quality-gate:
     # Todos os passos deste gate são herméticos: usam credenciais de teste e

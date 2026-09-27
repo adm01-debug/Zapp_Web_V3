@@ -26,6 +26,9 @@ on:
     types: [completed]
     branches: [main, production]
 
+permissions:
+  contents: read
+
 jobs:
   notify-failure:
     name: "Email Abner via N8N"

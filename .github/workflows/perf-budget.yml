@@ -52,6 +52,9 @@ env:
   VITE_SUPABASE_ANON_KEY: test-anon-key
   VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
 
+permissions:
+  contents: read
+
 jobs:
   budget:
     name: Carga inicial dentro do orçamento

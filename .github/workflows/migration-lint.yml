@@ -19,6 +19,9 @@ on:
     paths:
       - 'supabase/migrations/**.sql'
 
+permissions:
+  contents: read
+
 jobs:
   migration-lint:
     name: Lint migrations (RLS idempotency)

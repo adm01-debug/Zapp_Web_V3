@@ -20,6 +20,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   flaky-baseline:
     name: Test suite — sem retry (medição de flakiness)

@@ -8,6 +8,9 @@ on:
   # 2026-09-27: schedule suspenso — RPC rpc_e2e_cleanup falha (evolution_contacts e VIEW) — corrigir RPC antes de reativar
   # Para reabilitar: remover este comentario e restaurar o bloco schedule:
 
+permissions:
+  contents: read
+
 jobs:
   cleanup:
     name: Limpar dados E2E (rpc_e2e_cleanup)
