@@ -32,9 +32,10 @@ jobs:
   drift-check:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
-    # Etapa 19: eleva para write apenas no job de regen (dispatch com regen=true)
+    # Etapa 19: write declarado estaticamente (actionlint não aceita expressão em permissions);
+    # escrita real só ocorre no step de commit, que tem if: regen == 'true' como guarda.
     permissions:
-      contents: ${{ github.event.inputs.regen == 'true' && 'write' || 'read' }}
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
