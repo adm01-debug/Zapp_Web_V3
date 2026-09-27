@@ -14,6 +14,11 @@ on:
     paths:
       - 'supabase/functions/**'
   workflow_dispatch:
+    inputs:
+      prune:
+        description: 'Remover do volume os órfãos de _shared (arquivos fora das exclusões que só existem no volume)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -67,7 +72,9 @@ jobs:
         # (sem restart o módulo cacheado em memória pode divergir do volume).
         run: |
           set -euo pipefail
-          bash infra/edge-deploy/deploy-edge.sh --apply --restart 2>&1 | tee edge-deploy-report.txt
+          ARGS="--apply --restart"
+          if [ "${{ github.event.inputs.prune }}" = "true" ]; then ARGS="$ARGS --prune"; fi
+          bash infra/edge-deploy/deploy-edge.sh $ARGS 2>&1 | tee edge-deploy-report.txt
 
       - name: Upload drift report
         if: always()
