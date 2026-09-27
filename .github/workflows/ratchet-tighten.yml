@@ -321,7 +321,7 @@ jobs:
             exit 0
           fi
 
-          while IFS=$'\t' read -r EXISTING_BRANCH EXISTING_URL; do
+          while IFS=$'\t' read -r _ EXISTING_URL; do
             # Revalida imediatamente antes do aviso: OPEN→MERGED é seguro;
             # CLOSED, ausência, ambiguidade ou troca de URL preservam o PR anterior.
             LATEST_RECORD="$(resolve_successor)"

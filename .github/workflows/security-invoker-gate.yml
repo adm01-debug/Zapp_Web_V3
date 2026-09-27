@@ -96,6 +96,7 @@ jobs:
             exit 1
           fi
 
+          # shellcheck disable=SC2016
           COUNT=$(echo "$RESULT" | node -e "
             let d='';
             process.stdin.on('data',c=>d+=c);
@@ -154,6 +155,7 @@ jobs:
             exit 1
           fi
 
+          # shellcheck disable=SC2016
           COUNT=$(echo "$RESULT" | node -e "
             let d='';
             process.stdin.on('data',c=>d+=c);
