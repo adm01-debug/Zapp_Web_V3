@@ -181,3 +181,17 @@ jobs:
 
       - name: Performance Budget Gate (blocking — E02/F10-06)
         run: bun run perf:budget
+
+      - name: Resumo do Quality Gate
+        if: always()
+        run: |
+          echo "## Quality Gate — Resumo" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Performance Budget | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Resultado final: **${{ job.status }}**_" >> $GITHUB_STEP_SUMMARY

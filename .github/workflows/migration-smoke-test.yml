@@ -240,6 +240,14 @@ jobs:
             $$;
           PSQLEOF
 
+      - name: Resumo do Smoke Test
+        if: always()
+        run: |
+          echo "## Migration Smoke Test — Resumo" >> $GITHUB_STEP_SUMMARY
+          echo "- Resultado: **${{ job.status }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Gate sintaxe SQL (pglast): bloqueante" >> $GITHUB_STEP_SUMMARY
+          echo "- Apply delta (incremental): advisory (continue-on-error)" >> $GITHUB_STEP_SUMMARY
+
       - name: Stop Postgres container
         if: always()
         run: docker rm -f pg-smoke 2>/dev/null || true
