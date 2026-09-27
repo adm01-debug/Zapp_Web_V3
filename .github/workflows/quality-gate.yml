@@ -185,6 +185,7 @@ jobs:
       - name: Resumo do Quality Gate
         if: always()
         run: |
+          # shellcheck disable=SC2086,SC2129
           echo "## Quality Gate — Resumo" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY

@@ -36,6 +36,7 @@ jobs:
       - name: Detectar workflows com schedule suspenso
         id: detect
         run: |
+          # shellcheck disable=SC2086,SC2129
           set -euo pipefail
 
           # Captura arquivos com linha "# ... schedule suspenso ..."
@@ -144,6 +145,7 @@ jobs:
       - name: Resumo
         if: always()
         run: |
+          # shellcheck disable=SC2086,SC2129
           echo "## Schedule Health Monitor" >> $GITHUB_STEP_SUMMARY
           echo "- Workflows com schedule suspenso: **${{ steps.detect.outputs.count }}**" >> $GITHUB_STEP_SUMMARY
           echo "- Data: $(date -u +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY

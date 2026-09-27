@@ -31,6 +31,7 @@ jobs:
       - name: Comparar score do PR vs baseline T1
         id: ratchet
         run: |
+          # shellcheck disable=SC2086
           set -uo pipefail
           BASELINE="docs/decouple/BOUNDARY_SCORE_T1.json"
           PR_SCORE="decouple-score.json"
