@@ -22817,10 +22817,12 @@ BEGIN
 
   -- 2) espelho do status. 'arquivada' (nao 'resolved'): o CHECK da conversa
   --    aceita somente aberta/arquivada, e gravar 'resolved' violava a
-  --    constraint (23514). Mesma semantica ja usada no restante do app.
+  --    constraint (23514). O predicado `IS DISTINCT FROM 'arquivada'` e o que
+  --    faz conversations_atualizadas significar "conversas ativas espelhadas".
   UPDATE zapp.conversations
      SET status = 'arquivada'
-   WHERE contact_id = p_contact_id;
+   WHERE contact_id = p_contact_id
+     AND status IS DISTINCT FROM 'arquivada';
   GET DIAGNOSTICS v_conv = ROW_COUNT;
 
   -- 3) evento de auditoria
