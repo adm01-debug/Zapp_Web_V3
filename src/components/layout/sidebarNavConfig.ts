@@ -65,6 +65,10 @@ export const primaryNav: readonly NavItemConfig[] = [
   { id: 'team-chat', icon: UsersRound, label: 'Teams' },
   { id: 'email-chat', icon: Mail, label: 'Email' },
   { id: 'contacts', icon: User, label: 'Contatos' },
+  // Multiplix migrado da nav de grupos para cá (P1) — sempre visível para
+  // admin/supervisor sem precisar abrir acordeão.
+  { id: 'multiplix', icon: Zap, label: 'Multiplix', requiredRoles: ['admin', 'supervisor'] },
+  { id: 'catalog', icon: Package, label: 'Catálogo', requiredRoles: ['admin', 'supervisor'] },
   { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
   { id: 'pipeline', icon: Kanban, label: 'Pipeline' },
   { id: 'campaigns', icon: Megaphone, label: 'Campanhas' },

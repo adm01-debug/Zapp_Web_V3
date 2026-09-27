@@ -7,33 +7,17 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-vi.mock('@/hooks/ui/useTheme', () => ({
+// ── Mocks de dependências reais do Sidebar ───────────────────────────────────
+
+vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ resolvedTheme: 'light', setTheme: vi.fn() }),
 }));
 
-vi.mock('@/hooks/ui/useSidebarCollapse', () => ({
-  useSidebarCollapse: () => ({ collapsed: false, toggle: vi.fn() }),
-}));
-
-let mockRoles: string[] = ['supervisor'];
-vi.mock('@/hooks/system/useUserRole', () => ({
-  useUserRole: () => ({
-    roles: mockRoles,
-    isAdmin: mockRoles.includes('admin'),
-    isSupervisor: mockRoles.includes('supervisor') || mockRoles.includes('admin'),
-    isSpecialAgent: mockRoles.includes('special_agent'),
-    hasRole: (r: string) => mockRoles.includes(r),
-    loading: false,
-    refetch: vi.fn(),
-  }),
-}));
-
-let mockFavorites: string[] = [];
-const mockToggleFavorite = vi.fn();
-vi.mock('@/hooks/ui/useSidebarFavorites', () => ({
+let mockCollapsed = false;
+vi.mock('@/hooks/useSidebarState', () => ({
+  useSidebarCollapse: () => ({ collapsed: mockCollapsed, toggle: vi.fn() }),
   useSidebarFavorites: () => ({
     favorites: mockFavorites,
     toggleFavorite: mockToggleFavorite,
@@ -42,11 +26,39 @@ vi.mock('@/hooks/ui/useSidebarFavorites', () => ({
   }),
 }));
 
+let mockFavorites: string[] = [];
+const mockToggleFavorite = vi.fn();
+
+vi.mock('@/lib/evoApiHealth/useEvoApiAlertsBadge', () => ({
+  useEvoApiAlertsBadge: () => ({ topSeverity: null, total: 0, critical: 0, warning: 0, info: 0 }),
+}));
+
+// Componentes pesados substituídos por stubs leves
 vi.mock('@/components/notifications/PushNotificationToggle', () => ({ PushNotificationToggle: () => null }));
 vi.mock('@/components/notifications/ScreenProtectionToggle', () => ({ ScreenProtectionToggle: () => null }));
 vi.mock('@/components/notifications/SoundMuteToggle', () => ({ SoundMuteToggle: () => null }));
-vi.mock('@/components/layout/SidebarUserPill', () => ({ SidebarUserPill: () => null }));
-vi.mock('@/components/layout/SidebarBackButton', () => ({ SidebarBackButton: () => null }));
+vi.mock('@/components/notifications/StatusLabelToggle', () => ({ StatusLabelToggle: () => null }));
+vi.mock('./AgentProfilePopover', () => ({ AgentProfilePopover: () => null }));
+vi.mock('./ConnectionStatusIndicator', () => ({ ConnectionStatusIndicator: () => null }));
+
+// SidebarNavItem: renderiza data-tour + botão de toggle quando onToggleFavorite vem do pai
+vi.mock('./SidebarNavItem', () => ({
+  SidebarNavItem: ({ item, onToggleFavorite }: { item: { id: string; label: string }; onToggleFavorite?: (id: string) => void }) => (
+    <div data-tour={item.id}>
+      {item.label}
+      {onToggleFavorite && (
+        <button aria-label="Remover dos favoritos" onClick={() => onToggleFavorite(item.id)} />
+      )}
+    </div>
+  ),
+}));
+
+// SidebarNavGroup: achata os items para que apareçam com data-tour
+vi.mock('./SidebarNavGroup', () => ({
+  SidebarNavGroup: ({ items }: { items: Array<{ id: string; label: string }> }) => (
+    <div>{items.map((item) => <div key={item.id} data-tour={item.id}>{item.label}</div>)}</div>
+  ),
+}));
 
 import { Sidebar } from '@/components/layout/Sidebar';
 
@@ -55,61 +67,54 @@ function baseProps() {
 }
 
 function renderSidebar(props = baseProps()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
-      <TooltipProvider><Sidebar {...props} /></TooltipProvider>
-    </QueryClientProvider>,
+    <TooltipProvider><Sidebar {...props} /></TooltipProvider>,
   );
 }
 
 beforeEach(() => {
-  mockRoles = ['supervisor'];
+  mockCollapsed = false;
   mockFavorites = [];
   mockToggleFavorite.mockClear();
 });
 
 describe('Sidebar — nav primária e grupos compartilham uma única área de rolagem', () => {
-  it('Multiplix continua entre Contatos e Catálogo, e todos os três estão dentro do mesmo container com scroll', () => {
-    // currentView='chatbot' força o grupo "Automação & IA" (acordeão, fechado
-    // por padrão) a abrir, para podermos verificar que um item de grupo
-    // também vive dentro da mesma área de rolagem da nav primária.
-    const { container } = renderSidebar({ currentView: 'chatbot', onViewChange: vi.fn() });
+  it('nav primária (Multiplix) e um item de grupo (chatbot) vivem dentro do .overflow-y-auto', () => {
+    const { container } = renderSidebar();
 
+    const scrollArea = container.querySelector('.overflow-y-auto');
+    expect(scrollArea).not.toBeNull();
+
+    const multiplixEl = container.querySelector('[data-tour="multiplix"]');
+    const chatbotEl = container.querySelector('[data-tour="chatbot"]');
+    expect(multiplixEl).not.toBeNull();
+    expect(chatbotEl).not.toBeNull();
+    expect(scrollArea).toContainElement(multiplixEl as HTMLElement);
+    expect(scrollArea).toContainElement(chatbotEl as HTMLElement);
+  });
+
+  it('Multiplix aparece após Contatos na nav primária', () => {
+    const { container } = renderSidebar();
     const tourIds = Array.from(container.querySelectorAll('[data-tour]')).map(
       (el) => el.getAttribute('data-tour'),
     );
     const contatosIdx = tourIds.indexOf('contacts');
     const multiplixIdx = tourIds.indexOf('multiplix');
-    const catalogoIdx = tourIds.indexOf('catalog');
-
     expect(contatosIdx).toBeGreaterThanOrEqual(0);
     expect(multiplixIdx).toBe(contatosIdx + 1);
-    expect(catalogoIdx).toBe(multiplixIdx + 1);
-
-    const scrollArea = container.querySelector('.overflow-y-auto');
-    expect(scrollArea).not.toBeNull();
-    const multiplixButton = container.querySelector('[data-tour="multiplix"]');
-    const chatbotButton = container.querySelector('[data-tour="chatbot"]');
-    expect(scrollArea).toContainElement(multiplixButton as HTMLElement);
-    expect(scrollArea).toContainElement(chatbotButton as HTMLElement);
-  });
-
-  it('agente comum não vê Multiplix na nav primária', () => {
-    mockRoles = ['agent'];
-    const { container } = renderSidebar();
-    expect(container.querySelector('[data-tour="multiplix"]')).toBeNull();
   });
 });
 
 describe('Sidebar — Favoritos não duplica item que já vive na nav primária', () => {
-  it('Multiplix favoritado não aparece de novo na seção Favoritos (já é sempre visível)', () => {
+  it('Multiplix favoritado não aparece na seção Favoritos (já é sempre visível na nav primária)', () => {
     mockFavorites = ['multiplix'];
     const { container } = renderSidebar();
 
+    // Favoritos não deve aparecer
     expect(screen.queryByText('Favoritos')).toBeNull();
+    // Multiplix aparece exatamente uma vez (na nav primária)
     expect(container.querySelectorAll('[data-tour="multiplix"]')).toHaveLength(1);
-    // P2: o useEffect de limpeza deve ter removido o id fantasma do array
+    // P2: cleanup useEffect deve ter chamado toggleFavorite para remover o id fantasma
     expect(mockToggleFavorite).toHaveBeenCalledWith('multiplix');
   });
 

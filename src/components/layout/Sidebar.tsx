@@ -1,177 +1,143 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Star, Search } from 'lucide-react';
+import { Search, Moon, Sun, PanelLeftClose, PanelLeftOpen, Star } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useTheme } from '@/hooks/ui/useTheme';
-import { useSidebarCollapse } from '@/hooks/ui/useSidebarCollapse';
-import { useSidebarFavorites } from '@/hooks/ui/useSidebarFavorites';
+import { useTheme } from '@/hooks/useTheme';
+import { useSidebarCollapse, useSidebarFavorites } from '@/hooks/useSidebarState';
 import { PushNotificationToggle } from '@/components/notifications/PushNotificationToggle';
 import { ScreenProtectionToggle } from '@/components/notifications/ScreenProtectionToggle';
+import { StatusLabelToggle } from '@/components/notifications/StatusLabelToggle';
 import { SoundMuteToggle } from '@/components/notifications/SoundMuteToggle';
 import { SidebarNavItem } from './SidebarNavItem';
 import { SidebarNavGroup } from './SidebarNavGroup';
-import { SidebarUserPill } from './SidebarUserPill';
-import { SidebarBackButton } from './SidebarBackButton';
-import { primaryNav, sidebarGroups, advancedNav } from './sidebarNavConfig';
-import { useUserRole } from '@/hooks/system/useUserRole';
-import { NavigationService } from '@/services/navigation.service';
+import { AgentProfilePopover } from './AgentProfilePopover';
+import { primaryNav, sidebarGroups, communicationNav, automationNav, salesNav, connectionsNav, analyticsNav, systemNav, advancedNav } from './sidebarNavConfig';
+import { useEvoApiAlertsBadge } from '@/lib/evoApiHealth/useEvoApiAlertsBadge';
+import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 
 interface SidebarProps {
   currentView: string;
   onViewChange: (view: string) => void;
+  currentAgent?: { name: string; avatar?: string; status: 'online' | 'away' | 'offline' };
+  onLogout?: () => void;
   inboxBadge?: number;
-  profile?: { name?: string | null; avatar_url?: string | null } | null;
-  userEmail?: string;
-  signOut?: () => void;
-  canGoBack?: boolean;
-  onGoBack?: () => void;
+  onStatusChange?: (status: 'online' | 'away' | 'offline') => void;
 }
 
-export const Sidebar = React.memo(function Sidebar({
-  currentView,
-  onViewChange,
-  inboxBadge,
-  profile,
-  userEmail,
-  signOut,
-  canGoBack,
-  onGoBack,
-}: SidebarProps) {
+/** Sidebar component for the layout section. */
+export const Sidebar = React.memo(function Sidebar({ currentView, onViewChange, currentAgent, onLogout, inboxBadge, onStatusChange }: SidebarProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
+  const [statusOpen, setStatusOpen] = useState(false);
   const { collapsed, toggle } = useSidebarCollapse();
   const { favorites, toggleFavorite, isFavorite } = useSidebarFavorites();
-  const { roles } = useUserRole();
+  const evoBadge = useEvoApiAlertsBadge();
 
-  const filteredPrimaryNav = useMemo(() =>
-    NavigationService.filterNavItems(primaryNav, roles),
-    [roles]
+  // P2: ids que vivem permanentemente na nav primária — nunca devem aparecer
+  // como duplicata na prateleira de Favoritos (ex.: Multiplix).
+  const primaryNavIds = useMemo(() => new Set(primaryNav.map((item) => item.id)), []);
+
+  const allNavItems = useMemo(
+    () => [...communicationNav, ...automationNav, ...salesNav, ...connectionsNav, ...analyticsNav, ...systemNav, ...advancedNav],
+    [],
   );
 
-  const filteredGroups = useMemo(() =>
-    sidebarGroups.map(group => ({
-      ...group,
-      items: NavigationService.filterNavItems(group.items, roles)
-    })).filter(group => group.items.length > 0),
-    [roles]
-  );
-
-  const allNavItems = useMemo(() =>
-    [...primaryNav, ...sidebarGroups.flatMap(g => g.items), ...advancedNav],
-    []
-  );
-
-  // Itens da nav primária ficam sempre visíveis por conta própria — não
-  // precisam de atalho em Favoritos (evita duplicar o mesmo item nos dois
-  // lugares quando alguém favoritou algo que depois passou a viver na nav
-  // primária, caso do Multiplix).
-  const primaryNavIds = useMemo(() => new Set(primaryNav.map(item => item.id)), []);
-
-  const favoriteItems = useMemo(() =>
-    favorites
-      .map(id => allNavItems.find(item => item.id === id))
+  // P1: exclui ids da nav primária para que um item migrado (ex.: Multiplix)
+  // não apareça duas vezes — uma vez na nav primária e outra em Favoritos.
+  const favoriteItems = useMemo(
+    () => favorites
+      .map((id) => allNavItems.find((item) => item.id === id))
       .filter(Boolean)
-      .filter(item => !primaryNavIds.has(item!.id) && NavigationService.canAccess(item!.id, roles)) as typeof allNavItems,
-    [favorites, allNavItems, primaryNavIds, roles]
+      .filter((item) => !primaryNavIds.has(item!.id)) as typeof allNavItems,
+    [favorites, allNavItems, primaryNavIds],
   );
 
-  // P2: limpa ids fantasma — quando um item migra para a nav primária (ex.:
-  // Multiplix) o id permanece no array do localStorage consumindo um slot sem
-  // exibir toggle. Ao montar, remove esses ids via toggleFavorite (que faz
-  // remove quando o id já está no array). primaryNav é estático → deps vazias.
+  // P2: ao montar, remove do localStorage ids fantasma cujos items migraram
+  // para a nav primária — eles consumiam um slot sem exibir toggle visível.
+  // primaryNav é estático → deps vazias.
   useEffect(() => {
     favorites
-      .filter(id => primaryNavIds.has(id))
-      .forEach(id => toggleFavorite(id));
+      .filter((id) => primaryNavIds.has(id))
+      .forEach((id) => toggleFavorite(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Per-group dynamic badges (currently: Sistema → evo-api-health alerts)
+  const groupBadges: Record<string, Record<string, { count: number; variant?: 'destructive' | 'warning' | 'info'; title?: string }>> = {
+    Sistema: {
+      'evo-api-health':
+        evoBadge.topSeverity
+          ? {
+              count: evoBadge.total,
+              variant: evoBadge.topSeverity === 'critical' ? 'destructive' : evoBadge.topSeverity === 'warning' ? 'warning' : 'info',
+              title: `${evoBadge.critical} críticos · ${evoBadge.warning} warnings · ${evoBadge.info} info`,
+            }
+          : { count: 0 },
+    },
+  };
+
   return (
     <aside id="main-navigation" role="navigation" aria-label="Menu de navegação principal"
-      className={cn('flex flex-col h-screen supports-[height:100dvh]:h-[100dvh] border-r border-border bg-sidebar shrink-0 transition-[width] duration-300 ease-in-out overflow-hidden', collapsed ? 'w-[var(--sidebar-w-collapsed)]' : 'w-[var(--sidebar-w)]')}>
+      className={cn('flex flex-col h-screen border-r border-border bg-sidebar shrink-0 transition-[width] duration-300 ease-in-out overflow-hidden antialiased', collapsed ? 'w-[68px]' : 'w-[240px]')}>
 
       {/* Logo + Toggle */}
-      <div className={cn('flex items-center h-[64px] shrink-0 px-3', collapsed ? 'justify-center' : 'justify-between')}>
-        <button onClick={() => onViewChange('inbox')} className="sidebar-logo-tile w-11 h-11 rounded-xl flex items-center justify-center bg-primary hover:bg-primary/90 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="ZAPP — Ir para Inbox">
-          <span className="text-primary-foreground font-bold text-sm tracking-tight">Z</span>
+      <div className={cn('flex items-center h-[64px] shrink-0 px-4', collapsed ? 'justify-center' : 'justify-between')}>
+        <button type="button" onClick={() => onViewChange('inbox')} className="w-[40px] h-[40px] rounded-2xl flex items-center justify-center bg-primary hover:bg-primary/90 transition-all duration-300 shadow-sm hover:shadow-glow-primary shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="ZAPP — Ir para Inbox">
+          <span className="text-primary-foreground font-bold text-lg tracking-tighter">Z</span>
         </button>
-        {!collapsed && <span className="font-display text-xl font-bold leading-none tracking-[-0.01em] text-foreground ml-2 mr-auto">ZAPP</span>}
-        {!collapsed && <SidebarBackButton canGoBack={canGoBack} onGoBack={onGoBack} collapsed={false} />}
+        {!collapsed && <span className="text-sm font-bold text-foreground tracking-tight ml-2 mr-auto">ZAPP</span>}
         {!collapsed && (
           <Tooltip delayDuration={200}><TooltipTrigger asChild>
-            <button onClick={toggle} className="w-[28px] h-[28px] rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="Recolher menu">
+            <button type="button" onClick={toggle} className="w-[28px] h-[28px] rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="Recolher menu">
               <PanelLeftClose className="w-[15px] h-[15px]" />
             </button>
-          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Recolher <kbd className="ml-1 px-1 py-0.5 rounded bg-muted text-3xs font-mono">⌘B</kbd></TooltipContent></Tooltip>
+          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Recolher <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px]">⌘B</kbd></TooltipContent></Tooltip>
         )}
       </div>
 
       {collapsed && (
         <div className="flex justify-center my-1">
           <Tooltip delayDuration={200}><TooltipTrigger asChild>
-            <button onClick={toggle} className="w-[38px] h-[38px] rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all border border-border/40 hover:border-border focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="Expandir menu">
+            <button type="button" onClick={toggle} className="w-[38px] h-[38px] rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-all border border-border/40 hover:border-border focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="Expandir menu">
               <PanelLeftOpen className="w-[16px] h-[16px]" />
             </button>
-          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Expandir <kbd className="ml-1 px-1 py-0.5 rounded bg-muted text-3xs font-mono">⌘B</kbd></TooltipContent></Tooltip>
+          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Expandir <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px]">⌘B</kbd></TooltipContent></Tooltip>
         </div>
       )}
 
-      {collapsed && <SidebarBackButton canGoBack={canGoBack} onGoBack={onGoBack} collapsed />}
+      {/* P1 fix: área única de rolagem — ConnectionStatus + nav primária + busca +
+          favoritos + grupos rolam juntos. Antes só os grupos tinham
+          overflow-y-auto; a nav primária era fixa, então cada item novo
+          adicionado ali (ex.: Multiplix) encolhia permanentemente o espaço
+          visível dos grupos em telas baixas. Agora apenas o cabeçalho (logo)
+          e os controles do rodapé ficam fixos. */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-none">
 
-      {/* Área única de rolagem: nav primária + busca + favoritos + grupos.
-          Antes só os grupos rolavam e a nav primária ficava fixa no topo —
-          cada item novo ali (ex.: Multiplix) encolhia permanentemente o
-          espaço visível dos grupos em telas baixas. Agora tudo rola junto,
-          só o cabeçalho (logo) e os controles do rodapé ficam fixos. */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scroll-smooth [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-primary/50">
+        {/* Status das conexões WhatsApp (compacto) */}
+        <div className={cn('flex', collapsed ? 'justify-center px-[11px]' : 'px-3', 'pt-1 pb-1.5')}>
+          <ConnectionStatusIndicator collapsed={collapsed} />
+        </div>
+
+        {/* Primary Nav */}
         <nav className={cn('flex flex-col gap-0.5', collapsed ? 'items-center px-[11px]' : 'px-2')} aria-label="Menu principal">
           <ul role="list" className={cn('flex flex-col gap-0.5 w-full list-none p-0 m-0', collapsed && 'items-center')}>
-            {filteredPrimaryNav.map((item) => (
-              <li key={item.id}>
-                <SidebarNavItem
-                  item={item}
-                  currentView={currentView}
-                  onViewChange={onViewChange}
-                  badge={item.id === 'inbox' ? inboxBadge : undefined}
-                  collapsed={collapsed}
-                />
-              </li>
-            ))}
+            {primaryNav.map((item) => <li key={item.id}><SidebarNavItem item={item} currentView={currentView} onViewChange={onViewChange} badge={item.id === 'inbox' ? inboxBadge : undefined} collapsed={collapsed} /></li>)}
           </ul>
         </nav>
 
-        {/* Busca global */}
-        <div className={cn('px-2', collapsed && 'flex justify-center px-[11px]')}>
-          {collapsed ? (
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => document.dispatchEvent(new CustomEvent('open-global-search'))}
-                  className="w-[38px] h-[38px] rounded-full flex items-center justify-center text-sidebar-foreground hover:bg-muted/60 hover:text-foreground active:scale-[0.97] transition-all duration-200"
-                  aria-label="Busca global (⌘K)"
-                >
-                  <Search className="w-[18px] h-[18px] text-primary" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={8} className="bg-popover border-border text-xs font-medium flex items-center gap-2">
-                <span>Buscar</span>
-                <kbd className="px-1 py-0.5 rounded bg-muted text-3xs font-mono text-muted-foreground">⌘K</kbd>
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <button
-              onClick={() => document.dispatchEvent(new CustomEvent('open-global-search'))}
-              className="w-full flex items-center gap-3 py-2 px-3 rounded-xl text-sm font-medium min-h-[44px] text-sidebar-foreground hover:bg-muted/60 hover:text-foreground active:scale-[0.97] hover:translate-x-1 transition-all duration-200"
-              aria-label="Busca global (⌘K)"
-            >
-              <Search className="w-[18px] h-[18px] shrink-0 text-primary" />
-              <span className="truncate">Buscar...</span>
-              <kbd className="ml-auto shrink-0 px-1.5 py-0.5 rounded bg-muted/70 text-[9px] font-mono text-muted-foreground">⌘K</kbd>
+        {/* Search */}
+        <div className={cn('flex my-1.5', collapsed ? 'justify-center px-[11px]' : 'px-2')}>
+          <Tooltip delayDuration={200}><TooltipTrigger asChild>
+            <button type="button" onClick={() => document.dispatchEvent(new CustomEvent('open-global-search'))}
+              className={cn('rounded-lg flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-all border border-dashed border-border/60 hover:border-border', collapsed ? 'w-[40px] h-[30px] justify-center' : 'w-full h-[32px] px-3')} aria-label="Buscar módulo (Ctrl+K)">
+              <Search className="w-[14px] h-[14px] shrink-0" />
+              {!collapsed && <span className="text-xs text-muted-foreground">Buscar...</span>}
+              {!collapsed && <kbd className="ml-auto px-1 py-0.5 rounded bg-muted/20 text-[9px] text-muted-foreground">⌘K</kbd>}
             </button>
-          )}
+          </TooltipTrigger>{collapsed && <TooltipContent side="right" sideOffset={8} className="text-xs">Buscar <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px]">⌘K</kbd></TooltipContent>}</Tooltip>
         </div>
 
-        {/* Favorites */}
+        {/* Favorites — P1: itens exibem onToggleFavorite para desfavoritar daqui */}
         {favoriteItems.length > 0 && (
           <>
             <div className={cn('mx-3 h-px bg-border', collapsed ? 'my-1' : 'my-1.5')} />
@@ -197,45 +163,34 @@ export const Sidebar = React.memo(function Sidebar({
 
         <div className={cn('mx-3 h-px bg-border', collapsed ? 'my-1' : 'my-1.5')} />
 
-        <div className={cn('flex flex-col gap-1.5 py-1', collapsed ? 'items-center px-[11px]' : 'px-2')}>
-          {filteredGroups.map((group) => (
-            <SidebarNavGroup
-              key={group.label}
-              label={group.label}
-              icon={group.icon}
-              items={group.items}
-              currentView={currentView}
-              onViewChange={onViewChange}
-              collapsed={collapsed}
-              onToggleFavorite={toggleFavorite}
-              isFavorite={isFavorite}
-            />
-          ))}
+        {/* Groups */}
+        <div className={cn('flex flex-col gap-1.5 py-1', collapsed ? 'items-center' : 'px-2')}>
+          {sidebarGroups.map((group) => <SidebarNavGroup key={group.label} label={group.label} icon={group.icon} items={group.items} currentView={currentView} onViewChange={onViewChange} collapsed={collapsed} onToggleFavorite={toggleFavorite} isFavorite={isFavorite} badgeMap={groupBadges[group.label]} />)}
         </div>
+
       </div>
 
       {/* Bottom Controls */}
       <div className="flex flex-col items-center gap-1.5 pt-1.5 pb-3 shrink-0">
         <div className="mx-3 h-px bg-border self-stretch" />
         {!collapsed && <div className="px-3 self-stretch flex items-center gap-1.5 pb-0.5"><span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Controles rápidos</span></div>}
-        <div className={cn('flex flex-col gap-1 rounded-xl border border-border bg-muted/50 px-1.5 py-1.5 shadow-sm', collapsed ? 'items-center' : 'self-stretch mx-2')}>
-          {signOut && (
-            <>
-              <SidebarUserPill profile={profile ?? null} userEmail={userEmail ?? ''} signOut={signOut} onViewChange={onViewChange} collapsed={collapsed} />
-              <div className="h-px bg-border/60 self-stretch mx-1" />
-            </>
-          )}
-          <div className={cn('flex items-center gap-1', collapsed ? 'flex-col' : 'flex-row')}>
-            <ScreenProtectionToggle className="w-[36px] h-[36px]" />
-            <PushNotificationToggle className="w-[36px] h-[36px]" />
-            <SoundMuteToggle className="w-[36px] h-[36px]" />
-            <Tooltip delayDuration={200}><TooltipTrigger asChild>
-              <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className={cn("w-[36px] h-[36px] rounded-lg flex items-center justify-center transition-all duration-200 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none", isDark && "text-primary")} aria-label={isDark ? 'Modo claro' : 'Modo escuro'}>
-                {isDark ? <Sun className="w-[16px] h-[16px]" /> : <Moon className="w-[16px] h-[16px]" />}
-              </button>
-            </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">{isDark ? 'Modo claro' : 'Modo escuro'}</TooltipContent></Tooltip>
-          </div>
+        <div className={cn('flex items-center gap-1.5 rounded-2xl border border-border/40 bg-muted/20 px-2 py-2 shadow-sm transition-all duration-300 hover:bg-muted/30', collapsed ? 'flex-col' : 'flex-row self-stretch mx-2')}>
+          <ScreenProtectionToggle className="w-[36px] h-[36px] touch-manipulation" />
+          <PushNotificationToggle className="w-[36px] h-[36px] touch-manipulation" />
+          <SoundMuteToggle className="w-[36px] h-[36px] touch-manipulation" />
+          <StatusLabelToggle className="w-[36px] h-[36px] touch-manipulation" />
+          <Tooltip delayDuration={200}><TooltipTrigger asChild>
+            <button type="button" 
+              onClick={() => setTheme(isDark ? 'light' : 'dark')} 
+              className={cn("w-[36px] h-[36px] rounded-lg flex items-center justify-center transition-all duration-300 text-muted-foreground hover:bg-muted/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:outline-none touch-manipulation", isDark && "text-primary bg-primary/5")} 
+              aria-label={isDark ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+            >
+              {isDark ? <Sun className="w-[16px] h-[16px]" /> : <Moon className="w-[16px] h-[16px]" />}
+            </button>
+          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">{isDark ? 'Modo claro' : 'Modo escuro'}</TooltipContent></Tooltip>
         </div>
+
+        {currentAgent && <AgentProfilePopover agent={currentAgent} collapsed={collapsed} statusOpen={statusOpen} onStatusOpenChange={setStatusOpen} onStatusChange={onStatusChange} onViewChange={onViewChange} onLogout={onLogout} />}
       </div>
     </aside>
   );
