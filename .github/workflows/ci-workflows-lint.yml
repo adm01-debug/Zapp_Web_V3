@@ -35,9 +35,10 @@ jobs:
 
       - name: Instalar actionlint
         run: |
-          # Instalação reproduzível via script oficial + versão fixada
-          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.7
-          echo "$PWD" >> $GITHUB_PATH
+          # Download direto do release — evita curl|bash de branch mutable (supply-chain fix)
+          curl -sL "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz" \
+            | tar xz -C /usr/local/bin/ actionlint
+          actionlint --version
 
       - name: Setup Node
         uses: actions/setup-node@v7
