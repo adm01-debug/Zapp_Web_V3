@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Ask Jev and comment
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         env:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
         with:
