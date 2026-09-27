@@ -20,9 +20,11 @@ on:
       # fora do radar de alertas — falhas silenciosas detectadas na auditoria.
       - "db-migrate"
       - "DB Guard"
+      - "edge-deploy"
       - "edge-drift-check"
       - "Bundle Secret Guard"
       - "Migration Smoke Test"
+      - "Migration Drift Guard"
     types: [completed]
     branches: [main, production]
 
@@ -44,8 +46,17 @@ jobs:
     steps:
       - name: "POST warroom → Email + Bitrix24"
         run: |
-          curl -sf --retry 3 --retry-delay 5 --retry-all-errors \
+          # Etapa 31: payload via jq --arg (evita injeção JSON por branch/actor com caracteres especiais)
+          jq -n \
+            --arg severity   "critical" \
+            --arg alert_type "ci_failure" \
+            --arg title      "CI FAILED: ${{ github.event.workflow_run.name }}" \
+            --arg message    "Repo: ${{ github.repository }}\nBranch: ${{ github.event.workflow_run.head_branch }}\nActor: ${{ github.event.workflow_run.triggering_actor.login }}\nSHA: ${{ github.event.workflow_run.head_sha }}\nURL: ${{ github.event.workflow_run.html_url }}" \
+            --arg source     "github-actions" \
+            --argjson run_id  "${{ github.event.workflow_run.id }}" \
+            '{severity: $severity, alert_type: $alert_type, title: $title, message: $message, source: $source, run_id: $run_id}' \
+          | curl -sf --retry 3 --retry-delay 5 --retry-all-errors \
             -X POST https://n8n.atomicabr.com.br/webhook/warroom-alert \
             -H "Content-Type: application/json" \
-            -d "{\"severity\":\"critical\",\"alert_type\":\"ci_failure\",\"title\":\"CI FAILED: ${{ github.event.workflow_run.name }}\",\"message\":\"Repo: ${{ github.repository }}\nBranch: ${{ github.event.workflow_run.head_branch }}\nActor: ${{ github.event.workflow_run.triggering_actor.login }}\nSHA: ${{ github.event.workflow_run.head_sha }}\nURL: ${{ github.event.workflow_run.html_url }}\",\"source\":\"github-actions\",\"run_id\":\"${{ github.event.workflow_run.id }}\"}" \
+            -d @- \
           && echo "Alerta enviado (Email Abner + Bitrix24)"

@@ -23,13 +23,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
+# Etapa 19: contents:write apenas no job de regen (dispatch com regen=true).
+# PR/push ficam com read-only — o token não escreve no repo a não ser quando explicitamente pedido.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   drift-check:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
+    # Etapa 19: eleva para write apenas no job de regen (dispatch com regen=true)
+    permissions:
+      contents: ${{ github.event.inputs.regen == 'true' && 'write' || 'read' }}
     steps:
       - uses: actions/checkout@v7
         with:

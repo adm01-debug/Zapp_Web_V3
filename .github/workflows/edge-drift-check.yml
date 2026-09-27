@@ -5,25 +5,28 @@ on:
     branches: [main]
   # 2026-09-27: schedule suspenso — orphan/stale edge functions detectados diariamente mas drift nao resolvido no repo
   # Para reabilitar: remover este comentario e restaurar o bloco schedule:
+  # Etapa 48: reabilitar após etapa 5 (criar secret SUPABASE_ANON_KEY) estar concluída
   workflow_dispatch:
 
+# Etapa 30: removido issues:write (nunca usado neste workflow — issue criação não existe aqui)
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  drift:
-    name: edge-drift-check
+  # Etapas 28 + 43: jobs drift e e39 fundidos (ambos rodavam o mesmo deploy-edge.sh 2×)
+  # Removida a instalação do Supabase CLI via curl|sh (não era usada por nenhum step).
+  drift-and-hash:
+    name: edge-drift-check (E38/E39)
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
-      - name: E38 — Completude de ambiente
+      - name: Verificar vars de ambiente
         id: env_check
         run: |
           missing=""
@@ -32,11 +35,11 @@ jobs:
           done
           if [ -n "$missing" ]; then
             if [ "${{ github.event_name }}" = "pull_request" ]; then
-              echo "::notice::E38: vars ausentes em PR ($missing) — skip silencioso"
+              echo "::notice::E38/E39: vars ausentes em PR ($missing) — skip silencioso"
               echo "skip=true" >> $GITHUB_OUTPUT
               exit 0
             fi
-            echo "::error::E38: vars de ambiente obrigatórias ausentes:$missing"
+            echo "::error::E38/E39: vars de ambiente obrigatórias ausentes:$missing"
             exit 1
           fi
           echo "skip=false" >> $GITHUB_OUTPUT
@@ -45,68 +48,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
-      - name: E38 — Instalar Supabase CLI
-        if: steps.env_check.outputs.skip != 'true'
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/supabase/cli/main/install.sh | sh
-          supabase --version
-
-      # 2026-09-27 — CORREÇÃO (E38/E39 nunca executavam o que o nome dizia):
-      # os dois passos chamavam `bash scripts/deploy-edge.sh --read-only`, que falhava por
-      # DOIS motivos independentes:
-      #   (a) o script vive em `infra/edge-deploy/deploy-edge.sh` (é assim que
-      #       .github/workflows/edge-deploy.yml:70 chama, e é o único caminho no repo);
-      #   (b) `--read-only` NÃO é flag aceita: o parse só conhece --apply/--prune/--restart/
-      #       --help, e qualquer outro argumento cai no `*)` com `exit 2`
-      #       ("argumento desconhecido").
-      # O modo read-only é a AUSÊNCIA de --apply: sem flag o script imprime o diff e sai
-      # com exit 1 se houver MISSING/STALE/ORPHAN (cabeçalho do script, linha 45).
-      # Ou seja: o gate estava vermelho por erro de invocação, não por drift — e por isso
-      # não reportava nada. Agora ele reporta o drift real, com contagem, quando houver.
       - name: Registry de órfãos — teste de regressão
         # Sem `node --test`: este job roda em runner self-hosted cujo Node é
         # anterior ao 18 ("node: bad option: --test", run 36328997858). O teste é
         # um script autônomo com saída TAP — roda em qualquer Node com ESM.
         run: bash infra/edge-deploy/__tests__/edge-orphan-registry.test.sh
 
-      - name: E38 — Verificar edge functions (MISSING/STALE/ORPHAN)
-        if: steps.env_check.outputs.skip != 'true'
-        run: bash infra/edge-deploy/deploy-edge.sh
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-
-  e39:
-    name: E39 — hash drift (volume × repo)
-    runs-on: [Linux, X64, vps-zapp]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: E39 — verificar vars de ambiente
-        id: env_check
-        run: |
-          missing=""
-          for var in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_ANON_KEY; do
-            [ -z "${!var}" ] && missing="$missing $var"
-          done
-          if [ -n "$missing" ]; then
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
-              echo "::notice::E39: vars ausentes em PR ($missing) — skip silencioso"
-              echo "skip=true" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-            echo "::error::E39: vars de ambiente obrigatórias ausentes:$missing"
-            exit 1
-          fi
-          echo "skip=false" >> $GITHUB_OUTPUT
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-
-      - name: E39 — deploy-edge.sh read-only (falha em MISSING/STALE/ORPHAN)
+      - name: Verificar edge functions (MISSING/STALE/ORPHAN)
         if: steps.env_check.outputs.skip != 'true'
         run: bash infra/edge-deploy/deploy-edge.sh
         env:
