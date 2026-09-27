@@ -49561,7 +49561,7 @@ CREATE TABLE IF NOT EXISTS zapp.cookies_config (
 
 
 
-COMMENT ON TABLE zapp.cookies_config IS 'Third-party integration session state (LinkedIn/Lusha cookies, tokens). SERVICE_ROLE ONLY — never grant to anon/authenticated. Hardened 2026-07-02.';
+COMMENT ON TABLE zapp.cookies_config IS 'Credenciais de integracao (cookie/token/csrf_token). RLS ligada: SELECT restrito a admin/supervisor; escrita exclusiva de service_role. Migration 20260927162834_rls_cookies_config.sql';
 
 
 
@@ -72808,11 +72808,15 @@ ALTER TABLE zapp.cookie_probe_pending ENABLE ROW LEVEL SECURITY;
 
 DO $pol1146$
 BEGIN
-  CREATE POLICY cookies_admin_select ON zapp.cookies_config FOR SELECT TO authenticated USING (zapp.is_admin_or_supervisor());
+  CREATE POLICY cookies_admin_select ON zapp.cookies_config FOR SELECT TO authenticated USING (zapp.is_admin_or_supervisor(auth.uid()));
 EXCEPTION WHEN duplicate_object THEN NULL;
 END
 $pol1146$;
 
+
+
+
+ALTER TABLE zapp.cookies_config ENABLE ROW LEVEL SECURITY;
 
 
 
