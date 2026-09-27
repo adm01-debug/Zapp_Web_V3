@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Search, Moon, Sun, PanelLeftClose, PanelLeftOpen, Star } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -33,14 +33,34 @@ export const Sidebar = React.memo(function Sidebar({ currentView, onViewChange, 
   const { favorites, toggleFavorite, isFavorite } = useSidebarFavorites();
   const evoBadge = useEvoApiAlertsBadge();
 
+  // P2: ids que vivem permanentemente na nav primária — nunca devem aparecer
+  // como duplicata na prateleira de Favoritos (ex.: Multiplix).
+  const primaryNavIds = useMemo(() => new Set(primaryNav.map((item) => item.id)), []);
+
   const allNavItems = useMemo(
     () => [...communicationNav, ...automationNav, ...salesNav, ...connectionsNav, ...analyticsNav, ...systemNav, ...advancedNav],
     [],
   );
+
+  // P1: exclui ids da nav primária para que um item migrado (ex.: Multiplix)
+  // não apareça duas vezes — uma vez na nav primária e outra em Favoritos.
   const favoriteItems = useMemo(
-    () => favorites.map((id) => allNavItems.find((item) => item.id === id)).filter(Boolean) as typeof allNavItems,
-    [favorites, allNavItems],
+    () => favorites
+      .map((id) => allNavItems.find((item) => item.id === id))
+      .filter(Boolean)
+      .filter((item) => !primaryNavIds.has(item!.id)) as typeof allNavItems,
+    [favorites, allNavItems, primaryNavIds],
   );
+
+  // P2: ao montar, remove do localStorage ids fantasma cujos items migraram
+  // para a nav primária — eles consumiam um slot sem exibir toggle visível.
+  // primaryNav é estático → deps vazias.
+  useEffect(() => {
+    favorites
+      .filter((id) => primaryNavIds.has(id))
+      .forEach((id) => toggleFavorite(id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Per-group dynamic badges (currently: Sistema → evo-api-health alerts)
   const groupBadges: Record<string, Record<string, { count: number; variant?: 'destructive' | 'warning' | 'info'; title?: string }>> = {
@@ -71,7 +91,7 @@ export const Sidebar = React.memo(function Sidebar({ currentView, onViewChange, 
             <button type="button" onClick={toggle} className="w-[28px] h-[28px] rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="Recolher menu">
               <PanelLeftClose className="w-[15px] h-[15px]" />
             </button>
-          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Recolher <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px] ">⌘B</kbd></TooltipContent></Tooltip>
+          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Recolher <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px]">⌘B</kbd></TooltipContent></Tooltip>
         )}
       </div>
 
@@ -81,54 +101,73 @@ export const Sidebar = React.memo(function Sidebar({ currentView, onViewChange, 
             <button type="button" onClick={toggle} className="w-[38px] h-[38px] rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-all border border-border/40 hover:border-border focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:outline-none" aria-label="Expandir menu">
               <PanelLeftOpen className="w-[16px] h-[16px]" />
             </button>
-          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Expandir <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px] ">⌘B</kbd></TooltipContent></Tooltip>
+          </TooltipTrigger><TooltipContent side="right" sideOffset={8} className="text-xs">Expandir <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px]">⌘B</kbd></TooltipContent></Tooltip>
         </div>
       )}
 
-      {/* Status das conexões WhatsApp (compacto) */}
-      <div className={cn('flex shrink-0', collapsed ? 'justify-center px-[11px]' : 'px-3', 'pt-1 pb-1.5')}>
-        <ConnectionStatusIndicator collapsed={collapsed} />
-      </div>
-
-      {/* Primary Nav */}
-      <nav className={cn('flex flex-col gap-0.5', collapsed ? 'items-center px-[11px]' : 'px-2')} aria-label="Menu principal">
-        <ul role="list" className={cn('flex flex-col gap-0.5 w-full list-none p-0 m-0', collapsed && 'items-center')}>
-          {primaryNav.map((item) => <li key={item.id}><SidebarNavItem item={item} currentView={currentView} onViewChange={onViewChange} badge={item.id === 'inbox' ? inboxBadge : undefined} collapsed={collapsed} /></li>)}
-        </ul>
-      </nav>
-
-      {/* Search */}
-      <div className={cn('flex my-1.5', collapsed ? 'justify-center px-[11px]' : 'px-2')}>
-        <Tooltip delayDuration={200}><TooltipTrigger asChild>
-          <button type="button" onClick={() => document.dispatchEvent(new CustomEvent('open-global-search'))}
-            className={cn('rounded-lg flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-all border border-dashed border-border/60 hover:border-border', collapsed ? 'w-[40px] h-[30px] justify-center' : 'w-full h-[32px] px-3')} aria-label="Buscar módulo (Ctrl+K)">
-            <Search className="w-[14px] h-[14px] shrink-0" />
-            {!collapsed && <span className="text-xs text-muted-foreground">Buscar...</span>}
-            {!collapsed && <kbd className="ml-auto px-1 py-0.5 rounded bg-muted/20 text-[9px]  text-muted-foreground">⌘K</kbd>}
-          </button>
-        </TooltipTrigger>{collapsed && <TooltipContent side="right" sideOffset={8} className="text-xs">Buscar <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px] ">⌘K</kbd></TooltipContent>}</Tooltip>
-      </div>
-
-      {/* Favorites */}
-      {favoriteItems.length > 0 && (
-        <>
-          <div className={cn('mx-3 h-px bg-border', collapsed ? 'my-1' : 'my-1.5')} />
-          {!collapsed && <div className="px-3 flex items-center gap-1.5"><Star className="w-[10px] h-[10px] text-warning fill-warning" /><span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Favoritos</span></div>}
-          <nav className={cn('flex flex-col gap-0.5', collapsed ? 'items-center px-[11px]' : 'px-2')} aria-label="Favoritos">
-            <ul role="list" className={cn('flex flex-col gap-0.5 w-full list-none p-0 m-0', collapsed && 'items-center')}>
-              {favoriteItems.map((item) => <li key={item.id}><SidebarNavItem item={item} currentView={currentView} onViewChange={onViewChange} collapsed={collapsed} /></li>)}
-            </ul>
-          </nav>
-        </>
-      )}
-
-      <div className={cn('mx-3 h-px bg-border', collapsed ? 'my-1' : 'my-1.5')} />
-
-      {/* Groups */}
+      {/* P1 fix: área única de rolagem — ConnectionStatus + nav primária + busca +
+          favoritos + grupos rolam juntos. Antes só os grupos tinham
+          overflow-y-auto; a nav primária era fixa, então cada item novo
+          adicionado ali (ex.: Multiplix) encolhia permanentemente o espaço
+          visível dos grupos em telas baixas. Agora apenas o cabeçalho (logo)
+          e os controles do rodapé ficam fixos. */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-none">
+
+        {/* Status das conexões WhatsApp (compacto) */}
+        <div className={cn('flex', collapsed ? 'justify-center px-[11px]' : 'px-3', 'pt-1 pb-1.5')}>
+          <ConnectionStatusIndicator collapsed={collapsed} />
+        </div>
+
+        {/* Primary Nav */}
+        <nav className={cn('flex flex-col gap-0.5', collapsed ? 'items-center px-[11px]' : 'px-2')} aria-label="Menu principal">
+          <ul role="list" className={cn('flex flex-col gap-0.5 w-full list-none p-0 m-0', collapsed && 'items-center')}>
+            {primaryNav.map((item) => <li key={item.id}><SidebarNavItem item={item} currentView={currentView} onViewChange={onViewChange} badge={item.id === 'inbox' ? inboxBadge : undefined} collapsed={collapsed} /></li>)}
+          </ul>
+        </nav>
+
+        {/* Search */}
+        <div className={cn('flex my-1.5', collapsed ? 'justify-center px-[11px]' : 'px-2')}>
+          <Tooltip delayDuration={200}><TooltipTrigger asChild>
+            <button type="button" onClick={() => document.dispatchEvent(new CustomEvent('open-global-search'))}
+              className={cn('rounded-lg flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-all border border-dashed border-border/60 hover:border-border', collapsed ? 'w-[40px] h-[30px] justify-center' : 'w-full h-[32px] px-3')} aria-label="Buscar módulo (Ctrl+K)">
+              <Search className="w-[14px] h-[14px] shrink-0" />
+              {!collapsed && <span className="text-xs text-muted-foreground">Buscar...</span>}
+              {!collapsed && <kbd className="ml-auto px-1 py-0.5 rounded bg-muted/20 text-[9px] text-muted-foreground">⌘K</kbd>}
+            </button>
+          </TooltipTrigger>{collapsed && <TooltipContent side="right" sideOffset={8} className="text-xs">Buscar <kbd className="ml-1 px-1 py-0.5 rounded bg-muted/20 text-[10px]">⌘K</kbd></TooltipContent>}</Tooltip>
+        </div>
+
+        {/* Favorites — P1: itens exibem onToggleFavorite para desfavoritar daqui */}
+        {favoriteItems.length > 0 && (
+          <>
+            <div className={cn('mx-3 h-px bg-border', collapsed ? 'my-1' : 'my-1.5')} />
+            {!collapsed && <div className="px-3 flex items-center gap-1.5"><Star className="w-[10px] h-[10px] text-warning fill-warning" /><span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Favoritos</span></div>}
+            <nav className={cn('flex flex-col gap-0.5', collapsed ? 'items-center px-[11px]' : 'px-2')} aria-label="Favoritos">
+              <ul role="list" className={cn('flex flex-col gap-0.5 w-full list-none p-0 m-0', collapsed && 'items-center')}>
+                {favoriteItems.map((item) => (
+                  <li key={item.id}>
+                    <SidebarNavItem
+                      item={item}
+                      currentView={currentView}
+                      onViewChange={onViewChange}
+                      collapsed={collapsed}
+                      onToggleFavorite={toggleFavorite}
+                      isFavorite={isFavorite(item.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </>
+        )}
+
+        <div className={cn('mx-3 h-px bg-border', collapsed ? 'my-1' : 'my-1.5')} />
+
+        {/* Groups */}
         <div className={cn('flex flex-col gap-1.5 py-1', collapsed ? 'items-center' : 'px-2')}>
           {sidebarGroups.map((group) => <SidebarNavGroup key={group.label} label={group.label} icon={group.icon} items={group.items} currentView={currentView} onViewChange={onViewChange} collapsed={collapsed} onToggleFavorite={toggleFavorite} isFavorite={isFavorite} badgeMap={groupBadges[group.label]} />)}
         </div>
+
       </div>
 
       {/* Bottom Controls */}
