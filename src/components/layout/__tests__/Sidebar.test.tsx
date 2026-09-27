@@ -38,11 +38,14 @@ vi.mock('@/components/notifications/PushNotificationToggle', () => ({ PushNotifi
 vi.mock('@/components/notifications/ScreenProtectionToggle', () => ({ ScreenProtectionToggle: () => null }));
 vi.mock('@/components/notifications/SoundMuteToggle', () => ({ SoundMuteToggle: () => null }));
 vi.mock('@/components/notifications/StatusLabelToggle', () => ({ StatusLabelToggle: () => null }));
-vi.mock('./AgentProfilePopover', () => ({ AgentProfilePopover: () => null }));
-vi.mock('./ConnectionStatusIndicator', () => ({ ConnectionStatusIndicator: () => null }));
+
+// IMPORTANTE: caminhos relativos resolvem a partir do arquivo de test (__tests__/),
+// portanto precisam de ../ para apontar para src/components/layout/.
+vi.mock('../AgentProfilePopover', () => ({ AgentProfilePopover: () => null }));
+vi.mock('../ConnectionStatusIndicator', () => ({ ConnectionStatusIndicator: () => null }));
 
 // SidebarNavItem: renderiza data-tour + botão de toggle quando onToggleFavorite vem do pai
-vi.mock('./SidebarNavItem', () => ({
+vi.mock('../SidebarNavItem', () => ({
   SidebarNavItem: ({ item, onToggleFavorite }: { item: { id: string; label: string }; onToggleFavorite?: (id: string) => void }) => (
     <div data-tour={item.id}>
       {item.label}
@@ -54,7 +57,7 @@ vi.mock('./SidebarNavItem', () => ({
 }));
 
 // SidebarNavGroup: achata os items para que apareçam com data-tour
-vi.mock('./SidebarNavGroup', () => ({
+vi.mock('../SidebarNavGroup', () => ({
   SidebarNavGroup: ({ items }: { items: Array<{ id: string; label: string }> }) => (
     <div>{items.map((item) => <div key={item.id} data-tour={item.id}>{item.label}</div>)}</div>
   ),
