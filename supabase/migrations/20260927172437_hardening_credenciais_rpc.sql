@@ -77,7 +77,22 @@ BEGIN
 
   RAISE NOTICE 'hardening: % sobrecarga(s) tratada(s)', _total;
 
-  REVOKE INSERT, UPDATE, DELETE ON zapp.cookies_config FROM authenticated;
+  -- Tolerância a carga "from scratch": `zapp.cookies_config` e a RPC vieram do
+  -- banco canônico (histórico fora do repositório), então num banco novo elas
+  -- podem não existir. O CI `Apply migrations from scratch` reprovou a primeira
+  -- versão por isso — este hardening não pode depender de objeto que ele não cria.
+  IF to_regclass('zapp.cookies_config') IS NOT NULL THEN
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON zapp.cookies_config FROM authenticated';
+  ELSE
+    RAISE NOTICE 'hardening: zapp.cookies_config ausente nesta carga — revoke de escrita ignorado';
+  END IF;
+
+  IF to_regprocedure('zapp.get_official_credentials_by_phone_id(text)') IS NOT NULL THEN
+    EXECUTE $c$COMMENT ON FUNCTION zapp.get_official_credentials_by_phone_id(text) IS
+      'Credencial do WhatsApp Business. SECURITY DEFINER: NAO conceder EXECUTE a authenticated/anon (devolve access_token/app_secret de zapp.whatsapp_official_credentials sem checagem de autorizacao). Uso interno: service_role. Hardening 2026-09-27.'$c$;
+  ELSE
+    RAISE NOTICE 'hardening: RPC de credencial ausente nesta carga — comentario ignorado';
+  END IF;
 
   -- ── autoverificação: nada pior que hardening que "acha" que aplicou ──
   IF EXISTS (
@@ -92,18 +107,18 @@ BEGIN
     RAISE EXCEPTION 'hardening incompleto: ainda existe EXECUTE para authenticated/anon em funcao de credencial/probe';
   END IF;
 
-  IF has_table_privilege('authenticated', 'zapp.cookies_config', 'INSERT')
-     OR has_table_privilege('authenticated', 'zapp.cookies_config', 'UPDATE')
-     OR has_table_privilege('authenticated', 'zapp.cookies_config', 'DELETE') THEN
+  IF to_regclass('zapp.cookies_config') IS NOT NULL
+     AND (has_table_privilege('authenticated', 'zapp.cookies_config', 'INSERT')
+          OR has_table_privilege('authenticated', 'zapp.cookies_config', 'UPDATE')
+          OR has_table_privilege('authenticated', 'zapp.cookies_config', 'DELETE')) THEN
     RAISE EXCEPTION 'hardening incompleto: authenticated ainda escreve em zapp.cookies_config';
   END IF;
 
-  RAISE NOTICE 'hardening OK: RPCs de credencial inacessiveis e escrita em cookies_config restrita ao service_role';
+  IF to_regclass('zapp.cookies_config') IS NOT NULL
+     AND to_regprocedure('zapp.get_official_credentials_by_phone_id(text)') IS NOT NULL THEN
+    RAISE NOTICE 'hardening OK: RPCs de credencial inacessiveis e escrita em cookies_config restrita ao service_role';
+  ELSE
+    RAISE NOTICE 'hardening OK (carga parcial): revokes de EXECUTE aplicados; objetos ausentes nesta carga foram ignorados';
+  END IF;
 END
 $$;
-
--- As funções continuam existindo e funcionando para quem precisa: cron do banco
--- (postgres) e edge functions (service_role). Este hardening corta apenas o
--- caminho de usuário final.
-COMMENT ON FUNCTION zapp.get_official_credentials_by_phone_id(text) IS
-  'Credencial do WhatsApp Business. SECURITY DEFINER: NAO conceder EXECUTE a authenticated/anon (devolve access_token/app_secret de zapp.whatsapp_official_credentials sem checagem de autorizacao). Uso interno: service_role. Hardening 2026-09-27.';
