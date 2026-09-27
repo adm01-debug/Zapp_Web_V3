@@ -37,6 +37,11 @@
 20260820192000_f007_extra_dup_idx_fk_indexes.sql
 20260820193000_f002_fdw_delta_sentinel.sql
 20260820194000_f008_comments_evo_staging_e_meta.sql
+# --- 2026-09-27: zapp.contacts (view) passa a expor phone_numbers agregado de
+# --- zapp.contact_phones e contact_type real (zapp.contact_profile). Referencia
+# --- evo.evolution_contacts em FROM e numa FK — LEITURA e referencia de tipo, nao
+# --- DDL no schema evo. Justificativa: docs/decouple/ALLOWLIST-E42-CONTACTS-VIEW-20260927.md
+20260927131545_contacts_view_contract.sql | view zapp.contacts le evo.evolution_contacts (como sempre leu) + FK de zapp.contact_profile para evolucao_contacts: referencia/leitura, nao DDL em evo
 # --- Fix group_category (2026-09-26): falso positivo do regex — DDL 100% em zapp
 # --- (CREATE OR REPLACE VIEW zapp.contacts cujo corpo faz FROM evo.evolution_contacts,
 # --- apenas leitura). Mesma classe dos precedentes 20260818210102/210103/20260820193000.
