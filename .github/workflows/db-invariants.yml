@@ -179,6 +179,77 @@ jobs:
           echo "Conectividade OK — rodando o invariante em modo bloqueante."
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/sql/check-realtime-publication.sql
 
+      - name: "INV-7: RLS ligada em 100% das tabelas dos schemas do app"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Mesmo desenho do INV-6 e mesmo motivo para ser LIVE: o defeito que
+          # este invariante cobre (zapp.cookies_config, 27/09/2026) tinha o
+          # CREATE POLICY num arquivo de migração e o ENABLE ROW LEVEL SECURITY
+          # ausente — policy sem RLS é decorativa, e um grep não responde
+          # "a tabela está protegida hoje?".
+          #
+          # ROTA: este Postgres NÃO é publicado fora da malha do Swarm (por
+          # desenho). Medido no run 36334628364: `psql "$SUPABASE_DB_URL"` de
+          # fora dá "sem conectividade" e o passo terminava em warning + exit 0
+          # em TODA execução — invariante que nunca verificava nada. A rota que
+          # funciona é a mesma do drift-check: `docker exec` no container.
+          #
+          # SELEÇÃO DE CONTAINER (corrigido na validação de 27/09): a versão
+          # anterior usava `grep -m1 -E '^supabase_db'`. Com mais de um stack
+          # `supabase_db*` na máquina, `-m1` escolhe no chute — e o resultado é
+          # pior que não rodar: o invariante passa verde lendo um banco que não
+          # tem o schema `zapp` (reproduzido: "INV-7 OK — 0 tabelas"). Agora a
+          # escolha é determinística: só entram containers onde existe o schema
+          # `zapp`, e mais de um candidato é AMBIGUIDADE (falha, para um humano
+          # apontar a rota), nunca um chute.
+          #
+          # Separação entre falha de INFRA e falha de INVARIANTE: sem docker,
+          # sem psql e sem conectividade -> avisa e passa (não há o que
+          # afirmar). Com uma rota de pé -> BLOQUEANTE.
+          if command -v docker >/dev/null 2>&1; then
+            CANDIDATOS=""
+            for c in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^supabase_db' || true); do
+              if docker exec -i "$c" psql -U postgres -d postgres -Atc "select 1 from pg_namespace where nspname='zapp'" 2>/dev/null | grep -q 1; then
+                CANDIDATOS="$CANDIDATOS $c"
+              fi
+            done
+            CANDIDATOS="$(echo $CANDIDATOS)"
+            N_CANDIDATOS="$(echo "$CANDIDATOS" | wc -w)"
+            if [ "$N_CANDIDATOS" -gt 1 ]; then
+              echo "::error title=INV-7 ambiguidade::mais de um container com o schema zapp ($CANDIDATOS). Aponte a rota antes de confiar neste check."
+              exit 1
+            fi
+            if [ "$N_CANDIDATOS" -eq 1 ]; then
+              echo "Rota 1 (docker exec em $CANDIDATOS) — invariante BLOQUEANTE."
+              docker exec -i -w / "$CANDIDATOS" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
+                < scripts/sql/check-rls-coverage.sql
+              exit $?
+            fi
+            echo "::warning title=INV-7 rota 1 indisponivel::nenhum container supabase_db com o schema zapp; tentando psql direto."
+          fi
+
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::notice title=INV-7 nao executou::sem docker e sem secret SUPABASE_DB_URL. Cobertura de RLS nao verificada."
+            exit 0
+          fi
+
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client || true
+          fi
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "::warning title=INV-7 nao executou::psql indisponivel no runner. Invariante nao verificado."
+            exit 0
+          fi
+
+          if ! psql "$SUPABASE_DB_URL" -Atc 'SELECT 1' >/dev/null 2>&1; then
+            echo "::warning title=INV-7 nao executou::sem conectividade com o banco a partir do runner. Invariante nao verificado."
+            exit 0
+          fi
+
+          echo "Rota 2 (psql direto) — invariante BLOQUEANTE."
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/sql/check-rls-coverage.sql
+
       - name: Summary
         if: success()
         run: |
