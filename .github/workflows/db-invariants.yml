@@ -155,9 +155,34 @@ jobs:
           # que o PR #712 concluiu que faltavam 25 tabelas que ja estavam la.
           #
           # Separacao deliberada entre falha de INFRA e falha de INVARIANTE:
-          # sem secret, sem psql ou sem conectividade -> avisa e passa (nao ha o
-          # que afirmar). Com conexao de pe -> o check e BLOQUEANTE. Um gate que
+          # sem rota, sem psql e sem conectividade -> avisa e passa (nao ha o
+          # que afirmar). Com uma rota de pe -> o check e BLOQUEANTE. Um gate que
           # reprova por motivo ambiental treina o time a ignorar gate.
+          #
+          # ROTA: este Postgres nao e publicado fora da malha do Swarm (por
+          # desenho). Medido no run 36334628364: `psql "$SUPABASE_DB_URL"` nao
+          # conecta de fora e o passo terminava em warning + exit 0 em TODA
+          # execucao — este invariante, o unico live do repo, nunca verificou
+          # nada. A rota que funciona e `docker exec` no container, a mesma do
+          # drift-check.
+          #
+          # Detalhe que so aparece nessa rota: o `\copy` do .sql le o arquivo do
+          # lado do CLIENTE do psql. Com o psql rodando dentro do container, o
+          # cliente e o container — por isso o manifesto vai para /scripts/sql/
+          # e o psql roda com CWD em /, onde o caminho relativo do repo resolve.
+          if command -v docker >/dev/null 2>&1; then
+            CONTAINER="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 -E '^supabase_db' || true)"
+            if [ -n "$CONTAINER" ]; then
+              docker exec "$CONTAINER" mkdir -p /scripts/sql
+              docker cp scripts/sql/realtime-publication.manifest "$CONTAINER":/scripts/sql/realtime-publication.manifest
+              echo "Rota 1 (docker exec em $CONTAINER) — invariante BLOQUEANTE."
+              docker exec -i -w / "$CONTAINER" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
+                -f - < scripts/sql/check-realtime-publication.sql
+              exit $?
+            fi
+            echo "::warning title=INV-6 rota 1 indisponivel::container supabase_db nao encontrado; tentando psql direto."
+          fi
+
           if [ -z "${SUPABASE_DB_URL:-}" ]; then
             echo "::notice title=INV-6 nao executou::secret SUPABASE_DB_URL ausente. Enquanto ele nao existir, drift na publicacao supabase_realtime passa despercebido no CI."
             exit 0
