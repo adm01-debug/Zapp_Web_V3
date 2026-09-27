@@ -43,12 +43,12 @@ mkdir -p "$TMP/__tests__"
 listar_so_ts() {
   ( cd "$TMP" && find . -type f -name '*.ts' \
       ! -path '*/__tests__/*' ! -path '*/__fixtures__/*' \
-      ! -name '*.test.ts' ! -name '*.spec.ts' -printf '%P\n' | sort )
+      ! -name '*.test.ts' ! -name '*.spec.ts' -printf '%P\n' | LC_ALL=C sort )
 }
 listar_todos() {
   ( cd "$TMP" && find . -type f \
       ! -path '*/__tests__/*' ! -path '*/__fixtures__/*' \
-      ! -name '*.test.ts' ! -name '*.spec.ts' -printf '%P\n' | sort )
+      ! -name '*.test.ts' ! -name '*.spec.ts' -printf '%P\n' | LC_ALL=C sort )
 }
 
 SO_TS="$(listar_so_ts)"
@@ -58,7 +58,14 @@ if printf '%s\n' "$SO_TS" | grep -qx 'README.md'; then
   falha "1. lista do repo inclui não-.ts" "a lista antiga (só .ts) não deveria ver README.md"
 elif printf '%s\n' "$SO_TS" | grep -qx 'evolution-event-types.json'; then
   falha "1. lista do repo inclui não-.ts" "a lista antiga (só .ts) não deveria ver o .json"
-elif [ "$TODOS" != "$(printf 'README.md\nevolution-event-types.json\nmode.ts')" ]; then
+# Comparação por CONJUNTO, não por ordem: a colação de `sort` depende do locale do
+# runner (medido: no runner saiu [evolution..., mode.ts, README.md], aqui saiu
+# [README.md, ...]) — comparar string ordenada quebra fora do meu ambiente.
+elif [ "$(printf '%s\n' "$TODOS" | grep -c .)" -ne 3 ] \
+  || ! printf '%s\n' "$TODOS" | grep -qx 'README.md' \
+  || ! printf '%s\n' "$TODOS" | grep -qx 'evolution-event-types.json' \
+  || ! printf '%s\n' "$TODOS" | grep -qx 'mode.ts' \
+  || printf '%s\n' "$TODOS" | grep -qx '__tests__/x.test.ts'; then
   falha "1. lista do repo inclui não-.ts" "lista nova inesperada: [$TODOS]"
 else
   ok "1. a lista do repo inclui arquivos não-.ts versionados (comparação simétrica)"
