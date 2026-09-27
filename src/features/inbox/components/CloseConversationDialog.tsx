@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { dbFrom } from '@/integrations/datasource/db';
+import { dbRpc } from '@/integrations/datasource/db';
+import { RPC } from '@/integrations/datasource/rpcCatalog';
 import { invokeEdge } from '@/lib/invokeEdge';
 import { ticketStore } from '@/lib/inbox/ticketStore';
 import {
@@ -117,64 +118,32 @@ export function CloseConversationDialog({
       return;
     }
     setSaving(true);
-    const { error } = await dbFrom('conversation_closures').insert({
-      contact_id: contactId,
-      closed_by: profileId,
-      close_reason: reason,
-      outcome: outcome || null,
-      classification: classification || null,
-      notes: notes || null,
+    // Encerramento em UMA transacao no servidor (zapp.rpc_close_conversation):
+    // grava a closure canonica, espelha o status da conversa e registra o
+    // evento de auditoria. Antes eram tres escritas soltas aqui no cliente — e
+    // a do status era IMPOSSIVEL para um agent comum: a role `authenticated`
+    // nao tem GRANT de UPDATE na tabela base da conversa e a policy exige
+    // admin/supervisor. O encerramento ficava parcial, em silencio.
+    // A identidade (closed_by / performed_by) e resolvida no servidor a partir
+    // de auth.uid(), entao nao enviamos profileId.
+    const { data, error } = await dbRpc(RPC.closeConversation, {
+      p_contact_id: contactId,
+      p_close_reason: reason,
+      p_outcome: outcome || null,
+      p_classification: classification || null,
+      p_notes: notes || null,
     });
     if (!error) {
-      // INBOX-08: persistir status real. Não existe RPC/edge de fechamento no
-      // Evolution DB (só rpc_list_conversations, read-only), então grava-se no
-      // app DB (conversations.status + conversation_events de auditoria) e
-      // sincroniza o overlay de tickets para a UI refletir imediatamente.
-      // Escritas não-fatais: o registro canônico é a conversation_closures.
-      // O CHECK da tabela base (evo.evolution_conversations_status_check) aceita
-      // apenas 'aberta' e 'arquivada'. Gravar 'resolved' violava a constraint
-      // (erro 23514) e a atualizacao falhava em silencio. O registro de
-      // "resolvido" e a conversation_closures (ledger canonico, gravado acima);
-      // aqui espelhamos a conversa como fora da caixa de entrada — mesma
-      // semantica usada em messagesService.updateConversation.
-      const [convUpdate, eventInsert] = await Promise.all([
-        dbFrom('conversations').update({ status: 'arquivada' }).eq('contact_id', contactId),
-        dbFrom('conversation_events').insert({
-          contact_id: contactId,
-          event_type: 'close',
-          performed_by: profileId ?? null,
-          metadata: {
-            close_reason: reason,
-            outcome: outcome || null,
-            classification: classification || null,
-          },
-        }),
-      ]);
-      // As duas escritas abaixo sao nao-fatais (o registro canonico ja foi
-      // gravado), mas o usuario precisa saber quando o encerramento ficou
-      // parcial: antes isso so ia para o console enquanto a UI anunciava
-      // "Conversa encerrada com registro".
-      const falhasParciais: string[] = [];
-      if (convUpdate.error) {
-        console.warn(
-          '[CloseConversationDialog] falha ao persistir status em conversations:',
-          convUpdate.error.message
-        );
-        falhasParciais.push('status da conversa');
-      }
-      if (eventInsert.error) {
-        console.warn(
-          '[CloseConversationDialog] falha ao registrar conversation_events:',
-          eventInsert.error.message
-        );
-        falhasParciais.push('evento de auditoria');
-      }
+      const resultado = (data ?? {}) as { conversations_atualizadas?: number };
       ticketStore.setStatus(contactId, 'resolved', profileId ?? null);
       // INBOX-09: CSAT automation — non-fatal, runs in background
       void triggerCsatIfEnabled(contactId, profileId, conversationId);
-      if (falhasParciais.length > 0) {
+      // A RPC e atomica: respondeu ok = as tres escritas aconteceram. O unico
+      // encerramento parcial possivel agora e a conversa nao existir mais no
+      // inbox (0 linhas atualizadas) — o ledger continua sendo o canonico.
+      if ((resultado.conversations_atualizadas ?? 0) === 0) {
         toast.warning(
-          `Conversa encerrada, mas nao foi possivel registrar: ${falhasParciais.join(' e ')}. O encerramento em si foi gravado.`
+          'Conversa encerrada e registrada, mas nao havia conversa ativa para espelhar o status.'
         );
       } else {
         toast.success('Conversa encerrada com registro');
@@ -186,6 +155,7 @@ export function CloseConversationDialog({
       setNotes('');
       onClosed?.();
     } else {
+      console.warn('[CloseConversationDialog] rpc_close_conversation falhou:', error);
       toast.error('Erro ao registrar encerramento');
     }
     setSaving(false);

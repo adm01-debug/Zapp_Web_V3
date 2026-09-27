@@ -445,6 +445,32 @@ interface ToggleCronJobParams {
   p_active: boolean;
 }
 
+/**
+ * Params de rpc_close_conversation (zapp.rpc_close_conversation).
+ *
+ * A identidade de quem encerrou NAO e parametro: o servidor resolve a partir
+ * do auth.uid() da sessao. Aqui vao apenas os dados do encerramento.
+ */
+interface CloseConversationParams {
+  p_contact_id: string;
+  p_close_reason: string;
+  p_outcome?: string | null;
+  p_classification?: string | null;
+  p_notes?: string | null;
+}
+
+/**
+ * Retorno de rpc_close_conversation.
+ * `conversations_atualizadas` e 0 quando o contato existe mas nao havia
+ * conversa ativa para espelhar o status (o encerramento continua registrado).
+ */
+interface CloseConversationResult {
+  ok: boolean;
+  closure_id: string;
+  event_id: string;
+  conversations_atualizadas: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Catalog
 // ─────────────────────────────────────────────────────────────────────────────
@@ -534,6 +560,18 @@ export const RPC = {
     name: 'rpc_delete_contact',
     client: 'lovable',
     // p_instance: usar ACTIVE_WHATSAPP_INSTANCE no call site
+  }),
+
+  /**
+   * Encerra a conversa numa transacao no servidor: grava a closure canonica,
+   * espelha o status pela view zapp.conversations ('arquivada') e registra o
+   * evento de auditoria. Antes eram 3 escritas soltas no cliente, e a do status
+   * era impossivel para agent comum (sem GRANT + policy admin/supervisor).
+   * A identidade de quem encerrou vem do auth.uid() da sessao.
+   */
+  closeConversation: def<CloseConversationParams, CloseConversationResult>({
+    name: 'rpc_close_conversation',
+    client: 'lovable',
   }),
 
   // ── Analytics / Search ───────────────────────────────────────────────────────

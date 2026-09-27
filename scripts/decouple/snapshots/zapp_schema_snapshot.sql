@@ -22764,6 +22764,91 @@ COMMENT ON FUNCTION zapp.rpc_claim_pending_report_runs(p_limit integer, p_report
 
 
 
+CREATE OR REPLACE FUNCTION zapp.rpc_close_conversation(p_contact_id uuid, p_close_reason text, p_outcome text DEFAULT NULL::text, p_classification text DEFAULT NULL::text, p_notes text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+DECLARE
+  v_uid     uuid := auth.uid();
+  v_profile uuid;
+  v_reason  text := btrim(coalesce(p_close_reason, ''));
+  v_allowed boolean;
+  v_closure uuid;
+  v_conv    integer := 0;
+  v_event   uuid;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'rpc_close_conversation: nao autenticado'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- closed_by/performed_by referenciam zapp.profiles(id) — resolve pelo
+  -- auth.uid() em vez de aceitar id do cliente (que vinha NULL pela UI).
+  SELECT p.id INTO v_profile
+    FROM zapp.profiles p
+   WHERE p.user_id = v_uid
+   LIMIT 1;
+
+  IF v_profile IS NULL THEN
+    RAISE EXCEPTION 'rpc_close_conversation: usuario sem profile em zapp.profiles'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_reason = '' THEN
+    RAISE EXCEPTION 'rpc_close_conversation: close_reason e obrigatorio'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_allowed := zapp.is_admin_or_supervisor(v_uid)
+            OR zapp.is_contact_visible_to_user(p_contact_id, v_uid);
+
+  IF NOT v_allowed THEN
+    RAISE EXCEPTION 'rpc_close_conversation: sem permissao para encerrar o contato %', p_contact_id
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- 1) ledger canonico do encerramento
+  INSERT INTO zapp.conversation_closures (
+    contact_id, closed_by, close_reason, outcome, classification, notes
+  ) VALUES (
+    p_contact_id, v_profile, v_reason, p_outcome, p_classification, p_notes
+  )
+  RETURNING id INTO v_closure;
+
+  -- 2) espelho do status. 'arquivada' (nao 'resolved'): o CHECK da conversa
+  --    aceita somente aberta/arquivada, e gravar 'resolved' violava a
+  --    constraint (23514). Mesma semantica ja usada no restante do app.
+  UPDATE zapp.conversations
+     SET status = 'arquivada'
+   WHERE contact_id = p_contact_id;
+  GET DIAGNOSTICS v_conv = ROW_COUNT;
+
+  -- 3) evento de auditoria
+  INSERT INTO zapp.conversation_events (
+    contact_id, event_type, performed_by, metadata
+  ) VALUES (
+    p_contact_id, 'close', v_profile,
+    jsonb_build_object(
+      'close_reason', v_reason,
+      'outcome', p_outcome,
+      'classification', p_classification,
+      'source', 'rpc_close_conversation'
+    )
+  )
+  RETURNING id INTO v_event;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'closure_id', v_closure,
+    'event_id', v_event,
+    'conversations_atualizadas', v_conv
+  );
+END;
+$$;
+
+
+
+
 CREATE OR REPLACE FUNCTION zapp.rpc_complete_followup(p_id uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'evo', 'public', 'pg_catalog'
