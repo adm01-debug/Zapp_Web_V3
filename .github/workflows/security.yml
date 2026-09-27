@@ -1,8 +1,9 @@
 name: Security & Compliance
 
 # Secret scanning via gitleaks. Runs on schedule (weekly) AND on every PR.
-# Advisory (continue-on-error: true) so it never gates merge,
-# but results are surfaced as GitHub Check annotations.
+# Etapa 50: comentário "Advisory" removido — o job NÃO tem continue-on-error;
+# vazar credencial BLOQUEIA merge (SEM escape hatch, por design).
+# Resultados aparecem como GitHub Check annotations.
 on:
   push:
     branches: [main, master]

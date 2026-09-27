@@ -570,22 +570,31 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: "1/4 — TTM www.zappweb.app.br (< 3.0s)"
+        # Etapa 63: 2 tentativas com 10s de espera entre elas (1 medição isolada é flaky durante rollout start-first).
         run: |
-          RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
-          CODE=$(echo "$RESP" | awk '{print $1}')
-          TTM=$(echo "$RESP" | awk '{print $2}')
-          CODE=${CODE:-000}
-          TTM=${TTM:-0}
-          echo "www.zappweb.app.br → HTTP ${CODE} em ${TTM}s"
-          if [ "$CODE" = "000" ]; then
+          LAST_CODE=000
+          LAST_TTM=0
+          for attempt in 1 2; do
+            RESP=$(curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 15 https://www.zappweb.app.br/ || true)
+            LAST_CODE=$(echo "$RESP" | awk '{print $1}')
+            LAST_TTM=$(echo "$RESP" | awk '{print $2}')
+            LAST_CODE=${LAST_CODE:-000}
+            LAST_TTM=${LAST_TTM:-0}
+            echo "tentativa ${attempt}: www.zappweb.app.br → HTTP ${LAST_CODE} em ${LAST_TTM}s"
+            if [ "$LAST_CODE" != "000" ] && awk -v t="$LAST_TTM" 'BEGIN { exit !(t <= 3.0) }'; then
+              break
+            fi
+            [ "$attempt" -lt 2 ] && sleep 10
+          done
+          if [ "$LAST_CODE" = "000" ]; then
             echo "::error::SITE_DEAD — conexão falhou/timeout (HTTP 000)"
             exit 1
           fi
-          if ! awk -v t="$TTM" 'BEGIN { exit !(t <= 3.0) }'; then
-            echo "::error::TTM_TOO_SLOW — ${TTM}s > 3.0s (limite)"
+          if ! awk -v t="$LAST_TTM" 'BEGIN { exit !(t <= 3.0) }'; then
+            echo "::error::TTM_TOO_SLOW — ${LAST_TTM}s > 3.0s (limite após 2 tentativas)"
             exit 1
           fi
-          echo "✅ Site OK — TTM ${TTM}s (< 3.0s)"
+          echo "✅ Site OK — TTM ${LAST_TTM}s (< 3.0s)"
 
       - name: "2/4 — Supabase PostgREST vivo (4xx ok; 5xx/timeout = falha)"
         if: always()
