@@ -195,18 +195,38 @@ jobs:
           # em TODA execução — invariante que nunca verificava nada. A rota que
           # funciona é a mesma do drift-check: `docker exec` no container.
           #
+          # SELEÇÃO DE CONTAINER (corrigido na validação de 27/09): a versão
+          # anterior usava `grep -m1 -E '^supabase_db'`. Com mais de um stack
+          # `supabase_db*` na máquina, `-m1` escolhe no chute — e o resultado é
+          # pior que não rodar: o invariante passa verde lendo um banco que não
+          # tem o schema `zapp` (reproduzido: "INV-7 OK — 0 tabelas"). Agora a
+          # escolha é determinística: só entram containers onde existe o schema
+          # `zapp`, e mais de um candidato é AMBIGUIDADE (falha, para um humano
+          # apontar a rota), nunca um chute.
+          #
           # Separação entre falha de INFRA e falha de INVARIANTE: sem docker,
           # sem psql e sem conectividade -> avisa e passa (não há o que
           # afirmar). Com uma rota de pé -> BLOQUEANTE.
           if command -v docker >/dev/null 2>&1; then
-            CONTAINER="$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 -E '^supabase_db' || true)"
-            if [ -n "$CONTAINER" ]; then
-              echo "Rota 1 (docker exec em $CONTAINER) — invariante BLOQUEANTE."
-              docker exec -i "$CONTAINER" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
+            CANDIDATOS=""
+            for c in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^supabase_db' || true); do
+              if docker exec -i "$c" psql -U postgres -d postgres -Atc "select 1 from pg_namespace where nspname='zapp'" 2>/dev/null | grep -q 1; then
+                CANDIDATOS="$CANDIDATOS $c"
+              fi
+            done
+            CANDIDATOS="$(echo $CANDIDATOS)"
+            N_CANDIDATOS="$(echo "$CANDIDATOS" | wc -w)"
+            if [ "$N_CANDIDATOS" -gt 1 ]; then
+              echo "::error title=INV-7 ambiguidade::mais de um container com o schema zapp ($CANDIDATOS). Aponte a rota antes de confiar neste check."
+              exit 1
+            fi
+            if [ "$N_CANDIDATOS" -eq 1 ]; then
+              echo "Rota 1 (docker exec em $CANDIDATOS) — invariante BLOQUEANTE."
+              docker exec -i -w / "$CANDIDATOS" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
                 < scripts/sql/check-rls-coverage.sql
               exit $?
             fi
-            echo "::warning title=INV-7 rota 1 indisponivel::container supabase_db nao encontrado; tentando psql direto."
+            echo "::warning title=INV-7 rota 1 indisponivel::nenhum container supabase_db com o schema zapp; tentando psql direto."
           fi
 
           if [ -z "${SUPABASE_DB_URL:-}" ]; then
