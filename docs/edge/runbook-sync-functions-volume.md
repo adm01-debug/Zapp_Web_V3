@@ -64,21 +64,37 @@ sincronizar TODAS as funções + `_shared` + `main/index.ts` juntos — nunca ap
 ## Registry de órfãos do volume (revisado 2026-09-27)
 
 `deploy-edge.sh` reporta `ORPHAN` = arquivo presente no volume que **não existe no repo**.
-O gate **não** remove nada; a própria mensagem dele diz *"conferir registry antes de
-remover"*. Este é o registry. **NÃO rode `--apply --prune` sem revisar cada linha.**
+O script **não** remove nada por conta própria; a remoção é o `--prune`, que agora é
+alcançável por `gh workflow run edge-deploy.yml -f prune=true` (input `prune` com
+**`default: false`** — nunca apaga produção sem dispatch explícito). O registry abaixo é o
+resultado da revisão de 2026-09-27. **Revise-o antes de rodar `--prune` de novo.**
 
-### Funções (ORPHAN = 2) — NÃO REMOVER
+### Funções (ORPHAN 2 → 0) — retiradas de propósito, toleradas em código
 
-| função | situação | evidência medida |
+| função | situação | evidência |
 |---|---|---|
-| `zapp-google-calendar-sync` | arquivada no repo com 0 chamadores (commit `f39118d1b`), mas **ainda deployada no volume** | 1 referência no código do repo |
-| `email-health` | **nunca existiu no repo** — criada direto no volume | 3 referências no código do repo |
+| `email-health` | retirada em 2026-08-22; saiu do registry (`EDGE_FUNCTION_NAMES`), não é roteada e responde 404; o app usa `rpc_get_email_health_summary` como fallback | `docs/_archive/email-health-ADR-2026-08-22.md` + commits `577264780`, `7b3a9bb18` |
+| `zapp-google-calendar-sync` | retirada em 2026-08-25, **0 chamadores** (front/edge/cron/n8n/externo) | ADR + fonte preservada em `supabase/functions/_archive/zapp-google-calendar-sync/index.ts.archived` |
 
-As duas são referenciadas por código do repo: um `--prune` as apagaria do volume e
-**quebraria quem as chama**. Para removê-las com segurança: (1) remover os chamadores no
-repo, (2) confirmar que nada externo chama (cron, alertas, n8n), (3) só então deploy sem elas.
+As duas continuam no volume como **zumbis inertes** (fora do registry, respondendo 404).
+`--prune` **não** remove órfãos de função (só `_shared`) — e as fontes estão preservadas no
+repo/histórico — então elas ficam onde estão, listadas em `RETIRED_FUNCTIONS` no próprio
+script, com o ponteiro do ADR no comentário. Sem essa lista o gate acusaria `ORPHAN` para
+sempre, e vermelho permanente ensina o time a ignorar vermelho. **Órfão novo continua sendo
+reportado** (o `continue` acontece antes do incremento — há teste de regressão para isso).
 
-### `_shared/` (ORPHAN = 7) — mortos, removíveis
+> Correção de leitura, para não repetir o erro: a primeira versão deste registry dizia que
+> as duas eram **chamadas** pelo código. Não eram — as ocorrências eram **comentários** e
+> uma chave de query. Contar ocorrência de texto não é contar chamador.
+
+### `_shared/` — resolvido em 2026-09-27 (ORPHAN 7 → 0)
+
+Dois dos sete eram **falsos positivos do próprio gate**: `README.md` e
+`evolution-event-types.json` **existem versionados no `main`**, mas a lista do repo só
+olhava `*.ts` enquanto o snapshot do volume lista todos os arquivos — qualquer não-`.ts`
+versionado era acusado de órfão. Corrigido com a lista simétrica (`REPO_SHARED_ALL`).
+Os cinco restantes (abaixo) só existiam no volume e foram removidos com
+`edge-deploy.yml -f prune=true`; as fontes estão no histórico do git (`3380a52fb`).
 
 | arquivo | por que é seguro remover |
 |---|---|
