@@ -40,7 +40,9 @@ jobs:
 
           # Captura arquivos com linha "# ... schedule suspenso ..."
           SUSPENDED=$(grep -rl "schedule suspenso\|schedule: suspenso\|schedule comentado\|schedule desabilitado\|schedule off\|schedule pausado" \
-            .github/workflows/ 2>/dev/null | sort || true)
+            .github/workflows/ 2>/dev/null \
+            | grep -v "schedule-health.yml" \
+            | sort || true)
 
           COUNT=$(echo "$SUSPENDED" | grep -c . || true)
           echo "count=$COUNT" >> $GITHUB_OUTPUT

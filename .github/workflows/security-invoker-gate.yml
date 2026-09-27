@@ -34,8 +34,8 @@ jobs:
       - name: D-8 — Fail gate if v_security_audit has ⚠ rows (schema evo)
         run: |
           if [ -z "$META_URL" ] || [ -z "$META_TOKEN" ]; then
-            echo "⚠ Secrets not configured — skipping security audit gate"
-            exit 0
+            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN não configurados — FAIL-CLOSED: secrets ausentes impedem verificação de segurança (D-8)"
+            exit 1
           fi
           echo "→ Querying evo.v_security_audit for ⚠ rows..."
           RESPONSE=$(curl -sS "$META_URL/query" \
@@ -66,8 +66,8 @@ jobs:
       - name: Check security_invoker via postgres-meta
         run: |
           if [ -z "$META_URL" ] || [ -z "$META_TOKEN" ]; then
-            echo "⚠ Secrets not configured — skipping live check"
-            exit 0
+            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN não configurados — FAIL-CLOSED: secrets ausentes impedem verificação de security_invoker"
+            exit 1
           fi
 
           echo "→ Querying views without security_invoker..."
@@ -125,8 +125,8 @@ jobs:
       - name: Check no anon-executable functions
         run: |
           if [ -z "$META_URL" ] || [ -z "$META_TOKEN" ]; then
-            echo "⚠ Secrets not configured — skipping live check"
-            exit 0
+            echo "::error::ZAPP_META_URL ou ZAPP_META_TOKEN não configurados — FAIL-CLOSED: secrets ausentes impedem verificação de funções anon"
+            exit 1
           fi
 
           RESPONSE=$(curl -sS "$META_URL/query" \

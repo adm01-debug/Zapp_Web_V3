@@ -62,10 +62,8 @@ jobs:
 
           # p50 e p95 — ordenar e pegar percentis
           SORTED=$(echo "$DURATIONS" | sort -n)
-          P50_IDX=$(( (TOTAL * 50 / 100) + 1 ))
-          P95_IDX=$(( (TOTAL * 95 / 100) + 1 ))
-          [ "$P50_IDX" -gt "$TOTAL" ] && P50_IDX=$TOTAL
-          [ "$P95_IDX" -gt "$TOTAL" ] && P95_IDX=$TOTAL
+          P50_IDX=$(( (TOTAL * 50 + 99) / 100 ))
+          P95_IDX=$(( (TOTAL * 95 + 99) / 100 ))
 
           P50=$(echo "$SORTED" | sed -n "${P50_IDX}p")
           P95=$(echo "$SORTED" | sed -n "${P95_IDX}p")
