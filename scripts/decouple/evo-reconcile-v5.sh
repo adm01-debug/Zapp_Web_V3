@@ -29,8 +29,8 @@ while true; do
   if psql "$PG_EVO_URL" -tAq -c 'SELECT "remoteJid" FROM "Contact"' 2>/dev/null | sort -u > /tmp/evo_jids.txt \
      && psql "$PG_SUPA_URL" -tAq -c "SELECT jid FROM ops.rpc_reconcile_mirror_jids()" 2>/dev/null | sort -u > /tmp/mir_jids.txt; then
     comm -23 /tmp/evo_jids.txt /tmp/mir_jids.txt > /tmp/falt.txt 2>/dev/null || true
-    miss_lid=$(grep -c '@lid' /tmp/falt.txt 2>/dev/null || echo 0)
-    miss_nonlid=$(grep -vc '@lid' /tmp/falt.txt 2>/dev/null || echo 0)
+    miss_lid=$(grep -c '@lid' /tmp/falt.txt 2>/dev/null || true)
+    miss_nonlid=$(grep -vc '@lid' /tmp/falt.txt 2>/dev/null || true)
   else
     log WARN 'cobertura nao calculada (falha ao obter JIDs); enviando -1'
     miss_nonlid=-1; miss_lid=-1
