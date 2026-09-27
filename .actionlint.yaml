@@ -6,15 +6,15 @@ self-hosted-runner:
 
 shellcheck:
   disable:
-    - SC2086  # info: unquoted $VAR — legado pré-etapa 82
-    - SC2129  # style: multiple redirects — legado pré-etapa 82
-    - SC2016  # info: single quotes em JS args — false positives
-    - SC2126  # style: grep -c; use wc -l — legado
-    - SC2162  # info: read without -r — legado
-    - SC2012  # info: use find instead of ls — legado
-    - SC2015  # info: use || { cmd; } — legado
-    - SC2116  # info: useless echo — legado
-    - SC2002  # style: useless cat — legado
-    - SC2001  # style: use parameter expansion instead of sed — legado
-    - SC2013  # info: use while read instead of for — legado
-    - SC2034  # warning: unused variable — variáveis de controle de retry
+    - SC2086
+    - SC2129
+    - SC2016
+    - SC2126
+    - SC2162
+    - SC2012
+    - SC2015
+    - SC2116
+    - SC2002
+    - SC2001
+    - SC2013
+    - SC2034

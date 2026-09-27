@@ -1,10 +1,10 @@
 name: Workflow Lint (actionlint)
 
-# Gate que verifica erros de sintaxe e semântica em todos os workflows GitHub Actions.
-# Usa actionlint — linter estático oficial para GitHub Actions.
-# Bloqueia PRs com workflows inválidos antes de chegarem na main.
-# Etapa 82: também verifica se toda referência workflow_run aponta para um name: real
-# (achado A4/B2 da auditoria 2026-09-27 — trigger morto por nome errado).
+# Gate que verifica erros de sintaxe e semantica em todos os workflows GitHub Actions.
+# Usa actionlint -- linter estatico oficial para GitHub Actions.
+# Bloqueia PRs com workflows invalidos antes de chegarem na main.
+# Etapa 82: tambem verifica se toda referencia workflow_run aponta para um name: real
+# (achado A4/B2 da auditoria 2026-09-27 -- trigger morto por nome errado).
 
 on:
   pull_request:
@@ -12,11 +12,13 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
+      - '.actionlint.yaml'
   push:
     branches: [main, master]
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
+      - '.actionlint.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,7 +29,7 @@ permissions:
 
 jobs:
   actionlint:
-    name: actionlint — verificar workflows
+    name: actionlint -- verificar workflows
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -35,7 +37,7 @@ jobs:
 
       - name: Instalar actionlint
         run: |
-          # Download direto do release — evita curl|bash de branch mutable (supply-chain fix)
+          # Download direto do release -- evita curl|bash de branch mutable (supply-chain fix)
           curl -sL "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz" \
             | tar xz -C /usr/local/bin/ actionlint
           actionlint --version
@@ -46,11 +48,11 @@ jobs:
           node-version: '22'
 
       - name: Executar actionlint em todos os workflows
-        run: actionlint -color .github/workflows/*.yml
+        run: actionlint -color -config-file .actionlint.yaml .github/workflows/*.yml
 
-      - name: Verificar referências workflow_run (etapa 82)
+      - name: Verificar referencias workflow_run (etapa 82)
         # Garante que todo `workflows:` em `workflow_run:` aponta para um name: real.
-        # Previne triggers mortos silenciosos (achado A4/B2 — bundle-secret-guard, notify-ci-failure).
+        # Previne triggers mortos silenciosos (achado A4/B2 -- bundle-secret-guard, notify-ci-failure).
         run: node scripts/check-workflow-run-refs.mjs
 
       - name: Resumo
@@ -58,5 +60,5 @@ jobs:
         run: |
           echo "### Resultado Workflow Lint" >> $GITHUB_STEP_SUMMARY
           echo "- Workflows verificados: $(ls .github/workflows/*.yml | wc -l)" >> $GITHUB_STEP_SUMMARY
-          echo "- actionlint: verificação de sintaxe e semântica" >> $GITHUB_STEP_SUMMARY
-          echo "- workflow_run refs: verificação de nomes cruzados" >> $GITHUB_STEP_SUMMARY
+          echo "- actionlint: verificacao de sintaxe e semantica" >> $GITHUB_STEP_SUMMARY
+          echo "- workflow_run refs: verificacao de nomes cruzados" >> $GITHUB_STEP_SUMMARY
