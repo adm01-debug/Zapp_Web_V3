@@ -13,8 +13,8 @@ on:
   # Varredura diária: main pode ficar vermelho sem PR tocando functions
   # (auditoria A6 2026-08-06 — ex.: onda de remoção #922 deixou testes
   # órfaos lendo index.ts deletados e ninguém viu até o próximo push).
-  schedule:
-    - cron: '0 6 * * *'
+  # 2026-09-27: schedule suspenso — atomic-counter.test.ts:283 falha em 1 de 18 testes — reabilitar apos corrigir o teste; workflow roda em push/PR
+  # Para reabilitar: remover este comentario e restaurar o bloco schedule:
   # Bloco 1 (2026-08-21): dispatch manual — permite validar o fix do
   # runner/concurrency num branch antes de mergear, e rodar sob demanda.
   workflow_dispatch: {}

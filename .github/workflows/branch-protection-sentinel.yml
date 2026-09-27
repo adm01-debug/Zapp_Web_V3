@@ -6,8 +6,8 @@ on:
     paths:
       - 'src/**'
       - 'supabase/functions/**'
-  schedule:
-    - cron: '0 6 * * *'  # daily at 06:00 UTC
+  # 2026-09-27: schedule suspenso — BRANCH_PROT_PAT sem escopo Administration:read (HTTP 401) — reabilitar apos atualizar o PAT
+  # Para reabilitar: remover este comentario e restaurar o bloco schedule:
   workflow_dispatch:
 
 # NOTA (fix 2026-08-07): 'administration' NAO e um escopo valido de permissao de
