@@ -63,8 +63,30 @@ jobs:
       - name: Testar comparação e escopo dos objetos externos
         run: node --test scripts/lib/__tests__/compare-schema-catalog.test.mjs
 
-      - name: Catálogo local está determinístico
-        run: node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --check
+      # 2026-09-27 — CORREÇÃO. Este passo rodava
+      #   node scripts/generate-schema-catalog.mjs --schemas "..." --check
+      # ou seja: gerava o catálogo a partir de `src/integrations/supabase/types.ts` (fonte
+      # local, que declara APENAS o schema `public`) e comparava com o
+      # `supabase/schema-catalog.json` commitado — que é gerado por `--from-meta` com os
+      # schemas `public,zapp,evo` (ver o job catalog-regen, abaixo). Fontes diferentes do
+      # artefato => divergência garantida em toda run. O efeito colateral era pior que o
+      # ruído: como `catalog-regen` tem `needs: catalog-fresh`, um catálogo defasado
+      # deixava a frescura vermelha, e a frescura vermelha IMPEDIA o próprio regen de
+      # rodar — o conserto era bloqueado pelo sintoma.
+      # Agora o passo verifica o que o nome promete (determinismo da geração local: mesma
+      # entrada => mesma saída) e a frescura do catálogo continua sendo verificada contra
+      # o banco vivo nos passos `--from-meta` + compare abaixo.
+      - name: Catálogo local é determinístico (mesma entrada => mesma saída)
+        run: |
+          node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --out "$RUNNER_TEMP/cat-a.json"
+          node scripts/generate-schema-catalog.mjs --schemas "$SCHEMA_CATALOG_SCHEMAS" --out "$RUNNER_TEMP/cat-b.json"
+          # sem --external-objects-file aqui de propósito: as duas pontas vêm do types.ts
+          # local, então a assimetria "objeto externo só existe no catálogo vivo" não se
+          # aplica (com a flag, o comparador falha por presença inesperada).
+          node scripts/compare-schema-catalog.mjs \
+            --left "$RUNNER_TEMP/cat-a.json" \
+            --right "$RUNNER_TEMP/cat-b.json" \
+            --ignore-source
 
       - name: Contrato RLS canônico + deltas pendentes
         run: node scripts/audit-rls-coverage.mjs --check --require-canonical
@@ -89,7 +111,7 @@ jobs:
       - name: Avisar quando a checagem viva não executar
         if: ${{ env.META_URL == '' || env.META_TOKEN == '' }}
         run: |
-          echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. Só a consistência local do schema-catalog foi validada nesta run."
+          echo "::notice title=Catalog fresh não executou leitura viva::ZAPP_META_URL/ZAPP_META_TOKEN ausentes. A frescura do schema-catalog contra o banco vivo NÃO foi verificada nesta run (só o determinismo da geração local)."
 
       - name: Assertion ACL RPC MCP
         run: |
@@ -125,7 +147,11 @@ jobs:
 
   catalog-regen:
     name: Regen schema-catalog.json (somente workflow_dispatch com regen=true)
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.regen == 'true'
+    # 2026-09-27 — CORREÇÃO: `always()`. Sem isso, este job dependia de catalog-fresh ter
+    # passado — e o único caso em que o regen é necessário é justamente quando a frescura
+    # FALHA (catálogo defasado em relação ao banco vivo). O conserto estava bloqueado pelo
+    # sintoma que ele conserta.
+    if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.regen == 'true'
     runs-on: [Linux, X64, vps-zapp]
     needs: catalog-fresh
     permissions:

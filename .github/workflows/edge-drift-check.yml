@@ -50,9 +50,21 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/supabase/cli/main/install.sh | sh
           supabase --version
 
+      # 2026-09-27 — CORREÇÃO (E38/E39 nunca executavam o que o nome dizia):
+      # os dois passos chamavam `bash scripts/deploy-edge.sh --read-only`, que falhava por
+      # DOIS motivos independentes:
+      #   (a) o script vive em `infra/edge-deploy/deploy-edge.sh` (é assim que
+      #       .github/workflows/edge-deploy.yml:70 chama, e é o único caminho no repo);
+      #   (b) `--read-only` NÃO é flag aceita: o parse só conhece --apply/--prune/--restart/
+      #       --help, e qualquer outro argumento cai no `*)` com `exit 2`
+      #       ("argumento desconhecido").
+      # O modo read-only é a AUSÊNCIA de --apply: sem flag o script imprime o diff e sai
+      # com exit 1 se houver MISSING/STALE/ORPHAN (cabeçalho do script, linha 45).
+      # Ou seja: o gate estava vermelho por erro de invocação, não por drift — e por isso
+      # não reportava nada. Agora ele reporta o drift real, com contagem, quando houver.
       - name: E38 — Verificar edge functions (MISSING/STALE/ORPHAN)
         if: steps.env_check.outputs.skip != 'true'
-        run: bash scripts/deploy-edge.sh --read-only
+        run: bash infra/edge-deploy/deploy-edge.sh
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -65,7 +77,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: E39 — deploy-edge.sh read-only (falha em MISSING/STALE/ORPHAN)
-        run: bash scripts/deploy-edge.sh --read-only
+        run: bash infra/edge-deploy/deploy-edge.sh
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
