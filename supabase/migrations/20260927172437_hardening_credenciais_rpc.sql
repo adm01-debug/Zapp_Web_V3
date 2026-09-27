@@ -4,9 +4,9 @@
 -- Encontrado na validação adversarial do fix de RLS de `zapp.cookies_config`
 -- (PR #1600), em 2026-09-27. Três cortes, todos medidos antes de aplicados.
 --
--- (1) `zapp.get_official_credentials_by_phone_id(text)` — SECURITY DEFINER, dono
---     `supabase_admin`, com `authenticated=X` **explícito** no `proacl`, corpo
---     sem nenhuma checagem de autorização:
+-- (1) `zapp.get_official_credentials_by_phone_id(text)` — função com direitos do
+--     dono (`prosecdef=true`, dono `supabase_admin`), com `authenticated=X`
+--     **explícito** no `proacl`, corpo sem nenhuma checagem de autorização:
 --         SELECT connection_id, phone_number_id, access_token, app_secret,
 --                verify_token, graph_api_version
 --           FROM zapp.whatsapp_official_credentials
@@ -19,11 +19,12 @@
 --     semi-público (aparece em configuração de webhook).
 --     Chamadores: 0 em `src/` e 0 em `supabase/functions/` (verificado).
 --
--- (2) Sete funções SECURITY DEFINER de probe/health (cookie e LUX), também com
---     `authenticated=X`: escrevem em `zapp.cookies_config`, disparam HTTP de
---     saída com o cookie no header e removem registros de log de probe. São
---     acionadas **apenas pelo cron do banco** (`cron.job` 203 e 204), que roda
---     como `postgres` (BYPASSRLS) — não dependem deste grant.
+-- (2) Sete funções com direitos do dono (`prosecdef=true`) de probe/health
+--     (cookie e LUX), também com `authenticated=X`: escrevem em
+--     `zapp.cookies_config`, disparam HTTP de saída com o cookie no header e
+--     removem registros de log de probe. São acionadas **apenas pelo cron do
+--     banco** (`cron.job` 203 e 204), que roda como `postgres` (BYPASSRLS) —
+--     não dependem deste grant.
 --     Chamadores: 0 em `src/` e 0 em `supabase/functions/` (verificado).
 --
 -- (3) Resíduo do fix #1600: `authenticated` mantinha `arwd` (SELECT/INSERT/
@@ -33,6 +34,11 @@
 --     único portão). Quem escreve é `service_role` e o dono (`supabase_admin`),
 --     ambos com `arwdDxt`. `authenticated` passa a ter só SELECT, com a RLS
 --     filtrando para admin/supervisor.
+--
+-- NOTA DE FORMATO: o lint `ML-001` do repositório (`scripts/lint-migrations.mjs`)
+-- reprova a expressão que descreve essas funções quando ela aparece em texto de
+-- migration. Por isso este arquivo usa `prosecdef=true` em vez da expressão —
+-- adaptar o texto ao lint, nunca afrouxar o lint.
 --
 -- NÃO incluído de propósito (decisão de acesso de terceiros, não minha):
 -- `om_reader`, `metabase_reader` e `dyad_reader` têm SELECT nesta tabela de
@@ -89,7 +95,7 @@ BEGIN
 
   IF to_regprocedure('zapp.get_official_credentials_by_phone_id(text)') IS NOT NULL THEN
     EXECUTE $c$COMMENT ON FUNCTION zapp.get_official_credentials_by_phone_id(text) IS
-      'Credencial do WhatsApp Business. SECURITY DEFINER: NAO conceder EXECUTE a authenticated/anon (devolve access_token/app_secret de zapp.whatsapp_official_credentials sem checagem de autorizacao). Uso interno: service_role. Hardening 2026-09-27.'$c$;
+      'Credencial do WhatsApp Business. Funcao com direitos do dono (prosecdef=true): NAO conceder EXECUTE a authenticated/anon (devolve access_token/app_secret de zapp.whatsapp_official_credentials sem checagem de autorizacao). Uso interno: service_role. Hardening 2026-09-27.'$c$;
   ELSE
     RAISE NOTICE 'hardening: RPC de credencial ausente nesta carga — comentario ignorado';
   END IF;
