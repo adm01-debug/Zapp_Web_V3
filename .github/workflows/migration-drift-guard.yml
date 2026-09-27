@@ -178,29 +178,29 @@ jobs:
             const MARKER = '<!-- migration-drift-guard -->';
 
             const body = `${MARKER}
-## ⚠️ Migration Drift Guard — drift detectado
+            ## ⚠️ Migration Drift Guard — drift detectado
 
-| Tipo | Qtd |
-|------|-----|
-| 🗄️ No banco, sem arquivo no repo (shadow migration) | **${dbOnly}** |
-| 📁 No repo, sem entrada no banco (não aplicada) | **${repoOnly}** |
-| 🏷️ Mesmo version com nome diferente | **${mismatch}** |
+            | Tipo | Qtd |
+            |------|-----|
+            | 🗄️ No banco, sem arquivo no repo (shadow migration) | **${dbOnly}** |
+            | 📁 No repo, sem entrada no banco (não aplicada) | **${repoOnly}** |
+            | 🏷️ Mesmo version com nome diferente | **${mismatch}** |
 
-**Shadow migrations** (DB_ONLY) são o risco principal: foram aplicadas manualmente
-sem passar pelo versionamento do repo. Cada uma deve ser materializada em
-\`supabase/migrations/<timestamp>_<nome>.sql\` ou documentada como exceção em
-\`docs/ops/MIGRATIONS_CLEANUP_DECISIONS.md\`.
+            **Shadow migrations** (DB_ONLY) são o risco principal: foram aplicadas manualmente
+            sem passar pelo versionamento do repo. Cada uma deve ser materializada em
+            \`supabase/migrations/<timestamp>_<nome>.sql\` ou documentada como exceção em
+            \`docs/ops/MIGRATIONS_CLEANUP_DECISIONS.md\`.
 
-<details>
-<summary>Saída completa do check</summary>
+            <details>
+            <summary>Saída completa do check</summary>
 
-\`\`\`
-${output.slice(0, 4000)}
-\`\`\`
-</details>
+            \`\`\`
+            ${output.slice(0, 4000)}
+            \`\`\`
+            </details>
 
-> **Modo atual: WARN-ONLY** — este PR pode ser mergeado, mas o drift deve ser
-> resolvido. Runbook: \`docs/ops/RUNBOOK-MIGRATION-DRIFT.md\``;
+            > **Modo atual: WARN-ONLY** — este PR pode ser mergeado, mas o drift deve ser
+            > resolvido. Runbook: \`docs/ops/RUNBOOK-MIGRATION-DRIFT.md\``;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
