@@ -19099,6 +19099,11 @@ $$;
 
 
 
+COMMENT ON FUNCTION zapp.get_official_credentials_by_phone_id(p_phone_number_id text) IS 'Credencial do WhatsApp Business. SECURITY DEFINER: NAO conceder EXECUTE a authenticated/anon (devolve access_token/app_secret de zapp.whatsapp_official_credentials sem checagem de autorizacao). Uso interno: service_role. Hardening 2026-09-27.';
+
+
+
+
 CREATE OR REPLACE FUNCTION zapp.get_own_email_accounts() RETURNS TABLE(id uuid, email_address text, display_name text, picture_url text, is_active boolean, token_expires_at timestamp with time zone, watch_expiry timestamp with time zone, created_at timestamp with time zone)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
