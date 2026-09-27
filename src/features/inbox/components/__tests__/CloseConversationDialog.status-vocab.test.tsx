@@ -1,19 +1,22 @@
 /**
- * CloseConversationDialog — vocabulário de status + visibilidade de falha parcial.
+ * CloseConversationDialog — encerramento atomico via RPC + vocabulario de status.
  *
- * Defeitos cobertos (auditoria exaustiva de 2026-09-26):
+ * Defeitos cobertos (auditoria 2026-09-26, correcao 2026-09-27):
  *
- * 1. O dialog gravava `conversations.status = 'resolved'`, mas o CHECK da tabela
- *    base (`evo.evolution_conversations_status_check`) aceita APENAS 'aberta' e
- *    'arquivada'. Toda tentativa de encerrar violava a constraint (erro 23514) e
- *    falhava em silêncio — o usuário via "Conversa encerrada com registro" com o
- *    espelho de status nunca atualizado. O valor correto é 'arquivada' (mesma
- *    semântica de `messagesService.updateConversation`); o registro de "resolvido"
- *    é a `conversation_closures`, gravada antes e canônica.
+ * 1. O dialog fazia 3 escritas soltas pelo cliente (closure, status, evento).
+ *    A do status era IMPOSSIVEL para um agent comum: a role `authenticated` nao
+ *    tem GRANT de UPDATE na tabela base da conversa e a policy
+ *    `conversations_update` exige admin/supervisor. O encerramento ficava
+ *    parcial em silencio, e a UI anunciava "Conversa encerrada com registro".
  *
- * 2. As duas escritas não-fatais (status da conversa e evento de auditoria) só
- *    emitiam `console.warn` e a UI anunciava sucesso. Agora o usuário é avisado
- *    quando o encerramento ficou parcial.
+ * 2. O valor gravado era `'resolved'`, mas o CHECK da tabela base aceita apenas
+ *    'aberta'/'arquivada' (erro 23514) — o espelho de status nunca atualizava.
+ *    O status correto e 'arquivada'; o registro de "resolvido" e a
+ *    `conversation_closures`.
+ *
+ * Agora o encerramento e UMA chamada a `zapp.rpc_close_conversation`, que faz as
+ * tres escritas numa transacao no servidor. Este teste trava o contrato: o
+ * cliente nao escreve status em `conversations` e nunca usa 'resolved'.
  *
  * Rodar: bun run test src/features/inbox/components/__tests__/CloseConversationDialog.status-vocab.test.tsx
  */
@@ -21,22 +24,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
-  insert: vi.fn(),
-  update: vi.fn(),
-  eq: vi.fn(),
+  rpc: vi.fn(),
   toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
   toastError: vi.fn(),
 }));
 
-vi.mock('@/integrations/datasource/db', () => ({
-  dbFrom: (entity: string) => ({
-    insert: (payload: unknown) => h.insert(entity, payload),
-    update: (payload: unknown) => {
-      h.update(entity, payload);
-      return { eq: (...args: unknown[]) => h.eq(entity, ...args) };
-    },
-  }),
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: { rpc: (...args: unknown[]) => h.rpc(...args) },
 }));
 
 vi.mock('@/lib/invokeEdge', () => ({ invokeEdge: vi.fn(async () => ({ ok: true })) }));
@@ -53,7 +48,7 @@ import { CloseConversationDialog } from '../CloseConversationDialog';
 
 const CONTACT_ID = '11111111-1111-1111-1111-111111111111';
 
-/** Seleciona o motivo de encerramento (único campo obrigatório) e confirma. */
+/** Seleciona o motivo de encerramento (unico campo obrigatorio) e confirma. */
 async function encerrar() {
   fireEvent.click(screen.getAllByRole('combobox')[0]);
   const options = await screen.findAllByRole('option');
@@ -61,79 +56,89 @@ async function encerrar() {
   fireEvent.click(screen.getByRole('button', { name: 'Encerrar' }));
 }
 
-describe('CloseConversationDialog — vocabulário de status do encerramento', () => {
+function abrirDialogo() {
+  return render(
+    <CloseConversationDialog
+      open
+      onOpenChange={vi.fn()}
+      contactId={CONTACT_ID}
+      profileId="agent-1"
+    />
+  );
+}
+
+describe('CloseConversationDialog — encerramento atomico via RPC', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    h.insert.mockResolvedValue({ error: null });
-    h.eq.mockResolvedValue({ error: null });
+    h.rpc.mockResolvedValue({ data: { ok: true, conversations_atualizadas: 1 }, error: null });
   });
 
-  it("grava conversations.status = 'arquivada' (único vocabulário aceito pelo CHECK), nunca 'resolved'", async () => {
-    render(
-      <CloseConversationDialog
-        open
-        onOpenChange={vi.fn()}
-        contactId={CONTACT_ID}
-        profileId="agent-1"
-      />
-    );
+  it('encerra com UMA chamada a rpc_close_conversation, com contato e motivo', async () => {
+    abrirDialogo();
 
     await encerrar();
 
-    await waitFor(() => expect(h.update).toHaveBeenCalled());
+    await waitFor(() => expect(h.rpc).toHaveBeenCalledTimes(1));
 
-    const chamadasConversations = h.update.mock.calls.filter((c) => c[0] === 'conversations');
-    expect(chamadasConversations).toHaveLength(1);
-    expect(chamadasConversations[0][1]).toEqual({ status: 'arquivada' });
-
-    // O CHECK da base rejeita 'resolved' (23514) — nenhuma escrita pode usá-lo.
-    const statusGravados = h.update.mock.calls.map((c) => JSON.stringify(c[1]));
-    expect(statusGravados.join(' ')).not.toContain('resolved');
+    const [nomeFuncao, params] = h.rpc.mock.calls[0];
+    expect(nomeFuncao).toBe('rpc_close_conversation');
+    expect(params).toMatchObject({ p_contact_id: CONTACT_ID });
+    expect(String((params as Record<string, unknown>).p_close_reason).length).toBeGreaterThan(0);
   });
 
-  it('caminho feliz: as três escritas acontecem e o usuário recebe sucesso', async () => {
-    render(
-      <CloseConversationDialog
-        open
-        onOpenChange={vi.fn()}
-        contactId={CONTACT_ID}
-        profileId="agent-1"
-      />
-    );
+  it("nunca manda 'resolved' nem escreve status da conversa pelo cliente", async () => {
+    abrirDialogo();
+
+    await encerrar();
+    await waitFor(() => expect(h.rpc).toHaveBeenCalled());
+
+    // O CHECK da tabela base rejeita 'resolved' como STATUS (23514). O status
+    // correto e responsabilidade do servidor — o cliente nem envia status.
+    // Checagem por CHAVE, nao por valor: "resolved" e um valor legitimo do
+    // dropdown de motivo de encerramento (close_reason), o que nao pode e ele
+    // virar status da conversa.
+    const params = h.rpc.mock.calls[0][1] as Record<string, unknown>;
+    const chavesDeStatus = Object.keys(params).filter((chave) => /status/i.test(chave));
+    expect(chavesDeStatus).toHaveLength(0);
+  });
+
+  it('caminho feliz: usuario recebe sucesso quando a conversa foi espelhada', async () => {
+    abrirDialogo();
 
     await encerrar();
 
     await waitFor(() =>
       expect(h.toastSuccess).toHaveBeenCalledWith('Conversa encerrada com registro')
     );
-
-    // 1) closure canônica  2) status da conversa  3) evento de auditoria
-    expect(h.insert.mock.calls.map((c) => c[0])).toContain('conversation_closures');
-    expect(h.insert.mock.calls.map((c) => c[0])).toContain('conversation_events');
-    expect(h.update.mock.calls.map((c) => c[0])).toContain('conversations');
     expect(h.toastWarning).not.toHaveBeenCalled();
   });
 
-  it('falha do UPDATE em conversations: avisa o usuário em vez de anunciar sucesso silencioso', async () => {
-    h.eq.mockResolvedValue({ error: { message: 'violates check constraint' } });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    render(
-      <CloseConversationDialog
-        open
-        onOpenChange={vi.fn()}
-        contactId={CONTACT_ID}
-        profileId="agent-1"
-      />
-    );
+  it('avisa o usuario quando registrou mas nao havia conversa para espelhar (0 linhas)', async () => {
+    h.rpc.mockResolvedValue({ data: { ok: true, conversations_atualizadas: 0 }, error: null });
+    abrirDialogo();
 
     await encerrar();
 
     await waitFor(() => expect(h.toastWarning).toHaveBeenCalled());
     expect(h.toastSuccess).not.toHaveBeenCalled();
+    expect(String(h.toastWarning.mock.calls[0][0])).toContain('espelhar o status');
+  });
 
-    const aviso = String(h.toastWarning.mock.calls[0][0]);
-    expect(aviso).toContain('status da conversa');
+  it('erro da RPC: anuncia erro e nao finge sucesso', async () => {
+    h.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'rpc_close_conversation: sem permissao para encerrar' },
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    abrirDialogo();
+
+    await encerrar();
+
+    await waitFor(() =>
+      expect(h.toastError).toHaveBeenCalledWith('Erro ao registrar encerramento')
+    );
+    expect(h.toastSuccess).not.toHaveBeenCalled();
+    expect(h.toastWarning).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
   });
