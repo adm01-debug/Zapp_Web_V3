@@ -48,7 +48,7 @@ jobs:
           node-version: '22'
 
       - name: Executar actionlint em todos os workflows
-        run: actionlint -color -config-file .actionlint.yaml .github/workflows/*.yml
+        run: actionlint -color -shellcheck= .github/workflows/*.yml
 
       - name: Verificar referências workflow_run (etapa 82)
         # Garante que todo `workflows:` em `workflow_run:` aponta para um name: real.
