@@ -30,12 +30,6 @@ interface CategoryInfo {
   icon: string;
 }
 
-const FALLBACK_CATEGORY: CategoryInfo = {
-  name: 'Informação',
-  color: 'bg-secondary/10 text-secondary',
-  icon: 'ℹ️',
-};
-
 const CATEGORIES: CategoryInfo[] = [
   { name: 'Suporte Técnico', color: 'bg-info/10 text-info', icon: '🔧' },
   { name: 'Vendas', color: 'bg-success/10 text-success', icon: '💰' },

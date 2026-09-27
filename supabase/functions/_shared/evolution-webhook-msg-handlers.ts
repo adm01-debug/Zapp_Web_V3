@@ -6,9 +6,6 @@ import {
   isRecord, normalizePhone, resolveEventJid, toEventRecords, shouldUpdateStatus,
   getConnectionByInstance, getContactByPhone,
 } from "./evolution-helpers.ts";
-import { getLogger } from "./logger.ts";
-
-const log = getLogger('evolution-webhook-msg-handlers');
 
 const log = getLogger('evolution-webhook-msg-handlers');
 

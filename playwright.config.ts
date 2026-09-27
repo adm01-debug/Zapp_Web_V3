@@ -40,11 +40,25 @@ export default defineConfig({
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
     },
-    {
-      // Specs legados movidos de tests/e2e/ — rodar apenas via workflow_dispatch
-      name: 'legacy-e2e',
-      testDir: './e2e/legacy',
-      use: { ...devices['Desktop Chrome'] },
-    },
+    // Specs legados (movidos de tests/e2e/) — rodam APENAS sob demanda, como
+    // este comentario sempre declarou. O projeto estava registrado
+    // incondicionalmente, entao `bun run test:e2e:boot` — o job "E2E tests" do
+    // ci.yml, declarado como "boot suite — src/tests/e2e, 13 specs" — tambem
+    // executava os specs de e2e/legacy, que exigem backend real: o job ficava
+    // vermelho em todo PR, inclusive na main. Eles continuam cobertos pela
+    // suite completa do e2e-nightly-full.yml (playwright.e2e.config.ts, cujo
+    // testDir './e2e' e recursivo), que roda contra a VPS com credenciais.
+    //
+    // Para rodar aqui contra um backend vivo:
+    //   E2E_LEGACY=1 bun run test:e2e:boot --project=legacy-e2e
+    ...(process.env.E2E_LEGACY === '1'
+      ? [
+          {
+            name: 'legacy-e2e',
+            testDir: './e2e/legacy',
+            use: { ...devices['Desktop Chrome'] },
+          },
+        ]
+      : []),
   ],
 });

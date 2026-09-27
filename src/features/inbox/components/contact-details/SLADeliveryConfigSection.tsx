@@ -36,6 +36,7 @@ export function SLADeliveryConfigSection({ contactId }: SLADeliveryConfigSection
   const { data: config, isLoading } = useQuery({
     queryKey: queryKeys.sla.deliveryConfig(contactId),
     enabled: !!contactId && isValidUUID(contactId),
+    staleTime: 30_000,
     queryFn: async () => {
       // Mesma ordenação do consumidor de delivery (R5): regra ativa mais
       // recente primeiro — o painel de config reflete a regra em vigor.

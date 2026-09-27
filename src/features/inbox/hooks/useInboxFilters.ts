@@ -8,6 +8,7 @@ import { parseISO } from 'date-fns';
 import { MainTab, SubTab } from '@/features/inbox';
 import { useFailureMetricsBatch, type FailureCategory } from '@/features/inbox';
 import { useAllTicketStates } from '@/features/inbox';
+import { useResolvedTicketsHydration } from './useResolvedTicketsHydration';
 import { usePermissions } from '@/features/auth';
 import { useAuth } from '@/features/auth';
 import { getLogger } from '@/lib/logger';
@@ -41,7 +42,6 @@ import {
   mergeInboxPresets,
   pushLocalOnlyPresets,
 } from './inboxPresetsSync';
-
 
 const log = getLogger('useInboxFilters');
 
@@ -109,9 +109,7 @@ export function useInboxFilters({
     permissions,
   } = usePermissions();
   const [departmentAgentIds, setDepartmentAgentIds] = useState<string[]>([]);
-  const [selectedQueueId, setSelectedQueueId] = useState<string | null>(
-    initialPersisted.queueId
-  );
+  const [selectedQueueId, setSelectedQueueId] = useState<string | null>(initialPersisted.queueId);
   const [selectedContactType, setSelectedContactType] = useState<string | null>(
     initialPersisted.contactType
   );
@@ -121,7 +119,6 @@ export function useInboxFilters({
   const [failureCategoryFilter, setFailureCategoryFilter] = useState<FailureCategory | 'all'>(
     initialPersisted.failureCategory ?? 'all'
   );
-
 
   const {
     filters: urlFilters,
@@ -137,7 +134,7 @@ export function useInboxFilters({
   // dispara novamente → warnings repetidos.
   // Solução: usar valores booleanos estáveis como deps (não a função) + memoizá-los.
   const canSeeDept = hasPermission('inbox.view_department');
-  const canSeeAll  = hasPermission('inbox.view_all');
+  const canSeeAll = hasPermission('inbox.view_all');
 
   // Security: Enforce permissions on scope and showAll
   useEffect(() => {
@@ -166,7 +163,7 @@ export function useInboxFilters({
     } else if (scope === 'all' && !canSeeAll) {
       setScope(canSeeDept ? 'department' : 'mine');
     }
-  // Usar booleans como deps (não a fn hasPermission) para evitar loop de re-execução
+    // Usar booleans como deps (não a fn hasPermission) para evitar loop de re-execução
   }, [permissionsLoading, canSeeDept, canSeeAll, scope, showAll]);
 
   // Reset enforcement tracker quando permissões realmente mudam (e.g. role switch)
@@ -218,7 +215,6 @@ export function useInboxFilters({
       window.history.replaceState(null, '', `?${params.toString()}${window.location.hash}`);
     }
   }, [archivedTab, mainTab, subTab, selectedContactType, selectedQueueId]);
-
 
   const handleContactTypeChange = useCallback((value: string | null) => {
     setSelectedContactType(value);
@@ -376,7 +372,6 @@ export function useInboxFilters({
     failureCategoryFilter,
   ]);
 
-
   const setFilters = useCallback(
     (newFilters: InboxFiltersState) => {
       setUrlFilters({
@@ -391,6 +386,7 @@ export function useInboxFilters({
   );
 
   const ticketStates = useAllTicketStates();
+  useResolvedTicketsHydration();
 
   const enforceChannelPermissions = useMemo(() => {
     if (permissionsLoading) return false;
@@ -502,8 +498,14 @@ export function useInboxFilters({
     if (subTab === 'waiting' && inboxTabCounts.waiting === 0 && inboxTabCounts.attending > 0) {
       setSubTab('attending');
     }
-  }, [mainTab, subTab, conversations.length, archivedTab, inboxTabCounts.attending, inboxTabCounts.waiting]);
-
+  }, [
+    mainTab,
+    subTab,
+    conversations.length,
+    archivedTab,
+    inboxTabCounts.attending,
+    inboxTabCounts.waiting,
+  ]);
 
   const filteredConversations = useMemo(
     () => applyInboxFilters(pipelineOptions),
@@ -734,7 +736,6 @@ export function useInboxFilters({
       failureCategoryFilter,
     ]
   );
-
 
   return {
     presets,

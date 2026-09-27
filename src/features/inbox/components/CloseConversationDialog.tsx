@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { dbFrom } from '@/integrations/datasource/db';
 import { invokeEdge } from '@/lib/invokeEdge';
 import { ticketStore } from '@/lib/inbox/ticketStore';
 import {
@@ -117,7 +117,7 @@ export function CloseConversationDialog({
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('conversation_closures').insert({
+    const { error } = await dbFrom('conversation_closures').insert({
       contact_id: contactId,
       closed_by: profileId,
       close_reason: reason,
@@ -131,9 +131,15 @@ export function CloseConversationDialog({
       // app DB (conversations.status + conversation_events de auditoria) e
       // sincroniza o overlay de tickets para a UI refletir imediatamente.
       // Escritas não-fatais: o registro canônico é a conversation_closures.
+      // O CHECK da tabela base (evo.evolution_conversations_status_check) aceita
+      // apenas 'aberta' e 'arquivada'. Gravar 'resolved' violava a constraint
+      // (erro 23514) e a atualizacao falhava em silencio. O registro de
+      // "resolvido" e a conversation_closures (ledger canonico, gravado acima);
+      // aqui espelhamos a conversa como fora da caixa de entrada — mesma
+      // semantica usada em messagesService.updateConversation.
       const [convUpdate, eventInsert] = await Promise.all([
-        supabase.from('conversations').update({ status: 'resolved' }).eq('contact_id', contactId),
-        supabase.from('conversation_events').insert({
+        dbFrom('conversations').update({ status: 'arquivada' }).eq('contact_id', contactId),
+        dbFrom('conversation_events').insert({
           contact_id: contactId,
           event_type: 'close',
           performed_by: profileId ?? null,
@@ -144,22 +150,35 @@ export function CloseConversationDialog({
           },
         }),
       ]);
+      // As duas escritas abaixo sao nao-fatais (o registro canonico ja foi
+      // gravado), mas o usuario precisa saber quando o encerramento ficou
+      // parcial: antes isso so ia para o console enquanto a UI anunciava
+      // "Conversa encerrada com registro".
+      const falhasParciais: string[] = [];
       if (convUpdate.error) {
         console.warn(
           '[CloseConversationDialog] falha ao persistir status em conversations:',
           convUpdate.error.message
         );
+        falhasParciais.push('status da conversa');
       }
       if (eventInsert.error) {
         console.warn(
           '[CloseConversationDialog] falha ao registrar conversation_events:',
           eventInsert.error.message
         );
+        falhasParciais.push('evento de auditoria');
       }
       ticketStore.setStatus(contactId, 'resolved', profileId ?? null);
       // INBOX-09: CSAT automation — non-fatal, runs in background
       void triggerCsatIfEnabled(contactId, profileId, conversationId);
-      toast.success('Conversa encerrada com registro');
+      if (falhasParciais.length > 0) {
+        toast.warning(
+          `Conversa encerrada, mas nao foi possivel registrar: ${falhasParciais.join(' e ')}. O encerramento em si foi gravado.`
+        );
+      } else {
+        toast.success('Conversa encerrada com registro');
+      }
       onOpenChange(false);
       setReason('');
       setOutcome('');

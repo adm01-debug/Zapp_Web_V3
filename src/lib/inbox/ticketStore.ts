@@ -243,6 +243,46 @@ export const ticketStore = {
     writeAll({ ...current, [contactId]: updated });
   },
 
+  /**
+   * Hidrata o overlay com contatos duravelmente encerrados (fonte canônica:
+   * `conversation_closures.contact_id`), SEM sobrescrever estado local já
+   * presente no overlay.
+   *
+   * Por quê: o status `resolved` do ticket vivia só em `localStorage`, então a
+   * aba "Resolvidos" ficava vazia em qualquer máquina/sessão que não fosse a
+   * que encerrou a conversa. A escrita durável já existe
+   * (`CloseConversationDialog` grava `conversation_closures`), então basta
+   * hidratar o overlay a partir dela no boot.
+   *
+   * Só preenche contatos AUSENTES ou em `open` (que é o default de bootstrap,
+   * nunca um estado "real" — atribuir move para `in_progress`). Contatos em
+   * `in_progress` (reopen real) ou já `resolved` são respeitados — a closure é
+   * append-only e não registra reabertura, então o estado local mais recente
+   * prevalece.
+   */
+  hydrateResolved(contactIds: string[]) {
+    const current = readAll();
+    let changed = false;
+    const next: Overlay = { ...current };
+    for (const id of contactIds) {
+      if (!id) continue;
+      const existing = next[id];
+      if (existing && existing.status !== 'open') continue;
+      const now = new Date().toISOString();
+      next[id] = {
+        status: 'resolved',
+        assignedTo: null,
+        queueId: null,
+        openedAt: existing?.openedAt ?? now,
+        updatedAt: now,
+        resolvedAt: now,
+        events: existing?.events ?? [],
+      };
+      changed = true;
+    }
+    if (changed) writeAll(next);
+  },
+
   /** Subscreve mudanças (cross-tab via storage + intra-tab via custom). */
   subscribe(listener: () => void): () => void {
     if (typeof window === 'undefined') return () => undefined;

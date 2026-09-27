@@ -8,9 +8,6 @@ import {
   getConnectionByInstance, getContactByPhone, persistProfilePicture, generatePhoneVariants,
   resolveLidToPhone, redactJid,
 } from "./evolution-helpers.ts";
-import { getLogger } from "./logger.ts";
-
-const log = getLogger('evolution-webhook-handlers');
 
 const log = getLogger('evolution-webhook-handlers');
 
