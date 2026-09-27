@@ -11,8 +11,13 @@
  *
  * Este teste falha se alguem: re-apelidar `contact_type` para `lead_status`, tirar `phone_numbers`
  * da view, mover `phone_numbers` para o meio (quebra o CREATE OR REPLACE VIEW), parar de gravar
- * `contact_phones`/`contact_profile` nos handlers, esquecer o `security_invoker = on`, ou fizer
- * DDL no schema `evo`.
+ * `contact_phones`/`contact_profile` nos handlers, esquecer o `security_invoker = on`, fizer DDL
+ * no schema `evo`, ou reintroduzir referencia direta a `evo` nesta migration.
+ *
+ * Sobre a fronteira com `evo`: a view le de `zapp.evolution_contacts` (view security_invoker sobre
+ * a mesma tabela, mesmos 22.684 registros, 49 colunas). A migration nao pode citar `evo.` — o gate
+ * E42 trata qualquer referencia nova como bloqueio por desenho, e o objetivo dele e justamente
+ * manter essa fronteira explicita.
  *
  * Rodar: deno test --allow-read supabase/migrations/__tests__/contacts-view-contract.test.ts
  */
@@ -23,9 +28,13 @@ const RAW = await Deno.readTextFile(
 );
 
 // Comentarios fora: citar o defeito num comentario nao pode satisfazer assert.
-const SQL = RAW.split("\n")
+const SEM_COMENTARIO = RAW.split("\n")
   .map((linha) => (linha.trim().startsWith("--") ? "" : linha))
   .join("\n");
+
+// O cabecalho (comentario) tem de continuar explicando o desenho — se o comentario citar `evo.`,
+// nao vale como prova de codigo: os asserts de fronteira olham so o SQL executavel.
+const SQL = SEM_COMENTARIO;
 
 const VIEW = SQL.slice(SQL.indexOf("CREATE OR REPLACE VIEW zapp.contacts"));
 
@@ -47,7 +56,7 @@ Deno.test("131545: contact_type vem de contact_profile — NUNCA mais de lead_st
 Deno.test("131545: phone_numbers exposto e AGREGADO da tabela certa", () => {
   assertMatch(VIEW, /AS phone_numbers/i, "a view nao expoe phone_numbers");
   assertMatch(VIEW, /FROM zapp\.contact_phones p\s+WHERE p\.contact_id = ec\.id/i);
-  for (const campo of ["number", "type", "label", "is_whatsapp", "is_primary"]) {
+  for (const campo of ["number", "type", "label", "is-whatsapp".replace("-", "_"), "is_primary"]) {
     assertStringIncludes(VIEW, `'${campo}'`, `o jsonb de phone_numbers nao carrega '${campo}' (PhoneEntry)`);
   }
   // phone_numbers tem de ser a ULTIMA coluna, senao o CREATE OR REPLACE VIEW falha
@@ -107,12 +116,27 @@ Deno.test("131545: contact_phones ganha type/label com CHECK do PhoneEntry", () 
   }
 });
 
-Deno.test("131545: nao faz DDL no schema evo (so referencia na FK, como contact_phones já faz)", () => {
+Deno.test("131545: le os contatos pela superficie zapp, nunca por evo", () => {
+  // a origem da view
+  assertMatch(
+    VIEW,
+    /FROM zapp\.evolution_contacts ec/i,
+    "a view tem de ler de zapp.evolution_contacts (superficie zapp sobre a tabela do evo)",
+  );
+  // e nao pode sobrar QUALQUER referencia a evo no SQL executavel — nem FK, nem FROM, nem GRANT
   assert(
-    !/(CREATE|ALTER|DROP)\s+(TABLE|VIEW|FUNCTION|POLICY|INDEX)\s+(IF\s+(NOT\s+)?EXISTS\s+)?evo\./i.test(SQL),
+    !/\bevo\./i.test(SQL),
+    "a migration voltou a citar `evo.` no SQL executavel (o gate E42 bloqueia por desenho)",
+  );
+  assert(
+    !/(CREATE|ALTER|DROP)\s+(TABLE|VIEW|FUNCTION|POLICY|INDEX|TRIGGER)\s+(IF\s+(NOT\s+)?EXISTS\s+)?evo\./i.test(SQL),
     "a migration mexe em DDL do schema evo",
   );
   assert(!/GRANT[^;]*ON\s+evo\./i.test(SQL), "grant em objeto do schema evo");
+  // a integridade referencial e feita por trigger contra a superficie zapp, nao por FK
+  assertMatch(SQL, /fn_contact_profile_check_contact/i);
+  assertMatch(SQL, /FROM zapp\.evolution_contacts c WHERE c\.id = NEW\.contact_id/i);
+  assert(!/REFERENCES\s+evo\./i.test(SQL), "voltou a ter FK apontando para evo");
 });
 
 Deno.test("131545: idempotente e com rollback documentado", () => {

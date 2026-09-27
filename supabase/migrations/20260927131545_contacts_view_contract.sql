@@ -27,8 +27,20 @@
 --      classificado — a UI ja cai em 'cliente' nesse caso, ContactKanbanView.tsx:65) e ganha
 --      `phone_numbers` AGREGADO. O funil NAO se perde: continua exposto em `status`, intocado.
 --   4. Os dois handlers INSTEAD OF (insert/update) passam a gravar as duas tabelas.
---   5. `evo` nao e tocado em DDL. E o `security_invoker=on` da view e reaplicado explicitamente,
---      porque sem ele a view passaria a ler evo.evolution_contacts com privilegio de dono.
+--   5. A view le da superficie `zapp.evolution_contacts` (view security_invoker sobre a tabela
+--      do evo, mesmos 22.684 registros, 49 colunas cobrindo as 28 que usamos) — NAO de `evo.`
+--      direto. Assim a migration nao cruza a fronteira: o gate E42 e o responsavel por manter
+--      essa fronteira, e referencia a `evo` em migration nova e bloqueio por desenho.
+--   6. `security_invoker=on` e reaplicado explicitamente, porque sem ele a view passaria a ler
+--      com privilegio de dono e a fronteira de RLS se perderia.
+--
+-- INTEGRIDADE REFERENCIAL (por que nao ha FK para evo)
+--   FK so aponta para tabela, e o `zapp` so expoe contatos por VIEW — nao existe tabela
+--   `zapp`-side para apontar. Em vez de cruzar a fronteira, a integridade e garantida por
+--   trigger (fn_contact_profile_check_contact), que valida contra `zapp.evolution_contacts`.
+--   Sem ON DELETE CASCADE: quando o contato e apagado, a linha de perfil fica orfa e precisa
+--   ser limpa. Fica registrado como pendencia para os donos do plano de desacoplamento (falta
+--   uma tabela `zapp`-side real de contatos para a FK).
 --
 -- COMPATIBILIDADE
 --   `phone_numbers` entra como ULTIMA coluna (posicao 51): CREATE OR REPLACE VIEW exige a mesma
@@ -54,13 +66,32 @@ BEGIN
 END
 $c$;
 
--- 2) contact_profile: a casa real do contact_type
+-- 2) contact_profile: a casa real do contact_type (sem FK para evo — ver cabecalho)
 CREATE TABLE IF NOT EXISTS zapp.contact_profile (
-  contact_id   uuid PRIMARY KEY REFERENCES evo.evolution_contacts(id) ON DELETE CASCADE,
+  contact_id   uuid PRIMARY KEY,
   contact_type text NOT NULL,
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE OR REPLACE FUNCTION zapp.fn_contact_profile_check_contact()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'zapp'
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM zapp.evolution_contacts c WHERE c.id = NEW.contact_id) THEN
+    RAISE EXCEPTION 'contato % nao existe em zapp.evolution_contacts', NEW.contact_id
+      USING ERRCODE = '23503';
+  END IF;
+  RETURN NEW;
+END $function$;
+
+DROP TRIGGER IF EXISTS trg_contact_profile_check_contact ON zapp.contact_profile;
+CREATE TRIGGER trg_contact_profile_check_contact
+  BEFORE INSERT OR UPDATE OF contact_id ON zapp.contact_profile
+  FOR EACH ROW EXECUTE FUNCTION zapp.fn_contact_profile_check_contact();
 
 DO $c$
 BEGIN
@@ -147,7 +178,7 @@ CREATE OR REPLACE VIEW zapp.contacts AS
     ec.last_message_at AS last_seen_at,
     zapp.get_default_workspace_id() AS workspace_id,
     COALESCE(ph.phone_numbers, '[]'::jsonb) AS phone_numbers
-   FROM evo.evolution_contacts ec
+   FROM zapp.evolution_contacts ec
      LEFT JOIN zapp.whatsapp_groups wg ON wg.group_id = ec.remote_jid::text
      LEFT JOIN zapp.contact_profile cprof ON cprof.contact_id = ec.id
      LEFT JOIN LATERAL (
@@ -163,7 +194,6 @@ CREATE OR REPLACE VIEW zapp.contacts AS
      ) ph ON true
   WHERE ec.deleted_at IS NULL;
 
--- ela e security_invoker por construcao; reaplicado para nao herdar privilegio de dono
 ALTER VIEW zapp.contacts SET (security_invoker = on);
 
 -- 4) handler de UPDATE: grava contact_profile e contact_phones
