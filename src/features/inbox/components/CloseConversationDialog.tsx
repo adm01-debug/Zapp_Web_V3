@@ -126,39 +126,54 @@ export function CloseConversationDialog({
     // admin/supervisor. O encerramento ficava parcial, em silencio.
     // A identidade (closed_by / performed_by) e resolvida no servidor a partir
     // de auth.uid(), entao nao enviamos profileId.
-    const { data, error } = await dbRpc(RPC.closeConversation, {
-      p_contact_id: contactId,
-      p_close_reason: reason,
-      p_outcome: outcome || null,
-      p_classification: classification || null,
-      p_notes: notes || null,
-    });
-    if (!error) {
-      const resultado = (data ?? {}) as { conversations_atualizadas?: number };
-      ticketStore.setStatus(contactId, 'resolved', profileId ?? null);
-      // INBOX-09: CSAT automation — non-fatal, runs in background
-      void triggerCsatIfEnabled(contactId, profileId, conversationId);
-      // A RPC e atomica: respondeu ok = as tres escritas aconteceram. O unico
-      // encerramento parcial possivel agora e a conversa nao existir mais no
-      // inbox (0 linhas atualizadas) — o ledger continua sendo o canonico.
-      if ((resultado.conversations_atualizadas ?? 0) === 0) {
-        toast.warning(
-          'Conversa encerrada e registrada, mas nao havia conversa ativa para espelhar o status.'
-        );
+    // try/finally obrigatorio: dbRpc RE-LANCA excecoes em falha de transporte
+    // (nao devolve {error}); sem o finally o dialogo ficava preso em
+    // "Salvando..." com o botao Encerrar desabilitado. Achado em revisao
+    // independente, 2026-09-27.
+    try {
+      const { data, error } = await dbRpc(RPC.closeConversation, {
+        p_contact_id: contactId,
+        p_close_reason: reason,
+        p_outcome: outcome || null,
+        p_classification: classification || null,
+        p_notes: notes || null,
+      });
+      if (!error) {
+        const resultado = (data ?? {}) as { conversations_atualizadas?: number };
+        ticketStore.setStatus(contactId, 'resolved', profileId ?? null);
+        // INBOX-09: CSAT automation — non-fatal, runs in background
+        void triggerCsatIfEnabled(contactId, profileId, conversationId);
+        // A RPC e atomica: respondeu ok = as tres escritas aconteceram. O unico
+        // encerramento parcial possivel agora e a conversa nao existir mais no
+        // inbox (0 linhas atualizadas) — o ledger continua sendo o canonico.
+        // 0 significa "nenhuma conversa ativa deste contato": o servidor conta
+        // so o que ele realmente espelhou.
+        if ((resultado.conversations_atualizadas ?? 0) === 0) {
+          toast.warning(
+            'Conversa encerrada e registrada, mas nao havia conversa ativa para espelhar o status.'
+          );
+        } else {
+          toast.success('Conversa encerrada com registro');
+        }
+        onOpenChange(false);
+        setReason('');
+        setOutcome('');
+        setClassification('');
+        setNotes('');
+        onClosed?.();
       } else {
-        toast.success('Conversa encerrada com registro');
+        console.warn('[CloseConversationDialog] rpc_close_conversation falhou:', error);
+        toast.error('Erro ao registrar encerramento');
       }
-      onOpenChange(false);
-      setReason('');
-      setOutcome('');
-      setClassification('');
-      setNotes('');
-      onClosed?.();
-    } else {
-      console.warn('[CloseConversationDialog] rpc_close_conversation falhou:', error);
+    } catch (err) {
+      // dbRpc RE-LANCA em falha de transporte (nao devolve {error}): sem este
+      // catch o erro virava "unhandled rejection" e o usuario nao recebia aviso
+      // nenhum. O finally garante que o dialogo nunca fica preso em "Salvando...".
+      console.warn('[CloseConversationDialog] rpc_close_conversation lancou:', err);
       toast.error('Erro ao registrar encerramento');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (

@@ -113,7 +113,7 @@ describe('CloseConversationDialog — encerramento atomico via RPC', () => {
     expect(h.toastWarning).not.toHaveBeenCalled();
   });
 
-  it('avisa o usuario quando registrou mas nao havia conversa para espelhar (0 linhas)', async () => {
+  it('avisa o usuario quando registrou mas nao havia conversa ativa para espelhar (0 linhas)', async () => {
     h.rpc.mockResolvedValue({ data: { ok: true, conversations_atualizadas: 0 }, error: null });
     abrirDialogo();
 
@@ -122,6 +122,42 @@ describe('CloseConversationDialog — encerramento atomico via RPC', () => {
     await waitFor(() => expect(h.toastWarning).toHaveBeenCalled());
     expect(h.toastSuccess).not.toHaveBeenCalled();
     expect(String(h.toastWarning.mock.calls[0][0])).toContain('espelhar o status');
+  });
+
+  it('espelha varias conversas ativas do mesmo contato (numero > 1) sem avisar', async () => {
+    // Um contato pode ter conversa em mais de uma instance_name: o servidor
+    // espelha todas e devolve o total. Isso NAO e caso de aviso.
+    h.rpc.mockResolvedValue({ data: { ok: true, conversations_atualizadas: 3 }, error: null });
+    abrirDialogo();
+
+    await encerrar();
+
+    await waitFor(() =>
+      expect(h.toastSuccess).toHaveBeenCalledWith('Conversa encerrada com registro')
+    );
+    expect(h.toastWarning).not.toHaveBeenCalled();
+  });
+
+  it('rejeicao do dbRpc nao deixa o dialogo preso em "Salvando..." (try/finally)', async () => {
+    // dbRpc RE-LANCA excecoes de transporte (nao devolve {error}); sem finally,
+    // setSaving(false) era pulado e o botao ficava desabilitado para sempre.
+    h.rpc.mockRejectedValue(new Error('network down'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    abrirDialogo();
+
+    await encerrar();
+
+    await waitFor(() => {
+      const botao = screen.getByRole('button', { name: 'Encerrar' });
+      expect((botao as HTMLButtonElement).disabled).toBe(false);
+    });
+    expect(screen.queryByText('Salvando...')).toBeNull();
+    // O catch tem de avisar o usuario — antes disso o re-lancamento do dbRpc
+    // virava unhandled rejection e a tela nao dizia nada.
+    expect(h.toastError).toHaveBeenCalledWith('Erro ao registrar encerramento');
+    expect(h.toastSuccess).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 
   it('erro da RPC: anuncia erro e nao finge sucesso', async () => {

@@ -461,8 +461,15 @@ interface CloseConversationParams {
 
 /**
  * Retorno de rpc_close_conversation.
- * `conversations_atualizadas` e 0 quando o contato existe mas nao havia
- * conversa ativa para espelhar o status (o encerramento continua registrado).
+ *
+ * `conversations_atualizadas` conta SOMENTE conversas que ainda nao estavam
+ * arquivadas e que a chamada espelhou neste momento — ou seja, 0 significa
+ * "o contato existe mas nao havia conversa ativa" (o encerramento segue
+ * registrado no ledger). O servidor restringe o UPDATE por status justamente
+ * para que este numero cumpra esse contrato.
+ *
+ * Um contato pode ter conversa em mais de uma instance_name: todas as ativas
+ * sao espelhadas na mesma chamada, e o numero reflete esse total.
  */
 interface CloseConversationResult {
   ok: boolean;
