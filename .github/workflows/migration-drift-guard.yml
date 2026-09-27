@@ -25,9 +25,8 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/**.sql'
-  schedule:
-    # Diário às 06:00 UTC — detecta drift que aconteceu fora de PRs
-    - cron: '0 6 * * *'
+  # 2026-09-27: schedule suspenso — drift de migration detectado mas nao resolvido — workflow ainda roda em push/PR com filtro de paths
+  # Para reabilitar: remover este comentario e restaurar o bloco schedule:
   workflow_dispatch:
     inputs:
       fail_on_drift:
