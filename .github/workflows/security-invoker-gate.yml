@@ -8,7 +8,7 @@ on:
       - 'src/integrations/supabase/**'
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * 1'  # Monday 8am UTC
+    - cron: '33 10 * * 1'  # Etapa 95: deslocado de 08:00 para 10:33 (seg) — evita colisão com db-reference-integrity (08:00 diário, mesmo pool vps-zapp)
 
 permissions:
   contents: read

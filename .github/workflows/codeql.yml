@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '47 9 * * 1'  # Etapa 95: jitter de :00 → :47 para reduzir congestionamento de jobs na hora cheia
 
 permissions:
   contents: read

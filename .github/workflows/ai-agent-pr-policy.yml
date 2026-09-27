@@ -1,4 +1,12 @@
 name: AI Agent PR Policy
+# Etapa 97 — DECISÃO (2026-09-27):
+# Com branch protection configurada (etapa 12, required checks + enforce_admins),
+# push direto na main já é bloqueado ANTES de chegar ao runner — este workflow
+# vira redundante como barreira primária.
+# Mantido como TRIPWIRE: detecta o caso raro de enforce_admins desabilitado
+# ou token com bypass explícito. Não remover até que enforce_admins esteja
+# confirmado ativo (etapa 13 — branch-protection-sentinel verde diário por 7 dias).
+# Ref: docs/decisions/ADR-CI-001-gen-types-auto-merge.md (seção sobre policy gates)
 
 on:
   push:

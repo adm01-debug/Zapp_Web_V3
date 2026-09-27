@@ -37,6 +37,19 @@
 - [ ] Nenhuma credencial, token ou secret no código
 - [ ] `git diff --stat HEAD | grep -i secret` retorna vazio
 
+### Para PRs de CI/Workflows (`.github/workflows/`)
+- [ ] Todas as actions de terceiros estão pinadas por SHA digest (não tag flutuante)
+- [ ] Nenhum workflow usa `runs-on: ubuntu-latest` para jobs que precisam de DB/VPS
+- [ ] `name:` do workflow não usa emoji se é referenciado por outro via `workflow_run:`
+- [ ] `timeout-minutes:` definido em todo job
+- [ ] `concurrency:` com `cancel-in-progress: false` nos workflows que não devem se cancelar (deploy, migrate)
+- [ ] Permissions mínimas (`contents: read` por padrão; escrever só no job que precisa)
+- [ ] Secrets usados existem no repositório (`Settings → Secrets → Actions`)
+- [ ] `ci-workflows-lint.yml` passa (`actionlint` + checagem de refs `workflow_run`)
+
+> Template CI especializado: `.github/PULL_REQUEST_TEMPLATE/chat-ui-100.md`
+> (via `?template=chat-ui-100.md` na URL ao abrir o PR)
+
 ## Testes relacionados
 <!-- Liste os arquivos de teste adicionados/modificados -->
 

@@ -76,6 +76,18 @@ jobs:
           git push origin "$BRANCH"
 
       - name: Create PR and auto-merge
+        # DECISÃO DE AUTO-MERGE (etapa 93, 2026-09-27):
+        # types.ts é gerado 100% pelo schema — não é código de negócio escrito à mão.
+        # HERMES.md define "merge é ato humano" para código de produto, edge functions,
+        # migrations e mudanças de infraestrutura. types.ts é exceção documentada:
+        #   - Arquivo gerado via query ao banco (nenhuma lógica introduzida pelo workflow)
+        #   - PR toca apenas src/integrations/supabase/types.ts (arquivos gerados)
+        #   - CI completo roda antes de auto-merge (required checks via branch protection)
+        #   - Disparado manualmente por humano (workflow_dispatch) — não assíncrono
+        # Condições para revogar a exceção: se branch protection não exigir CI antes do
+        # merge OU se o arquivo começar a conter lógica manual — então trocar por PR draft
+        # sem --auto e aguardar aprovação humana.
+        # Ref: docs/decisions/ADR-CI-001-gen-types-auto-merge.md
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,9 +103,10 @@ jobs:
           **Triggered by:** \`${{ github.actor }}\`
           **Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-          > Auto-merge via squash será executado imediatamente.")
+          > Auto-merge via squash — exceção documentada ao fluxo 'merge é ato humano'
+          > (HERMES.md). Arquivo gerado, sem lógica de negócio. Ver ADR-CI-001.")
           echo "PR created: $PR_URL"
-          # Auto-merge squash (requer branch protection configurado para aceitar)
+          # Auto-merge squash — requer required checks ativados na branch protection
           gh pr merge "$BRANCH" --squash --auto --delete-branch
           echo "Auto-merge requested (squash)"
 
