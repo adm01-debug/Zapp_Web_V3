@@ -66,7 +66,7 @@ jobs:
         # Sem `node --test`: este job roda em runner self-hosted cujo Node é
         # anterior ao 18 ("node: bad option: --test", run 36328997858). O teste é
         # um script autônomo com saída TAP — roda em qualquer Node com ESM.
-        run: node infra/edge-deploy/__tests__/edge-orphan-registry.test.mjs
+        run: bash infra/edge-deploy/__tests__/edge-orphan-registry.test.sh
 
       - name: E38 — Verificar edge functions (MISSING/STALE/ORPHAN)
         if: steps.env_check.outputs.skip != 'true'
