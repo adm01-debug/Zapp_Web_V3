@@ -18,25 +18,32 @@
  *     remove arquivo de produção sem dispatch explícito.
  *
  * NÃO cobre (por construção): execução contra o volume real (exige SSH na VPS).
- * Run: node --test infra/edge-deploy/__tests__/edge-orphan-registry.test.mjs
+ *
+ * POR QUE NÃO `node --test`: o job que hospeda este teste roda em runner
+ * self-hosted cujo Node é anterior ao 18 — `node --test` falha com
+ * "node: bad option: --test" (medido no run 36328997858, 2026-09-27). Este
+ * arquivo é um script autônomo: qualquer Node com ESM roda, e a saída usa TAP
+ * (ok/not ok) para ficar legível no log do CI.
+ *
+ * Run: node infra/edge-deploy/__tests__/edge-orphan-registry.test.mjs
  */
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import assert from 'assert';
+import { execFileSync } from 'child_process';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = dirname(fileURLToPath(import.meta.url));
+const RAIZ = join(HERE, '..', '..', '..');
 const SCRIPT = join(HERE, '..', 'deploy-edge.sh');
-const WORKFLOW = join(HERE, '..', '..', '..', '.github', 'workflows', 'edge-deploy.yml');
+const WORKFLOW = join(RAIZ, '.github', 'workflows', 'edge-deploy.yml');
 
 const sh = readFileSync(SCRIPT, 'utf8');
 const wf = readFileSync(WORKFLOW, 'utf8');
 
 /** Reproduz a pipeline `find` do script sobre uma árvore temporária de _shared. */
-function listar(dir, { soTs }) {
+function listar(dir, soTs) {
   const args = ['-type', 'f'];
   if (soTs) args.push('-name', '*.ts');
   args.push(
@@ -46,11 +53,22 @@ function listar(dir, { soTs }) {
     '!', '-name', '*.spec.ts',
     '-printf', '%P\n',
   );
-  return execFileSync('find', ['.', ...args], { cwd: dir, encoding: 'utf8' })
+  return execFileSync('find', ['.'].concat(args), { cwd: dir, encoding: 'utf8' })
     .split('\n').filter(Boolean).sort();
 }
 
-test('1. a lista do repo inclui arquivos não-.ts versionados (comparação simétrica)', () => {
+let falhas = 0;
+function teste(nome, fn) {
+  try {
+    fn();
+    console.log('ok - ' + nome);
+  } catch (e) {
+    falhas++;
+    console.log('not ok - ' + nome + '\n  ' + (e && e.message ? e.message : String(e)));
+  }
+}
+
+teste('1. a lista do repo inclui arquivos não-.ts versionados (comparação simétrica)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'shared-'));
   mkdirSync(join(dir, '__tests__'), { recursive: true });
   writeFileSync(join(dir, 'README.md'), '# doc\n');
@@ -58,57 +76,55 @@ test('1. a lista do repo inclui arquivos não-.ts versionados (comparação sim�
   writeFileSync(join(dir, 'mode.ts'), 'export const a = 1;\n');
   writeFileSync(join(dir, '__tests__', 'x.test.ts'), '// teste\n');
 
-  const soTs = listar(dir, { soTs: true });
-  const todos = listar(dir, { soTs: false });
+  const soTs = listar(dir, true);
+  const todos = listar(dir, false);
 
   // é exatamente a assimetria que gerava os falsos positivos
-  assert.equal(soTs.includes('README.md'), false, 'a lista antiga (só .ts) não via README.md');
-  assert.equal(soTs.includes('evolution-event-types.json'), false, 'nem o .json');
-  assert.deepEqual(
-    todos,
-    ['README.md', 'evolution-event-types.json', 'mode.ts'],
-    'a lista nova vê todos os arquivos e continua excluindo __tests__',
-  );
+  assert.deepStrictEqual(soTs.indexOf('README.md'), -1,
+    'a lista antiga (só .ts) não deveria ver README.md');
+  assert.deepStrictEqual(soTs.indexOf('evolution-event-types.json'), -1,
+    'a lista antiga (só .ts) não deveria ver o .json');
+  assert.deepStrictEqual(todos, ['README.md', 'evolution-event-types.json', 'mode.ts'],
+    'a lista nova vê todos os arquivos e continua excluindo __tests__');
 });
 
-test('2. o teste de órfão de _shared usa a lista simétrica', () => {
-  assert.match(sh, /REPO_SHARED_ALL/, 'deploy-edge.sh precisa declarar REPO_SHARED_ALL');
-  assert.match(
-    sh,
-    /printf '%s\\n' "\$\{REPO_SHARED_ALL\[@\]\}" \| grep -qx "\$name"/,
+teste('2. o teste de órfão de _shared usa a lista simétrica', () => {
+  assert.ok(sh.indexOf('REPO_SHARED_ALL') !== -1,
+    'deploy-edge.sh precisa declarar REPO_SHARED_ALL');
+  assert.ok(
+    sh.indexOf('printf \'%s\\n\' "${REPO_SHARED_ALL[@]}" | grep -qx "$name"') !== -1,
     'a detecção de órfão precisa comparar contra REPO_SHARED_ALL (não REPO_SHARED)',
   );
 });
 
-test('3. funções retiradas com ADR estão no registry', () => {
+teste('3. funções retiradas com ADR estão no registry', () => {
   const m = sh.match(/RETIRED_FUNCTIONS=\(([^)]*)\)/);
   assert.ok(m, 'RETIRED_FUNCTIONS precisa existir no script');
-  for (const fn of ['email-health', 'zapp-google-calendar-sync']) {
-    assert.ok(m[1].includes(fn), `${fn} precisa estar em RETIRED_FUNCTIONS`);
-  }
+  ['email-health', 'zapp-google-calendar-sync'].forEach((fn) => {
+    assert.ok(m[1].indexOf(fn) !== -1, fn + ' precisa estar em RETIRED_FUNCTIONS');
+  });
   // a justificativa (ADR) precisa existir no repo, não só o nome na lista
-  const raiz = join(HERE, '..', '..', '..');
-  const adrs = execFileSync('bash', ['-c', 'ls docs/_archive/ | grep -cE "email-health|calendar"'], {
-    cwd: raiz, encoding: 'utf8',
-  }).trim();
+  const adrs = execFileSync('bash', ['-c', 'ls docs/_archive/ | grep -cE "email-health|calendar"'],
+    { cwd: RAIZ, encoding: 'utf8' }).trim();
   assert.ok(Number(adrs) >= 1, 'a retirada precisa estar documentada em docs/_archive/');
 });
 
-test('4. rigor preservado: órfão desconhecido continua sendo reportado', () => {
+teste('4. rigor preservado: órfão desconhecido continua sendo reportado', () => {
   const retiradas = sh.match(/RETIRED_FUNCTIONS=\(([^)]*)\)/)[1].split(/\s+/).filter(Boolean);
-  assert.equal(
-    retiradas.includes('funcao-nova-desconhecida'), false,
-    'a lista de retiradas não pode virar um curinga',
-  );
-  assert.match(
-    sh,
-    /RETIRED_FUNCTIONS\[@\]\}" \| grep -qx "\$name"; then\n\s+continue/,
-    'a tolerância precisa ser um continue ANTES do incremento de ORPHAN',
-  );
+  assert.strictEqual(retiradas.indexOf('funcao-nova-desconhecida'), -1,
+    'a lista de retiradas não pode virar um curinga');
+  const alvo = 'RETIRED_FUNCTIONS[@]}" | grep -qx "$name"; then';
+  const pos = sh.indexOf(alvo);
+  assert.ok(pos !== -1, 'a tolerância precisa testar RETIRED_FUNCTIONS');
+  assert.ok(/^\s*continue/m.test(sh.slice(pos, pos + 120)),
+    'a tolerância precisa ser um continue ANTES do incremento de ORPHAN');
 });
 
-test('5. segurança: prune só por dispatch explícito (default false)', () => {
-  assert.match(wf, /prune:/, 'edge-deploy.yml precisa expor o input prune');
-  assert.match(wf, /default: false/, 'prune precisa ter default false');
-  assert.match(wf, /--apply --restart/, 'o deploy normal continua sem prune');
+teste('5. segurança: prune só por dispatch explícito (default false)', () => {
+  assert.ok(wf.indexOf('prune:') !== -1, 'edge-deploy.yml precisa expor o input prune');
+  assert.ok(wf.indexOf('default: false') !== -1, 'prune precisa ter default false');
+  assert.ok(wf.indexOf('--apply --restart') !== -1, 'o deploy normal continua sem prune');
 });
+
+console.log((falhas === 0 ? 'ok' : 'not ok') + ' - 5 testes do registry de órfãos (falhas=' + falhas + ')');
+process.exit(falhas === 0 ? 0 : 1);

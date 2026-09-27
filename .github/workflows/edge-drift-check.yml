@@ -63,7 +63,10 @@ jobs:
       # Ou seja: o gate estava vermelho por erro de invocação, não por drift — e por isso
       # não reportava nada. Agora ele reporta o drift real, com contagem, quando houver.
       - name: Registry de órfãos — teste de regressão
-        run: node --test infra/edge-deploy/__tests__/edge-orphan-registry.test.mjs
+        # Sem `node --test`: este job roda em runner self-hosted cujo Node é
+        # anterior ao 18 ("node: bad option: --test", run 36328997858). O teste é
+        # um script autônomo com saída TAP — roda em qualquer Node com ESM.
+        run: node infra/edge-deploy/__tests__/edge-orphan-registry.test.mjs
 
       - name: E38 — Verificar edge functions (MISSING/STALE/ORPHAN)
         if: steps.env_check.outputs.skip != 'true'
