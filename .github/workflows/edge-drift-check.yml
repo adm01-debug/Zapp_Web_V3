@@ -62,6 +62,9 @@ jobs:
       # com exit 1 se houver MISSING/STALE/ORPHAN (cabeçalho do script, linha 45).
       # Ou seja: o gate estava vermelho por erro de invocação, não por drift — e por isso
       # não reportava nada. Agora ele reporta o drift real, com contagem, quando houver.
+      - name: Registry de órfãos — teste de regressão
+        run: node --test infra/edge-deploy/__tests__/edge-orphan-registry.test.mjs
+
       - name: E38 — Verificar edge functions (MISSING/STALE/ORPHAN)
         if: steps.env_check.outputs.skip != 'true'
         run: bash infra/edge-deploy/deploy-edge.sh
