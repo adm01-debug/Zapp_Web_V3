@@ -23,11 +23,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci --no-audit --no-fund
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Etapa 80 — paridade de contratos e schemas
         run: node scripts/check-contract-parity.mjs
       - name: Etapa 90 — ratchet de shapes de erro ad-hoc em Edge Functions

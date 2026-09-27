@@ -82,7 +82,30 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: E39 — verificar vars de ambiente
+        id: env_check
+        run: |
+          missing=""
+          for var in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_ANON_KEY; do
+            [ -z "${!var}" ] && missing="$missing $var"
+          done
+          if [ -n "$missing" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "::notice::E39: vars ausentes em PR ($missing) — skip silencioso"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "::error::E39: vars de ambiente obrigatórias ausentes:$missing"
+            exit 1
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
       - name: E39 — deploy-edge.sh read-only (falha em MISSING/STALE/ORPHAN)
+        if: steps.env_check.outputs.skip != 'true'
         run: bash infra/edge-deploy/deploy-edge.sh
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

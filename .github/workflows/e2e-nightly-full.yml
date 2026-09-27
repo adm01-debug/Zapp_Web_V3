@@ -31,15 +31,12 @@ jobs:
       BASE_URL: ${{ inputs.base_url || 'https://zapp.atomicabr.com.br' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci --no-audit --no-fund
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Install Playwright
-        run: npx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium
       - name: Run full E2E suite
-        run: npx playwright test --reporter=html
+        run: bunx playwright test --reporter=html
         env:
           BASE_URL: ${{ env.BASE_URL }}
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
