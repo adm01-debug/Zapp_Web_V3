@@ -1,0 +1,90 @@
+# =================================================
+# Orçamento de performance — carga inicial da SPA
+# =================================================
+# O script `scripts/check-performance-budget.mjs` nasceu em 2026-08-04 junto com
+# `performance-baseline.json`, mas NENHUM workflow o chamava: ele mede a carga
+# inicial real (o entry module + os chunks vendor pré-carregados por
+# `modulepreload` no `dist/index.html`) e falhava se o orçamento estourasse —
+# só que nunca rodava. Resultado: o bundle pôde crescer sem ninguém ver o número.
+#
+# Este workflow liga o gate que já existia, sem reescrever a medição:
+#   entry  ≤ 600 KB gz   ·   total inicial ≤ 2 MB gz   ·   ≤ 600 KB gz por chunk
+# Valores vindos de `performance-baseline.json` (medição de 2026-08-04:
+# entry 449 KB gz, total 1,19 MB gz). O script também alivia aviso de regressão
+# acima de 10% em relação ao baseline gravado.
+#
+# Roda em `ubuntu-latest` (repo público → minutos gratuitos) de propósito: o pool
+# self-hosted `vps-zapp` tem 6 runners para ~48 workflows e enfileira por dezenas
+# de minutos; um gate de build não deve competir com o CI obrigatório.
+#
+# Este check NÃO está na branch protection — ele reporta e falha, mas não bloqueia
+# o merge de quem não mexeu no bundle.
+
+name: 📊 Orçamento de performance (bundle)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/**"
+      - "index.html"
+      - "vite.config.ts"
+      - "package.json"
+      - "bun.lock"
+      - "performance-baseline.json"
+      - "scripts/check-performance-budget.mjs"
+      - ".github/workflows/perf-budget.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "vite.config.ts"
+      - "performance-baseline.json"
+  workflow_dispatch:
+
+concurrency:
+  group: perf-budget-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event.pull_request.number != '' }}
+
+env:
+  CI: true
+  VITE_SUPABASE_URL: https://example.supabase.co
+  VITE_SUPABASE_ANON_KEY: test-anon-key
+  VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
+
+jobs:
+  budget:
+    name: Carga inicial dentro do orçamento
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Instalar dependências
+        run: bun install
+
+      - name: Build de produção
+        run: bun run build
+
+      - name: Medir a carga inicial contra o orçamento
+        run: node scripts/check-performance-budget.mjs
+
+      - name: Resumo no job (últimos números medidos)
+        if: always()
+        run: |
+          echo "### 📊 Orçamento de performance" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f dist/index.html ]; then
+            echo "Chunks pré-carregados no boot (modulepreload):" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -oE 'assets/[A-Za-z0-9._-]+\.js' dist/index.html | sort -u >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Build não gerou dist/index.html — veja o passo de build acima." >> "$GITHUB_STEP_SUMMARY"
+          fi
