@@ -20,9 +20,32 @@
 # exceções toleradas. 1 (`zapp.evolution_instances_public`) nunca recebeu a flag
 # por decisão do dono do projeto — exposição pública é decisão dele.
 #
-# TODO(governança): decidir por view entre (a) conceder SELECT na base com
-# política de RLS que faça sentido, ou (b) dropar/redefinir a view sem a flag.
-# Ambas são mudanças de dado/estrutura e por isso não foram feitas em lote.
+# TODO(governança) — POR QUE A OPÇÃO "CONCEDER SELECT NA BASE" NÃO FOI APLICADA
+#
+# Avaliada em 28/09/2026 e REPROVADA caso a caso. Medição das 24 bases bloqueadoras:
+#   21 estão no schema `evo`  -> o gate E42 desta casa PROÍBE: "bloqueia DDL NOVO em
+#       schema evo via migrations deste repo. O schema evo é fronteira (infra no repo
+#       evolution-stack); DDL evo novo exige revisão explícita", com exceções em
+#       scripts/decouple/evo-ddl-allowlist.txt. Não se contorna gate para conceder
+#       privilégio.
+#   1 é `cron.job` (pg_cron) -> expor definição de job agendado não faz sentido.
+#   1 é `zapp.evolution_instance_credentials` -> colunas `api_key`, `instance_token`,
+#       `vault_secret_id`. Conceder AQUI desfaria o próprio hardening. Nunca.
+#   1 é `zapp.cookie_probe_log` (a única nossa) -> `v_cookie_health` depende de
+#       `p.response_preview` (corpo bruto da resposta do probe) para montar
+#       `last_probe_preview`. Conceder = expor resposta crua de upstream a qualquer
+#       usuário logado. Reprovado na simulação: com grant colunar sem essa coluna, a
+#       leitura continuou em `permission denied`.
+#
+# CONCLUSÃO: as 30 exceções ficam como estão — FALHANDO FECHADO (erro em vez de
+# vazamento), com zero consumidor medido (`src/` e `supabase/functions/`). O caminho
+# para reabri-las é OUTRO, e não é deste repo:
+#   (a) o lado `evo` conceder leitura (outro repo/time, via allowlist do E42); ou
+#   (b) reescrever a view para ler uma fonte sancionada nossa (RPC/view com filtro).
+# Enquanto isso o INV-9 garante que nenhuma view NOVA entre sem a flag.
+#
+# (mantido para referência o motivo original)
+
 evolution_alert_cooldown
 evolution_backfill_audit
 evolution_bootstrap_log
