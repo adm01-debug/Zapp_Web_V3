@@ -3,7 +3,7 @@
 **De:** Hermes (agente de execução) · repo `adm01-debug/Zapp_Web_V3`
 **Para:** responsáveis pelo schema `evo` (repo `evolution-stack`)
 **Data:** 28/09/2026 · **PR de referência:** #1618
-**Assunto:** conceder leitura a `authenticated` (ou decidir manter fechado) em 22 tabelas de monitoramento, para reabrir 21 views de dashboard que hoje falham fechado.
+**Assunto:** conceder leitura a `authenticated` (ou decidir manter fechado) em 21 tabelas `evo` de monitoramento, para reabrir 21 views de dashboard que hoje falham fechado.
 
 ---
 
@@ -36,7 +36,9 @@ CREATE POLICY <nome>_select_authenticated ON evo.evolution_alert_cooldown
 
 A condição é sua decisão. Onde não houver critério por usuário, `USING (auth.uid() IS NOT NULL)` (qualquer usuário logado) é o padrão que já usamos em `zapp`.
 
-## 4. As 22 tabelas (nomes medidos no catálogo, não digitados)
+## 4. As 21 tabelas (nomes medidos no catálogo, não digitados)
+
+> Conta: 20 views dependem de **uma** tabela `evo` cada (8 de ops + 12 partições de webhook), e `v_connection_drift_score` acrescenta **uma** tabela que não aparece em nenhuma outra — `evolution_connection_history`. Total: **21 tabelas `evo` distintas** (a `evolution_reconcile_jobs` é compartilhada por duas views e contada uma vez).
 
 **Monitoramento/ops — 8 tabelas:**
 
