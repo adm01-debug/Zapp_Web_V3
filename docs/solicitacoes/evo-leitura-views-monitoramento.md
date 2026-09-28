@@ -7,6 +7,13 @@
 
 ---
 
+> **Atualização pós-auditoria (28/09/2026).** A medição completa das views que TÊM a flag
+> `security_invoker` e ainda assim falham fechado deu **25** (a contagem anterior, 23, estava
+> incompleta: faltavam `v_perf_dashboard` e `vw_system_health`). A lista nominal, com o motivo de
+> cada uma, está em `scripts/sql/views-security-invoker.baseline`. **Deste pedido são as 21 que
+> dependem de tabela `evo`** — as demais dependem de `cron.job` ou de tabela nossa com política
+> deliberada, e não se resolvem por concessão de leitura no lado `evo`.
+
 ## 1. Situação em uma frase
 
 Endurecemos as views do schema `zapp` com `security_invoker = true` (correto: elas passaram a respeitar a RLS de quem consulta). Como efeito colateral, **21 views de monitoramento ficaram ilegíveis** para usuários logados, porque a tabela-base vive no schema `evo` e **não concede SELECT** a `authenticated`.
