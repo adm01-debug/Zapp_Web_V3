@@ -64,7 +64,8 @@ export function dbTable(entity: LogicalEntity): string {
 export function dbFrom(entity: LogicalEntity): any {
   const mapping = requireMapping(entity);
   validateEntityAccess(mapping.table, mapping.client);
-  return (dbClient(entity) as any).from(mapping.table);
+  const client: any = dbClient(entity);
+  return client.from(mapping.table);
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
