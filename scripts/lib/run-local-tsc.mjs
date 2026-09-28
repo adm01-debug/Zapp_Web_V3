@@ -9,7 +9,7 @@ const ANY_ERROR_DIAGNOSTIC_RE = /error TS\d+:/;
 const FATAL_PROCESS_OUTPUT_RE =
   /^(?:FATAL(?: ERROR)?|INTERNAL COMPILER ERROR|JavaScript heap out of memory|heap out of memory|segmentation fault|uncaught(?: exception)?|node:internal(?:[\\/]|:)|npm (?:ERR!|error)|pnpm (?:ERR_|error)|bun (?:error|panic)|panic:|ERR_[A-Z0-9_]+)/im;
 
-export const DEFAULT_TSC_TIMEOUT_MS = 5 * 60 * 1_000;
+export const DEFAULT_TSC_TIMEOUT_MS = 10 * 60 * 1_000;
 export const DEFAULT_TSC_MAX_BUFFER = 64 * 1024 * 1024;
 
 const TYPECHECK_EXIT_STATUSES = new Set([1, 2]);

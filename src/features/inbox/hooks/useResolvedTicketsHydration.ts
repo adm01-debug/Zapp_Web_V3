@@ -22,7 +22,10 @@ export function useResolvedTicketsHydration() {
     queryFn: async () => {
       const { data: rows, error } = await dbFrom('conversation_closures').select('contact_id');
       if (error) throw error;
-      return Array.from(new Set((rows ?? []).map((r) => r.contact_id).filter(Boolean)));
+      const typed = rows as Array<{ contact_id: string | null }> | null;
+      return Array.from(
+        new Set((typed ?? []).map((r) => r.contact_id).filter((id): id is string => Boolean(id)))
+      );
     },
   });
 
