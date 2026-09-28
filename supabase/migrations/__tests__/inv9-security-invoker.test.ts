@@ -32,11 +32,14 @@ Deno.test('o check LIVE existe e tem as três guardas (escopo, vacuidade, baseli
 Deno.test('o baseline lista as exceções com o motivo, sem duplicatas, e mantém a view reservada', () => {
   const bruto = Deno.readTextFileSync(BASELINE);
   const nomes = bruto.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#')).map((l) => l.trim());
-  exigir(nomes.length === 30, `baseline com ${nomes.length} entradas — esperado 30 (medido em 28/09/2026)`);
+  exigir(nomes.length === 25, `baseline com ${nomes.length} entradas — esperado 25 (30 menos as 5 views de ops reescritas sobre fonte nossa)`);
   exigir(new Set(nomes).size === nomes.length, 'baseline com nomes duplicados');
   exigir(nomes.includes('evolution_instances_public'), 'evolution_instances_public (reservada) saiu do baseline');
-  exigir(/POR QUE ESTAS 30 PERMANECEM/.test(bruto), 'baseline sem o motivo registrado por escrito');
+  exigir(/POR QUE ESTAS 25 PERMANECEM/.test(bruto), 'baseline sem o motivo registrado por escrito');
   exigir(/PG 15\.8|PostgreSQL 15\.8/.test(bruto), 'baseline não registra a limitação de plataforma (flag não removível)');
+  for (const quitada of ['zapp_dash_daily', 'zapp_dash_heatmap', 'zapp_dash_overview', 'zapp_dash_top_contacts', 'zapp_inbox_threads']) {
+    exigir(!nomes.includes(quitada), `${quitada} está legível com a flag — dívida quitada não pode voltar ao baseline`);
+  }
 });
 
 Deno.test('o workflow roda o check E passa a baseline (senão o ratchet não tem contra o que comparar)', () => {

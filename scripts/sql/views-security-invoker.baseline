@@ -7,7 +7,13 @@
 # Estado em 28/09/2026 (medido, depois das migrations 20260928180000 e
 # 20260928172940): 258 views em `zapp`, 228 com a flag, 30 sem.
 #
-# POR QUE ESTAS 30 PERMANECEM (todas com o mesmo motivo):
+# DÍVIDA QUITADA (28/09/2026) — 5 views saíram do baseline com a migration
+# 20260928210000_ops_views_fonte_nossa: zapp_dash_daily, zapp_dash_heatmap,
+# zapp_dash_overview, zapp_dash_top_contacts e zapp_inbox_threads liam
+# `evo.active_messages` e agora leem `zapp.evolution_messages` (view nossa, já com
+# a flag e já legível). Nenhum privilégio foi concedido: a correção foi de FONTE.
+#
+# POR QUE ESTAS 25 PERMANECEM (todas com o mesmo motivo):
 #   a tabela-base NÃO concede SELECT a `authenticated`. Ligar a flag as torna
 #   ILEGÍVEIS para o usuário logado — o que é "falhar fechado" e é aceitável,
 #   MAS esta instância (PG 15.8) NÃO permite mais desligar a flag depois
@@ -71,8 +77,3 @@ evolution_webhook_events_v2_default
 v_connection_drift_score
 v_cookie_health
 v_system_scorecard
-zapp_dash_daily
-zapp_dash_heatmap
-zapp_dash_overview
-zapp_dash_top_contacts
-zapp_inbox_threads
