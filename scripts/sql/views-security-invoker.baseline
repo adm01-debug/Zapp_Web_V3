@@ -1,79 +1,50 @@
 # Baseline do INV-9 — views SEM `security_invoker` nos schemas do app.
 #
-# Regra: esta lista é DÍVIDA CONHECIDA. O CI (INV-9) falha se aparecer view sem
-# a flag que NÃO esteja aqui. A lista só encurta — corrigir uma exceção não
-# obriga a mexer nela, mas esquecer a flag numa view nova quebra o build.
+# Regra: esta lista é DÍVIDA CONHECIDA. O CI (INV-9) falha se aparecer view SEM a
+# flag que NÃO esteja aqui. A lista só encurta — esquecer a flag numa view nova
+# quebra o build.
 #
-# Estado em 28/09/2026 (medido, depois das migrations 20260928180000 e
-# 20260928172940): 258 views em `zapp`, 228 com a flag, 30 sem.
+# Estado medido em 28/09/2026, depois das migrations 20260928180000, 20260928172940
+# e 20260928210000: 258 views em `zapp`, 257 COM a flag, 1 SEM.
 #
-# DÍVIDA QUITADA (28/09/2026) — 5 views saíram do baseline com a migration
-# 20260928210000_ops_views_fonte_nossa: zapp_dash_daily, zapp_dash_heatmap,
-# zapp_dash_overview, zapp_dash_top_contacts e zapp_inbox_threads liam
-# `evo.active_messages` e agora leem `zapp.evolution_messages` (view nossa, já com
-# a flag e já legível). Nenhum privilégio foi concedido: a correção foi de FONTE.
+# POR QUE ESTA 1 PERMANECE:
+#   `evolution_instances_public` nunca recebeu a flag por decisão do dono do projeto
+#   — exposição pública é decisão dele, não minha.
 #
-# POR QUE ESTAS 25 PERMANECEM (todas com o mesmo motivo):
-#   a tabela-base NÃO concede SELECT a `authenticated`. Ligar a flag as torna
-#   ILEGÍVEIS para o usuário logado — o que é "falhar fechado" e é aceitável,
-#   MAS esta instância (PG 15.8) NÃO permite mais desligar a flag depois
-#   (medido: `SET (security_invoker = false)` e `RESET (security_invoker)` não
-#   alteram `reloptions`). Sem poder reverter, não se aplica a flag em lote.
+# ---------------------------------------------------------------------------
+# ATENÇÃO — ISTO NÃO É ENTRADA DE RATCHET (leia antes de acrescentar nome aqui)
 #
-# Das 30: 29 já receberam a flag durante o hardening e hoje respondem
-# `permission denied` (falham fechado, zero consumidores medida em `src/` e em
-# `supabase/functions/`); elas seguem aqui porque o baseline é a lista de
-# exceções toleradas. 1 (`zapp.evolution_instances_public`) nunca recebeu a flag
-# por decisão do dono do projeto — exposição pública é decisão dele.
+# Existem 24 views que JÁ TÊM a flag e ainda assim respondem `permission denied`
+# para `authenticated`: a tabela-base vive no schema `evo` (fronteira de infra deste
+# repo, protegida pelo gate E42 para DDL) ou é `cron.job` (pg_cron) / tabela de
+# credencial. Elas NÃO entram nesta lista, porque o assunto do ratchet é "view SEM a
+# flag" — e o check nunca casaria esses nomes, o que faria a lista parecer tolerar 24
+# exceções que ela não tolera.
 #
-# TODO(governança) — POR QUE A OPÇÃO "CONCEDER SELECT NA BASE" NÃO FOI APLICADA
+# Elas falham FECHADO (erro em vez de vazamento) e têm ZERO consumidor medido em
+# `src/` e em `supabase/functions/`. Nesta instância (PG 15.8) a flag NÃO é
+# removível — medido: `SET (security_invoker = false)` e `RESET (security_invoker)`
+# não alteram `reloptions`. Por isso a dívida é documentada, não "resolvida" às
+# pressas.
 #
-# Avaliada em 28/09/2026 e REPROVADA caso a caso. Medição das 24 bases bloqueadoras:
-#   21 estão no schema `evo`  -> o gate E42 desta casa PROÍBE: "bloqueia DDL NOVO em
-#       schema evo via migrations deste repo. O schema evo é fronteira (infra no repo
-#       evolution-stack); DDL evo novo exige revisão explícita", com exceções em
-#       scripts/decouple/evo-ddl-allowlist.txt. Não se contorna gate para conceder
-#       privilégio.
-#   1 é `cron.job` (pg_cron) -> expor definição de job agendado não faz sentido.
-#   1 é `zapp.evolution_instance_credentials` -> colunas `api_key`, `instance_token`,
-#       `vault_secret_id`. Conceder AQUI desfaria o próprio hardening. Nunca.
-#   1 é `zapp.cookie_probe_log` (a única nossa) -> `v_cookie_health` depende de
-#       `p.response_preview` (corpo bruto da resposta do probe) para montar
-#       `last_probe_preview`. Conceder = expor resposta crua de upstream a qualquer
-#       usuário logado. Reprovado na simulação: com grant colunar sem essa coluna, a
-#       leitura continuou em `permission denied`.
+# Quais são: evolution_alert_cooldown, evolution_backfill_audit, evolution_bootstrap_log,
+# evolution_guardian_heartbeat, evolution_instances, evolution_pipeline_health_log,
+# evolution_pipeline_history, evolution_reconcile_jobs, evolution_retention_log,
+# evolution_webhook_events_v2_2026_08, _09, _10, _11, _12, _2027_01 … _2027_06,
+# _default, v_connection_drift_score, v_cookie_health, v_system_scorecard.
 #
-# CONCLUSÃO: as 30 exceções ficam como estão — FALHANDO FECHADO (erro em vez de
-# vazamento), com zero consumidor medido (`src/` e `supabase/functions/`). O caminho
-# para reabri-las é OUTRO, e não é deste repo:
-#   (a) o lado `evo` conceder leitura (outro repo/time, via allowlist do E42); ou
-#   (b) reescrever a view para ler uma fonte sancionada nossa (RPC/view com filtro).
-# Enquanto isso o INV-9 garante que nenhuma view NOVA entre sem a flag.
+# A opção "conceder SELECT na base + política de RLS" foi avaliada e REPROVADA caso a
+# caso (21 das bases estão em `evo`, 1 é `cron.job`, 1 é a tabela de credenciais com
+# `api_key`/`instance_token`/`vault_secret_id`, 1 exigiria expor corpo de resposta de
+# upstream). O registro completo está no PR #1618. Caminhos possíveis: o lado `evo`
+# conceder leitura (outro repo/time, via allowlist do E42) ou reescrever a view sobre
+# fonte sancionada nossa — foi o que se fez com as 5 de ops abaixo.
 #
-# (mantido para referência o motivo original)
+# DÍVIDA QUITADA (28/09/2026): `zapp_dash_daily`, `zapp_dash_heatmap`,
+# `zapp_dash_overview`, `zapp_dash_top_contacts` e `zapp_inbox_threads` liam
+# `evo.active_messages` e agora leem `zapp.evolution_messages`, já com a flag e já
+# legíveis — migration 20260928210000_ops_views_fonte_nossa. Nenhum privilégio foi
+# concedido: a correção foi de FONTE.
+# ---------------------------------------------------------------------------
 
-evolution_alert_cooldown
-evolution_backfill_audit
-evolution_bootstrap_log
-evolution_guardian_heartbeat
-evolution_instances
 evolution_instances_public
-evolution_pipeline_health_log
-evolution_pipeline_history
-evolution_reconcile_jobs
-evolution_retention_log
-evolution_webhook_events_v2_2026_08
-evolution_webhook_events_v2_2026_09
-evolution_webhook_events_v2_2026_10
-evolution_webhook_events_v2_2026_11
-evolution_webhook_events_v2_2026_12
-evolution_webhook_events_v2_2027_01
-evolution_webhook_events_v2_2027_02
-evolution_webhook_events_v2_2027_03
-evolution_webhook_events_v2_2027_04
-evolution_webhook_events_v2_2027_05
-evolution_webhook_events_v2_2027_06
-evolution_webhook_events_v2_default
-v_connection_drift_score
-v_cookie_health
-v_system_scorecard

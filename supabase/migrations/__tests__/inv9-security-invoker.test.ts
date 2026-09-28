@@ -32,13 +32,21 @@ Deno.test('o check LIVE existe e tem as três guardas (escopo, vacuidade, baseli
 Deno.test('o baseline lista as exceções com o motivo, sem duplicatas, e mantém a view reservada', () => {
   const bruto = Deno.readTextFileSync(BASELINE);
   const nomes = bruto.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#')).map((l) => l.trim());
-  exigir(nomes.length === 25, `baseline com ${nomes.length} entradas — esperado 25 (30 menos as 5 views de ops reescritas sobre fonte nossa)`);
+  exigir(nomes.length === 1, `baseline com ${nomes.length} entradas — esperado 1 (só quem está SEM a flag tolerável; view com a flag que falha fechado NÃO é entrada de ratchet)`);
   exigir(new Set(nomes).size === nomes.length, 'baseline com nomes duplicados');
   exigir(nomes.includes('evolution_instances_public'), 'evolution_instances_public (reservada) saiu do baseline');
-  exigir(/POR QUE ESTAS 25 PERMANECEM/.test(bruto), 'baseline sem o motivo registrado por escrito');
+  exigir(/POR QUE ESTA 1 PERMANECE/.test(bruto), 'baseline sem o motivo registrado por escrito');
   exigir(/PG 15\.8|PostgreSQL 15\.8/.test(bruto), 'baseline não registra a limitação de plataforma (flag não removível)');
   for (const quitada of ['zapp_dash_daily', 'zapp_dash_heatmap', 'zapp_dash_overview', 'zapp_dash_top_contacts', 'zapp_inbox_threads']) {
     exigir(!nomes.includes(quitada), `${quitada} está legível com a flag — dívida quitada não pode voltar ao baseline`);
+  }
+  // A lista do ratchet contém SÓ quem está sem a flag. View que já tem a flag e falha
+  // fechado é outra dívida: documentada no cabeçalho, nunca como exceção tolerada.
+  for (const comFlagQuebrada of ['v_system_scorecard', 'v_cookie_health', 'evolution_instances']) {
+    exigir(
+      !nomes.includes(comFlagQuebrada),
+      `${comFlagQuebrada} tem a flag e falha fechado — não é "view sem flag"; não pode entrar no baseline`,
+    );
   }
 });
 
