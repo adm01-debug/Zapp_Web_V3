@@ -32,8 +32,14 @@ function acharResiduo(): string {
 
 Deno.test('a migration NÃO finge reverter a flag (impossível nesta instância)', () => {
   const sql = acharResiduo();
-  if (/RESET \(security_invoker\)/.test(sql)) {
-    throw new Error('a migration ainda tenta RESET (security_invoker) — medido: não funciona no PG 15.8 desta instância');
+  // Só CÓDIGO: o cabeçalho documenta exatamente a medição de que
+  // `RESET (security_invoker)` não funciona — citar isso no comentário é o
+  // objetivo, não o defeito. (Terceira vez que esse padrão me pega: lint ML-001,
+  // teste do GRANT e aqui. Daqui pra frente, asserção sobre texto de SQL
+  // tolerante a comentário SEMPRE roda sobre o código sem `--`.)
+  const codigo = sql.replace(/--[^\n]*/g, '');
+  if (/RESET \(security_invoker\)/.test(codigo)) {
+    throw new Error('o CÓDIGO da migration ainda tenta RESET (security_invoker) — medido: não funciona no PG 15.8 desta instância');
   }
   if (!/SET \(security_invoker = false\)/.test(sql) || !/PG 15\.8|PostgreSQL 15\.8/.test(sql)) {
     throw new Error('a limitação da plataforma (SET false / RESET não removem a flag) não está documentada');
