@@ -125,7 +125,8 @@ export function useSupervisorConversations() {
     async (contactId: string, patch: { assigned_to?: string | null; queue_id?: string | null }) => {
       if (!isValidUUID(contactId)) return { error: new Error('Invalid UUID') };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (supabase.from('contacts') as any).update(patch).eq('id', contactId);
+      const contactsFrom: any = supabase.from('contacts');
+      return contactsFrom.update(patch).eq('id', contactId);
     },
     []
   );
