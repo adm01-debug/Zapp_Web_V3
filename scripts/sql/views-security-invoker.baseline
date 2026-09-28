@@ -14,12 +14,20 @@
 # ---------------------------------------------------------------------------
 # ATENÇÃO — ISTO NÃO É ENTRADA DE RATCHET (leia antes de acrescentar nome aqui)
 #
-# Existem 24 views que JÁ TÊM a flag e ainda assim respondem `permission denied`
+# Existem 23 views que JÁ TÊM a flag e ainda assim respondem `permission denied`
 # para `authenticated`: a tabela-base vive no schema `evo` (fronteira de infra deste
 # repo, protegida pelo gate E42 para DDL) ou é `cron.job` (pg_cron) / tabela de
 # credencial. Elas NÃO entram nesta lista, porque o assunto do ratchet é "view SEM a
 # flag" — e o check nunca casaria esses nomes, o que faria a lista parecer tolerar 24
 # exceções que ela não tolera.
+#
+# A 24ª (`v_cookie_health`) foi REABERTA em 28/09/2026 pela migration
+# 20260928220000_v_cookie_health_funcao: as bases dela são NOSSAS (`cookies_config` e
+# `cookie_probe_log`), mas a tabela de probes tem política deliberada
+# `rls_cookie_probe_log_service_only`, então NÃO se concede leitura nela. A view passou
+# a ler uma função nossa, `SECURITY DEFINER` com `search_path` fixo e colunas escolhidas,
+# e o campo `last_probe_preview` sai NULL (era o corpo cru de resposta do upstream).
+# Ela sai desta lista porque voltou a ser legível.
 #
 # Elas falham FECHADO (erro em vez de vazamento) e têm ZERO consumidor medido em
 # `src/` e em `supabase/functions/`. Nesta instância (PG 15.8) a flag NÃO é
