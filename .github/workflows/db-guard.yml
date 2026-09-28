@@ -52,7 +52,7 @@ jobs:
     permissions:
       contents: read
     env:
-      SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
+      SCHEMA_CATALOG_SCHEMAS: zapp,evo
       META_URL: ${{ secrets.ZAPP_META_URL }}
       META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -169,7 +169,7 @@ jobs:
     permissions:
       contents: write
     env:
-      SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
+      SCHEMA_CATALOG_SCHEMAS: zapp,evo
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
