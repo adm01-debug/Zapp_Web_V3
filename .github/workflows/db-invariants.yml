@@ -275,9 +275,13 @@ jobs:
           # DETERMINÍSTICA: só entram containers com o schema `zapp`, e mais de
           # um candidato é ambiguidade (falha), nunca chute.
           BASELINE="$(grep -v '^#' scripts/sql/views-security-invoker.baseline | grep -v '^[[:space:]]*$' | tr '\n' ',' | sed 's/,$//')"
+          # Baseline VAZIA e estado VALIDO (zero excecoes conhecidas: e o caso hoje).
+          # O que nao pode passar e o passo NAO receber o parametro - disso o proprio
+          # SQL cuida (guarda de rota em current_setting IS NULL).
           if [ -z "$BASELINE" ]; then
-            echo "::error title=INV-9 baseline vazia::scripts/sql/views-security-invoker.baseline sem entradas — o ratchet viraria 'reprova tudo'."
-            exit 1
+            echo "INV-9 baseline: vazia (0 excecoes conhecidas) - esperado neste estado."
+          else
+            echo "INV-9 baseline: $BASELINE"
           fi
 
           if command -v docker >/dev/null 2>&1; then

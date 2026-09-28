@@ -1,58 +1,47 @@
-# Baseline do INV-9 — views SEM `security_invoker` nos schemas do app.
+# Baseline do INV-9 - views SEM `security_invoker` efetivo nos schemas do app.
 #
-# Regra: esta lista é DÍVIDA CONHECIDA. O CI (INV-9) falha se aparecer view SEM a
-# flag que NÃO esteja aqui. A lista só encurta — esquecer a flag numa view nova
-# quebra o build.
+# REGRA: esta lista e DIVIDA CONHECIDA. O CI (INV-9) falha se aparecer view SEM a
+# flag que NAO esteja aqui. A lista so encurta. Baseline VAZIA e estado VALIDO
+# (zero excecoes conhecidas) - e o caso hoje.
 #
-# Estado medido em 28/09/2026, depois das migrations 20260928180000, 20260928172940
-# e 20260928210000: 258 views em `zapp`, 257 COM a flag, 1 SEM.
+# ESTADO MEDIDO EM 28/09/2026 (catalogo vivo, nao suposicao):
+#   `zapp`: 258 views, 258 COM a opcao `security_invoker` (257 gravadas como
+#   `=true` e 1 como `=on`). SEM a opcao: 0.
+#   Escopo do INV-9 (public+zapp+evo+prospeccao): 730 views, 0 sem a opcao.
 #
-# POR QUE ESTA 1 PERMANECE:
-#   `evolution_instances_public` nunca recebeu a flag por decisão do dono do projeto
-#   — exposição pública é decisão dele, não minha.
+# POR QUE A LISTA ESTA VAZIA (o que mudou aqui)
+#   A versao anterior listava `evolution_instances_public` como "view SEM a flag,
+#   mantida por decisao do dono". MEDICAO POSTERIOR MOSTROU QUE ISSO ESTAVA
+#   ERRADO: ela TEM a opcao - gravada como `security_invoker=on`, forma que o
+#   PostgreSQL usa quando o DDL original diz `WITH (security_invoker='on')`. O
+#   predicado do check so reconhecia `=true`, entao (a) classificava essa view
+#   como ofensora e (b) gerava 25 falsos positivos no escopo. Pior: a entrada
+#   estava escrita como nome NU (`evolution_instances_public`), enquanto o check
+#   compara qualificado (`zapp.evolution_instances_public`) - nao perdoava nada,
+#   era ruido. Corrigido o predicado, nao ha mais o que listar.
 #
+# DIVIDA VIVA (NAO e entrada de ratchet - leia antes de acrescentar nome aqui)
+#   25 views TEM a flag e ainda assim respondem `permission denied` ao usuario
+#   logado: a tabela-base vive em `evo` (fronteira de infra deste repo, protegida
+#   pelo E42 para DDL), e `cron.job` (pg_cron) ou e tabela de credencial. Elas NAO
+#   entram nesta lista: o assunto do ratchet e "view SEM a flag" e o check nunca
+#   casaria esses nomes. Falham FECHADO e tem ZERO consumidor medido em `src/` e
+#   `supabase/functions/`. Nesta instancia (PG 15.8) a flag NAO e removivel:
+#   `SET (security_invoker = false)` e `RESET` nao alteram `reloptions`.
+#
+#   As 25: evolution_alert_cooldown, evolution_backfill_audit,
+#   evolution_bootstrap_log, evolution_guardian_heartbeat, evolution_instances,
+#   evolution_pipeline_health_log, evolution_pipeline_history,
+#   evolution_reconcile_jobs, evolution_retention_log,
+#   evolution_webhook_events_v2_2026_08 .. _2027_06 e _default,
+#   v_connection_drift_score, v_perf_dashboard, v_system_scorecard, vw_system_health.
+#   (v_perf_dashboard e vw_system_health nao estavam documentadas antes.)
+#
+# QUITADAS (28/09/2026): `zapp_dash_daily`, `zapp_dash_heatmap`, `zapp_dash_overview`,
+#   `zapp_dash_top_contacts` e `zapp_inbox_threads` liam `evo.active_messages` e agora
+#   leem `zapp.evolution_messages` + `zapp.evolution_contacts`
+#   (20260928210000_ops_views_fonte_nossa); `v_cookie_health` passou a ler funcao nossa
+#   SECURITY DEFINER com colunas escolhidas e `last_probe_preview` NULL, sem abrir a
+#   tabela de probes (20260928220000_v_cookie_health_funcao).
 # ---------------------------------------------------------------------------
-# ATENÇÃO — ISTO NÃO É ENTRADA DE RATCHET (leia antes de acrescentar nome aqui)
-#
-# Existem 23 views que JÁ TÊM a flag e ainda assim respondem `permission denied`
-# para `authenticated`: a tabela-base vive no schema `evo` (fronteira de infra deste
-# repo, protegida pelo gate E42 para DDL) ou é `cron.job` (pg_cron) / tabela de
-# credencial. Elas NÃO entram nesta lista, porque o assunto do ratchet é "view SEM a
-# flag" — e o check nunca casaria esses nomes, o que faria a lista parecer tolerar 24
-# exceções que ela não tolera.
-#
-# A 24ª (`v_cookie_health`) foi REABERTA em 28/09/2026 pela migration
-# 20260928220000_v_cookie_health_funcao: as bases dela são NOSSAS (`cookies_config` e
-# `cookie_probe_log`), mas a tabela de probes tem política deliberada
-# `rls_cookie_probe_log_service_only`, então NÃO se concede leitura nela. A view passou
-# a ler uma função nossa, `SECURITY DEFINER` com `search_path` fixo e colunas escolhidas,
-# e o campo `last_probe_preview` sai NULL (era o corpo cru de resposta do upstream).
-# Ela sai desta lista porque voltou a ser legível.
-#
-# Elas falham FECHADO (erro em vez de vazamento) e têm ZERO consumidor medido em
-# `src/` e em `supabase/functions/`. Nesta instância (PG 15.8) a flag NÃO é
-# removível — medido: `SET (security_invoker = false)` e `RESET (security_invoker)`
-# não alteram `reloptions`. Por isso a dívida é documentada, não "resolvida" às
-# pressas.
-#
-# Quais são: evolution_alert_cooldown, evolution_backfill_audit, evolution_bootstrap_log,
-# evolution_guardian_heartbeat, evolution_instances, evolution_pipeline_health_log,
-# evolution_pipeline_history, evolution_reconcile_jobs, evolution_retention_log,
-# evolution_webhook_events_v2_2026_08, _09, _10, _11, _12, _2027_01 … _2027_06,
-# _default, v_connection_drift_score, v_cookie_health, v_system_scorecard.
-#
-# A opção "conceder SELECT na base + política de RLS" foi avaliada e REPROVADA caso a
-# caso (21 das bases estão em `evo`, 1 é `cron.job`, 1 é a tabela de credenciais com
-# `api_key`/`instance_token`/`vault_secret_id`, 1 exigiria expor corpo de resposta de
-# upstream). O registro completo está no PR #1618. Caminhos possíveis: o lado `evo`
-# conceder leitura (outro repo/time, via allowlist do E42) ou reescrever a view sobre
-# fonte sancionada nossa — foi o que se fez com as 5 de ops abaixo.
-#
-# DÍVIDA QUITADA (28/09/2026): `zapp_dash_daily`, `zapp_dash_heatmap`,
-# `zapp_dash_overview`, `zapp_dash_top_contacts` e `zapp_inbox_threads` liam
-# `evo.active_messages` e agora leem `zapp.evolution_messages`, já com a flag e já
-# legíveis — migration 20260928210000_ops_views_fonte_nossa. Nenhum privilégio foi
-# concedido: a correção foi de FONTE.
-# ---------------------------------------------------------------------------
-
-evolution_instances_public
+# (sem entradas)

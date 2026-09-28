@@ -1,6 +1,15 @@
 -- Reescreve as 5 views de ops/dash para lerem FONTE NOSSA, sem tocar no schema `evo`.
+-- CORRECAO PÓS-APLICACAO (2a aplicacao em diante: este arquivo DIVERGE do ledger do
+-- apply anterior, de proposito — mesmo padrao da 20260928190000). Dois consertos:
+--   1) E42: as 3 views abaixo ainda liam `evo.evolution_contacts` — o gate E42
+--      bloqueia `CREATE ...` que cite `evo.` em qualquer ponto, com razao. Passam a
+--      ler `zapp.evolution_contacts`, medido EQUIVALENTE (49 colunas identicas, 0
+--      faltantes, 22.684 = 22.684 linhas, `authenticated` com SELECT nas duas);
+--   2) a clausula `WITH (security_invoker = true)` passa a ser EXPLICITA em cada
+--      CREATE OR REPLACE, para que a flag nao dependa de comportamento herdado de
+--      reloptions do objeto anterior.
 --
--- Problema: elas liam `evo.active_messages`, que (1) vive no schema `evo` — fronteira de
+-- Problema (original): elas liam `evo.active_messages`, que (1) vive no schema `evo` — fronteira de
 -- infra deste repo, protegida pelo gate E42 para DDL — e (2) nao concede SELECT a
 -- `authenticated`. Quando essas 5 views ganharam `security_invoker=true` (hardening
 -- correto, migration 20260928172940), passaram a falhar FECHADO: `permission denied`.
@@ -19,7 +28,7 @@
 -- Cada uma das 5 views abaixo e reescrita com CREATE OR REPLACE VIEW (o que preserva a
 -- flag security_invoker=true e os GRANTs ja existentes).
 --
-CREATE OR REPLACE VIEW zapp.zapp_dash_daily AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_daily WITH (security_invoker = true) AS
 WITH anchor AS (
          SELECT max(zapp.evolution_messages.created_at) AS t
            FROM zapp.evolution_messages
@@ -35,7 +44,7 @@ WITH anchor AS (
   GROUP BY (date_trunc('day'::text, m.created_at)::date)
   ORDER BY (date_trunc('day'::text, m.created_at)::date);
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_heatmap AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_heatmap WITH (security_invoker = true) AS
 WITH anchor AS (
          SELECT max(zapp.evolution_messages.created_at) AS t
            FROM zapp.evolution_messages
@@ -48,7 +57,7 @@ WITH anchor AS (
   WHERE m.created_at > (a.t - '60 days'::interval) AND m.deleted_at IS NULL
   GROUP BY (EXTRACT(dow FROM m.created_at)::integer), (EXTRACT(hour FROM m.created_at)::integer);
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_overview AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_overview WITH (security_invoker = true) AS
 WITH anchor AS (
          SELECT max(zapp.evolution_messages.created_at) AS t
            FROM zapp.evolution_messages
@@ -70,11 +79,11 @@ WITH anchor AS (
     count(*) FILTER (WHERE win.cur AND win.from_me) AS sent_7d,
     count(*) FILTER (WHERE win.cur AND NOT win.from_me) AS recv_7d,
     ( SELECT count(*) AS count
-           FROM evo.evolution_contacts
+           FROM zapp.evolution_contacts
           WHERE evolution_contacts.deleted_at IS NULL) AS contacts_total
    FROM win;
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_top_contacts AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_top_contacts WITH (security_invoker = true) AS
 SELECT m.remote_jid,
     c.full_name,
     c.push_name,
@@ -82,13 +91,13 @@ SELECT m.remote_jid,
     count(*) AS msg_count,
     max(m.created_at) AS last_msg_at
    FROM zapp.evolution_messages m
-     LEFT JOIN evo.evolution_contacts c ON c.remote_jid::text = m.remote_jid
+     LEFT JOIN zapp.evolution_contacts c ON c.remote_jid::text = m.remote_jid
   WHERE m.created_at > (now() - '30 days'::interval) AND m.deleted_at IS NULL
   GROUP BY m.remote_jid, c.full_name, c.push_name, c.profile_picture_url
   ORDER BY (count(*)) DESC
  LIMIT 20;
 
-CREATE OR REPLACE VIEW zapp.zapp_inbox_threads AS
+CREATE OR REPLACE VIEW zapp.zapp_inbox_threads WITH (security_invoker = true) AS
 SELECT c.remote_jid::text AS remote_jid,
     lm.content,
     lm.message_type,
@@ -144,7 +153,7 @@ SELECT c.remote_jid::text AS remote_jid,
             evolution_contacts.first_name,
             evolution_contacts.last_name,
             evolution_contacts.nickname
-           FROM evo.evolution_contacts
+           FROM zapp.evolution_contacts
           WHERE evolution_contacts.deleted_at IS NULL AND evolution_contacts.last_message_at IS NOT NULL
           ORDER BY evolution_contacts.last_message_at DESC
          LIMIT 50) c

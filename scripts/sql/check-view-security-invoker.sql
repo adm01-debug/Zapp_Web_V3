@@ -13,14 +13,14 @@
 --   ANULA a RLS. Sem erro, sem log: a tela mostra os dados e parece certa.
 --
 -- O QUE JÁ FOI FECHADO (28/09/2026, medido)
---   258 views em `zapp`: 29 com a flag -> 219 com a flag. 190 fechadas na
---   migration 20260928180000 (todas com mudança NEUTRA de linhas, verificado
---   impersonando `authenticated`) + 29 na 20260928172940.
+--   `zapp`: 258 views, 258 COM a opção `security_invoker` (257 gravadas como
+--   `=true`, 1 como `=on`), 0 SEM. Medido no catálogo vivo em 28/09/2026.
+--   Escopo deste check (public+zapp+evo+prospeccao): 730 views, 0 sem a opção.
 --
 -- DÍVIDA CONHECIDA E POR QUE ELA FICA (lição medida, não suposição)
---   * 29 views ficaram com a flag e respondem `permission denied` ao usuário
---     autenticado: a tabela-base não concede SELECT (`evolution_*`,
---     `active_messages`, ...). Elas FALHAM FECHADO (erro em vez de vazar) e não
+--   * 25 views ficaram com a flag e respondem `permission denied` ao usuário
+--     autenticado: a tabela-base não concede SELECT (`evolution_*` em `evo`,
+--     `cron.job`, tabela de credencial). Elas FALHAM FECHADO (erro em vez de vazar) e não
 --     têm nenhum consumidor (medido: 0 ocorrências em `src/` e em
 --     `supabase/functions/`) — logo não há tela quebrada;
 --   * **a flag NÃO pode ser removida nesta instância**: medido em transações
@@ -28,8 +28,9 @@
 --     nem `ALTER VIEW ... RESET (security_invoker)` alteram `reloptions`
 --     (continua `security_invoker=true`). Não é bug do meu SQL: é comportamento
 --     da plataforma. Sem correção disponível, o certo é documentar e travar;
---   * `evolution_instances_public` fica SEM a flag por decisão do dono do
---     projeto (exposição pública é decisão dele).
+--   * `evolution_instances_public` TEM a flag — gravada como `security_invoker=on`
+--     (forma que o PG usa quando o DDL diz `'on'`), invisível a um predicado que
+--     exige literalmente `true`. Era um falso positivo do baseline antigo.
 --
 -- COMO O RATCHET FUNCIONA
 --   `scripts/sql/views-security-invoker.baseline` lista as exceções conhecidas.
@@ -38,8 +39,8 @@
 --   numa view nova quebra o CI na hora.
 --
 -- O QUE ESTE INVARIANTE NÃO COBRE (não presumir cobertura que ele não tem)
---   1. view com a flag que esteja ILEGÍVEL para `authenticated` (a dívida das 29
---      acima) — quem quiser medir isso precisa impersonar, e a impersonação
+--   1. view com a flag que esteja ILEGÍVEL para `authenticated` (a dívida das 25
+--      acima, nominal em scripts/sql/views-security-invoker.baseline) — quem quiser medir isso precisa impersonar, e a impersonação
 --      DENTRO de migration não é confiável (a prova é externa, pelo harness);
 --   2. schemas de outros sistemas no mesmo Postgres (ai, bpm, email_app,
 --      financeiro, ops, vendas, logistica, ...): têm outros donos;
@@ -53,10 +54,20 @@
 
 \set ON_ERROR_STOP on
 
+-- A baseline precisa ser materializada FORA de dollar-quote: o psql NAO
+-- interpola `:'var'` dentro de bloco dollar-quoted (era o defeito: o passo
+-- morria com `syntax error at or near ":"` e nunca comparava nada).
+SELECT set_config('inv9.baseline', :'baseline', false);
+
 DO $$
 DECLARE
   _schemas  constant text[] := ARRAY['public','zapp','evo','prospeccao'];
-  _baseline text[] := string_to_array(:'baseline', ',');
+  _bruto    text := current_setting('inv9.baseline', true);
+  _baseline text[] := CASE
+                        WHEN coalesce(_bruto, '') = '' THEN ARRAY[]::text[]
+                        ELSE string_to_array(_bruto, ',')
+                      END;
+  _com_opcao integer;
   _existem  integer;
   _total    integer;
   _novas    text;
@@ -77,9 +88,12 @@ BEGIN
     RAISE EXCEPTION 'INV-9: escopo % não casou view nenhuma — resultado vazio NÃO é aprovação', _schemas;
   END IF;
 
-  IF _baseline IS NULL OR array_length(_baseline, 1) IS NULL THEN
-    RAISE EXCEPTION 'INV-9: baseline não recebida pelo passo (faltou psql -v baseline=...)'
-      USING HINT = 'Sem baseline o ratchet não tem como distinguir dívida antiga de regressão nova.';
+  -- Baseline VAZIA e estado valido (zero excecoes conhecidas: e o caso hoje).
+  -- O que nao pode passar e o passo NAO receber o parametro: sem ele nao ha como
+  -- distinguir "zero excecoes" de "wiring quebrado".
+  IF _bruto IS NULL THEN
+    RAISE EXCEPTION 'INV-9: o passo não recebeu a baseline (faltou psql -v baseline=...)'
+      USING HINT = 'Sem o parâmetro não há como distinguir zero exceções (válido) de wiring quebrado.';
   END IF;
 
   -- o ratchet: view sem a flag FORA do baseline = regressão nova, bloqueia
@@ -89,7 +103,7 @@ BEGIN
     JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE c.relkind = 'v'
      AND n.nspname = ANY (_schemas)
-     AND coalesce(array_to_string(c.reloptions, ','), '') NOT LIKE '%security_invoker=true%'
+     AND coalesce(array_to_string(c.reloptions, ','), '') !~ 'security_invoker=(on|true|yes|1)'
      AND (n.nspname || '.' || c.relname) <> ALL (_baseline);
 
   IF _novas IS NOT NULL THEN
@@ -97,6 +111,12 @@ BEGIN
       USING HINT = 'View sem a flag roda com direitos do dono e anula a RLS da base. Aplique ALTER VIEW ... SET (security_invoker = true) ou registre a exceção em scripts/sql/views-security-invoker.baseline com justificativa.';
   END IF;
 
-  RAISE NOTICE 'INV-9 OK — % view(s) no escopo; regressão fora do baseline: 0 (baseline: % entrada(s)).', _total, array_length(_baseline, 1);
+  SELECT count(*) INTO _com_opcao
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE c.relkind = 'v' AND n.nspname = ANY (_schemas)
+     AND coalesce(array_to_string(c.reloptions, ','), '') LIKE '%security_invoker=%';
+
+  RAISE NOTICE 'INV-9 OK — % view(s) no escopo; % com a opção gravada; regressão fora do baseline: 0 (baseline: % entrada(s)).',
+    _total, _com_opcao, coalesce(array_length(_baseline, 1), 0);
 END
 $$;

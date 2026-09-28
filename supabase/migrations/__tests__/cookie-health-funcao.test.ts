@@ -67,8 +67,42 @@ Deno.test('a view é reescrita com CREATE OR REPLACE lendo a função (flag e gr
   if (/\bDROP\s+VIEW\b/i.test(codigo)) {
     throw new Error('a migration usa DROP VIEW — derrubaria a flag security_invoker e os GRANTs (inclusive dos leitores de BI)');
   }
-  if (!/CREATE\s+OR\s+REPLACE\s+VIEW\s+zapp\.v_cookie_health\s+AS\s+SELECT\s+\*\s+FROM\s+zapp\.fn_cookie_health\(\)/i.test(codigo)) {
+  const re = /CREATE\s+OR\s+REPLACE\s+VIEW\s+zapp\.v_cookie_health(\s+WITH\s*\(security_invoker\s*=\s*true\))?\s+AS\s+SELECT\s+\*\s+FROM\s+zapp\.fn_cookie_health\(\)/i;
+  if (!re.test(codigo)) {
     throw new Error('a view não foi reescrita para ler zapp.fn_cookie_health()');
+  }
+  if (!/WITH\s*\(security_invoker\s*=\s*true\)\s+AS/i.test(codigo)) {
+    throw new Error('a view nao declara a flag EXPLICITA: em PG a flag pode se perder em CREATE OR REPLACE');
+  }
+});
+
+Deno.test('a funcao DEFINER tem guarda de caller (ML-008) e nao quebra os leitores legitimos', () => {
+  // Regra ML-008 do repo: SECURITY DEFINER + GRANT TO authenticated exige prova do
+  // chamador. Dentro de DEFINER `current_user` e o dono, entao a prova vem do JWT
+  // (auth.uid()) e do session_user dos leitores de BI/servico.
+  if (!/SECURITY\s+DEFINER/i.test(codigo)) {
+    throw new Error('a funcao deixou de ser SECURITY DEFINER (a view perderia a leitura do probe)');
+  }
+  if (!/IF\s+auth\.uid\s*\(\s*\)\s+IS\s+NULL\s+AND\s+session_user\s+NOT\s+IN/i.test(codigo)) {
+    throw new Error(
+      'a guarda nao tem a forma exigida (IF auth.uid() IS NULL AND session_user NOT IN ...): ' +
+        'sem auth.uid() o lint ML-008 (bloqueante) reprova, e sem a lista de session_user os leitores de BI seriam barrados',
+    );
+  }
+  // guarda neutralizada por curto-circuito (IF false AND ... / IF true OR ...) nao pode passar como "guarda presente"
+  if (/IF\s+(false|true)\s+(AND|OR)\b/i.test(codigo)) {
+    throw new Error('guarda de caller neutralizada por curto-circuito (IF false AND ... / IF true OR ...)');
+  }
+  if (!/RAISE\s+EXCEPTION\s+'unauthenticated'/i.test(codigo)) {
+    throw new Error('sem RAISE EXCEPTION para chamador sem identidade: a guarda nao barra nada');
+  }
+  for (const papel of ['metabase_reader', 'dyad_reader', 'om_reader', 'service_role']) {
+    if (!codigo.includes(papel)) {
+      throw new Error(`${papel} fora da guarda: os leitores de BI/servico seriam barrados (regressao)`);
+    }
+  }
+  if (!/LANGUAGE\s+plpgsql/i.test(codigo)) {
+    throw new Error('a funcao precisa ser plpgsql para poder levantar excecao na guarda');
   }
 });
 

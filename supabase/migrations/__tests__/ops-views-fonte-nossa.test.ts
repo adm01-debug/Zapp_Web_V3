@@ -77,17 +77,39 @@ Deno.test('as 5 views são reescritas com CREATE OR REPLACE (preserva flag e gra
     );
   }
   for (const v of VIEWS) {
-    if (!new RegExp(`CREATE OR REPLACE VIEW zapp\\.${v} AS`).test(codigo)) {
+    // aceita a clausula explicita WITH (security_invoker = true): ela E o conserto,
+    // nao pode ser tratada como desvio pelo teste.
+    const re = new RegExp(`CREATE OR REPLACE VIEW zapp\\.${v}( WITH \\(security_invoker = true\\))? AS`);
+    if (!re.test(codigo)) {
       throw new Error(`a migration não reescreve ${v} com CREATE OR REPLACE VIEW (em código ativo)`);
     }
+  }
+  if (!/WITH \(security_invoker = true\) AS/.test(codigo)) {
+    throw new Error(
+      'a migration nao declara a flag EXPLICITA (WITH (security_invoker = true)): em PG a flag pode se perder em CREATE OR REPLACE, entao ela precisa ir no comando',
+    );
+  }
+});
+
+Deno.test('nenhuma referencia ATIVA ao schema evo (gate E42)', () => {
+  // E42 aceita QUALQUER statement CREATE/ALTER/DROP/GRANT/REVOKE/COMMENT ON que
+  // cite `evo.` em qualquer ponto — inclusive leitura no corpo de uma view zapp.
+  // Comentario nao conta, por isso a checagem roda sobre o codigo sem comentarios.
+  const ativas = codigo.match(/\bevo\./g) ?? [];
+  if (ativas.length > 0) {
+    throw new Error(
+      `a migration cita o schema evo ${ativas.length}x em codigo ativo (o gate E42 bloqueia)` +
+        ' — use a fonte nossa equivalente (zapp.evolution_contacts / zapp.evolution_messages)',
+    );
   }
 });
 
 Deno.test('cada view reescrita aponta para a fonte nossa', () => {
   for (const v of VIEWS) {
-    const i = codigo.indexOf(`CREATE OR REPLACE VIEW zapp.${v} AS`);
-    const j = codigo.indexOf('CREATE OR REPLACE VIEW', i + 10);
-    const corpo = codigo.slice(i, j === -1 ? undefined : j);
+    const norm = codigo.replace(/ WITH \(security_invoker = true\) AS/g, ' AS');
+    const i = norm.indexOf(`CREATE OR REPLACE VIEW zapp.${v} AS`);
+    const j = norm.indexOf('CREATE OR REPLACE VIEW', i + 10);
+    const corpo = norm.slice(i, j === -1 ? undefined : j);
     if (!corpo.includes('zapp.evolution_messages')) {
       throw new Error(`${v} não aponta para zapp.evolution_messages`);
     }

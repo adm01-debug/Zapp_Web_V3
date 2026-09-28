@@ -30,10 +30,23 @@ RETURNS TABLE (
   mins_since_probe numeric,
   probe_stale boolean
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = zapp, pg_catalog
 AS $fn$
+BEGIN
+  -- ML-008: SECURITY DEFINER + GRANT EXECUTE TO authenticated exige prova de caller.
+  -- Dentro de DEFINER, `current_user` e o DONO (nao o chamador) — entao a prova do
+  -- usuario logado vem do JWT (`auth.uid()`), e os leitores de BI/servico entram pelo
+  -- `session_user` deles (conexao direta ao Postgres, sem JWT). Chamador desconhecido
+  -- sem uid e barrado em vez de herdar os privilegios do dono.
+  IF auth.uid() IS NULL
+     AND session_user NOT IN ('postgres','supabase_admin','service_role',
+                              'metabase_reader','dyad_reader','om_reader') THEN
+    RAISE EXCEPTION 'unauthenticated';
+  END IF;
+
+  RETURN QUERY
   SELECT c.servico,
          c.is_healthy,
          c.health_status,
@@ -54,10 +67,11 @@ AS $fn$
        LIMIT 1
     ) p ON true
    ORDER BY c.servico;
+END;
 $fn$;
 
 REVOKE ALL ON FUNCTION zapp.fn_cookie_health() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION zapp.fn_cookie_health() TO authenticated, service_role, dyad_reader, metabase_reader, om_reader;
 
-CREATE OR REPLACE VIEW zapp.v_cookie_health AS
+CREATE OR REPLACE VIEW zapp.v_cookie_health WITH (security_invoker = true) AS
 SELECT * FROM zapp.fn_cookie_health();
