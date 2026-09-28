@@ -90,7 +90,10 @@ jobs:
         # Ref: docs/decisions/ADR-CI-001-gen-types-auto-merge.md
         if: steps.diff.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GH_TOKEN_ACTIONS (PAT com repo+workflow) — necessário porque o repo tem
+          # "Allow GitHub Actions to create and approve pull requests" DESABILITADO.
+          # GITHUB_TOKEN recebe apenas createPullRequest=forbidden neste repo.
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
           BRANCH="${{ steps.commit.outputs.branch }}"
           PR_URL=$(gh pr create \
