@@ -20,25 +20,36 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Require event-capable GitHub token
+        id: token_check
         env:
-          GH_ACTIONS_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
-          if [ -z "$GH_ACTIONS_TOKEN" ]; then
-            echo "::error::GH_TOKEN_ACTIONS ausente — o token padrão não dispara os checks do PR gerado"
-            exit 1
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning title=ratchet-tighten desabilitado::GH_TOKEN_ACTIONS ausente. Renovar o PAT e atualizar o secret."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          if ! gh api user --jq '.login' >/dev/null 2>&1; then
+            echo "::warning title=ratchet-tighten desabilitado::GH_TOKEN_ACTIONS inválido ou expirado. Renovar o PAT e atualizar o secret."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
+        if: steps.token_check.outputs.skip != 'true'
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Node
+        if: steps.token_check.outputs.skip != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       - name: Tighten baseline (down-only nos escopos hard)
+        if: steps.token_check.outputs.skip != 'true'
         id: tighten
         run: |
           node - << 'EOF'
@@ -88,7 +99,7 @@ jobs:
           EOF
 
       - name: Create branch and commit
-        if: steps.tighten.outputs.changed == 'true'
+        if: steps.token_check.outputs.skip != 'true' && steps.tighten.outputs.changed == 'true'
         run: |
           git config user.name "ratchet-bot"
           git config user.email "bot@users.noreply.github.com"
@@ -99,7 +110,7 @@ jobs:
 
       - name: Check prior canonical ratchet PR state
         id: prior_pr
-        if: steps.tighten.outputs.changed == 'true'
+        if: steps.token_check.outputs.skip != 'true' && steps.tighten.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
         run: |
@@ -164,7 +175,7 @@ jobs:
           esac
 
       - name: Push ratchet branch
-        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
+        if: steps.token_check.outputs.skip != 'true' && steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           # O PAT disponível é event-capable, mas pode ser read-only para contents.
           # O token efêmero tem contents:write e seu push não grava na main.
@@ -202,7 +213,7 @@ jobs:
           fi
 
       - name: Create PR for tightened baseline
-        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
+        if: steps.token_check.outputs.skip != 'true' && steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
           BEFORE_TOTAL: ${{ steps.tighten.outputs.before_total }}
@@ -234,7 +245,7 @@ jobs:
           EOF
 
       - name: Mark stale bot-owned ratchet PRs after successor validation
-        if: steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
+        if: steps.token_check.outputs.skip != 'true' && steps.tighten.outputs.changed == 'true' && steps.prior_pr.outputs.completed != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
           TARGET_BRANCH: ${{ steps.tighten.outputs.branch }}
