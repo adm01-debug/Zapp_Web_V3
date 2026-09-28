@@ -19365,48 +19365,6 @@
           "overload_count": 0,
           "overloads": []
         },
-        "has_role": {
-          "definition_sha1": "222e07d03280f6b9507e3bbc5f54274a9a98da75",
-          "overload_count": 1,
-          "overloads": [
-            {
-              "args": [
-                {
-                  "name": "_role",
-                  "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
-                },
-                {
-                  "name": "_user_id",
-                  "type": "string"
-                }
-              ],
-              "returns": "boolean"
-            }
-          ]
-        },
-        "has_role_in_empresa": {
-          "definition_sha1": "c11d7523beac6331a018b9946742ae63b9928a31",
-          "overload_count": 1,
-          "overloads": [
-            {
-              "args": [
-                {
-                  "name": "_empresa",
-                  "type": "string"
-                },
-                {
-                  "name": "_role",
-                  "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
-                },
-                {
-                  "name": "_user",
-                  "type": "string"
-                }
-              ],
-              "returns": "boolean"
-            }
-          ]
-        },
         "increment_webhook_rate_limit": {
           "definition_sha1": "bcda8aaa4c147294163cfac63e34e63a96920826",
           "overload_count": 1,
@@ -19775,436 +19733,6 @@
             {
               "name": "table_schema",
               "type": "unknown"
-            }
-          ]
-        },
-        "empresas": {
-          "definition_sha1": "072d7b272db146c4fa3a8aeba3d779c0318a42cd",
-          "insert_columns": [
-            {
-              "name": "aliquota_rat",
-              "type": "number | null"
-            },
-            {
-              "name": "aliquota_terceiros",
-              "type": "number | null"
-            },
-            {
-              "name": "ativo",
-              "type": "boolean"
-            },
-            {
-              "name": "bairro",
-              "type": "string | null"
-            },
-            {
-              "name": "cep",
-              "type": "string | null"
-            },
-            {
-              "name": "cidade",
-              "type": "string | null"
-            },
-            {
-              "name": "cnae_principal",
-              "type": "string | null"
-            },
-            {
-              "name": "cnpj",
-              "type": "string | null"
-            },
-            {
-              "name": "codigo_fpas",
-              "type": "string | null"
-            },
-            {
-              "name": "cor_hex",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "endereco",
-              "type": "string | null"
-            },
-            {
-              "name": "estado",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inscricao_estadual",
-              "type": "string | null"
-            },
-            {
-              "name": "is_padrao",
-              "type": "boolean"
-            },
-            {
-              "name": "logo_url",
-              "type": "string | null"
-            },
-            {
-              "name": "nome_fantasia",
-              "type": "string | null"
-            },
-            {
-              "name": "razao_social",
-              "type": "string"
-            },
-            {
-              "name": "regime_tributario",
-              "type": "string | null"
-            },
-            {
-              "name": "sigla",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            },
-            {
-              "name": "user_id",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "aliquota_rat",
-              "type": "number | null"
-            },
-            {
-              "name": "aliquota_terceiros",
-              "type": "number | null"
-            },
-            {
-              "name": "ativo",
-              "type": "boolean"
-            },
-            {
-              "name": "bairro",
-              "type": "string | null"
-            },
-            {
-              "name": "cep",
-              "type": "string | null"
-            },
-            {
-              "name": "cidade",
-              "type": "string | null"
-            },
-            {
-              "name": "cnae_principal",
-              "type": "string | null"
-            },
-            {
-              "name": "cnpj",
-              "type": "string | null"
-            },
-            {
-              "name": "codigo_fpas",
-              "type": "string | null"
-            },
-            {
-              "name": "cor_hex",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "endereco",
-              "type": "string | null"
-            },
-            {
-              "name": "estado",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inscricao_estadual",
-              "type": "string | null"
-            },
-            {
-              "name": "is_padrao",
-              "type": "boolean"
-            },
-            {
-              "name": "logo_url",
-              "type": "string | null"
-            },
-            {
-              "name": "nome_fantasia",
-              "type": "string | null"
-            },
-            {
-              "name": "razao_social",
-              "type": "string"
-            },
-            {
-              "name": "regime_tributario",
-              "type": "string | null"
-            },
-            {
-              "name": "sigla",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            },
-            {
-              "name": "user_id",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "aliquota_rat",
-              "type": "number | null"
-            },
-            {
-              "name": "aliquota_terceiros",
-              "type": "number | null"
-            },
-            {
-              "name": "ativo",
-              "type": "boolean"
-            },
-            {
-              "name": "bairro",
-              "type": "string | null"
-            },
-            {
-              "name": "cep",
-              "type": "string | null"
-            },
-            {
-              "name": "cidade",
-              "type": "string | null"
-            },
-            {
-              "name": "cnae_principal",
-              "type": "string | null"
-            },
-            {
-              "name": "cnpj",
-              "type": "string | null"
-            },
-            {
-              "name": "codigo_fpas",
-              "type": "string | null"
-            },
-            {
-              "name": "cor_hex",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "endereco",
-              "type": "string | null"
-            },
-            {
-              "name": "estado",
-              "type": "string | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "inscricao_estadual",
-              "type": "string | null"
-            },
-            {
-              "name": "is_padrao",
-              "type": "boolean"
-            },
-            {
-              "name": "logo_url",
-              "type": "string | null"
-            },
-            {
-              "name": "nome_fantasia",
-              "type": "string | null"
-            },
-            {
-              "name": "razao_social",
-              "type": "string"
-            },
-            {
-              "name": "regime_tributario",
-              "type": "string | null"
-            },
-            {
-              "name": "sigla",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            },
-            {
-              "name": "user_id",
-              "type": "string"
-            }
-          ]
-        },
-        "user_empresas": {
-          "definition_sha1": "d498b8b7fdfb0f140c7624e12a35ca7c0615cf71",
-          "insert_columns": [
-            {
-              "name": "ativo",
-              "type": "boolean"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "empresa_id",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "is_default",
-              "type": "boolean"
-            },
-            {
-              "name": "provisioned_via",
-              "type": "string"
-            },
-            {
-              "name": "role",
-              "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
-            },
-            {
-              "name": "scim_external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            },
-            {
-              "name": "user_id",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 1,
-          "row_columns": [
-            {
-              "name": "ativo",
-              "type": "boolean"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "empresa_id",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "is_default",
-              "type": "boolean"
-            },
-            {
-              "name": "provisioned_via",
-              "type": "string"
-            },
-            {
-              "name": "role",
-              "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
-            },
-            {
-              "name": "scim_external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            },
-            {
-              "name": "user_id",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "ativo",
-              "type": "boolean"
-            },
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "empresa_id",
-              "type": "string"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "is_default",
-              "type": "boolean"
-            },
-            {
-              "name": "provisioned_via",
-              "type": "string"
-            },
-            {
-              "name": "role",
-              "type": "Database[\"public\"][\"Enums\"][\"app_role\"]"
-            },
-            {
-              "name": "scim_external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "updated_at",
-              "type": "string"
-            },
-            {
-              "name": "user_id",
-              "type": "string"
             }
           ]
         }
@@ -33959,209 +33487,8 @@
           ]
         },
         "contacts": {
-          "definition_sha1": "a8353a4e2d1651943c0ec509a010fcc61d32fd78",
-          "insert_columns": [
-            {
-              "name": "address",
-              "type": "never"
-            },
-            {
-              "name": "ai_priority",
-              "type": "never"
-            },
-            {
-              "name": "ai_sentiment",
-              "type": "never"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "avatar_url",
-              "type": "string | null"
-            },
-            {
-              "name": "channel",
-              "type": "never"
-            },
-            {
-              "name": "channel_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "channel_type",
-              "type": "never"
-            },
-            {
-              "name": "city",
-              "type": "never"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "consent_status",
-              "type": "never"
-            },
-            {
-              "name": "contact_type",
-              "type": "never"
-            },
-            {
-              "name": "country",
-              "type": "never"
-            },
-            {
-              "name": "cpf",
-              "type": "never"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "first_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "group_category",
-              "type": "never"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_blocked",
-              "type": "never"
-            },
-            {
-              "name": "is_favorite",
-              "type": "never"
-            },
-            {
-              "name": "job_title",
-              "type": "never"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_origin",
-              "type": "never"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "name",
-              "type": "never"
-            },
-            {
-              "name": "nickname",
-              "type": "never"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "never"
-            },
-            {
-              "name": "position",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "risk_score",
-              "type": "never"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "state",
-              "type": "never"
-            },
-            {
-              "name": "status",
-              "type": "never"
-            },
-            {
-              "name": "surname",
-              "type": "never"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "unread_count",
-              "type": "never"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            },
-            {
-              "name": "workspace_id",
-              "type": "never"
-            }
-          ],
+          "definition_sha1": "5ebf6f6675ac50d0381eb0f7531fc7f8df877ecb",
+          "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
           "row_columns": [
@@ -34366,208 +33693,7 @@
               "type": "string | null"
             }
           ],
-          "update_columns": [
-            {
-              "name": "address",
-              "type": "never"
-            },
-            {
-              "name": "ai_priority",
-              "type": "never"
-            },
-            {
-              "name": "ai_sentiment",
-              "type": "never"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "avatar_url",
-              "type": "string | null"
-            },
-            {
-              "name": "channel",
-              "type": "never"
-            },
-            {
-              "name": "channel_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "channel_type",
-              "type": "never"
-            },
-            {
-              "name": "city",
-              "type": "never"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "consent_status",
-              "type": "never"
-            },
-            {
-              "name": "contact_type",
-              "type": "never"
-            },
-            {
-              "name": "country",
-              "type": "never"
-            },
-            {
-              "name": "cpf",
-              "type": "never"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "first_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "group_category",
-              "type": "never"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_blocked",
-              "type": "never"
-            },
-            {
-              "name": "is_favorite",
-              "type": "never"
-            },
-            {
-              "name": "job_title",
-              "type": "never"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_origin",
-              "type": "never"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "name",
-              "type": "never"
-            },
-            {
-              "name": "nickname",
-              "type": "never"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "never"
-            },
-            {
-              "name": "position",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "risk_score",
-              "type": "never"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "state",
-              "type": "never"
-            },
-            {
-              "name": "status",
-              "type": "never"
-            },
-            {
-              "name": "surname",
-              "type": "never"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "unread_count",
-              "type": "never"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            },
-            {
-              "name": "workspace_id",
-              "type": "never"
-            }
-          ]
+          "update_columns": []
         },
         "contatos": {
           "definition_sha1": "d7fabdbf4cc81136f6928a841f3b694cd27a7e3a",
@@ -36621,7 +35747,7 @@
           ]
         },
         "cookies_config": {
-          "definition_sha1": "c2985c94461cc875afb144894527aa10fcb53358",
+          "definition_sha1": "e3eee44f627977a20ab76ea2f9f888a3588b81fb",
           "insert_columns": [
             {
               "name": "alerta_dias_antes",
@@ -36662,10 +35788,6 @@
             {
               "name": "is_healthy",
               "type": "boolean | null"
-            },
-            {
-              "name": "last_health_check_at",
-              "type": "string | null"
             },
             {
               "name": "linkedin_cookie",
@@ -36728,10 +35850,6 @@
               "type": "boolean | null"
             },
             {
-              "name": "last_health_check_at",
-              "type": "string | null"
-            },
-            {
               "name": "linkedin_cookie",
               "type": "string | null"
             },
@@ -36788,10 +35906,6 @@
             {
               "name": "is_healthy",
               "type": "boolean | null"
-            },
-            {
-              "name": "last_health_check_at",
-              "type": "string | null"
             },
             {
               "name": "linkedin_cookie",
@@ -40190,89 +39304,6 @@
             },
             {
               "name": "watch_registered_at",
-              "type": "string | null"
-            }
-          ]
-        },
-        "empresas_zapp_legacy": {
-          "definition_sha1": "192829066ee0fd928bb3e52ffc00d0728c061948",
-          "insert_columns": [
-            {
-              "name": "bitrix_empresa_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "Json | null"
-            },
-            {
-              "name": "id",
-              "type": "number | null"
-            },
-            {
-              "name": "nome",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "bitrix_empresa_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "Json | null"
-            },
-            {
-              "name": "id",
-              "type": "number | null"
-            },
-            {
-              "name": "nome",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "bitrix_empresa_id",
-              "type": "string | null"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "Json | null"
-            },
-            {
-              "name": "id",
-              "type": "number | null"
-            },
-            {
-              "name": "nome",
-              "type": "string | null"
-            },
-            {
-              "name": "telefone",
               "type": "string | null"
             }
           ]
@@ -90975,6 +90006,16 @@
             }
           ]
         },
+        "fn_check_fdw_connection": {
+          "definition_sha1": "a54d6c85027909558a627a4c4e6f2b48d2c58e0d",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "Json"
+            }
+          ]
+        },
         "fn_check_followup_triggers": {
           "definition_sha1": "6fe6a8bbc8da4775f637c3d112b9b56248cd1ec3",
           "overload_count": 1,
@@ -91057,6 +90098,16 @@
                 }
               ],
               "returns": "boolean"
+            }
+          ]
+        },
+        "fn_check_real_invalid_signatures": {
+          "definition_sha1": "2599bea947b7fa51830e68d084bcfed2527d7692",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "string"
             }
           ]
         },
@@ -91635,6 +90686,16 @@
             }
           ]
         },
+        "fn_dispatch_critical_alert_emails": {
+          "definition_sha1": "0ec42847b69d3e1fbe4184f4a0b03702d130e5a3",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "Json"
+            }
+          ]
+        },
         "fn_dispatch_scheduled_messages": {
           "definition_sha1": "e97889336a10f85d1b7c014250b359e1725c58ad",
           "overload_count": 1,
@@ -91698,6 +90759,16 @@
                 ],
                 "kind": "object[]"
               }
+            }
+          ]
+        },
+        "fn_dispatch_unnotified_alerts": {
+          "definition_sha1": "618778438f3d3da5215ac54be19033fc461752dc",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "string"
             }
           ]
         },
@@ -92438,6 +91509,21 @@
               "returns": "string"
             }
           ]
+        },
+        "fn_kpi_conversas_ativas": {
+          "definition_sha1": "cd91cf539f4ec61a9ae93989f8829baaf532d319",
+          "overload_count": 0,
+          "overloads": []
+        },
+        "fn_kpi_mensagens_nao_respondidas": {
+          "definition_sha1": "75e49e66771840552055761282f924a12e140b91",
+          "overload_count": 0,
+          "overloads": []
+        },
+        "fn_kpi_tempo_primeira_resposta": {
+          "definition_sha1": "9e9bcf1cc094494919624b2fb53e8f3eee9427a8",
+          "overload_count": 0,
+          "overloads": []
         },
         "fn_last_evo_license_alert": {
           "definition_sha1": "5e3de08477fbca2fd8588faec6082906bc248cdb",
@@ -93362,6 +92448,16 @@
             }
           ]
         },
+        "fn_refresh_daily_metrics_safe": {
+          "definition_sha1": "e89b0debe15e29df521e28fd20f93d2ec723059b",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "Json"
+            }
+          ]
+        },
         "fn_refresh_materialized_views": {
           "definition_sha1": "c30f2745a1dcd5ba20dd326d832ffefbaf2f864a",
           "overload_count": 1,
@@ -93845,6 +92941,16 @@
           "overload_count": 0,
           "overloads": []
         },
+        "fn_send_alert_heartbeat": {
+          "definition_sha1": "3fe47657200b8e168090f735b5d4845121a4c5c4",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "Json"
+            }
+          ]
+        },
         "fn_send_audio_meme": {
           "definition_sha1": "9ddafed8513aa097ae0326fbe6756b6eec9a5789",
           "overload_count": 1,
@@ -93971,6 +93077,26 @@
                   "type": "string"
                 }
               ],
+              "returns": "Json"
+            }
+          ]
+        },
+        "fn_sentinel_fdw_down": {
+          "definition_sha1": "b689ad1b0b4358dacf1be24fcb75d3beac10da09",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "Json"
+            }
+          ]
+        },
+        "fn_sentinel_partition_existence": {
+          "definition_sha1": "13835cc4da7c485be2f42d26330b285792af9bda",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
               "returns": "Json"
             }
           ]
@@ -94480,6 +93606,16 @@
                 ],
                 "kind": "object[]"
               }
+            }
+          ]
+        },
+        "fn_validate_parity_audit": {
+          "definition_sha1": "75a5cb8eacd0dc3122071952f462b2dd29186c4c",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": "Json"
             }
           ]
         },
@@ -96676,6 +95812,37 @@
           "definition_sha1": "ea7d21fcb01ee855322213ca56bcb32e97187c5f",
           "overload_count": 0,
           "overloads": []
+        },
+        "rpc_close_conversation": {
+          "definition_sha1": "c2d9f37fbf035045949ac8d12a1e2c4a84dc8cb9",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [
+                {
+                  "name": "p_classification",
+                  "type": "string"
+                },
+                {
+                  "name": "p_close_reason",
+                  "type": "string"
+                },
+                {
+                  "name": "p_contact_id",
+                  "type": "string"
+                },
+                {
+                  "name": "p_notes",
+                  "type": "string"
+                },
+                {
+                  "name": "p_outcome",
+                  "type": "string"
+                }
+              ],
+              "returns": "Json"
+            }
+          ]
         },
         "rpc_complete_followup": {
           "definition_sha1": "2b7b78823cc80d31ca8ce7f3506efd0307b40faa",
@@ -100810,6 +99977,21 @@
                 }
               ],
               "returns": "string"
+            }
+          ]
+        },
+        "rpc_sla_dashboard": {
+          "definition_sha1": "9703c65f42dbaa000498d9acb231e7de62d879f5",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [
+                {
+                  "name": "p_period",
+                  "type": "string"
+                }
+              ],
+              "returns": "Json"
             }
           ]
         },
@@ -112205,7 +111387,7 @@
           ]
         },
         "contact_phones": {
-          "definition_sha1": "0169b99e536ed4cd114a3f72c30d60698e35fc1d",
+          "definition_sha1": "7b06251e44b0fa000a261f138d9bb6369bb7aa8c",
           "insert_columns": [
             {
               "name": "area_code",
@@ -112240,6 +111422,10 @@
               "type": "boolean | null"
             },
             {
+              "name": "label",
+              "type": "string | null"
+            },
+            {
               "name": "phone_e164",
               "type": "string | null"
             },
@@ -112250,6 +111436,10 @@
             {
               "name": "phone_raw",
               "type": "string"
+            },
+            {
+              "name": "phone_type",
+              "type": "string | null"
             },
             {
               "name": "verified_at",
@@ -112292,6 +111482,10 @@
               "type": "boolean | null"
             },
             {
+              "name": "label",
+              "type": "string | null"
+            },
+            {
               "name": "phone_e164",
               "type": "string | null"
             },
@@ -112302,6 +111496,10 @@
             {
               "name": "phone_raw",
               "type": "string"
+            },
+            {
+              "name": "phone_type",
+              "type": "string | null"
             },
             {
               "name": "verified_at",
@@ -112342,6 +111540,10 @@
               "type": "boolean | null"
             },
             {
+              "name": "label",
+              "type": "string | null"
+            },
+            {
               "name": "phone_e164",
               "type": "string | null"
             },
@@ -112354,8 +111556,71 @@
               "type": "string"
             },
             {
+              "name": "phone_type",
+              "type": "string | null"
+            },
+            {
               "name": "verified_at",
               "type": "string | null"
+            }
+          ]
+        },
+        "contact_profile": {
+          "definition_sha1": "0acfda2ec9067e127d604ed18932a0265d3ae782",
+          "insert_columns": [
+            {
+              "name": "contact_id",
+              "type": "string"
+            },
+            {
+              "name": "contact_type",
+              "type": "string"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            }
+          ],
+          "kind": "table",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "contact_id",
+              "type": "string"
+            },
+            {
+              "name": "contact_type",
+              "type": "string"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
+            }
+          ],
+          "update_columns": [
+            {
+              "name": "contact_id",
+              "type": "string"
+            },
+            {
+              "name": "contact_type",
+              "type": "string"
+            },
+            {
+              "name": "created_at",
+              "type": "string"
+            },
+            {
+              "name": "updated_at",
+              "type": "string"
             }
           ]
         },
@@ -162340,209 +161605,8 @@
           ]
         },
         "contacts": {
-          "definition_sha1": "a8353a4e2d1651943c0ec509a010fcc61d32fd78",
-          "insert_columns": [
-            {
-              "name": "address",
-              "type": "never"
-            },
-            {
-              "name": "ai_priority",
-              "type": "never"
-            },
-            {
-              "name": "ai_sentiment",
-              "type": "never"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "avatar_url",
-              "type": "string | null"
-            },
-            {
-              "name": "channel",
-              "type": "never"
-            },
-            {
-              "name": "channel_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "channel_type",
-              "type": "never"
-            },
-            {
-              "name": "city",
-              "type": "never"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "consent_status",
-              "type": "never"
-            },
-            {
-              "name": "contact_type",
-              "type": "never"
-            },
-            {
-              "name": "country",
-              "type": "never"
-            },
-            {
-              "name": "cpf",
-              "type": "never"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "first_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "group_category",
-              "type": "never"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_blocked",
-              "type": "never"
-            },
-            {
-              "name": "is_favorite",
-              "type": "never"
-            },
-            {
-              "name": "job_title",
-              "type": "never"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_origin",
-              "type": "never"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "name",
-              "type": "never"
-            },
-            {
-              "name": "nickname",
-              "type": "never"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "never"
-            },
-            {
-              "name": "position",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "risk_score",
-              "type": "never"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "state",
-              "type": "never"
-            },
-            {
-              "name": "status",
-              "type": "never"
-            },
-            {
-              "name": "surname",
-              "type": "never"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "unread_count",
-              "type": "never"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            },
-            {
-              "name": "workspace_id",
-              "type": "never"
-            }
-          ],
+          "definition_sha1": "c8d5fa683e498d2e59fed1cb57616d0f2b11f5ed",
+          "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
           "row_columns": [
@@ -162683,6 +161747,10 @@
               "type": "string | null"
             },
             {
+              "name": "phone_numbers",
+              "type": "Json | null"
+            },
+            {
               "name": "position",
               "type": "string | null"
             },
@@ -162747,208 +161815,7 @@
               "type": "string | null"
             }
           ],
-          "update_columns": [
-            {
-              "name": "address",
-              "type": "never"
-            },
-            {
-              "name": "ai_priority",
-              "type": "never"
-            },
-            {
-              "name": "ai_sentiment",
-              "type": "never"
-            },
-            {
-              "name": "assigned_to",
-              "type": "string | null"
-            },
-            {
-              "name": "avatar_url",
-              "type": "string | null"
-            },
-            {
-              "name": "channel",
-              "type": "never"
-            },
-            {
-              "name": "channel_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "channel_type",
-              "type": "never"
-            },
-            {
-              "name": "city",
-              "type": "never"
-            },
-            {
-              "name": "company",
-              "type": "string | null"
-            },
-            {
-              "name": "consent_status",
-              "type": "never"
-            },
-            {
-              "name": "contact_type",
-              "type": "never"
-            },
-            {
-              "name": "country",
-              "type": "never"
-            },
-            {
-              "name": "cpf",
-              "type": "never"
-            },
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "deleted_at",
-              "type": "string | null"
-            },
-            {
-              "name": "email",
-              "type": "string | null"
-            },
-            {
-              "name": "external_id",
-              "type": "string | null"
-            },
-            {
-              "name": "first_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "group_category",
-              "type": "never"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "is_blocked",
-              "type": "never"
-            },
-            {
-              "name": "is_favorite",
-              "type": "never"
-            },
-            {
-              "name": "job_title",
-              "type": "never"
-            },
-            {
-              "name": "last_message_at",
-              "type": "string | null"
-            },
-            {
-              "name": "last_seen_at",
-              "type": "string | null"
-            },
-            {
-              "name": "lead_origin",
-              "type": "never"
-            },
-            {
-              "name": "lead_score",
-              "type": "number | null"
-            },
-            {
-              "name": "metadata",
-              "type": "Json | null"
-            },
-            {
-              "name": "name",
-              "type": "never"
-            },
-            {
-              "name": "nickname",
-              "type": "never"
-            },
-            {
-              "name": "notes",
-              "type": "string | null"
-            },
-            {
-              "name": "phone",
-              "type": "never"
-            },
-            {
-              "name": "position",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "queue_id",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "risk_score",
-              "type": "never"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "state",
-              "type": "never"
-            },
-            {
-              "name": "status",
-              "type": "never"
-            },
-            {
-              "name": "surname",
-              "type": "never"
-            },
-            {
-              "name": "tags",
-              "type": "string[] | null"
-            },
-            {
-              "name": "total_purchases",
-              "type": "number | null"
-            },
-            {
-              "name": "unread_count",
-              "type": "never"
-            },
-            {
-              "name": "updated_at",
-              "type": "string | null"
-            },
-            {
-              "name": "whatsapp_connection_id",
-              "type": "never"
-            },
-            {
-              "name": "whatsapp_labels",
-              "type": "string[] | null"
-            },
-            {
-              "name": "workspace_id",
-              "type": "never"
-            }
-          ]
+          "update_columns": []
         },
         "conversations": {
           "definition_sha1": "657a068ec3c181ccf94763fcf9d93ea5d9b7b884",
@@ -184243,6 +183110,84 @@
             }
           ]
         },
+        "v_kpi_alertas_mudos": {
+          "definition_sha1": "83cee90f5728441a9c5367daca618054a52247e7",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "alert_type",
+              "type": "string | null"
+            },
+            {
+              "name": "mais_antigo",
+              "type": "string | null"
+            },
+            {
+              "name": "mais_recente",
+              "type": "string | null"
+            },
+            {
+              "name": "notificados",
+              "type": "number | null"
+            },
+            {
+              "name": "sem_notificacao",
+              "type": "number | null"
+            },
+            {
+              "name": "severity",
+              "type": "string | null"
+            },
+            {
+              "name": "total_abertos",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": []
+        },
+        "v_kpi_webhook_saude": {
+          "definition_sha1": "f799383e4db197156a52e930158cda4b66f6a7a5",
+          "insert_columns": [],
+          "kind": "view",
+          "relationship_count": 0,
+          "row_columns": [
+            {
+              "name": "calculado_em",
+              "type": "string | null"
+            },
+            {
+              "name": "externo_5xx",
+              "type": "number | null"
+            },
+            {
+              "name": "externo_ok",
+              "type": "number | null"
+            },
+            {
+              "name": "invalid_signature",
+              "type": "number | null"
+            },
+            {
+              "name": "probe_fail",
+              "type": "number | null"
+            },
+            {
+              "name": "probe_ok",
+              "type": "number | null"
+            },
+            {
+              "name": "taxa_sucesso_pct",
+              "type": "number | null"
+            },
+            {
+              "name": "total_externo_24h",
+              "type": "number | null"
+            }
+          ],
+          "update_columns": []
+        },
         "v_lead_status_coverage": {
           "definition_sha1": "2f52410cd427b2ff63e4d7828c1c5f02e0eaf862",
           "insert_columns": [],
@@ -189340,21 +188285,16 @@
     }
   },
   "source": {
-    "kind": "postgres-meta",
-    "schemas_requested": [
-      "public",
-      "zapp",
-      "evo"
-    ],
-    "types_sha1": "91f4fd8d2bd93d5792ad219f75cb197ebd5fd5bd",
-    "url": "https://supabase.atomicabr.com.br/pg/generators/typescript?included_schemas=public%2Czapp%2Cevo&detect_one_to_one_relationships=true"
+    "kind": "types-file",
+    "path": "src/integrations/supabase/types.ts",
+    "types_sha1": "13a204f59c3dc3bca0eb96b2b74069af6b05ec0b"
   },
   "summary": {
-    "composite_types": 0,
-    "enums": 22,
-    "functions": 918,
     "schemas": 3,
-    "tables": 469,
-    "views": 736
+    "tables": 468,
+    "views": 737,
+    "functions": 930,
+    "enums": 22,
+    "composite_types": 0
   }
 }
