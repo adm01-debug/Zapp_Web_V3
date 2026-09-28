@@ -6097,7 +6097,15 @@ CREATE OR REPLACE FUNCTION zapp.fn_contact_ranking(p_limit integer DEFAULT 20) R
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
     AS $$
-BEGIN RETURN QUERY SELECT c.id,COALESCE(c.full_name,c.push_name)::text,c.phone_number::text,COALESCE(c.lead_score,0),COALESCE(c.total_messages,0)::bigint,c.last_message_at FROM evolution_contacts c WHERE c.deleted_at IS NULL ORDER BY c.lead_score DESC NULLS LAST, c.total_messages DESC NULLS LAST LIMIT p_limit; END; $$;
+BEGIN
+  -- GUARDA ANTI-ESCALADA (mesma familia do ML-008): SECURITY DEFINER sem prova de
+  -- caller anula a RLS do mesmo jeito que uma view sem security_invoker — a funcao
+  -- roda como dona e devolve linha que o chamador nao poderia ler direto.
+  -- Medido 28/09/2026: qualquer `authenticated` colhia contato/telefone por aqui.
+  IF NOT zapp.is_admin_or_supervisor() THEN
+    RAISE EXCEPTION 'forbidden: app member required';
+  END IF;
+  RETURN QUERY SELECT c.id,COALESCE(c.full_name,c.push_name)::text,c.phone_number::text,COALESCE(c.lead_score,0),COALESCE(c.total_messages,0)::bigint,c.last_message_at FROM evolution_contacts c WHERE c.deleted_at IS NULL ORDER BY c.lead_score DESC NULLS LAST, c.total_messages DESC NULLS LAST LIMIT p_limit; END; $$;
 
 
 
@@ -23879,6 +23887,13 @@ DECLARE
   v_evo_cred      record;
   v_result        jsonb;
 BEGIN
+  -- GUARDA ANTI-ESCALADA (mesma familia do ML-008): SECURITY DEFINER sem prova de
+  -- caller anula a RLS do mesmo jeito que uma view sem security_invoker — a funcao
+  -- roda como dona e devolve linha que o chamador nao poderia ler direto.
+  -- Medido 28/09/2026: qualquer `authenticated` colhia contato/telefone por aqui.
+  IF NOT zapp.is_admin_or_supervisor() THEN
+    RAISE EXCEPTION 'forbidden: app member required';
+  END IF;
   SELECT
   CASE WHEN count(*) FILTER (WHERE created_at >= now() - interval '1 hour') > 0 THEN 'healthy'
        WHEN count(*) FILTER (WHERE created_at >= now() - interval '24 hours') > 0 THEN 'degraded'
