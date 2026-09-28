@@ -6097,7 +6097,25 @@ CREATE OR REPLACE FUNCTION zapp.fn_contact_ranking(p_limit integer DEFAULT 20) R
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
     AS $$
-BEGIN RETURN QUERY SELECT c.id,COALESCE(c.full_name,c.push_name)::text,c.phone_number::text,COALESCE(c.lead_score,0),COALESCE(c.total_messages,0)::bigint,c.last_message_at FROM evolution_contacts c WHERE c.deleted_at IS NULL ORDER BY c.lead_score DESC NULLS LAST, c.total_messages DESC NULLS LAST LIMIT p_limit; END; $$;
+BEGIN
+  -- GUARDA ANTI-ESCALADA (mesma familia do ML-008): SECURITY DEFINER sem prova de
+  -- caller anula a RLS do mesmo jeito que uma view sem security_invoker — a funcao
+  -- roda como dona e devolve linha que o chamador nao poderia ler direto.
+  -- Medido 28/09/2026: qualquer `authenticated` colhia contato/telefone por aqui.
+  -- Guarda simetrica (revisao pos-auditoria, 28/09/2026): funcao SECURITY DEFINER nao
+  -- pode servir de bypass da RLS. Aceita (1) chamador de servico pelo claim do JWT
+  -- (auth.role() = 'service_role', que e como o PostgREST serve service_role),
+  -- (2) conexao direta/psql e as roles de leitura/BI pelo session_user, e (3) admin ou
+  -- supervisor por auth.uid(). Sem nenhum dos tres, recusa - e nao bloqueia cron/edge
+  -- por engano, que era a assimetria medida na auditoria.
+  IF NOT (
+    COALESCE(auth.role(), '') = 'service_role'
+    OR session_user IN ('postgres','supabase_admin','service_role','metabase_reader','dyad_reader','om_reader')
+    OR zapp.is_admin_or_supervisor()
+  ) THEN
+    RAISE EXCEPTION 'forbidden: app member required';
+  END IF;
+  RETURN QUERY SELECT c.id,COALESCE(c.full_name,c.push_name)::text,c.phone_number::text,COALESCE(c.lead_score,0),COALESCE(c.total_messages,0)::bigint,c.last_message_at FROM evolution_contacts c WHERE c.deleted_at IS NULL ORDER BY c.lead_score DESC NULLS LAST, c.total_messages DESC NULLS LAST LIMIT p_limit; END; $$;
 
 
 
@@ -6448,6 +6466,57 @@ BEGIN
   UPDATE evolution_contacts SET lead_status='qualified' WHERE id=p_contact_id;
   RETURN v_deal_id;
 END; $$;
+
+
+
+
+CREATE OR REPLACE FUNCTION zapp.fn_cookie_health() RETURNS TABLE(servico text, is_healthy boolean, health_status text, last_health_check_at timestamp with time zone, health_error text, expires_at timestamp with time zone, last_probe_http integer, last_probe_ms integer, last_probe_preview text, mins_since_probe numeric, probe_stale boolean)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'zapp', 'pg_catalog'
+    AS $$
+BEGIN
+  -- ML-008: SECURITY DEFINER + GRANT EXECUTE TO authenticated exige prova de caller.
+  -- Dentro de DEFINER, `current_user` e o DONO (nao o chamador) — entao a prova do
+  -- usuario logado vem do JWT (`auth.uid()`), e os leitores de BI/servico entram pelo
+  -- `session_user` deles (conexao direta ao Postgres, sem JWT). Chamador desconhecido
+  -- sem uid e barrado em vez de herdar os privilegios do dono.
+  -- Guarda simetrica (revisao pos-auditoria, 28/09/2026): funcao SECURITY DEFINER nao
+  -- pode servir de bypass da RLS. Aceita (1) chamador de servico pelo claim do JWT
+  -- (auth.role() = 'service_role', que e como o PostgREST serve service_role),
+  -- (2) conexao direta/psql e as roles de leitura/BI pelo session_user, e (3) admin ou
+  -- supervisor por auth.uid(). Sem nenhum dos tres, recusa - e nao bloqueia cron/edge
+  -- por engano, que era a assimetria medida na auditoria.
+  IF NOT (
+    COALESCE(auth.role(), '') = 'service_role'
+    OR session_user IN ('postgres','supabase_admin','service_role','metabase_reader','dyad_reader','om_reader')
+    OR zapp.is_admin_or_supervisor()
+  ) THEN
+    RAISE EXCEPTION 'forbidden: app member required';
+  END IF;
+
+  RETURN QUERY
+  SELECT c.servico,
+         c.is_healthy,
+         c.health_status,
+         c.last_health_check_at,
+         c.health_error,
+         c.expires_at,
+         p.http_status,
+         p.probe_ms,
+         NULL::text,
+         EXTRACT(epoch FROM now() - c.last_health_check_at) / 60::numeric,
+         (c.last_health_check_at < (now() - '00:35:00'::interval))
+    FROM zapp.cookies_config c
+    LEFT JOIN LATERAL (
+      SELECT pl.http_status, pl.probe_ms
+        FROM zapp.cookie_probe_log pl
+       WHERE pl.servico = c.servico
+       ORDER BY pl.probed_at DESC
+       LIMIT 1
+    ) p ON true
+   ORDER BY c.servico;
+END;
+$$;
 
 
 
@@ -18441,18 +18510,22 @@ CREATE OR REPLACE FUNCTION zapp.get_companies_by_phones_batch(p_phones text[]) R
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'zapp', 'monitoring'
     AS $$
+DECLARE v_uid uuid := auth.uid();
 BEGIN
   PERFORM zapp.fn_require_app_user();
   RETURN QUERY
-SELECT ct.phone_number::text, ct.company::text, COALESCE(ct.full_name, ct.push_name)::text, ct.lead_status::text
-FROM zapp.evolution_contacts ct
-WHERE ct.deleted_at IS NULL
-  AND regexp_replace(lower(ct.phone_number), '[^0-9]'::text, ''::text, 'g'::text) = ANY (
-    SELECT DISTINCT regexp_replace(lower(p), '[^0-9]'::text, ''::text, 'g'::text)
-    FROM unnest(COALESCE(p_phones, '{}'::text[])) p
-    WHERE length(regexp_replace(lower(p), '[^0-9]'::text, ''::text, 'g'::text)) >= 8
-  )
-LIMIT 1000;
+  SELECT ct.phone_number::text, ct.company::text, COALESCE(ct.full_name, ct.push_name)::text, ct.lead_status::text
+  FROM zapp.evolution_contacts ct
+  WHERE ct.deleted_at IS NULL
+    AND (v_uid IS NULL
+         OR zapp.is_admin_or_supervisor(v_uid)
+         OR ct.assigned_to::text = (SELECT p.id::text FROM zapp.profiles p WHERE p.user_id = v_uid)
+         OR (ct.assigned_to IS NULL AND EXISTS (SELECT 1 FROM zapp.profiles p WHERE p.user_id = v_uid AND p.role IN ('admin','supervisor','agent'))))
+    AND regexp_replace(lower(ct.phone_number), '[^0-9]', '', 'g') = ANY (
+      SELECT DISTINCT regexp_replace(lower(p), '[^0-9]', '', 'g')
+      FROM unnest(COALESCE(p_phones, '{}'::text[])) p
+      WHERE length(regexp_replace(lower(p), '[^0-9]', '', 'g')) >= 8)
+  LIMIT 1000;
 END;
 $$;
 
@@ -23836,6 +23909,23 @@ DECLARE
   v_evo_cred      record;
   v_result        jsonb;
 BEGIN
+  -- GUARDA ANTI-ESCALADA (mesma familia do ML-008): SECURITY DEFINER sem prova de
+  -- caller anula a RLS do mesmo jeito que uma view sem security_invoker — a funcao
+  -- roda como dona e devolve linha que o chamador nao poderia ler direto.
+  -- Medido 28/09/2026: qualquer `authenticated` colhia contato/telefone por aqui.
+  -- Guarda simetrica (revisao pos-auditoria, 28/09/2026): funcao SECURITY DEFINER nao
+  -- pode servir de bypass da RLS. Aceita (1) chamador de servico pelo claim do JWT
+  -- (auth.role() = 'service_role', que e como o PostgREST serve service_role),
+  -- (2) conexao direta/psql e as roles de leitura/BI pelo session_user, e (3) admin ou
+  -- supervisor por auth.uid(). Sem nenhum dos tres, recusa - e nao bloqueia cron/edge
+  -- por engano, que era a assimetria medida na auditoria.
+  IF NOT (
+    COALESCE(auth.role(), '') = 'service_role'
+    OR session_user IN ('postgres','supabase_admin','service_role','metabase_reader','dyad_reader','om_reader')
+    OR zapp.is_admin_or_supervisor()
+  ) THEN
+    RAISE EXCEPTION 'forbidden: app member required';
+  END IF;
   SELECT
   CASE WHEN count(*) FILTER (WHERE created_at >= now() - interval '1 hour') > 0 THEN 'healthy'
        WHEN count(*) FILTER (WHERE created_at >= now() - interval '24 hours') > 0 THEN 'degraded'
@@ -33824,7 +33914,7 @@ COMMENT ON COLUMN zapp.whatsapp_connections.evo_instance_id IS 'UUID interno da 
 
 
 
-CREATE OR REPLACE VIEW zapp.messages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.messages WITH (security_invoker='true') AS
  SELECT em.id,
     em.contact_id,
     conn.connection_id,
@@ -36533,7 +36623,7 @@ COMMENT ON COLUMN zapp.whatsapp_groups.whatsapp_connection_id IS 'Conexao WhatsA
 
 
 
-CREATE OR REPLACE VIEW zapp.contacts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.contacts WITH (security_invoker='true') AS
  SELECT ec.id,
     COALESCE(ec.full_name, ec.push_name, 'Sem nome'::character varying) AS name,
     COALESCE(ec.phone_number, ((split_part((ec.remote_jid)::text, '@'::text, 1))::character varying)::text) AS phone,
@@ -47938,7 +48028,7 @@ COMMENT ON COLUMN zapp._system_health_log.created_at IS 'Timestamp de criacao do
 
 
 
-CREATE OR REPLACE VIEW zapp._test_evt_check_now WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp._test_evt_check_now WITH (security_invoker='true') AS
  SELECT 1 AS x,
     now() AS ts;
 
@@ -48069,7 +48159,7 @@ $idn23$;
 
 
 
-CREATE OR REPLACE VIEW zapp.ai_providers WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.ai_providers WITH (security_invoker='true') AS
  SELECT ai_providers.api_endpoint,
     ai_providers.api_key_secret_name,
     ai_providers.config,
@@ -48090,7 +48180,7 @@ CREATE OR REPLACE VIEW zapp.ai_providers WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.ai_usage_logs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.ai_usage_logs WITH (security_invoker='true') AS
  SELECT ai_usage_logs.created_at,
     ai_usage_logs.duration_ms,
     ai_usage_logs.error_message,
@@ -48408,7 +48498,7 @@ CREATE SEQUENCE IF NOT EXISTS zapp.audit_full_runs_id_seq
 
 
 
-CREATE OR REPLACE VIEW zapp.audit_log WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.audit_log WITH (security_invoker='true') AS
  SELECT evolution_audit_log.id,
     evolution_audit_log.action,
     evolution_audit_log.created_at AS changed_at,
@@ -48428,7 +48518,7 @@ COMMENT ON VIEW zapp.audit_log IS 'Repoint p/ ContactAuditLogPanel (shape: chang
 
 
 
-CREATE OR REPLACE VIEW zapp.audit_log_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.audit_log_safe WITH (security_invoker='true') AS
  SELECT audit_log.id,
     audit_log.user_id,
     audit_log.action,
@@ -48498,7 +48588,7 @@ COMMENT ON COLUMN zapp.auto_export_jobs.file_path IS 'Caminho do objeto gerado n
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_activity_log WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_activity_log WITH (security_invoker='true') AS
  SELECT bpm_activity_log.id,
     bpm_activity_log.workspace_id,
     bpm_activity_log.flow_id,
@@ -48517,7 +48607,7 @@ CREATE OR REPLACE VIEW zapp.bpm_activity_log WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_automation_actions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_automation_actions WITH (security_invoker='true') AS
  SELECT bpm_automation_actions.id,
     bpm_automation_actions.automation_id,
     bpm_automation_actions.action_type,
@@ -48532,7 +48622,7 @@ CREATE OR REPLACE VIEW zapp.bpm_automation_actions WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_automation_conditions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_automation_conditions WITH (security_invoker='true') AS
  SELECT bpm_automation_conditions.id,
     bpm_automation_conditions.automation_id,
     bpm_automation_conditions.condition_order,
@@ -48548,7 +48638,7 @@ CREATE OR REPLACE VIEW zapp.bpm_automation_conditions WITH (security_invoker='on
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_automation_executions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_automation_executions WITH (security_invoker='true') AS
  SELECT bpm_automation_executions.id,
     bpm_automation_executions.automation_id,
     bpm_automation_executions.card_id,
@@ -48566,7 +48656,7 @@ CREATE OR REPLACE VIEW zapp.bpm_automation_executions WITH (security_invoker='on
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_automations WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_automations WITH (security_invoker='true') AS
  SELECT bpm_automations.id,
     bpm_automations.flow_id,
     bpm_automations.name,
@@ -48585,7 +48675,7 @@ CREATE OR REPLACE VIEW zapp.bpm_automations WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_answer_fields WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_answer_fields WITH (security_invoker='true') AS
  SELECT bpm_card_answer_fields.id,
     bpm_card_answer_fields.card_answer_id,
     bpm_card_answer_fields.field_id,
@@ -48601,7 +48691,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_answer_fields WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_answers WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_answers WITH (security_invoker='true') AS
  SELECT bpm_card_answers.id,
     bpm_card_answers.card_id,
     bpm_card_answers.form_id,
@@ -48615,7 +48705,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_answers WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_attachments WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_attachments WITH (security_invoker='true') AS
  SELECT bpm_card_attachments.id,
     bpm_card_attachments.card_id,
     bpm_card_attachments.file_name,
@@ -48629,7 +48719,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_attachments WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_checklist_items WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_checklist_items WITH (security_invoker='true') AS
  SELECT bpm_card_checklist_items.id,
     bpm_card_checklist_items.checklist_id,
     bpm_card_checklist_items.title,
@@ -48643,7 +48733,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_checklist_items WITH (security_invoker='on'
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_checklists WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_checklists WITH (security_invoker='true') AS
  SELECT bpm_card_checklists.id,
     bpm_card_checklists.card_id,
     bpm_card_checklists.title,
@@ -48655,7 +48745,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_checklists WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_comments WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_comments WITH (security_invoker='true') AS
  SELECT bpm_card_comments.id,
     bpm_card_comments.card_id,
     bpm_card_comments.user_id,
@@ -48672,7 +48762,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_comments WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_email_attachments WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_email_attachments WITH (security_invoker='true') AS
  SELECT bpm_card_email_attachments.id,
     bpm_card_email_attachments.email_id,
     bpm_card_email_attachments.file_name,
@@ -48685,7 +48775,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_email_attachments WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_emails WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_emails WITH (security_invoker='true') AS
  SELECT bpm_card_emails.id,
     bpm_card_emails.card_id,
     bpm_card_emails.direction,
@@ -48711,7 +48801,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_emails WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_labels WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_labels WITH (security_invoker='true') AS
  SELECT bpm_card_labels.card_id,
     bpm_card_labels.label_id
    FROM bpm.bpm_card_labels;
@@ -48719,7 +48809,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_labels WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_movements WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_movements WITH (security_invoker='true') AS
  SELECT bpm_card_movements.id,
     bpm_card_movements.card_id,
     bpm_card_movements.from_step_id,
@@ -48733,7 +48823,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_movements WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_recurrences WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_recurrences WITH (security_invoker='true') AS
  SELECT bpm_card_recurrences.id,
     bpm_card_recurrences.card_id,
     bpm_card_recurrences.frequency,
@@ -48755,7 +48845,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_recurrences WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_subtasks WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_subtasks WITH (security_invoker='true') AS
  SELECT bpm_card_subtasks.id,
     bpm_card_subtasks.card_id,
     bpm_card_subtasks.title,
@@ -48773,7 +48863,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_subtasks WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_time_entries WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_time_entries WITH (security_invoker='true') AS
  SELECT bpm_card_time_entries.id,
     bpm_card_time_entries.card_id,
     bpm_card_time_entries.user_id,
@@ -48787,7 +48877,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_time_entries WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_card_watchers WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_card_watchers WITH (security_invoker='true') AS
  SELECT bpm_card_watchers.card_id,
     bpm_card_watchers.user_id,
     bpm_card_watchers.watch_type,
@@ -48797,7 +48887,7 @@ CREATE OR REPLACE VIEW zapp.bpm_card_watchers WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_cards WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_cards WITH (security_invoker='true') AS
  SELECT bpm_cards.id,
     bpm_cards.flow_id,
     bpm_cards.current_step_id,
@@ -48832,7 +48922,7 @@ CREATE SEQUENCE IF NOT EXISTS zapp.bpm_cards_card_number_seq
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_connections WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_connections WITH (security_invoker='true') AS
  SELECT bpm_connections.id,
     bpm_connections.source_type,
     bpm_connections.source_id,
@@ -48845,7 +48935,7 @@ CREATE OR REPLACE VIEW zapp.bpm_connections WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_dashboard_elements WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_dashboard_elements WITH (security_invoker='true') AS
  SELECT bpm_dashboard_elements.id,
     bpm_dashboard_elements.flow_id,
     bpm_dashboard_elements.element_type,
@@ -48861,7 +48951,7 @@ CREATE OR REPLACE VIEW zapp.bpm_dashboard_elements WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_email_configs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_email_configs WITH (security_invoker='true') AS
  SELECT bpm_email_configs.id,
     bpm_email_configs.workspace_id,
     bpm_email_configs.name,
@@ -48879,7 +48969,7 @@ CREATE OR REPLACE VIEW zapp.bpm_email_configs WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_flow_steps WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_flow_steps WITH (security_invoker='true') AS
  SELECT bpm_flow_steps.id,
     bpm_flow_steps.flow_id,
     bpm_flow_steps.name,
@@ -48898,7 +48988,7 @@ CREATE OR REPLACE VIEW zapp.bpm_flow_steps WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_flow_template_installs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_flow_template_installs WITH (security_invoker='true') AS
  SELECT bpm_flow_template_installs.id,
     bpm_flow_template_installs.template_id,
     bpm_flow_template_installs.workspace_id,
@@ -48910,7 +49000,7 @@ CREATE OR REPLACE VIEW zapp.bpm_flow_template_installs WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_flow_templates WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_flow_templates WITH (security_invoker='true') AS
  SELECT bpm_flow_templates.id,
     bpm_flow_templates.name,
     bpm_flow_templates.description,
@@ -48932,7 +49022,7 @@ CREATE OR REPLACE VIEW zapp.bpm_flow_templates WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_flows WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_flows WITH (security_invoker='true') AS
  SELECT bpm_flows.id,
     bpm_flows.workspace_id,
     bpm_flows.name,
@@ -48951,7 +49041,7 @@ CREATE OR REPLACE VIEW zapp.bpm_flows WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_form_fields WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_form_fields WITH (security_invoker='true') AS
  SELECT bpm_form_fields.id,
     bpm_form_fields.form_id,
     bpm_form_fields.field_hash,
@@ -48975,7 +49065,7 @@ CREATE OR REPLACE VIEW zapp.bpm_form_fields WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_forms WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_forms WITH (security_invoker='true') AS
  SELECT bpm_forms.id,
     bpm_forms.flow_step_id,
     bpm_forms.flow_id,
@@ -48990,7 +49080,7 @@ CREATE OR REPLACE VIEW zapp.bpm_forms WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_labels WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_labels WITH (security_invoker='true') AS
  SELECT bpm_labels.id,
     bpm_labels.flow_id,
     bpm_labels.name,
@@ -49001,7 +49091,7 @@ CREATE OR REPLACE VIEW zapp.bpm_labels WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_notification_preferences WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_notification_preferences WITH (security_invoker='true') AS
  SELECT bpm_notification_preferences.id,
     bpm_notification_preferences.user_id,
     bpm_notification_preferences.flow_id,
@@ -49023,7 +49113,7 @@ CREATE OR REPLACE VIEW zapp.bpm_notification_preferences WITH (security_invoker=
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_public_form_submissions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_public_form_submissions WITH (security_invoker='true') AS
  SELECT bpm_public_form_submissions.id,
     bpm_public_form_submissions.form_id,
     bpm_public_form_submissions.flow_id,
@@ -49043,7 +49133,7 @@ CREATE OR REPLACE VIEW zapp.bpm_public_form_submissions WITH (security_invoker='
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_public_share_access WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_public_share_access WITH (security_invoker='true') AS
  SELECT bpm_public_share_access.id,
     bpm_public_share_access.share_id,
     bpm_public_share_access.ip_address,
@@ -49055,7 +49145,7 @@ CREATE OR REPLACE VIEW zapp.bpm_public_share_access WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_public_shares WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_public_shares WITH (security_invoker='true') AS
  SELECT bpm_public_shares.id,
     bpm_public_shares.share_type,
     bpm_public_shares.entity_id,
@@ -49075,7 +49165,7 @@ CREATE OR REPLACE VIEW zapp.bpm_public_shares WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_register_fields WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_register_fields WITH (security_invoker='true') AS
  SELECT bpm_register_fields.id,
     bpm_register_fields.register_id,
     bpm_register_fields.field_hash,
@@ -49092,7 +49182,7 @@ CREATE OR REPLACE VIEW zapp.bpm_register_fields WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_register_records WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_register_records WITH (security_invoker='true') AS
  SELECT bpm_register_records.id,
     bpm_register_records.register_id,
     bpm_register_records.created_by,
@@ -49104,7 +49194,7 @@ CREATE OR REPLACE VIEW zapp.bpm_register_records WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_register_values WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_register_values WITH (security_invoker='true') AS
  SELECT bpm_register_values.id,
     bpm_register_values.record_id,
     bpm_register_values.field_id,
@@ -49117,7 +49207,7 @@ CREATE OR REPLACE VIEW zapp.bpm_register_values WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_registers WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_registers WITH (security_invoker='true') AS
  SELECT bpm_registers.id,
     bpm_registers.workspace_id,
     bpm_registers.name,
@@ -49134,7 +49224,7 @@ CREATE OR REPLACE VIEW zapp.bpm_registers WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_saved_views WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_saved_views WITH (security_invoker='true') AS
  SELECT bpm_saved_views.id,
     bpm_saved_views.flow_id,
     bpm_saved_views.name,
@@ -49157,7 +49247,7 @@ CREATE OR REPLACE VIEW zapp.bpm_saved_views WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_sla_records WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_sla_records WITH (security_invoker='true') AS
  SELECT bpm_sla_records.id,
     bpm_sla_records.card_id,
     bpm_sla_records.step_id,
@@ -49174,7 +49264,7 @@ CREATE OR REPLACE VIEW zapp.bpm_sla_records WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.bpm_user_favorites WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.bpm_user_favorites WITH (security_invoker='true') AS
  SELECT bpm_user_favorites.id,
     bpm_user_favorites.user_id,
     bpm_user_favorites.entity_type,
@@ -49185,7 +49275,7 @@ CREATE OR REPLACE VIEW zapp.bpm_user_favorites WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.channel_connections_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.channel_connections_safe WITH (security_invoker='true') AS
  SELECT channel_connections.id,
     channel_connections.name,
     channel_connections.channel_type,
@@ -49257,7 +49347,7 @@ COMMENT ON TABLE zapp.constraint_changelog IS 'Módulo inativo/vazio até 2026-0
 
 
 
-CREATE OR REPLACE VIEW zapp.contact_emails WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.contact_emails WITH (security_invoker='true') AS
  SELECT contact_emails.id,
     contact_emails.contact_id,
     contact_emails.email,
@@ -49386,7 +49476,7 @@ ALTER SEQUENCE zapp.conversation_transfers_ticket_number_seq OWNED BY zapp.conve
 
 
 
-CREATE OR REPLACE VIEW zapp.conversations WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.conversations WITH (security_invoker='true') AS
  SELECT ec.contact_id,
     ec.created_at,
     ec.id,
@@ -49662,7 +49752,7 @@ ALTER SEQUENCE zapp.cookies_config_id_seq OWNED BY zapp.cookies_config.id;
 
 
 
-CREATE OR REPLACE VIEW zapp.cookies_health_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.cookies_health_dashboard WITH (security_invoker='true') AS
  SELECT cookies_config.id,
     cookies_config.servico,
     cookies_config.health_status,
@@ -49850,7 +49940,7 @@ COMMENT ON TABLE zapp.dashboard_queries IS 'Módulo inativo/vazio até 2026-08 (
 
 
 
-CREATE OR REPLACE VIEW zapp.departments_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.departments_safe WITH (security_invoker='true') AS
  SELECT departments.id,
     departments.name,
     departments.description,
@@ -49904,7 +49994,7 @@ ALTER SEQUENCE zapp.dept_mapping_id_seq OWNED BY zapp.dept_mapping.id;
 
 
 
-CREATE OR REPLACE VIEW zapp.email_accounts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_accounts WITH (security_invoker='true') AS
  SELECT email_accounts.id,
     email_accounts.user_id,
     email_accounts.email_address,
@@ -49928,7 +50018,7 @@ CREATE OR REPLACE VIEW zapp.email_accounts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_attachments WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_attachments WITH (security_invoker='true') AS
  SELECT email_attachments.id,
     email_attachments.email_message_id,
     email_attachments.gmail_attachment_id,
@@ -49943,7 +50033,7 @@ CREATE OR REPLACE VIEW zapp.email_attachments WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_contact_scores WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_contact_scores WITH (security_invoker='true') AS
  SELECT email_contact_scores.id,
     email_contact_scores.user_id,
     email_contact_scores.email,
@@ -49960,7 +50050,7 @@ CREATE OR REPLACE VIEW zapp.email_contact_scores WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_drafts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_drafts WITH (security_invoker='true') AS
  SELECT email_drafts.id,
     email_drafts.account_id,
     email_drafts.thread_id,
@@ -49988,7 +50078,7 @@ CREATE OR REPLACE VIEW zapp.email_drafts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_labels WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_labels WITH (security_invoker='true') AS
  SELECT email_labels.id,
     email_labels.gmail_account_id,
     email_labels.gmail_label_id,
@@ -50004,7 +50094,7 @@ CREATE OR REPLACE VIEW zapp.email_labels WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_link_click_events WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_link_click_events WITH (security_invoker='true') AS
  SELECT email_link_click_events.id,
     email_link_click_events.link_id,
     email_link_click_events.tracking_id,
@@ -50021,7 +50111,7 @@ CREATE OR REPLACE VIEW zapp.email_link_click_events WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.email_messages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_messages WITH (security_invoker='true') AS
  SELECT email_messages.id,
     email_messages.thread_id,
     email_messages.gmail_message_id,
@@ -50054,7 +50144,7 @@ CREATE OR REPLACE VIEW zapp.email_messages WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_signatures WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_signatures WITH (security_invoker='true') AS
  SELECT email_signatures.id,
     email_signatures.account_id,
     email_signatures.name,
@@ -50069,7 +50159,7 @@ CREATE OR REPLACE VIEW zapp.email_signatures WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_templates WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_templates WITH (security_invoker='true') AS
  SELECT email_templates.id,
     email_templates.created_at,
     email_templates.updated_at,
@@ -50083,7 +50173,7 @@ CREATE OR REPLACE VIEW zapp.email_templates WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_threads WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_threads WITH (security_invoker='true') AS
  SELECT email_threads.assigned_to,
     email_threads.contact_id,
     email_threads.created_at,
@@ -50117,7 +50207,7 @@ CREATE OR REPLACE VIEW zapp.email_threads WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_tracked_links WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_tracked_links WITH (security_invoker='true') AS
  SELECT email_tracked_links.id,
     email_tracked_links.link_id,
     email_tracked_links.tracking_id,
@@ -50133,7 +50223,7 @@ CREATE OR REPLACE VIEW zapp.email_tracked_links WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.email_tracked_messages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_tracked_messages WITH (security_invoker='true') AS
  SELECT email_tracked_messages.id,
     email_tracked_messages.tracking_id,
     email_tracked_messages.user_id,
@@ -50162,7 +50252,7 @@ CREATE OR REPLACE VIEW zapp.email_tracked_messages WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.email_tracking_events WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_tracking_events WITH (security_invoker='true') AS
  SELECT email_tracking_events.id,
     email_tracking_events.tracking_id,
     email_tracking_events.event_type,
@@ -50182,7 +50272,7 @@ CREATE OR REPLACE VIEW zapp.email_tracking_events WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.email_tracking_summary WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_tracking_summary WITH (security_invoker='true') AS
  SELECT m.user_id,
     count(*) AS total_tracked,
     count(*) FILTER (WHERE (m.open_count > 0)) AS total_opened,
@@ -50201,7 +50291,7 @@ CREATE OR REPLACE VIEW zapp.email_tracking_summary WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.email_tracking_templates WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.email_tracking_templates WITH (security_invoker='true') AS
  SELECT email_tracking_templates.id,
     email_tracking_templates.user_id,
     email_tracking_templates.name,
@@ -50466,7 +50556,7 @@ CREATE OR REPLACE VIEW zapp.evo_contact_delta WITH (security_invoker='true') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_alert_cooldown WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_alert_cooldown WITH (security_invoker='true') AS
  SELECT evolution_alert_cooldown.alert_key,
     evolution_alert_cooldown.last_severity,
     evolution_alert_cooldown.last_severity_rank,
@@ -50481,7 +50571,7 @@ CREATE OR REPLACE VIEW zapp.evolution_alert_cooldown WITH (security_invoker='on'
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_backfill_audit WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_backfill_audit WITH (security_invoker='true') AS
  SELECT evolution_backfill_audit.id,
     evolution_backfill_audit.batch_id,
     evolution_backfill_audit.inserted,
@@ -50497,7 +50587,7 @@ CREATE OR REPLACE VIEW zapp.evolution_backfill_audit WITH (security_invoker='on'
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_bootstrap_log WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_bootstrap_log WITH (security_invoker='true') AS
  SELECT evolution_bootstrap_log.id,
     evolution_bootstrap_log.instance_name,
     evolution_bootstrap_log.instance_id,
@@ -50512,7 +50602,7 @@ CREATE OR REPLACE VIEW zapp.evolution_bootstrap_log WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_connection_history WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_connection_history WITH (security_invoker='true') AS
  SELECT evolution_connection_history.id,
     evolution_connection_history.instance_name,
     evolution_connection_history.state,
@@ -50780,7 +50870,7 @@ CREATE SEQUENCE IF NOT EXISTS zapp.evolution_ef_logs_id_seq
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_guardian_heartbeat WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_guardian_heartbeat WITH (security_invoker='true') AS
  SELECT evolution_guardian_heartbeat.id,
     evolution_guardian_heartbeat.service_name,
     evolution_guardian_heartbeat.heartbeat_at,
@@ -50814,7 +50904,7 @@ COMMENT ON VIEW zapp.evolution_instances_public IS 'View segura para consumo pel
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_instances WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_instances WITH (security_invoker='true') AS
  SELECT evolution_instances_public.instance_name,
     evolution_instances_public.api_url,
     evolution_instances_public.display_name,
@@ -50999,7 +51089,7 @@ $idn27$;
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_pipeline_health_log WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_pipeline_health_log WITH (security_invoker='true') AS
  SELECT evolution_pipeline_health_log.id,
     evolution_pipeline_health_log.checked_at,
     evolution_pipeline_health_log.pipeline_status,
@@ -51022,7 +51112,7 @@ CREATE OR REPLACE VIEW zapp.evolution_pipeline_health_log WITH (security_invoker
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_pipeline_history WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_pipeline_history WITH (security_invoker='true') AS
  SELECT evolution_pipeline_history.id,
     evolution_pipeline_history.pipeline_id,
     evolution_pipeline_history.from_stage,
@@ -51035,7 +51125,7 @@ CREATE OR REPLACE VIEW zapp.evolution_pipeline_history WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_reconcile_jobs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_reconcile_jobs WITH (security_invoker='true') AS
  SELECT evolution_reconcile_jobs.id,
     evolution_reconcile_jobs.request_id,
     evolution_reconcile_jobs.dispatched_at,
@@ -51047,7 +51137,7 @@ CREATE OR REPLACE VIEW zapp.evolution_reconcile_jobs WITH (security_invoker='on'
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_retention_log WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_retention_log WITH (security_invoker='true') AS
  SELECT evolution_retention_log.id,
     evolution_retention_log.ran_at,
     evolution_retention_log.processed_days_kept,
@@ -51094,7 +51184,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2 WITH (security_invoker='
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_08 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_08 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2026_08.id,
     evolution_webhook_events_v2_2026_08.event_type,
     evolution_webhook_events_v2_2026_08.instance_name,
@@ -51114,7 +51204,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_08 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_09 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_09 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2026_09.id,
     evolution_webhook_events_v2_2026_09.event_type,
     evolution_webhook_events_v2_2026_09.instance_name,
@@ -51134,7 +51224,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_09 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_10 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_10 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2026_10.id,
     evolution_webhook_events_v2_2026_10.event_type,
     evolution_webhook_events_v2_2026_10.instance_name,
@@ -51154,7 +51244,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_10 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_11 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_11 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2026_11.id,
     evolution_webhook_events_v2_2026_11.event_type,
     evolution_webhook_events_v2_2026_11.instance_name,
@@ -51174,7 +51264,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_11 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_12 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_12 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2026_12.id,
     evolution_webhook_events_v2_2026_12.event_type,
     evolution_webhook_events_v2_2026_12.instance_name,
@@ -51194,7 +51284,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2026_12 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_01 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_01 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2027_01.id,
     evolution_webhook_events_v2_2027_01.event_type,
     evolution_webhook_events_v2_2027_01.instance_name,
@@ -51214,7 +51304,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_01 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_02 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_02 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2027_02.id,
     evolution_webhook_events_v2_2027_02.event_type,
     evolution_webhook_events_v2_2027_02.instance_name,
@@ -51234,7 +51324,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_02 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_03 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_03 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2027_03.id,
     evolution_webhook_events_v2_2027_03.event_type,
     evolution_webhook_events_v2_2027_03.instance_name,
@@ -51254,7 +51344,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_03 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_04 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_04 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2027_04.id,
     evolution_webhook_events_v2_2027_04.event_type,
     evolution_webhook_events_v2_2027_04.instance_name,
@@ -51274,7 +51364,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_04 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_05 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_05 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2027_05.id,
     evolution_webhook_events_v2_2027_05.event_type,
     evolution_webhook_events_v2_2027_05.instance_name,
@@ -51294,7 +51384,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_05 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_06 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_06 WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_2027_06.id,
     evolution_webhook_events_v2_2027_06.event_type,
     evolution_webhook_events_v2_2027_06.instance_name,
@@ -51314,7 +51404,7 @@ CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_2027_06 WITH (security_i
 
 
 
-CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_default WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.evolution_webhook_events_v2_default WITH (security_invoker='true') AS
  SELECT evolution_webhook_events_v2_default.id,
     evolution_webhook_events_v2_default.event_type,
     evolution_webhook_events_v2_default.instance_name,
@@ -51534,7 +51624,7 @@ COMMENT ON TABLE zapp.forwarded_messages IS 'Módulo inativo/vazio até 2026-08 
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_accounts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_accounts WITH (security_invoker='true') AS
  SELECT gmail_accounts.access_token_encrypted,
     gmail_accounts.created_at,
     gmail_accounts.email_address,
@@ -51556,7 +51646,7 @@ CREATE OR REPLACE VIEW zapp.gmail_accounts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_accounts_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_accounts_safe WITH (security_invoker='true') AS
  SELECT gmail_accounts.id,
     gmail_accounts.user_id,
     gmail_accounts.email_address,
@@ -51572,7 +51662,7 @@ CREATE OR REPLACE VIEW zapp.gmail_accounts_safe WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_attachments WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_attachments WITH (security_invoker='true') AS
  SELECT gmail_attachments.id,
     gmail_attachments.message_id_ref,
     gmail_attachments.account_id,
@@ -51588,7 +51678,7 @@ CREATE OR REPLACE VIEW zapp.gmail_attachments WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_cache_test WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_cache_test WITH (security_invoker='true') AS
  SELECT gmail_cache_test.id,
     gmail_cache_test.cache_key,
     gmail_cache_test.cache_value,
@@ -51599,7 +51689,7 @@ CREATE OR REPLACE VIEW zapp.gmail_cache_test WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_daily_metrics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_daily_metrics WITH (security_invoker='true') AS
  SELECT gmail_daily_metrics.id,
     gmail_daily_metrics.created_at,
     gmail_daily_metrics.updated_at,
@@ -51616,7 +51706,7 @@ CREATE OR REPLACE VIEW zapp.gmail_daily_metrics WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_drafts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_drafts WITH (security_invoker='true') AS
  SELECT gmail_drafts.id,
     gmail_drafts.created_at,
     gmail_drafts.updated_at,
@@ -51634,7 +51724,7 @@ CREATE OR REPLACE VIEW zapp.gmail_drafts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_health_logs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_health_logs WITH (security_invoker='true') AS
  SELECT gmail_health_logs.id,
     gmail_health_logs."timestamp",
     gmail_health_logs.status,
@@ -51649,7 +51739,7 @@ CREATE OR REPLACE VIEW zapp.gmail_health_logs WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_health_summary WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_health_summary WITH (security_invoker='true') AS
  SELECT gmail_health_summary.id,
     gmail_health_summary.account_id,
     gmail_health_summary.status,
@@ -51665,7 +51755,7 @@ CREATE OR REPLACE VIEW zapp.gmail_health_summary WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_labels WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_labels WITH (security_invoker='true') AS
  SELECT gmail_labels.id,
     gmail_labels.created_at,
     gmail_labels.updated_at,
@@ -51682,7 +51772,7 @@ CREATE OR REPLACE VIEW zapp.gmail_labels WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_messages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_messages WITH (security_invoker='true') AS
  SELECT gmail_messages.id,
     gmail_messages.created_at,
     gmail_messages.updated_at,
@@ -51709,7 +51799,7 @@ CREATE OR REPLACE VIEW zapp.gmail_messages WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_revalidation_jobs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_revalidation_jobs WITH (security_invoker='true') AS
  SELECT gmail_revalidation_jobs.id,
     gmail_revalidation_jobs.account_id,
     gmail_revalidation_jobs.status,
@@ -51725,7 +51815,7 @@ CREATE OR REPLACE VIEW zapp.gmail_revalidation_jobs WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_signatures WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_signatures WITH (security_invoker='true') AS
  SELECT gmail_signatures.id,
     gmail_signatures.created_at,
     gmail_signatures.updated_at,
@@ -51738,7 +51828,7 @@ CREATE OR REPLACE VIEW zapp.gmail_signatures WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_test_fail WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_test_fail WITH (security_invoker='true') AS
  SELECT gmail_test_fail.id,
     gmail_test_fail.test_name,
     gmail_test_fail.error_msg,
@@ -51750,7 +51840,7 @@ CREATE OR REPLACE VIEW zapp.gmail_test_fail WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_test_telemetry WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_test_telemetry WITH (security_invoker='true') AS
  SELECT gmail_test_telemetry.id,
     gmail_test_telemetry.test_name,
     gmail_test_telemetry.duration_ms,
@@ -51762,7 +51852,7 @@ CREATE OR REPLACE VIEW zapp.gmail_test_telemetry WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.gmail_threads WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.gmail_threads WITH (security_invoker='true') AS
  SELECT gmail_threads.id,
     gmail_threads.created_at,
     gmail_threads.updated_at,
@@ -51809,7 +51899,7 @@ COMMENT ON TABLE zapp.google_calendar_config IS 'Configuração da integração 
 
 
 
-CREATE OR REPLACE VIEW zapp.guardrail_ml_logs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.guardrail_ml_logs WITH (security_invoker='true') AS
  SELECT guardrail_ml_logs.id,
     guardrail_ml_logs.workspace_id,
     guardrail_ml_logs.agent_id,
@@ -51825,7 +51915,7 @@ CREATE OR REPLACE VIEW zapp.guardrail_ml_logs WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.guardrail_policies WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.guardrail_policies WITH (security_invoker='true') AS
  SELECT guardrail_policies.id,
     guardrail_policies.workspace_id,
     guardrail_policies.name,
@@ -51839,7 +51929,7 @@ CREATE OR REPLACE VIEW zapp.guardrail_policies WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.hf_config WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.hf_config WITH (security_invoker='true') AS
  SELECT hf_config.id,
     hf_config.workspace_id,
     hf_config.key,
@@ -51873,7 +51963,7 @@ COMMENT ON TABLE zapp.hmac_selftest_audit IS 'Módulo inativo/vazio até 2026-08
 
 
 
-CREATE OR REPLACE VIEW zapp.imap_smtp_accounts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.imap_smtp_accounts WITH (security_invoker='true') AS
  SELECT imap_smtp_accounts.id,
     imap_smtp_accounts.created_at,
     imap_smtp_accounts.updated_at,
@@ -51932,7 +52022,7 @@ COMMENT ON TABLE zapp.invites IS 'Módulo inativo/vazio até 2026-08 (sprawl F-0
 
 
 
-CREATE OR REPLACE VIEW zapp.knowledge_base_articles WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.knowledge_base_articles WITH (security_invoker='true') AS
  SELECT knowledge_base_articles.category,
     knowledge_base_articles.content,
     knowledge_base_articles.created_at,
@@ -51951,7 +52041,7 @@ CREATE OR REPLACE VIEW zapp.knowledge_base_articles WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.knowledge_base_files WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.knowledge_base_files WITH (security_invoker='true') AS
  SELECT knowledge_base_files.article_id,
     knowledge_base_files.created_at,
     knowledge_base_files.extracted_text,
@@ -52114,7 +52204,7 @@ ALTER SEQUENCE zapp.lux_system_alerts_id_seq OWNED BY zapp.lux_system_alerts.id;
 
 
 
-CREATE OR REPLACE VIEW zapp.mcp_servers WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.mcp_servers WITH (security_invoker='true') AS
  SELECT mcp_servers.id,
     mcp_servers.workspace_id,
     mcp_servers.name,
@@ -52178,7 +52268,7 @@ COMMENT ON TABLE zapp.message_reports IS 'Módulo inativo/vazio até 2026-08 (sp
 
 
 
-CREATE OR REPLACE VIEW zapp.messages_whatsapp WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.messages_whatsapp WITH (security_invoker='true') AS
  SELECT ec.id,
     ec.contact_id,
     (ec.instance_name)::text AS instance_name,
@@ -52196,7 +52286,7 @@ CREATE OR REPLACE VIEW zapp.messages_whatsapp WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.meta_capi_events WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.meta_capi_events WITH (security_invoker='true') AS
  SELECT meta_capi_events.action_source,
     meta_capi_events.contact_id,
     meta_capi_events.created_at,
@@ -52277,7 +52367,7 @@ CREATE SEQUENCE IF NOT EXISTS zapp.migration_snapshot_d30_id_seq
 
 
 
-CREATE OR REPLACE VIEW zapp.model_pricing_v2 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.model_pricing_v2 WITH (security_invoker='true') AS
  SELECT model_pricing_v2.id,
     model_pricing_v2.model,
     model_pricing_v2.provider,
@@ -52399,7 +52489,7 @@ COMMENT ON COLUMN zapp.n8n_variables.updated_at IS 'Timestamp da ultima atualiza
 
 
 
-CREATE OR REPLACE VIEW zapp.nlp_extractions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.nlp_extractions WITH (security_invoker='true') AS
  SELECT nlp_extractions.id,
     nlp_extractions.workspace_id,
     nlp_extractions.source_type,
@@ -52454,7 +52544,7 @@ $idn29$;
 
 
 
-CREATE OR REPLACE VIEW zapp.nps_invitations WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.nps_invitations WITH (security_invoker='true') AS
  SELECT nps_invitations.id,
     nps_invitations.contact_id,
     nps_invitations.sent_at,
@@ -52469,7 +52559,7 @@ CREATE OR REPLACE VIEW zapp.nps_invitations WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.nps_surveys WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.nps_surveys WITH (security_invoker='true') AS
  SELECT nps_surveys.agent_id,
     nps_surveys.contact_id,
     nps_surveys.created_at,
@@ -52504,7 +52594,7 @@ CREATE OR REPLACE VIEW zapp.oracle_history WITH (security_invoker='true') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.password_reset_requests_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.password_reset_requests_safe WITH (security_invoker='true') AS
  SELECT password_reset_requests.id,
     password_reset_requests.user_id,
     password_reset_requests.email,
@@ -52523,7 +52613,7 @@ CREATE OR REPLACE VIEW zapp.password_reset_requests_safe WITH (security_invoker=
 
 
 
-CREATE OR REPLACE VIEW zapp.payment_links WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.payment_links WITH (security_invoker='true') AS
  SELECT payment_links.amount,
     payment_links.contact_id,
     payment_links.created_at,
@@ -52565,7 +52655,7 @@ COMMENT ON TABLE zapp.pinned_messages IS 'Módulo inativo/vazio até 2026-08 (sp
 
 
 
-CREATE OR REPLACE VIEW zapp.playbooks WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.playbooks WITH (security_invoker='true') AS
  SELECT playbooks.category,
     playbooks.created_at,
     playbooks.created_by,
@@ -52603,7 +52693,7 @@ COMMENT ON TABLE zapp.processed_requests IS 'Módulo inativo/vazio até 2026-08 
 
 
 
-CREATE OR REPLACE VIEW zapp.products WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.products WITH (security_invoker='true') AS
  SELECT products.category,
     products.created_at,
     products.currency,
@@ -52623,7 +52713,7 @@ CREATE OR REPLACE VIEW zapp.products WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.profiles_public WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.profiles_public WITH (security_invoker='true') AS
  SELECT profiles.id,
     profiles.user_id,
     profiles.name,
@@ -52636,7 +52726,7 @@ CREATE OR REPLACE VIEW zapp.profiles_public WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.prompt_ab_tests WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.prompt_ab_tests WITH (security_invoker='true') AS
  SELECT prompt_ab_tests.id,
     prompt_ab_tests.agent_id,
     prompt_ab_tests.name,
@@ -52654,7 +52744,7 @@ CREATE OR REPLACE VIEW zapp.prompt_ab_tests WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.prompt_versions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.prompt_versions WITH (security_invoker='true') AS
  SELECT prompt_versions.id,
     prompt_versions.agent_id,
     prompt_versions.user_id,
@@ -52831,7 +52921,7 @@ COMMENT ON TABLE zapp.queue_items IS 'Módulo Filas (queue_*) — nunca ativado 
 
 
 
-CREATE OR REPLACE VIEW zapp.ragas_scores WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.ragas_scores WITH (security_invoker='true') AS
  SELECT ragas_scores.id,
     ragas_scores.workspace_id,
     ragas_scores.agent_id,
@@ -52898,7 +52988,7 @@ COMMENT ON TABLE zapp.rls_denied_log IS 'Módulo inativo/vazio até 2026-08 (spr
 
 
 
-CREATE OR REPLACE VIEW zapp.salespeople WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.salespeople WITH (security_invoker='true') AS
  SELECT salespeople.id,
     salespeople.created_at,
     salespeople.updated_at,
@@ -53098,7 +53188,7 @@ COMMENT ON COLUMN zapp.sentry_config.updated_by IS 'Usuario/processo autor da ac
 
 
 
-CREATE OR REPLACE VIEW zapp.session_traces WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.session_traces WITH (security_invoker='true') AS
  SELECT session_traces.id,
     session_traces.session_id,
     session_traces.trace_type,
@@ -53135,7 +53225,7 @@ COMMENT ON TABLE zapp.sicoob_contact_mapping IS 'Mapeamento contato zapp <-> ide
 
 
 
-CREATE OR REPLACE VIEW zapp.skill_registry WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.skill_registry WITH (security_invoker='true') AS
  SELECT skill_registry.id,
     skill_registry.name,
     skill_registry.slug,
@@ -53379,7 +53469,7 @@ COMMENT ON TABLE zapp.test_cases IS 'Módulo inativo/vazio até 2026-08 (sprawl 
 
 
 
-CREATE OR REPLACE VIEW zapp.tool_integrations WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.tool_integrations WITH (security_invoker='true') AS
  SELECT tool_integrations.id,
     tool_integrations.workspace_id,
     tool_integrations.name,
@@ -53409,7 +53499,7 @@ CREATE OR REPLACE VIEW zapp.tool_policies WITH (security_invoker='true') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.trace_events WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.trace_events WITH (security_invoker='true') AS
  SELECT trace_events.id,
     trace_events.session_trace_id,
     trace_events.event_type,
@@ -53420,7 +53510,7 @@ CREATE OR REPLACE VIEW zapp.trace_events WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.training_sessions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.training_sessions WITH (security_invoker='true') AS
  SELECT training_sessions.completed_at,
     training_sessions.created_at,
     training_sessions.feedback,
@@ -53447,7 +53537,7 @@ CREATE SEQUENCE IF NOT EXISTS zapp.transfer_ticket_seq
 
 
 
-CREATE OR REPLACE VIEW zapp.usage_records WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.usage_records WITH (security_invoker='true') AS
  SELECT usage_records.id,
     usage_records.workspace_id,
     usage_records.agent_id,
@@ -53461,7 +53551,7 @@ CREATE OR REPLACE VIEW zapp.usage_records WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_active_alerts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_active_alerts WITH (security_invoker='true') AS
  SELECT evolution_alerts.id,
     evolution_alerts.alert_type,
     evolution_alerts.severity,
@@ -53483,7 +53573,7 @@ CREATE OR REPLACE VIEW zapp.v_active_alerts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_active_stages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_active_stages WITH (security_invoker='true') AS
  SELECT evolution_stage_mapping.stage_key,
     evolution_stage_mapping.label_name,
     evolution_stage_mapping.label_color,
@@ -53497,7 +53587,7 @@ CREATE OR REPLACE VIEW zapp.v_active_stages WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_admin_sla_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_admin_sla_dashboard WITH (security_invoker='true') AS
  SELECT q.id AS queue_id,
     q.name AS queue_name,
     q.priority,
@@ -53520,7 +53610,7 @@ CREATE OR REPLACE VIEW zapp.v_admin_sla_dashboard WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_alert_channels_health WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_alert_channels_health WITH (security_invoker='true') AS
  SELECT ac.id,
     ac.name,
     ac.channel_type,
@@ -53539,7 +53629,7 @@ CREATE OR REPLACE VIEW zapp.v_alert_channels_health WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.v_alerts_active WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_alerts_active WITH (security_invoker='true') AS
  SELECT evolution_alerts.id,
     evolution_alerts.alert_type,
     evolution_alerts.severity,
@@ -53568,7 +53658,7 @@ UNION ALL
 
 
 
-CREATE OR REPLACE VIEW zapp.v_all_consent_audit WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_all_consent_audit WITH (security_invoker='true') AS
  SELECT lgpd_consent_audit.id,
     lgpd_consent_audit.contact_id,
     lgpd_consent_audit.consent_type,
@@ -53596,7 +53686,7 @@ UNION ALL
 
 
 
-CREATE OR REPLACE VIEW zapp.v_audio_memes_catalog WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_audio_memes_catalog WITH (security_invoker='true') AS
  SELECT audio_memes.category,
     count(*) AS total_memes,
     count(*) FILTER (WHERE audio_memes.is_favorite) AS favoritos,
@@ -53609,7 +53699,7 @@ CREATE OR REPLACE VIEW zapp.v_audio_memes_catalog WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_audio_memes_full WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_audio_memes_full WITH (security_invoker='true') AS
  SELECT am.id,
     am.name,
     am.audio_url,
@@ -53631,7 +53721,7 @@ CREATE OR REPLACE VIEW zapp.v_audio_memes_full WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_backfill_stats WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_backfill_stats WITH (security_invoker='true') AS
  SELECT count(*) AS total_jids,
     count(*) FILTER (WHERE (audit_backfill_progress.status = 'pending'::text)) AS pending,
     count(*) FILTER (WHERE (audit_backfill_progress.status = 'fetching'::text)) AS fetching,
@@ -53646,7 +53736,7 @@ CREATE OR REPLACE VIEW zapp.v_backfill_stats WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_complete_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_complete_dashboard WITH (security_invoker='true') AS
  SELECT ( SELECT count(*) AS count
            FROM evo.evolution_contacts
           WHERE (evolution_contacts.deleted_at IS NULL)) AS total_contacts,
@@ -53661,7 +53751,7 @@ CREATE OR REPLACE VIEW zapp.v_complete_dashboard WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_connection_drift_score WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_connection_drift_score WITH (security_invoker='true') AS
  WITH last_reconcile AS (
          SELECT max(evolution_reconcile_jobs.applied_at) AS last_applied
            FROM evo.evolution_reconcile_jobs
@@ -53720,7 +53810,7 @@ CREATE OR REPLACE VIEW zapp.v_connection_uptime WITH (security_invoker='true') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_contact_360 WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_contact_360 WITH (security_invoker='true') AS
  SELECT c.id,
     c.remote_jid,
     COALESCE(c.full_name, c.push_name) AS nome,
@@ -53753,7 +53843,7 @@ CREATE OR REPLACE VIEW zapp.v_contact_360 WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_contacts_by_tag WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_contacts_by_tag WITH (security_invoker='true') AS
  SELECT t.name AS tag_name,
     t.color,
     count(DISTINCT ta.entity_id) AS contact_count,
@@ -53767,7 +53857,7 @@ CREATE OR REPLACE VIEW zapp.v_contacts_by_tag WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_contacts_with_legacy WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_contacts_with_legacy WITH (security_invoker='true') AS
  SELECT evolution_contacts.id,
     evolution_contacts.remote_jid,
     evolution_contacts.phone_number,
@@ -53800,35 +53890,24 @@ CREATE OR REPLACE VIEW zapp.v_contacts_with_legacy WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.v_cookie_health WITH (security_invoker='on') AS
- SELECT c.servico,
-    c.is_healthy,
-    c.health_status,
-    c.last_health_check_at,
-    c.health_error,
-    c.expires_at,
-    p.http_status AS last_probe_http,
-    p.probe_ms AS last_probe_ms,
-    p.response_preview AS last_probe_preview,
-    (EXTRACT(epoch FROM (now() - c.last_health_check_at)) / (60)::numeric) AS mins_since_probe,
-        CASE
-            WHEN (c.last_health_check_at < (now() - '00:35:00'::interval)) THEN true
-            ELSE false
-        END AS probe_stale
-   FROM (zapp.cookies_config c
-     LEFT JOIN LATERAL ( SELECT cookie_probe_log.http_status,
-            cookie_probe_log.probe_ms,
-            cookie_probe_log.response_preview
-           FROM zapp.cookie_probe_log
-          WHERE (cookie_probe_log.servico = c.servico)
-          ORDER BY cookie_probe_log.probed_at DESC
-         LIMIT 1) p ON (true))
-  ORDER BY c.servico;
+CREATE OR REPLACE VIEW zapp.v_cookie_health WITH (security_invoker='true') AS
+ SELECT fn_cookie_health.servico,
+    fn_cookie_health.is_healthy,
+    fn_cookie_health.health_status,
+    fn_cookie_health.last_health_check_at,
+    fn_cookie_health.health_error,
+    fn_cookie_health.expires_at,
+    fn_cookie_health.last_probe_http,
+    fn_cookie_health.last_probe_ms,
+    fn_cookie_health.last_probe_preview,
+    fn_cookie_health.mins_since_probe,
+    fn_cookie_health.probe_stale
+   FROM zapp.fn_cookie_health() fn_cookie_health(servico, is_healthy, health_status, last_health_check_at, health_error, expires_at, last_probe_http, last_probe_ms, last_probe_preview, mins_since_probe, probe_stale);
 
 
 
 
-CREATE OR REPLACE VIEW zapp.v_cron_status WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_cron_status WITH (security_invoker='true') AS
  SELECT evolution_settings.key AS job_name,
     evolution_settings.value AS schedule,
     evolution_settings.description,
@@ -53848,7 +53927,7 @@ CREATE OR REPLACE VIEW zapp.v_cron_status WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_daily_sales_summary WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_daily_sales_summary WITH (security_invoker='true') AS
  SELECT date(evolution_deals.created_at) AS date,
     count(*) AS new_deals,
     sum(evolution_deals.value) AS total_value,
@@ -53880,7 +53959,7 @@ CREATE OR REPLACE VIEW zapp.v_daily_sales_summary WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_deleted_contacts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_deleted_contacts WITH (security_invoker='true') AS
  SELECT evolution_contacts.id,
     evolution_contacts.push_name AS name,
     evolution_contacts.phone_number AS phone,
@@ -53893,7 +53972,7 @@ CREATE OR REPLACE VIEW zapp.v_deleted_contacts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_department_volume WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_department_volume WITH (security_invoker='true') AS
  SELECT ir.department,
     count(DISTINCT ir.instance_name) AS instancias,
     array_agg(ir.instance_name ORDER BY ir.instance_name) AS instance_names
@@ -53905,7 +53984,7 @@ CREATE OR REPLACE VIEW zapp.v_department_volume WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_dr_runbook WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_dr_runbook WITH (security_invoker='true') AS
  SELECT t.step_number,
     t.category,
     t.title,
@@ -53920,7 +53999,7 @@ CREATE OR REPLACE VIEW zapp.v_dr_runbook WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_email_accounts_unified WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_email_accounts_unified WITH (security_invoker='true') AS
  SELECT gmail_accounts.id,
     'gmail'::text AS provider,
     gmail_accounts.created_at
@@ -53929,7 +54008,7 @@ CREATE OR REPLACE VIEW zapp.v_email_accounts_unified WITH (security_invoker='on'
 
 
 
-CREATE OR REPLACE VIEW zapp.v_evolution_dlq_open WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_evolution_dlq_open WITH (security_invoker='true') AS
  SELECT evolution_webhook_dlq.id,
     evolution_webhook_dlq.created_at,
     evolution_webhook_dlq.event_type,
@@ -53952,7 +54031,7 @@ CREATE OR REPLACE VIEW zapp.v_evolution_dlq_open WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_evolution_pipeline_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_evolution_pipeline_dashboard WITH (security_invoker='true') AS
  SELECT now() AS checked_at,
     ( SELECT count(*) AS count
            FROM evo.active_messages
@@ -53987,7 +54066,7 @@ CREATE OR REPLACE VIEW zapp.v_evolution_pipeline_dashboard WITH (security_invoke
 
 
 
-CREATE OR REPLACE VIEW zapp.v_evolution_source_tables_summary WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_evolution_source_tables_summary WITH (security_invoker='true') AS
  SELECT evolution_source_schema_map.table_name,
     max(evolution_source_schema_map.row_count_est) AS rows,
     count(*) AS num_columns,
@@ -54007,7 +54086,7 @@ CREATE OR REPLACE VIEW zapp.v_evolution_source_tables_summary WITH (security_inv
 
 
 
-CREATE OR REPLACE VIEW zapp.v_gmail_sla_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_gmail_sla_dashboard WITH (security_invoker='true') AS
  SELECT ga.id AS account_id,
     ga.email_address,
     ga.sync_status,
@@ -54017,7 +54096,7 @@ CREATE OR REPLACE VIEW zapp.v_gmail_sla_dashboard WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_guardrail_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_guardrail_dashboard WITH (security_invoker='true') AS
  SELECT date(g.created_at) AS day,
     g.workspace_id,
     g.direction,
@@ -54031,7 +54110,7 @@ CREATE OR REPLACE VIEW zapp.v_guardrail_dashboard WITH (security_invoker='on') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_hourly_metrics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_hourly_metrics WITH (security_invoker='true') AS
  SELECT date_trunc('hour'::text, evolution_messages.created_at) AS hora,
     count(*) AS total,
     count(*) FILTER (WHERE ((evolution_messages.direction)::text = 'inbound'::text)) AS inbound,
@@ -54044,7 +54123,7 @@ CREATE OR REPLACE VIEW zapp.v_hourly_metrics WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_improvements_status WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_improvements_status WITH (security_invoker='true') AS
  SELECT 'Trigger media fix'::text AS improvement,
     'DONE'::text AS status,
     'fn_auto_enqueue_media_download corrigido para path correto'::text AS detail
@@ -54108,7 +54187,7 @@ UNION ALL
 
 
 
-CREATE OR REPLACE VIEW zapp.v_instance_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_instance_dashboard WITH (security_invoker='true') AS
  SELECT ir.instance_name,
     ir.display_name,
     ir.department,
@@ -54124,7 +54203,7 @@ CREATE OR REPLACE VIEW zapp.v_instance_dashboard WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_integration_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_integration_dashboard WITH (security_invoker='true') AS
  SELECT ir.id,
     ir.name,
     ir.type,
@@ -54204,7 +54283,7 @@ CREATE OR REPLACE VIEW zapp.v_kpi_webhook_saude WITH (security_invoker='true') A
 
 
 
-CREATE OR REPLACE VIEW zapp.v_lead_status_coverage WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_lead_status_coverage WITH (security_invoker='true') AS
  WITH permitted AS (
          SELECT unnest(ARRAY['novo'::text, 'qualificado'::text, 'negociando'::text, 'cliente'::text, 'perdido'::text, 'inativo'::text, 'lead'::text, 'prospect'::text, 'contacted'::text, 'converted'::text, 'churned'::text, 'hot'::text, 'cold'::text, 'quente'::text, 'frio'::text, 'pendente'::text]) AS status
         ), used AS (
@@ -54234,7 +54313,7 @@ CREATE OR REPLACE VIEW zapp.v_lead_status_coverage WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.v_legacy_stages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_legacy_stages WITH (security_invoker='true') AS
  SELECT evolution_stage_mapping.stage_key,
     evolution_stage_mapping.label_name,
     evolution_stage_mapping.label_color,
@@ -54248,7 +54327,7 @@ CREATE OR REPLACE VIEW zapp.v_legacy_stages WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_legacy_vs_evolution_comparison WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_legacy_vs_evolution_comparison WITH (security_invoker='true') AS
  SELECT s.entidade,
     s.qtd_legacy,
     s.qtd_evolution,
@@ -54271,7 +54350,7 @@ CREATE OR REPLACE VIEW zapp.v_legacy_vs_evolution_comparison WITH (security_invo
 
 
 
-CREATE OR REPLACE VIEW zapp.v_link_analytics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_link_analytics WITH (security_invoker='true') AS
  SELECT (evolution_messages.link_preview ->> 'url'::text) AS url,
     (evolution_messages.link_preview ->> 'title'::text) AS title,
     (evolution_messages.link_preview ->> 'description'::text) AS description,
@@ -54410,7 +54489,7 @@ CREATE OR REPLACE VIEW zapp.v_media_security_dashboard WITH (security_invoker='t
 
 
 
-CREATE OR REPLACE VIEW zapp.v_migration_reconciliation WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_migration_reconciliation WITH (security_invoker='true') AS
  SELECT s.entidade,
     s.qtd_legacy AS legacy_total,
     s.qtd_evolution AS evolution_total,
@@ -54431,7 +54510,7 @@ CREATE OR REPLACE VIEW zapp.v_migration_reconciliation WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.v_mirror_backfill_progress WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_mirror_backfill_progress WITH (security_invoker='true') AS
  WITH stats AS (
          SELECT evolution_mirror_batches.run_id,
             count(*) AS total_batches,
@@ -54473,7 +54552,7 @@ CREATE OR REPLACE VIEW zapp.v_mirror_backfill_progress WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.v_model_catalog WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_model_catalog WITH (security_invoker='true') AS
  SELECT model_pricing_v2.model,
     model_pricing_v2.provider,
     model_pricing_v2.tier,
@@ -54495,7 +54574,7 @@ CREATE OR REPLACE VIEW zapp.v_model_catalog WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_monthly_comparison WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_monthly_comparison WITH (security_invoker='true') AS
  SELECT (date_trunc('month'::text, (evolution_daily_metrics.metric_date)::timestamp with time zone))::date AS month,
     sum(evolution_daily_metrics.new_contacts) AS new_contacts,
     sum(evolution_daily_metrics.messages_received) AS messages_received,
@@ -54517,7 +54596,7 @@ CREATE OR REPLACE VIEW zapp.v_monthly_comparison WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_nlp_analytics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_nlp_analytics WITH (security_invoker='true') AS
  SELECT date(nlp_extractions.created_at) AS day,
     nlp_extractions.workspace_id,
     nlp_extractions.source_type,
@@ -54533,7 +54612,7 @@ CREATE OR REPLACE VIEW zapp.v_nlp_analytics WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_pending_conversations WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_pending_conversations WITH (security_invoker='true') AS
  SELECT c.id,
     c.contact_id,
     c.remote_jid,
@@ -54572,7 +54651,7 @@ CREATE OR REPLACE VIEW zapp.v_pending_conversations WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.v_pending_notifications WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_pending_notifications WITH (security_invoker='true') AS
  SELECT nl.id,
     nl.channel,
     nl.message,
@@ -54591,7 +54670,7 @@ CREATE OR REPLACE VIEW zapp.v_pending_notifications WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.v_pending_tasks WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_pending_tasks WITH (security_invoker='true') AS
  SELECT t.id,
     t.title,
     t.task_type,
@@ -54625,7 +54704,7 @@ CREATE OR REPLACE VIEW zapp.v_pending_tasks WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_pending_transfers WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_pending_transfers WITH (security_invoker='true') AS
  SELECT conversation_transfers.target_instance,
     count(*) AS pending,
     count(*) FILTER (WHERE (conversation_transfers.priority = 4)) AS urgente,
@@ -54720,7 +54799,7 @@ SELECT
 
 
 
-CREATE OR REPLACE VIEW zapp.v_ragas_by_agent WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_ragas_by_agent WITH (security_invoker='true') AS
  SELECT ragas_scores.agent_id,
     ragas_scores.workspace_id,
     count(*) AS total_evaluations,
@@ -54738,7 +54817,7 @@ CREATE OR REPLACE VIEW zapp.v_ragas_by_agent WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_reaction_analytics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_reaction_analytics WITH (security_invoker='true') AS
  SELECT evolution_reactions.instance_name,
     evolution_reactions.emoji,
     count(*) AS total,
@@ -54752,7 +54831,7 @@ CREATE OR REPLACE VIEW zapp.v_reaction_analytics WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_realtime_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_realtime_dashboard WITH (security_invoker='true') AS
  SELECT ( SELECT count(*) AS count
            FROM evo.evolution_contacts
           WHERE (evolution_contacts.deleted_at IS NULL)) AS total_contatos,
@@ -54839,7 +54918,7 @@ CREATE OR REPLACE VIEW zapp.v_rls_impact_preview WITH (security_invoker='true') 
 
 
 
-CREATE OR REPLACE VIEW zapp.v_sales_pipeline WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_sales_pipeline WITH (security_invoker='true') AS
  SELECT evolution_deals.stage,
     count(*) AS deals_count,
     sum(evolution_deals.value) AS total_value,
@@ -54864,7 +54943,7 @@ CREATE OR REPLACE VIEW zapp.v_sales_pipeline WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_security_invoker_audit WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_security_invoker_audit WITH (security_invoker='true') AS
  SELECT n.nspname AS schema,
     c.relname AS view_name,
     pg_get_userbyid(c.relowner) AS owner,
@@ -55007,7 +55086,7 @@ CREATE OR REPLACE VIEW zapp.v_security_posture WITH (security_invoker='true') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_sticker_catalog WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_sticker_catalog WITH (security_invoker='true') AS
  SELECT sc.slug AS category,
     sc.label_pt AS label,
     sc.emoji,
@@ -55024,7 +55103,7 @@ CREATE OR REPLACE VIEW zapp.v_sticker_catalog WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_sticker_top WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_sticker_top WITH (security_invoker='true') AS
  SELECT s.id,
     s.name,
     s.category,
@@ -55051,7 +55130,7 @@ CREATE OR REPLACE VIEW zapp.v_sticker_top WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_stickers_catalog WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_stickers_catalog WITH (security_invoker='true') AS
  SELECT sc.slug AS category,
     sc.label_pt AS label,
     sc.emoji,
@@ -55065,7 +55144,7 @@ CREATE OR REPLACE VIEW zapp.v_stickers_catalog WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_stickers_full WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_stickers_full WITH (security_invoker='true') AS
  SELECT s.id,
     s.name,
     s.image_url,
@@ -55097,7 +55176,7 @@ CREATE OR REPLACE VIEW zapp.v_stickers_full WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_storage_policy_audit WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_storage_policy_audit WITH (security_invoker='true') AS
  SELECT p.policyname,
     p.tablename,
     p.cmd,
@@ -55123,7 +55202,7 @@ CREATE OR REPLACE VIEW zapp.v_storage_policy_audit WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.v_system_health WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_system_health WITH (security_invoker='true') AS
  SELECT ( SELECT count(*) AS count
            FROM evo.evolution_contacts) AS total_contacts,
     ( SELECT count(*) AS count
@@ -55159,7 +55238,7 @@ COMMENT ON VIEW zapp.v_system_health IS 'Real-time system health metrics for mon
 
 
 
-CREATE OR REPLACE VIEW zapp.v_system_scorecard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_system_scorecard WITH (security_invoker='true') AS
  SELECT jsonb_build_object('db_size_mb', ((pg_database_size(current_database()) / 1048576))::integer, 'cache_hit_pct', round(( SELECT ((sum(pg_statio_user_tables.heap_blks_hit) * 100.0) / NULLIF((sum(pg_statio_user_tables.heap_blks_hit) + sum(pg_statio_user_tables.heap_blks_read)), (0)::numeric))
            FROM pg_statio_user_tables), 1), 'total_tables_public', ( SELECT count(*) AS count
            FROM pg_stat_user_tables
@@ -55180,7 +55259,12 @@ CREATE OR REPLACE VIEW zapp.v_system_scorecard WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_top_contacts WITH (security_invoker='on') AS
+COMMENT ON VIEW zapp.v_system_scorecard IS 'ADMIN-ONLY por natureza: le cron.job (pg_cron) e pg_stat_*, e cron.job nao concede SELECT a authenticated nem a service_role. Privilegios de authenticated foram revogados em 20260928230000 para que "fechado por decisao" seja distinguivel de "fechado por acidente". Para um scorecard voltado a usuario logado, criar view nova sobre fonte sancionada nossa.';
+
+
+
+
+CREATE OR REPLACE VIEW zapp.v_top_contacts WITH (security_invoker='true') AS
  SELECT c.id,
     c.phone_number,
     COALESCE(c.full_name, c.push_name) AS name,
@@ -55205,7 +55289,7 @@ CREATE OR REPLACE VIEW zapp.v_top_contacts WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_transfer_metrics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_transfer_metrics WITH (security_invoker='true') AS
  SELECT conversation_transfers.target_instance,
     count(*) AS total,
     count(*) FILTER (WHERE (conversation_transfers.status = 'completed'::text)) AS completed,
@@ -55220,7 +55304,7 @@ CREATE OR REPLACE VIEW zapp.v_transfer_metrics WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_vault_health WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_vault_health WITH (security_invoker='true') AS
  SELECT l.checked_at,
     l.status,
     l.ok_count,
@@ -55240,7 +55324,7 @@ COMMENT ON VIEW zapp.v_vault_health IS 'Onda 9.1 — atalho de leitura: top 20 �
 
 
 
-CREATE OR REPLACE VIEW zapp.v_weekly_metrics WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_weekly_metrics WITH (security_invoker='true') AS
  SELECT evolution_daily_metrics.metric_date,
     evolution_daily_metrics.new_contacts,
     (evolution_daily_metrics.messages_received + evolution_daily_metrics.messages_sent) AS total_messages,
@@ -55258,7 +55342,7 @@ CREATE OR REPLACE VIEW zapp.v_weekly_metrics WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.v_whatsapp_status_feed WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_whatsapp_status_feed WITH (security_invoker='true') AS
  SELECT s.id,
     s.instance_name,
     s.participant_jid,
@@ -55310,7 +55394,7 @@ ALTER SEQUENCE zapp.vault_healthcheck_log_id_seq OWNED BY zapp.vault_healthcheck
 
 
 
-CREATE OR REPLACE VIEW zapp.vector_indexes WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vector_indexes WITH (security_invoker='true') AS
  SELECT vector_indexes.id,
     vector_indexes.knowledge_base_id,
     vector_indexes.provider,
@@ -55351,7 +55435,7 @@ COMMENT ON TABLE zapp.voip_profile_credentials IS 'Credenciais SIP por perfil (V
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_contact_labels WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_contact_labels WITH (security_invoker='true') AS
  SELECT la.remote_jid,
     ct.full_name AS contact_name,
     ct.phone_number,
@@ -55366,7 +55450,7 @@ CREATE OR REPLACE VIEW zapp.vw_contact_labels WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_dlq_pending WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_dlq_pending WITH (security_invoker='true') AS
  SELECT evolution_webhook_dlq.id,
     evolution_webhook_dlq.event_type,
     evolution_webhook_dlq.instance_name,
@@ -55389,7 +55473,7 @@ CREATE OR REPLACE VIEW zapp.vw_dlq_pending WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_evolution_hot_leads WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_evolution_hot_leads WITH (security_invoker='true') AS
  SELECT evolution_contacts.remote_jid,
     evolution_contacts.push_name,
     evolution_contacts.lead_score,
@@ -55404,7 +55488,7 @@ CREATE OR REPLACE VIEW zapp.vw_evolution_hot_leads WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_evolution_queue_failures WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_evolution_queue_failures WITH (security_invoker='true') AS
  SELECT evolution_message_queue.id,
     evolution_message_queue.status,
     evolution_message_queue.attempts,
@@ -55439,7 +55523,7 @@ CREATE OR REPLACE VIEW zapp.vw_evolution_queue_failures WITH (security_invoker='
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_evolution_queues_health WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_evolution_queues_health WITH (security_invoker='true') AS
  WITH msg_q AS (
          SELECT 'evolution_message_queue'::text AS queue_name,
             count(*) FILTER (WHERE ((evolution_message_queue.status)::text = 'pending'::text)) AS pending,
@@ -55511,7 +55595,7 @@ CREATE OR REPLACE VIEW zapp.vw_evolution_queues_health WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_evolution_sales_funnel WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_evolution_sales_funnel WITH (security_invoker='true') AS
  SELECT sm.stage_key,
     sm.label_name,
     sm.stage_order,
@@ -55526,7 +55610,7 @@ CREATE OR REPLACE VIEW zapp.vw_evolution_sales_funnel WITH (security_invoker='on
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_evolution_top_contacts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_evolution_top_contacts WITH (security_invoker='true') AS
  SELECT evolution_contacts.remote_jid,
     evolution_contacts.push_name,
     evolution_contacts.lead_score,
@@ -55543,7 +55627,7 @@ CREATE OR REPLACE VIEW zapp.vw_evolution_top_contacts WITH (security_invoker='on
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_historico WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_historico WITH (security_invoker='true') AS
  SELECT c.id_bitrix,
     c.nome,
     s.periodo,
@@ -55558,7 +55642,7 @@ CREATE OR REPLACE VIEW zapp.vw_historico WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_media_health_dashboard WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_media_health_dashboard WITH (security_invoker='true') AS
  WITH stats AS (
          SELECT evolution_messages.message_type,
             count(*) AS total,
@@ -55646,7 +55730,7 @@ CREATE OR REPLACE VIEW zapp.vw_media_pipeline_status WITH (security_invoker='tru
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_minio_decommission_check WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_minio_decommission_check WITH (security_invoker='true') AS
  SELECT ( SELECT count(*) AS count
            FROM evo.evolution_messages
           WHERE ((evolution_messages.media_url ~~ 'http://minio%'::text) AND (evolution_messages.deleted_at IS NULL))) AS urls_minio_interno,
@@ -55669,7 +55753,7 @@ CREATE OR REPLACE VIEW zapp.vw_minio_decommission_check WITH (security_invoker='
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_missed_calls_pending WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_missed_calls_pending WITH (security_invoker='true') AS
  SELECT c.id,
     c.call_id,
     c.remote_jid,
@@ -55687,7 +55771,7 @@ CREATE OR REPLACE VIEW zapp.vw_missed_calls_pending WITH (security_invoker='on')
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_pendentes_atual WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_pendentes_atual WITH (security_invoker='true') AS
  SELECT c.id_bitrix,
     c.nome,
     c.dialog_id,
@@ -55734,7 +55818,7 @@ CREATE OR REPLACE VIEW zapp.vw_r2_migration_status WITH (security_invoker='true'
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_recent_media WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_recent_media WITH (security_invoker='true') AS
  SELECT m.id,
     m.message_id,
     m.remote_jid,
@@ -55754,7 +55838,7 @@ CREATE OR REPLACE VIEW zapp.vw_recent_media WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_resumo_mes WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_resumo_mes WITH (security_invoker='true') AS
  SELECT solicitacoes_vale.periodo,
     count(*) FILTER (WHERE (solicitacoes_vale.status = 'PENDENTE'::text)) AS pendentes,
     count(*) FILTER (WHERE (solicitacoes_vale.status = 'SOLICITADO'::text)) AS solicitaram,
@@ -55768,7 +55852,7 @@ CREATE OR REPLACE VIEW zapp.vw_resumo_mes WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_sticker_categories WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_sticker_categories WITH (security_invoker='true') AS
  SELECT COALESCE(stickers.category, 'sem_categoria'::text) AS category,
     count(*) AS total,
     count(*) FILTER (WHERE stickers.is_favorite) AS favorites,
@@ -55787,7 +55871,7 @@ COMMENT ON VIEW zapp.vw_sticker_categories IS 'Resumo de categorias de stickers 
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_sticker_messages WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_sticker_messages WITH (security_invoker='true') AS
  SELECT em.id,
     em.message_id,
     em.remote_jid,
@@ -55880,7 +55964,7 @@ CREATE OR REPLACE VIEW zapp.vw_system_health WITH (security_invoker='true') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.vw_unread_events WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.vw_unread_events WITH (security_invoker='true') AS
  SELECT evolution_realtime_events.id,
     evolution_realtime_events.event_type,
     evolution_realtime_events.entity_type,
@@ -56002,7 +56086,7 @@ COMMENT ON TABLE zapp.webhook_reprocess_queue IS 'Tabela de suporte a webhooks �
 
 
 
-CREATE OR REPLACE VIEW zapp.whatsapp_connections_agent WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.whatsapp_connections_agent WITH (security_invoker='true') AS
  SELECT whatsapp_connections.id,
     whatsapp_connections.name,
     whatsapp_connections.status,
@@ -56013,7 +56097,7 @@ CREATE OR REPLACE VIEW zapp.whatsapp_connections_agent WITH (security_invoker='o
 
 
 
-CREATE OR REPLACE VIEW zapp.whatsapp_connections_public WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.whatsapp_connections_public WITH (security_invoker='true') AS
  SELECT whatsapp_connections.id,
     whatsapp_connections.name,
     whatsapp_connections.status,
@@ -56023,7 +56107,7 @@ CREATE OR REPLACE VIEW zapp.whatsapp_connections_public WITH (security_invoker='
 
 
 
-CREATE OR REPLACE VIEW zapp.whatsapp_connections_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.whatsapp_connections_safe WITH (security_invoker='true') AS
  SELECT whatsapp_connections.id,
     whatsapp_connections.name,
     whatsapp_connections.phone_number,
@@ -56059,7 +56143,7 @@ CREATE OR REPLACE VIEW zapp.whatsapp_connections_safe WITH (security_invoker='on
 
 
 
-CREATE OR REPLACE VIEW zapp.whatsapp_official_credentials_safe WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.whatsapp_official_credentials_safe WITH (security_invoker='true') AS
  SELECT whatsapp_official_credentials.id,
     whatsapp_official_credentials.connection_id,
     whatsapp_official_credentials.app_id,
@@ -56074,7 +56158,7 @@ CREATE OR REPLACE VIEW zapp.whatsapp_official_credentials_safe WITH (security_in
 
 
 
-CREATE OR REPLACE VIEW zapp.workflow_checkpoints WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflow_checkpoints WITH (security_invoker='true') AS
  SELECT workflow_checkpoints.id,
     workflow_checkpoints.workflow_run_id,
     workflow_checkpoints.step_index,
@@ -56085,7 +56169,7 @@ CREATE OR REPLACE VIEW zapp.workflow_checkpoints WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.workflow_executions WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflow_executions WITH (security_invoker='true') AS
  SELECT workflow_executions.id,
     workflow_executions.workflow_id,
     workflow_executions.trigger_type,
@@ -56102,7 +56186,7 @@ CREATE OR REPLACE VIEW zapp.workflow_executions WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.workflow_handoffs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflow_handoffs WITH (security_invoker='true') AS
  SELECT workflow_handoffs.id,
     workflow_handoffs.workflow_run_id,
     workflow_handoffs.from_agent_id,
@@ -56115,7 +56199,7 @@ CREATE OR REPLACE VIEW zapp.workflow_handoffs WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.workflow_runs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflow_runs WITH (security_invoker='true') AS
  SELECT workflow_runs.id,
     workflow_runs.workflow_id,
     workflow_runs.status,
@@ -56131,7 +56215,7 @@ CREATE OR REPLACE VIEW zapp.workflow_runs WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.workflow_step_runs WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflow_step_runs WITH (security_invoker='true') AS
  SELECT workflow_step_runs.id,
     workflow_step_runs.workflow_run_id,
     workflow_step_runs.workflow_step_id,
@@ -56150,7 +56234,7 @@ CREATE OR REPLACE VIEW zapp.workflow_step_runs WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.workflow_steps WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflow_steps WITH (security_invoker='true') AS
  SELECT workflow_steps.id,
     workflow_steps.workflow_run_id,
     workflow_steps.step_index,
@@ -56167,7 +56251,7 @@ CREATE OR REPLACE VIEW zapp.workflow_steps WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.workflows WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.workflows WITH (security_invoker='true') AS
  SELECT workflows.id,
     workflows.workspace_id,
     workflows.name,
@@ -56230,17 +56314,17 @@ COMMENT ON TABLE zapp.xp_transactions IS 'Módulo inativo/vazio até 2026-08 (sp
 
 
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_daily WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_daily WITH (security_invoker='true') AS
  WITH anchor AS (
-         SELECT max(active_messages.created_at) AS t
-           FROM evo.active_messages
+         SELECT max(evolution_messages.created_at) AS t
+           FROM zapp.evolution_messages
         )
  SELECT (date_trunc('day'::text, m.created_at))::date AS day,
     count(*) AS total,
     count(*) FILTER (WHERE m.from_me) AS sent,
     count(*) FILTER (WHERE (NOT m.from_me)) AS received,
     count(DISTINCT m.remote_jid) AS chats
-   FROM evo.active_messages m,
+   FROM zapp.evolution_messages m,
     anchor a
   WHERE ((m.created_at > (a.t - '14 days'::interval)) AND (m.deleted_at IS NULL))
   GROUP BY ((date_trunc('day'::text, m.created_at))::date)
@@ -56249,15 +56333,15 @@ CREATE OR REPLACE VIEW zapp.zapp_dash_daily WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_heatmap WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_heatmap WITH (security_invoker='true') AS
  WITH anchor AS (
-         SELECT max(active_messages.created_at) AS t
-           FROM evo.active_messages
+         SELECT max(evolution_messages.created_at) AS t
+           FROM zapp.evolution_messages
         )
  SELECT (EXTRACT(dow FROM m.created_at))::integer AS dow,
     (EXTRACT(hour FROM m.created_at))::integer AS hour,
     count(*) AS n
-   FROM evo.active_messages m,
+   FROM zapp.evolution_messages m,
     anchor a
   WHERE ((m.created_at > (a.t - '60 days'::interval)) AND (m.deleted_at IS NULL))
   GROUP BY ((EXTRACT(dow FROM m.created_at))::integer), ((EXTRACT(hour FROM m.created_at))::integer);
@@ -56265,16 +56349,16 @@ CREATE OR REPLACE VIEW zapp.zapp_dash_heatmap WITH (security_invoker='on') AS
 
 
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_overview WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_overview WITH (security_invoker='true') AS
  WITH anchor AS (
-         SELECT max(active_messages.created_at) AS t
-           FROM evo.active_messages
+         SELECT max(evolution_messages.created_at) AS t
+           FROM zapp.evolution_messages
         ), win AS (
          SELECT m.created_at,
             m.from_me,
             m.remote_jid,
             (m.created_at > (a.t - '7 days'::interval)) AS cur
-           FROM evo.active_messages m,
+           FROM zapp.evolution_messages m,
             anchor a
           WHERE ((m.created_at > (a.t - '14 days'::interval)) AND (m.deleted_at IS NULL))
         )
@@ -56287,7 +56371,7 @@ CREATE OR REPLACE VIEW zapp.zapp_dash_overview WITH (security_invoker='on') AS
     count(*) FILTER (WHERE (win.cur AND win.from_me)) AS sent_7d,
     count(*) FILTER (WHERE (win.cur AND (NOT win.from_me))) AS recv_7d,
     ( SELECT count(*) AS count
-           FROM evo.evolution_contacts
+           FROM zapp.evolution_contacts
           WHERE (evolution_contacts.deleted_at IS NULL)) AS contacts_total
    FROM win;
 
@@ -56299,15 +56383,15 @@ COMMENT ON VIEW zapp.zapp_dash_overview IS 'ZAPP WEB dashboard: KPIs agregados (
 
 
 
-CREATE OR REPLACE VIEW zapp.zapp_dash_top_contacts WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.zapp_dash_top_contacts WITH (security_invoker='true') AS
  SELECT m.remote_jid,
     c.full_name,
     c.push_name,
     c.profile_picture_url,
     count(*) AS msg_count,
     max(m.created_at) AS last_msg_at
-   FROM (evo.active_messages m
-     LEFT JOIN evo.evolution_contacts c ON (((c.remote_jid)::text = m.remote_jid)))
+   FROM (zapp.evolution_messages m
+     LEFT JOIN zapp.evolution_contacts c ON (((c.remote_jid)::text = m.remote_jid)))
   WHERE ((m.created_at > (now() - '30 days'::interval)) AND (m.deleted_at IS NULL))
   GROUP BY m.remote_jid, c.full_name, c.push_name, c.profile_picture_url
   ORDER BY (count(*)) DESC
@@ -56316,7 +56400,7 @@ CREATE OR REPLACE VIEW zapp.zapp_dash_top_contacts WITH (security_invoker='on') 
 
 
 
-CREATE OR REPLACE VIEW zapp.zapp_inbox_threads WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.zapp_inbox_threads WITH (security_invoker='true') AS
  SELECT (c.remote_jid)::text AS remote_jid,
     lm.content,
     lm.message_type,
@@ -56372,7 +56456,7 @@ CREATE OR REPLACE VIEW zapp.zapp_inbox_threads WITH (security_invoker='on') AS
             evolution_contacts.first_name,
             evolution_contacts.last_name,
             evolution_contacts.nickname
-           FROM evo.evolution_contacts
+           FROM zapp.evolution_contacts
           WHERE ((evolution_contacts.deleted_at IS NULL) AND (evolution_contacts.last_message_at IS NOT NULL))
           ORDER BY evolution_contacts.last_message_at DESC
          LIMIT 50) c
@@ -56381,7 +56465,7 @@ CREATE OR REPLACE VIEW zapp.zapp_inbox_threads WITH (security_invoker='on') AS
             m.from_me,
             m.created_at,
             m.push_name
-           FROM evo.active_messages m
+           FROM zapp.evolution_messages m
           WHERE ((m.remote_jid = (c.remote_jid)::text) AND (m.deleted_at IS NULL))
           ORDER BY m.created_at DESC
          LIMIT 1) lm)
@@ -64735,7 +64819,7 @@ CREATE INDEX IF NOT EXISTS xp_transactions_profile_created_idx ON zapp.xp_transa
 
 
 
-CREATE OR REPLACE VIEW zapp.v_popular_tags WITH (security_invoker='on') AS
+CREATE OR REPLACE VIEW zapp.v_popular_tags WITH (security_invoker='true') AS
  SELECT t.id,
     t.name,
     t.color,
