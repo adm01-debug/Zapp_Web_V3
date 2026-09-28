@@ -285,5 +285,5 @@ Deno.test("(d)+(e) edge: contrato/telemetria preservados (parseOrReject + rate-l
   assertMatch(indexTs, /checkRateLimit\(`login-attempts:\$\{ip\}`, 60, 60_000\)/);
   assertMatch(indexTs, /action === "clear"/);
   assertMatch(indexTs, /action === "check"/);
-  assertMatch(indexTs, /console\.warn/);
+  assertMatch(indexTs, /log\.warn/);
 });
