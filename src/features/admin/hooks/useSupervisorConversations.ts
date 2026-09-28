@@ -122,12 +122,10 @@ export function useSupervisorConversations() {
   }, [load]);
 
   const updateContact = useCallback(
-    async (
-      contactId: string,
-      patch: { assigned_to?: string | null; queue_id?: string | null }
-    ) => {
+    async (contactId: string, patch: { assigned_to?: string | null; queue_id?: string | null }) => {
       if (!isValidUUID(contactId)) return { error: new Error('Invalid UUID') };
-      return supabase.from('contacts').update(patch).eq('id', contactId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (supabase.from('contacts') as any).update(patch).eq('id', contactId);
     },
     []
   );

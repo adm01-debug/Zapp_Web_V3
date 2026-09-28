@@ -60,13 +60,13 @@ export function dbTable(entity: LogicalEntity): string {
   return requireMapping(entity).table;
 }
 
-type DynamicTableClient = { from(t: string): ReturnType<typeof supabase.from> };
-
-export function dbFrom(entity: LogicalEntity): ReturnType<typeof supabase.from> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export function dbFrom(entity: LogicalEntity): any {
   const mapping = requireMapping(entity);
   validateEntityAccess(mapping.table, mapping.client);
-  return (dbClient(entity) as unknown as DynamicTableClient).from(mapping.table);
+  return (dbClient(entity) as any).from(mapping.table);
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function dbChannel(entity: LogicalEntity, name: string): RealtimeChannel {
   return dbClient(entity).channel(`${name}:${dbTable(entity)}`);

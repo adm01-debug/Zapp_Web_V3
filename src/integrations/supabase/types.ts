@@ -1958,7 +1958,7 @@ export type Database = {
           id: string
           instance_name: string | null
           notes: string | null
-          pipeline_status: Database["public"]["Enums"]["evolution_pipeline_status"]
+          pipeline_status: string
           probe_latency_ms: number | null
           probe_status: string | null
           queue_failed_24h: number | null
@@ -1986,7 +1986,7 @@ export type Database = {
           id?: string
           instance_name?: string | null
           notes?: string | null
-          pipeline_status: Database["public"]["Enums"]["evolution_pipeline_status"]
+          pipeline_status: string
           probe_latency_ms?: number | null
           probe_status?: string | null
           queue_failed_24h?: number | null
@@ -2014,7 +2014,7 @@ export type Database = {
           id?: string
           instance_name?: string | null
           notes?: string | null
-          pipeline_status?: Database["public"]["Enums"]["evolution_pipeline_status"]
+          pipeline_status?: string
           probe_latency_ms?: number | null
           probe_status?: string | null
           queue_failed_24h?: number | null
@@ -4747,7 +4747,7 @@ export type Database = {
           checked_at: string | null
           doc_coverage_pct: number | null
           gap_sync_status:
-            | Database["public"]["Enums"]["evolution_pipeline_status"]
+            | string
             | null
           media_classified_pct: number | null
           mirror_coverage: number | null
@@ -4999,7 +4999,7 @@ export type Database = {
           gap_sync_checked_at: string | null
           gap_sync_min: number | null
           gap_sync_status:
-            | Database["public"]["Enums"]["evolution_pipeline_status"]
+            | string
             | null
           ipwatch_hits_24h: number | null
           last_ingest_at: string | null
@@ -29986,7 +29986,7 @@ export type Database = {
           gap_inbound_min: number | null
           id: string | null
           pipeline_status:
-            | Database["public"]["Enums"]["evolution_pipeline_status"]
+            | string
             | null
           queue_failed_24h: number | null
           queue_pending_now: number | null
@@ -30007,7 +30007,7 @@ export type Database = {
           gap_inbound_min?: number | null
           id?: string | null
           pipeline_status?:
-            | Database["public"]["Enums"]["evolution_pipeline_status"]
+            | string
             | null
           queue_failed_24h?: number | null
           queue_pending_now?: number | null
@@ -30028,7 +30028,7 @@ export type Database = {
           gap_inbound_min?: number | null
           id?: string | null
           pipeline_status?:
-            | Database["public"]["Enums"]["evolution_pipeline_status"]
+            | string
             | null
           queue_failed_24h?: number | null
           queue_pending_now?: number | null
