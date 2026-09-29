@@ -185,11 +185,11 @@ export function useRealtimeInbox() {
       conversations.find(
         (c) => c.contact.id === selectedContactId || c.contact.remote_jid === selectedContactId
       ) || null;
-    // Retorna o objeto cacheado se o id não mudou — evita nova referência por evento
-    if (found?.id != null && found.id === _selectedConvIdRef.current) {
+    // Retorna o objeto cacheado se o contact.id não mudou — evita nova referência por evento
+    if (found?.contact.id != null && found.contact.id === _selectedConvIdRef.current) {
       return _selectedConvObjRef.current;
     }
-    _selectedConvIdRef.current = found?.id ?? null;
+    _selectedConvIdRef.current = found?.contact.id ?? null;
     _selectedConvObjRef.current = found;
     return found;
   }, [conversations, selectedContactId]);
