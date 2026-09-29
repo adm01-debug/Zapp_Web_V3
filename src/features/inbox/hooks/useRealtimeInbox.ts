@@ -174,13 +174,25 @@ export function useRealtimeInbox() {
   }, []);
 
   // Load fallback contact if not found in list
-  const selectedConversation = useMemo(
-    () =>
+  // RCA bug-D (2026-09-29): estabiliza referência de objeto para evitar cascade
+  // de remount quando Realtime atualiza `conversations` mas a conversa selecionada
+  // não mudou. Sem isso cada evento cria novo objeto → useFallbackContact re-executa
+  // → janela null → ChatPanel desmonta → abort burst em sla_delivery_rules/contact_tags/messages.
+  const _selectedConvIdRef = useRef<string | null>(null);
+  const _selectedConvObjRef = useRef<(typeof conversations)[number] | null>(null);
+  const selectedConversation = useMemo(() => {
+    const found =
       conversations.find(
         (c) => c.contact.id === selectedContactId || c.contact.remote_jid === selectedContactId
-      ) || null,
-    [conversations, selectedContactId]
-  );
+      ) || null;
+    // Retorna o objeto cacheado se o contact.id não mudou — evita nova referência por evento
+    if (found?.contact.id != null && found.contact.id === _selectedConvIdRef.current) {
+      return _selectedConvObjRef.current;
+    }
+    _selectedConvIdRef.current = found?.contact.id ?? null;
+    _selectedConvObjRef.current = found;
+    return found;
+  }, [conversations, selectedContactId]);
 
   // ── Fallback contact search ───────────────────────────────────────────────
   // When the clicked conversation is NOT in the sidebar list (BREAK POINT A),
@@ -327,7 +339,12 @@ export function useRealtimeInbox() {
         if (status === 'SUBSCRIBED') {
           lastConnectedAtMs = Date.now();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          void logChannelError(log, '[useRealtimeInbox] whisper channel subscription status:', lastConnectedAtMs, status);
+          void logChannelError(
+            log,
+            '[useRealtimeInbox] whisper channel subscription status:',
+            lastConnectedAtMs,
+            status
+          );
         }
       });
     return () => {
