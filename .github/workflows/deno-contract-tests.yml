@@ -59,7 +59,7 @@ jobs:
             echo "No contract test paths touched — skipping"
             echo "should-run=false" >> $GITHUB_OUTPUT
           fi
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@v9.0.0
         if: steps.check.outputs.should-run == 'false'
         with:
           script: |
