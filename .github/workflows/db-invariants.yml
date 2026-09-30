@@ -9,6 +9,11 @@
 #   INV-4: Every useEffect that calls supabase.channel() must call unsubscribe()
 #   INV-5: No bare .from('evolution_messages') without schema qualification
 #   INV-6: supabase_realtime publication has not regressed (source: pg_catalog)
+#   INV-7: RLS enabled on 100% of tables in the app schemas (LIVE, docker exec)
+#   INV-8: no materialized view in the app schemas readable by authenticated/anon
+#          (LIVE, docker exec — matviews cannot have RLS, so the GRANT is the
+#          only gate; measured 28/09/2026: authenticated read 243 rows from
+#          zapp.mv_conversations_summary while the base table returned 0)
 # ==========================================================================
 
 name: DB Invariants
@@ -254,6 +259,68 @@ jobs:
           echo "Rota 2 (psql direto) — invariante BLOQUEANTE."
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/sql/check-rls-coverage.sql
 
+      - name: "INV-8: nenhuma matview dos schemas do app legivel por authenticated/anon"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Motivo: matview nao aceita ENABLE ROW LEVEL SECURITY — o unico portao
+          # que sobra e o GRANT, e ele estava aberto. Medido em 28/09/2026
+          # impersonando `authenticated`: zapp.mv_conversations_summary devolvia
+          # 243 LINHAS enquanto a tabela base devolvia 0; mv_top_stickers 100;
+          # mv_instance_metrics 2; mv_system_status 1. `anon` nao acessa nenhuma.
+          # Fechado em 20260928170000_matviews_revoga_leitura_authenticated.sql.
+          #
+          # ROTA: identica ao INV-7 e pelo mesmo motivo (este Postgres nao e
+          # publicado fora da malha do Swarm; `psql` de fora nunca conecta e o
+          # passo terminaria em warning+exit 0 para sempre). Selecao de
+          # container DETERMINISTICA: so entram containers com o schema `zapp`,
+          # e mais de um candidato e ambiguidade (falha), nunca chute.
+          #
+          # Separacao entre falha de INFRA e falha de INVARIANTE: sem rota de pe
+          # -> avisa e passa (nao ha o que afirmar); com rota -> BLOQUEANTE.
+          if command -v docker >/dev/null 2>&1; then
+            CANDIDATOS=""
+            for c in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^supabase_db' || true); do
+              if docker exec -i "$c" psql -U postgres -d postgres -Atc "select 1 from pg_namespace where nspname='zapp'" 2>/dev/null | grep -q 1; then
+                CANDIDATOS="$CANDIDATOS $c"
+              fi
+            done
+            CANDIDATOS="$(echo $CANDIDATOS)"
+            N_CANDIDATOS="$(echo "$CANDIDATOS" | wc -w)"
+            if [ "$N_CANDIDATOS" -gt 1 ]; then
+              echo "::error title=INV-8 ambiguidade::mais de um container com o schema zapp ($CANDIDATOS). Aponte a rota antes de confiar neste check."
+              exit 1
+            fi
+            if [ "$N_CANDIDATOS" -eq 1 ]; then
+              echo "Rota 1 (docker exec em $CANDIDATOS) — invariante BLOQUEANTE."
+              docker exec -i -w / "$CANDIDATOS" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
+                < scripts/sql/check-matview-exposure.sql
+              exit $?
+            fi
+            echo "::warning title=INV-8 rota 1 indisponivel::nenhum container supabase_db com o schema zapp; tentando psql direto."
+          fi
+
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::notice title=INV-8 nao executou::sem docker e sem secret SUPABASE_DB_URL. Exposicao de matview nao verificada."
+            exit 0
+          fi
+
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client || true
+          fi
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "::warning title=INV-8 nao executou::psql indisponivel no runner. Invariante nao verificado."
+            exit 0
+          fi
+
+          if ! psql "$SUPABASE_DB_URL" -Atc 'SELECT 1' >/dev/null 2>&1; then
+            echo "::warning title=INV-8 nao executou::sem conectividade com o banco a partir do runner. Invariante nao verificado."
+            exit 0
+          fi
+
+          echo "Rota 2 (psql direto) — invariante BLOQUEANTE."
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/sql/check-matview-exposure.sql
+
       - name: Summary
         if: success()
         run: |
@@ -266,3 +333,5 @@ jobs:
           echo "INV-4: channel() cleanup present             v"
           echo "INV-5: evolution_* uses schema:'evo'         v"
           echo "INV-6: publicacao supabase_realtime intacta   v (skip sem secret)"
+          echo "INV-7: RLS em 100% das tabelas do app        v (LIVE)"
+          echo "INV-8: matviews nao legiveis por authenticated/anon v (LIVE)"
