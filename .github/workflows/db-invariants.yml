@@ -254,6 +254,79 @@ jobs:
           echo "Rota 2 (psql direto) — invariante BLOQUEANTE."
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/sql/check-rls-coverage.sql
 
+      - name: "INV-9: ratchet de security_invoker nas views dos schemas do app"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Motivo: existe um check "Verify security_invoker on all views" que
+          # PASSA — e passava enquanto 229 views de `zapp` estavam sem a flag,
+          # porque ele só olha o schema `public`. View sem a flag roda com
+          # direitos do dono: `authenticated` lê sem ter SELECT na base e a RLS
+          # da base é avaliada como se fosse o dono — a view ANULA a RLS, sem
+          # erro e sem log.
+          #
+          # Forma do gate: RATCHET com baseline (scripts/sql/views-security-invoker.baseline).
+          # Falha se aparecer view sem a flag FORA do baseline. Assim a dívida
+          # antiga (30 views, com o motivo registrado no arquivo) não deixa o CI
+          # vermelho para sempre e view nova esquecida quebra na hora.
+          #
+          # ROTA: idêntica ao INV-7 e pelo mesmo motivo (este Postgres não é
+          # publicado fora da malha do Swarm). Seleção de container
+          # DETERMINÍSTICA: só entram containers com o schema `zapp`, e mais de
+          # um candidato é ambiguidade (falha), nunca chute.
+          BASELINE="$(grep -v '^#' scripts/sql/views-security-invoker.baseline | grep -v '^[[:space:]]*$' | tr '\n' ',' | sed 's/,$//')"
+          # Baseline VAZIA e estado VALIDO (zero excecoes conhecidas: e o caso hoje).
+          # O que nao pode passar e o passo NAO receber o parametro - disso o proprio
+          # SQL cuida (guarda de rota em current_setting IS NULL).
+          if [ -z "$BASELINE" ]; then
+            echo "INV-9 baseline: vazia (0 excecoes conhecidas) - esperado neste estado."
+          else
+            echo "INV-9 baseline: $BASELINE"
+          fi
+
+          if command -v docker >/dev/null 2>&1; then
+            CANDIDATOS=""
+            for c in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^supabase_db' || true); do
+              if docker exec -i "$c" psql -U postgres -d postgres -Atc "select 1 from pg_namespace where nspname='zapp'" 2>/dev/null | grep -q 1; then
+                CANDIDATOS="$CANDIDATOS $c"
+              fi
+            done
+            CANDIDATOS="$(echo $CANDIDATOS)"
+            N_CANDIDATOS="$(echo "$CANDIDATOS" | wc -w)"
+            if [ "$N_CANDIDATOS" -gt 1 ]; then
+              echo "::error title=INV-9 ambiguidade::mais de um container com o schema zapp ($CANDIDATOS). Aponte a rota antes de confiar neste check."
+              exit 1
+            fi
+            if [ "$N_CANDIDATOS" -eq 1 ]; then
+              echo "Rota 1 (docker exec em $CANDIDATOS) — invariante BLOQUEANTE."
+              docker exec -i -w / "$CANDIDATOS" psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 \
+                -v baseline="$BASELINE" < scripts/sql/check-view-security-invoker.sql
+              exit $?
+            fi
+            echo "::warning title=INV-9 rota 1 indisponivel::nenhum container supabase_db com o schema zapp; tentando psql direto."
+          fi
+
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::notice title=INV-9 nao executou::sem docker e sem secret SUPABASE_DB_URL. Ratchet de security_invoker nao verificado."
+            exit 0
+          fi
+
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client || true
+          fi
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "::warning title=INV-9 nao executou::psql indisponivel no runner. Ratchet nao verificado."
+            exit 0
+          fi
+
+          if ! psql "$SUPABASE_DB_URL" -Atc 'SELECT 1' >/dev/null 2>&1; then
+            echo "::warning title=INV-9 nao executou::sem conectividade com o banco a partir do runner. Ratchet nao verificado."
+            exit 0
+          fi
+
+          echo "Rota 2 (psql direto) — invariante BLOQUEANTE."
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -v baseline="$BASELINE" -f scripts/sql/check-view-security-invoker.sql
+
       - name: Summary
         if: success()
         run: |
