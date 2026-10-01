@@ -203,7 +203,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "schema-catalog.json já estava atualizado — nada a commitar."
           else
-            git commit -m "fix(ci): regen schema-catalog.json do types.ts canônico [skip ci]"
+            git commit -m "fix(ci): regen schema-catalog.json do types.ts canonico"
             git push
             echo "schema-catalog.json regenerado e commitado."
           fi
