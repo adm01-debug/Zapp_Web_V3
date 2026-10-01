@@ -8064,7 +8064,7 @@
           ]
         },
         "evolution_pipeline_health_log": {
-          "definition_sha1": "6e6ae60af36b80dcc93b04eddc0de49ad1927f1d",
+          "definition_sha1": "4f1f24363a5e27bb4734120a74288c9f34b75cec",
           "insert_columns": [
             {
               "name": "alerts_critical_open",
@@ -8124,7 +8124,7 @@
             },
             {
               "name": "pipeline_status",
-              "type": "Database[\"public\"][\"Enums\"][\"evolution_pipeline_status\"]"
+              "type": "\"healthy\" | \"warning\" | \"degraded_webhook\" | \"degraded_sender\" | \"critical_alerts\" | \"critical\""
             },
             {
               "name": "probe_latency_ms",
@@ -8232,7 +8232,7 @@
             },
             {
               "name": "pipeline_status",
-              "type": "Database[\"public\"][\"Enums\"][\"evolution_pipeline_status\"]"
+              "type": "\"healthy\" | \"warning\" | \"degraded_webhook\" | \"degraded_sender\" | \"critical_alerts\" | \"critical\""
             },
             {
               "name": "probe_latency_ms",
@@ -8338,7 +8338,7 @@
             },
             {
               "name": "pipeline_status",
-              "type": "Database[\"public\"][\"Enums\"][\"evolution_pipeline_status\"]"
+              "type": "\"healthy\" | \"warning\" | \"degraded_webhook\" | \"degraded_sender\" | \"critical_alerts\" | \"critical\""
             },
             {
               "name": "probe_latency_ms",
@@ -17283,7 +17283,7 @@
           "update_columns": []
         },
         "v_ai_health_summary": {
-          "definition_sha1": "1b3fd495af60365a068399324ab3370fafc01cfd",
+          "definition_sha1": "9f63959dd7054303450cbdce58f82df8917ecacc",
           "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
@@ -18091,7 +18091,7 @@
           "update_columns": []
         },
         "v_kpi_overview": {
-          "definition_sha1": "81f04fc630e574c0f3369e9266496e24890bcd95",
+          "definition_sha1": "98dfa82c9bdafd0c77b210a3b8ce2b692a9c34ae",
           "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
@@ -102015,7 +102015,7 @@
           ]
         },
         "evolution_pipeline_health_log": {
-          "definition_sha1": "072e26f0b91afaf0db25478ba9c0f103f6e597af",
+          "definition_sha1": "aa89ef966448bd6827cb76ebce9648fac84b5b9f",
           "insert_columns": [
             {
               "name": "alerts_critical_open",
@@ -119110,7 +119110,7 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "b6e6c9da32c5ac0da8ca486b86089a201852aa96"
+    "types_sha1": "9edc7b589e46fc77845d1428ca46557f4b024a8d"
   },
   "summary": {
     "composite_types": 0,
