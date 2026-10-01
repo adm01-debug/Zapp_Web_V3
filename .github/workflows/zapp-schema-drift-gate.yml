@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       regen:
-        description: 'Regenerar snapshot (commita resultado — use apenas quando migration nova foi aplicada)'
+        description: 'Regenerar snapshot (abre PR com resultado — use apenas quando migration nova foi aplicada)'
         type: boolean
         default: false
   pull_request:
@@ -36,6 +36,7 @@ jobs:
     # escrita real só ocorre no step de commit, que tem if: regen == 'true' como guarda.
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,8 +47,10 @@ jobs:
           REGEN: ${{ github.event.inputs.regen == 'true' && '1' || '0' }}
         run: sh scripts/decouple/zapp-drift-check.sh
 
-      - name: Commit snapshot regenerado (somente quando REGEN=true)
+      - name: Abrir PR com snapshot regenerado (somente quando REGEN=true)
         if: github.event.inputs.regen == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.email "ci-bot@atomicabr.com.br"
           git config user.name "CI Bot [zapp-drift-regen]"
@@ -55,7 +58,14 @@ jobs:
           if git diff --staged --quiet; then
             echo "Snapshot ja estava atualizado — nada a commitar."
           else
+            BRANCH="chore/regen-zapp-snapshot-$(date +%Y%m%d-%H%M)"
+            git checkout -b "$BRANCH"
             git commit -m "fix(ci): regen zapp schema snapshot [skip ci]"
-            git push
-            echo "Snapshot regenerado e commitado."
+            git push -u origin "$BRANCH"
+            gh pr create \
+              --title "fix(ci): regen zapp schema snapshot" \
+              --body "Snapshot regenerado automaticamente pelo CI (zapp-schema-drift-gate regen=true).\n\nRevisar e mergear após validação do drift." \
+              --base main \
+              --head "$BRANCH"
+            echo "PR criada para o snapshot regenerado."
           fi
