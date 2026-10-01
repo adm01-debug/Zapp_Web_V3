@@ -148,7 +148,7 @@ Deno.test("gmail-webhook OIDC: JWT válido (iss/aud/assinatura/email corretos) �
   const token = await signToken();
   const res = await push({ authorization: `Bearer ${token}` });
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { ok: true }); // fixture sem messagesAdded — só valida que passou da auth e completou o fluxo
+  assertEquals(await res.json(), { ok: true, skipped: "invalid_history_id" }); // fixture sem messagesAdded — só valida que passou da auth e completou o fluxo
   assertEquals(gmailApiCalls, ["history"]);
   // Cumulativo (não resetado antes deste teste): createRemoteJWKSet cacheia a
   // chave por processo, então um reset local não força um novo fetch — o que
