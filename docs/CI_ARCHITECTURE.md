@@ -10,7 +10,7 @@
 ### Gatilhos Primários
 
 | Arquivo | `name:` | Gatilho | Runner | Bloqueia merge? | Dono/Runbook |
-|---------|---------|---------|--------|----------------|--|
+|---------|---------|---------|--------|----------------|---|
 | `action-pin-check.yml` | action-pin-check | PR | ubuntu-latest | ✅ sim | CI / `docs/ops/RUNBOOK-CI.md` |
 | `ai-agent-pr-policy.yml` | AI Agent PR Policy | push, dispatch | ubuntu-latest | ❌ advisory | CI |
 | `branch-protection-sentinel.yml` | Branch Protection Sentinel | PR | vps-zapp | ❌ (schedule suspenso) | Segurança |
