@@ -32,7 +32,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
@@ -110,8 +109,16 @@ jobs:
           > (HERMES.md). Arquivo gerado, sem lógica de negócio. Ver ADR-CI-001.")
           echo "PR created: $PR_URL"
           # Auto-merge squash — requer required checks ativados na branch protection
-          gh pr merge "$BRANCH" --squash --auto --delete-branch
-          echo "Auto-merge requested (squash)"
+          # Guard: só habilita --auto se branch protection tiver required checks (ADR-CI-001)
+          REQUIRED=$(gh api "repos/$GITHUB_REPOSITORY/branches/main/protection/required_status_checks" \
+            --jq '.contexts | length' 2>/dev/null || echo "0")
+          if [ "${REQUIRED}" = "0" ]; then
+            echo "::warning::branch protection sem required checks — auto-merge desabilitado (ADR-CI-001)"
+            echo "PR aberto para revisão manual: $PR_URL"
+          else
+            gh pr merge "$BRANCH" --squash --auto --delete-branch
+            echo "Auto-merge requested (squash)"
+          fi
 
       - name: No changes
         if: steps.diff.outputs.changed == 'false'
