@@ -36,13 +36,25 @@ jobs:
             exit 1
           fi
 
+      - name: Validate and set base branch
+        id: base
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch || 'main' }}
+        run: |
+          if ! printf '%s' "${INPUT_BRANCH}" | grep -qE '^[a-zA-Z0-9/_.-]+$'; then
+            echo "::error::Branch name inválido: ${INPUT_BRANCH}"
+            exit 1
+          fi
+          echo "branch=${INPUT_BRANCH}" >> $GITHUB_OUTPUT
+
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ steps.base.outputs.branch }}
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 
@@ -67,10 +79,9 @@ jobs:
       - name: Create branch and commit
         if: steps.diff.outputs.changed == 'true'
         id: commit
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
-          BASE_BRANCH="${{ github.event.inputs.branch || 'main' }}"
-          git fetch origin "${BASE_BRANCH}"
-          git checkout "${BASE_BRANCH}"
           BRANCH="chore/regen-types-$(date +%Y%m%d-%H%M%S)"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           git config user.name "github-actions[bot]"
@@ -103,10 +114,11 @@ jobs:
           # "Allow GitHub Actions to create and approve pull requests" DESABILITADO.
           # GITHUB_TOKEN recebe apenas createPullRequest=forbidden neste repo.
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
           BRANCH="${{ steps.commit.outputs.branch }}"
           PR_URL=$(gh pr create \
-            --base "${{ github.event.inputs.branch || 'main' }}" \
+            --base "${BASE_BRANCH}" \
             --head "$BRANCH" \
             --title "chore(types): regenerate zapp/evo types [$(date +%Y-%m-%d)]" \
             --body "Geração automática de \`types.ts\` via workflow \`gen-types-zapp\`.
@@ -120,7 +132,6 @@ jobs:
           echo "PR created: $PR_URL"
           # Auto-merge squash — requer required checks ativados na branch protection
           # Guard: só habilita --auto se branch protection tiver required checks (ADR-CI-001)
-          BASE_BRANCH="${{ github.event.inputs.branch || 'main' }}"
           REQUIRED=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" \
             --jq '.contexts | length' 2>/dev/null || echo "0")
           if [ "${REQUIRED}" = "0" ]; then
