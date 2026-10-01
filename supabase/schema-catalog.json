@@ -8064,7 +8064,7 @@
           ]
         },
         "evolution_pipeline_health_log": {
-          "definition_sha1": "6e6ae60af36b80dcc93b04eddc0de49ad1927f1d",
+          "definition_sha1": "4f1f24363a5e27bb4734120a74288c9f34b75cec",
           "insert_columns": [
             {
               "name": "alerts_critical_open",
@@ -8124,7 +8124,7 @@
             },
             {
               "name": "pipeline_status",
-              "type": "Database[\"public\"][\"Enums\"][\"evolution_pipeline_status\"]"
+              "type": "\"healthy\" | \"warning\" | \"degraded_webhook\" | \"degraded_sender\" | \"critical_alerts\" | \"critical\""
             },
             {
               "name": "probe_latency_ms",
@@ -8232,7 +8232,7 @@
             },
             {
               "name": "pipeline_status",
-              "type": "Database[\"public\"][\"Enums\"][\"evolution_pipeline_status\"]"
+              "type": "\"healthy\" | \"warning\" | \"degraded_webhook\" | \"degraded_sender\" | \"critical_alerts\" | \"critical\""
             },
             {
               "name": "probe_latency_ms",
@@ -8338,7 +8338,7 @@
             },
             {
               "name": "pipeline_status",
-              "type": "Database[\"public\"][\"Enums\"][\"evolution_pipeline_status\"]"
+              "type": "\"healthy\" | \"warning\" | \"degraded_webhook\" | \"degraded_sender\" | \"critical_alerts\" | \"critical\""
             },
             {
               "name": "probe_latency_ms",
@@ -9401,197 +9401,6 @@
         },
         "evolution_webhook_events_v2": {
           "definition_sha1": "aa8e45a6842de61e2ac56a1751af8de3ab6a112c",
-          "insert_columns": [
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "error_message",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json"
-            },
-            {
-              "name": "processed",
-              "type": "boolean | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "retry_count",
-              "type": "number"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string"
-            }
-          ],
-          "kind": "table",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "error_message",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json"
-            },
-            {
-              "name": "processed",
-              "type": "boolean | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "retry_count",
-              "type": "number"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "created_at",
-              "type": "string"
-            },
-            {
-              "name": "error_message",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string"
-            },
-            {
-              "name": "instance_name",
-              "type": "string"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json"
-            },
-            {
-              "name": "processed",
-              "type": "boolean | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "retry_count",
-              "type": "number"
-            },
-            {
-              "name": "source",
-              "type": "string | null"
-            },
-            {
-              "name": "status",
-              "type": "string"
-            }
-          ]
-        },
-        "evolution_webhook_events_v2_2026_08": {
-          "definition_sha1": "b19ef741b0031e6663ab3cd87efa27a4701613af",
           "insert_columns": [
             {
               "name": "created_at",
@@ -17474,7 +17283,7 @@
           "update_columns": []
         },
         "v_ai_health_summary": {
-          "definition_sha1": "1b3fd495af60365a068399324ab3370fafc01cfd",
+          "definition_sha1": "9f63959dd7054303450cbdce58f82df8917ecacc",
           "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
@@ -18282,7 +18091,7 @@
           "update_columns": []
         },
         "v_kpi_overview": {
-          "definition_sha1": "81f04fc630e574c0f3369e9266496e24890bcd95",
+          "definition_sha1": "98dfa82c9bdafd0c77b210a3b8ce2b692a9c34ae",
           "insert_columns": [],
           "kind": "view",
           "relationship_count": 0,
@@ -21598,6 +21407,64 @@
           "definition_sha1": "2c3a9e5546d57b66e0cd17584e1cfce21eddb8c1",
           "overload_count": 0,
           "overloads": []
+        },
+        "fn_cookie_health": {
+          "definition_sha1": "b30bea1b898649faf8368fa3af67749f6b573b92",
+          "overload_count": 1,
+          "overloads": [
+            {
+              "args": [],
+              "returns": {
+                "fields": [
+                  {
+                    "name": "expires_at",
+                    "type": "string"
+                  },
+                  {
+                    "name": "health_error",
+                    "type": "string"
+                  },
+                  {
+                    "name": "health_status",
+                    "type": "string"
+                  },
+                  {
+                    "name": "is_healthy",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "last_health_check_at",
+                    "type": "string"
+                  },
+                  {
+                    "name": "last_probe_http",
+                    "type": "number"
+                  },
+                  {
+                    "name": "last_probe_ms",
+                    "type": "number"
+                  },
+                  {
+                    "name": "last_probe_preview",
+                    "type": "string"
+                  },
+                  {
+                    "name": "mins_since_probe",
+                    "type": "number"
+                  },
+                  {
+                    "name": "probe_stale",
+                    "type": "boolean"
+                  },
+                  {
+                    "name": "servico",
+                    "type": "string"
+                  }
+                ],
+                "kind": "object[]"
+              }
+            }
+          ]
         },
         "fn_cookie_probe_collect": {
           "definition_sha1": "d533766b91d38b91f5ce41000dbe01b670f35e05",
@@ -102148,7 +102015,7 @@
           ]
         },
         "evolution_pipeline_health_log": {
-          "definition_sha1": "072e26f0b91afaf0db25478ba9c0f103f6e597af",
+          "definition_sha1": "aa89ef966448bd6827cb76ebce9648fac84b5b9f",
           "insert_columns": [
             {
               "name": "alerts_critical_open",
@@ -102673,185 +102540,6 @@
         },
         "evolution_webhook_events_v2": {
           "definition_sha1": "31d2eb5aad8214bfc17ab3e382fe5d90dc99d4f3",
-          "insert_columns": [
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "error_message",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json | null"
-            },
-            {
-              "name": "processed",
-              "type": "boolean | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "retry_count",
-              "type": "number | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            }
-          ],
-          "kind": "view",
-          "relationship_count": 0,
-          "row_columns": [
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "error_message",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json | null"
-            },
-            {
-              "name": "processed",
-              "type": "boolean | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "retry_count",
-              "type": "number | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            }
-          ],
-          "update_columns": [
-            {
-              "name": "created_at",
-              "type": "string | null"
-            },
-            {
-              "name": "error_message",
-              "type": "string | null"
-            },
-            {
-              "name": "event_type",
-              "type": "string | null"
-            },
-            {
-              "name": "from_me",
-              "type": "boolean | null"
-            },
-            {
-              "name": "id",
-              "type": "string | null"
-            },
-            {
-              "name": "instance_name",
-              "type": "string | null"
-            },
-            {
-              "name": "message_type",
-              "type": "string | null"
-            },
-            {
-              "name": "payload",
-              "type": "Json | null"
-            },
-            {
-              "name": "processed",
-              "type": "boolean | null"
-            },
-            {
-              "name": "processed_at",
-              "type": "string | null"
-            },
-            {
-              "name": "push_name",
-              "type": "string | null"
-            },
-            {
-              "name": "remote_jid",
-              "type": "string | null"
-            },
-            {
-              "name": "retry_count",
-              "type": "number | null"
-            },
-            {
-              "name": "status",
-              "type": "string | null"
-            }
-          ]
-        },
-        "evolution_webhook_events_v2_2026_08": {
-          "definition_sha1": "51e444e72f152c20f467d689784b7e088198f6d9",
           "insert_columns": [
             {
               "name": "created_at",
@@ -119422,14 +119110,14 @@
   "source": {
     "kind": "types-file",
     "path": "src/integrations/supabase/types.ts",
-    "types_sha1": "43289c5cee9561e3566d50b6a032200ad561d3a7"
+    "types_sha1": "9edc7b589e46fc77845d1428ca46557f4b024a8d"
   },
   "summary": {
     "composite_types": 0,
     "enums": 17,
-    "functions": 896,
+    "functions": 897,
     "schemas": 2,
-    "tables": 467,
-    "views": 299
+    "tables": 466,
+    "views": 298
   }
 }

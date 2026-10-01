@@ -37,7 +37,7 @@ on:
         default: false
 
 concurrency:
-  group: db-guard-${{ github.event.pull_request.number || github.ref }}
+  group: db-guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
 permissions:
@@ -203,7 +203,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "schema-catalog.json já estava atualizado — nada a commitar."
           else
-            git commit -m "fix(ci): regen schema-catalog.json do types.ts canônico [skip ci]"
+            git commit -m "fix(ci): regen schema-catalog.json do types.ts canonico"
             git push
             echo "schema-catalog.json regenerado e commitado."
           fi
