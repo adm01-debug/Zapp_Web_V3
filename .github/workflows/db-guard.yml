@@ -37,7 +37,7 @@ on:
         default: false
 
 concurrency:
-  group: db-guard-${{ github.event.pull_request.number || github.ref }}
+  group: db-guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
 permissions:
