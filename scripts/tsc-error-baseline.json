@@ -1,4 +1,6 @@
 {
-  "total": 0,
-  "files": {}
+  "total": 8,
+  "files": {
+    "src/integrations/supabase/types.ts": 8
+  }
 }
