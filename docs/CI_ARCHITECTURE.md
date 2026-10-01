@@ -5,7 +5,7 @@
 
 ---
 
-## Mapa de Workflows (60 arquivos)
+## Mapa de Workflows (61 arquivos)
 
 ### Gatilhos Primários
 
@@ -17,6 +17,7 @@
 | `bundle-secret-guard.yml` | Bundle Secret Guard | `workflow_run` deploy, cron diário | vps-zapp | ❌ advisory | Segurança |
 | `check-multiplix-guards.yml` | DB Guard — Multiplix RLS & Realtime PII | PR | ubuntu-latest | ✅ sim | DB |
 | `check-realtime-dead-channels.yml` | Guard — Realtime Dead Channels | PR | ubuntu-latest | ✅ sim | DB |
+| `ci-slo-metrics.yml` | CI SLO Metrics | cron seg 08:00 | ubuntu-latest | ❌ informativo | CI |
 | `ci-workflows-lint.yml` | Workflow Lint (actionlint) | PR | ubuntu-latest | ✅ sim | CI |
 | `ci.yml` | CI/CD Pipeline | push (main/develop), PR | ubuntu-latest | ✅ sim (PR) | CI / `docs/ops/RUNBOOK-CI.md` |
 | `cleanup-e2e-data.yml` | Cleanup E2E data (REST) | dispatch | vps-zapp | ❌ manual | QA |
@@ -86,13 +87,14 @@
 | 07:00 seg | Schedule Health Monitor | semanal | — |
 | 07:05 seg | Migration Drift Guard | semanal | — |
 | 08:00 diário | DB Reference Integrity | diário | — |
+| 08:00 seg | CI SLO Metrics | semanal | — |
 | 08:00 seg | Security Invoker Gate | semanal | — |
 | 08:17 diário | Bundle Secret Guard | diário | — |
 | 09:00 seg | CodeQL | semanal | — |
 | 09:10 diário | Zapp Schema Drift Gate | diário | — |
 | 09:00 seg | Cleanup E2E data | semanal | **suspenso** |
 
-> Conflitos conhecidos: seg 06:00–09:10 UTC concentra 6 crons (5 semanais + 1 diário).
+> Conflitos conhecidos: seg 06:00–09:10 UTC concentra 7 crons (6 semanais + 1 diário).
 > Se o pool `vps-zapp` estiver com 1 runner disponível, backlog pode atrasar alertas.
 > Etapa 95 do plano propõe re-espalhamento.
 

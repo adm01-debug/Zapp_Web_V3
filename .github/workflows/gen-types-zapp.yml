@@ -110,7 +110,8 @@ jobs:
           echo "PR created: $PR_URL"
           # Auto-merge squash — requer required checks ativados na branch protection
           # Guard: só habilita --auto se branch protection tiver required checks (ADR-CI-001)
-          REQUIRED=$(gh api "repos/$GITHUB_REPOSITORY/branches/main/protection/required_status_checks" \
+          BASE_BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          REQUIRED=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" \
             --jq '.contexts | length' 2>/dev/null || echo "0")
           if [ "${REQUIRED}" = "0" ]; then
             echo "::warning::branch protection sem required checks — auto-merge desabilitado (ADR-CI-001)"
