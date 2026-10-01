@@ -43,11 +43,11 @@
 | `edge-schema-parity.yml` | Edge Schema Parity | PR, push, dispatch | ubuntu-latest | ✅ sim (PR) | Edge |
 | `evo-ddl-gate.yml` | evo-ddl-gate | PR | ubuntu-latest | ✅ sim | DB |
 | `flaky-test-detector.yml` | Flaky Test Detector | cron seg–sex 03:00 | ubuntu-latest | ❌ informativo | QA |
-| `gen-types-zapp.yml` | Regenerate Supabase types | dispatch | ubuntu-latest | ❌ manual | DB |
+| `gen-types-zapp.yml` | Regenerate Supabase types | dispatch | vps-zapp | ❌ manual | DB |
 | `health-score-anti-drift.yml` | health-score-anti-drift | PR | vps-zapp | ✅ sim | DB |
 | `measure-invariants.yml` | Desacoplamento — Score de Invariantes | PR, dispatch | vps-zapp | ❌ advisory | Arquitetura |
 | `migration-drift-guard.yml` | Migration Drift Guard | cron seg 07:05, PR, push | vps-zapp | ❌ warn-only | DB / `docs/ops/RUNBOOK-CI.md` |
-| `migration-lint.yml` | Migration Lint | push, PR | vps-zapp | ✅ sim | DB |
+| `migration-lint.yml` | Migration Lint | push, PR | vps-zapp | ❌ warn-only (exit 0) | DB |
 | `migration-smoke-test.yml` | Migration Smoke Test | PR | vps-zapp | ✅ sim | DB |
 | `migration-tests.yml` | 🦕 Migration Tests | push (main) | ubuntu-latest | ❌ pós-merge | DB |
 | `migration-uniqueness.yml` | Migration Uniqueness Gate | PR, push | ubuntu-latest | ✅ sim | DB |
