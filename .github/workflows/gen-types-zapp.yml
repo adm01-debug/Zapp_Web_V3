@@ -70,7 +70,8 @@ jobs:
           BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
           git fetch origin "${BASE_BRANCH}"
-          if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > src/integrations/supabase/types.ts 2>/dev/null; then
+          if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > /tmp/seed-types.ts 2>/dev/null; then
+            cp /tmp/seed-types.ts src/integrations/supabase/types.ts
             echo "Seeded types.ts from origin/${BASE_BRANCH}"
           else
             echo "types.ts not found in origin/${BASE_BRANCH} — will generate from scratch"
@@ -83,6 +84,7 @@ jobs:
         run: |
           if ! curl -fsS --max-time 15 --connect-timeout 5 \
             -H "Authorization: Bearer ${META_TOKEN}" \
+            -H "apikey: ${META_TOKEN}" \
             "${META_URL}/generators/typescript?included_schemas=public" \
             -o /dev/null; then
             echo "::error::META_URL inacessível: verifique que o runner vps-zapp está na mesma rede overlay que supabase_meta (AtomicaBRNet)."
