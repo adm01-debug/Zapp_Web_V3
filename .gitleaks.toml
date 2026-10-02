@@ -51,7 +51,7 @@ commits = [
   # commit fe25893b criou lighthouse-ci.yml com `eyJhbG...anon....fake`
   # como VITE_SUPABASE_ANON_KEY fake de build; corrigido para
   # "test-anon-key" no commit seguinte (convenção do ci.yml).
-  "fe25893b4"
+  "fe25893b43ca8773f6cca1c4b64012f6ec97d13e"
 ]
 regexes = [
   # Match no payload base64 do token anon self-hosted (role: anon, iat: 1715050800)
