@@ -22,6 +22,13 @@ permissions:
 
 jobs:
   regen-types:
+    # SECURITY: job-level guard redundante com environment: types-generation.
+    # Ambos vivem no YAML (atacante com write pode remover), mas a mitigação
+    # estrutural exige runner group restrito a main no nível org (GitHub Settings →
+    # Actions → Runner Groups → vps-zapp → "Only allow specific branches: main").
+    # Essa configuração está fora do alcance de qualquer YAML e é o único limite
+    # inviolável. Documentado em docs/decisions/ADR-CI-002-vps-runner-boundary.md
+    if: github.ref == 'refs/heads/main'
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 10
     environment: types-generation
@@ -69,7 +76,7 @@ jobs:
         env:
           BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
-          git fetch origin "${BASE_BRANCH}"
+          git fetch origin "refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
           if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > /tmp/seed-types.ts 2>/dev/null; then
             cp /tmp/seed-types.ts src/integrations/supabase/types.ts
             echo "Seeded types.ts from origin/${BASE_BRANCH}"
@@ -109,7 +116,7 @@ jobs:
         env:
           BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
-          git fetch origin "${BASE_BRANCH}"
+          git fetch origin "refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
           if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > /tmp/base-types.ts 2>/dev/null; then
             if diff -q /tmp/base-types.ts src/integrations/supabase/types.ts > /dev/null 2>&1; then
               echo "changed=false" >> $GITHUB_OUTPUT
@@ -169,17 +176,29 @@ jobs:
           > Auto-merge via squash — exceção documentada ao fluxo 'merge é ato humano'
           > (HERMES.md). Arquivo gerado, sem lógica de negócio. Ver ADR-CI-001.")
           echo "PR created: $PR_URL"
-          # Auto-merge squash — requer >= 2 required checks (ADR-CI-001 full-CI prerequisite)
+          # Auto-merge squash — ADR-CI-001: verificar presença dos checks canônicos
+          # definidos em branch-protection-sentinel.yml (não apenas count >= 2, pois
+          # 2 checks leves seriam suficientes para liberar merge sem full-CI).
+          EXPECTED_CHECKS='["edge-auth-smoke","edge-drift-check","Edge guard checks","DB Invariants","Migration Uniqueness Gate","schema-drift-guard","PR Size Gate","Analyze (javascript-typescript)","🔍 Secret Scan (gitleaks)","Verify security_invoker on all views"]'
           PROTECTION=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" 2>/dev/null || echo '{"contexts":[]}')
-          REQUIRED=$(echo "${PROTECTION}" | jq -r '.contexts | length' 2>/dev/null || echo "0")
-          CONTEXTS=$(echo "${PROTECTION}" | jq -r '.contexts | join(", ")' 2>/dev/null || echo "")
-          echo "Required checks (${REQUIRED}): ${CONTEXTS:-none}"
-          if [ "${REQUIRED}" -lt 2 ]; then
-            echo "::warning::branch protection com ${REQUIRED} required check(s) — insuficiente para garantir full CI antes do merge (ADR-CI-001)"
+          ACTUAL_CONTEXTS=$(echo "${PROTECTION}" | jq -r '.contexts[]' 2>/dev/null || true)
+          echo "Required checks configurados:"
+          echo "${ACTUAL_CONTEXTS}" | sed 's/^/  - /'
+          MISSING_COUNT=0
+          MISSING_LIST=""
+          while IFS= read -r expected; do
+            if ! printf '%s\n' "${ACTUAL_CONTEXTS}" | grep -Fxq "${expected}"; then
+              MISSING_COUNT=$((MISSING_COUNT + 1))
+              MISSING_LIST="${MISSING_LIST}\n  - ${expected}"
+            fi
+          done < <(echo "${EXPECTED_CHECKS}" | jq -r '.[]')
+          if [ "${MISSING_COUNT}" -gt 0 ]; then
+            echo "::warning::${MISSING_COUNT} required check(s) canônico(s) ausente(s) da branch protection (ADR-CI-001):"
+            printf '%b\n' "${MISSING_LIST}"
             echo "PR aberto para revisão manual: $PR_URL"
           else
             gh pr merge "$BRANCH" --squash --auto --delete-branch
-            echo "Auto-merge requested (squash)"
+            echo "Auto-merge requested (squash) — todos os checks canônicos presentes"
           fi
 
       - name: No changes
