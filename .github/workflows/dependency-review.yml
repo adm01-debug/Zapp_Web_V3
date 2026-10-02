@@ -10,7 +10,6 @@ permissions:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,5 +18,5 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
-          comment-summary-in-pr: always
+          comment-summary-in-pr: ${{ github.actor != 'dependabot[bot]' && 'always' || 'never' }}
           warn-only: false

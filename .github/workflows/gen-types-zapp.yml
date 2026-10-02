@@ -24,6 +24,7 @@ jobs:
   regen-types:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 10
+    environment: types-generation
     permissions:
       contents: write
       pull-requests: write
@@ -47,6 +48,17 @@ jobs:
           fi
           echo "branch=${INPUT_BRANCH}" >> $GITHUB_OUTPUT
 
+      - name: Validate and set schemas
+        id: schemas
+        env:
+          INPUT_SCHEMAS: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+        run: |
+          if ! printf '%s' "${INPUT_SCHEMAS}" | grep -qE '^[a-zA-Z0-9_]+(,[a-zA-Z0-9_]+)*$'; then
+            echo "::error::Schemas inválidos: ${INPUT_SCHEMAS}. Use identificadores separados por vírgula."
+            exit 1
+          fi
+          echo "schemas=${INPUT_SCHEMAS}" >> $GITHUB_OUTPUT
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -62,18 +74,26 @@ jobs:
         env:
           META_URL: ${{ secrets.SUPABASE_META_URL }}
           META_TOKEN: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SCHEMAS: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+          SCHEMAS: ${{ steps.schemas.outputs.schemas }}
         run: node scripts/gen-types-zapp.mjs
 
-      - name: Check diff
+      - name: Check diff against base branch
         id: diff
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
-          if git diff --quiet src/integrations/supabase/types.ts; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "types.ts sem mudancas — schema em sync"
+          git fetch origin "${BASE_BRANCH}"
+          if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > /tmp/base-types.ts 2>/dev/null; then
+            if diff -q /tmp/base-types.ts src/integrations/supabase/types.ts > /dev/null 2>&1; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "types.ts sem mudancas — schema em sync com ${BASE_BRANCH}"
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+              diff --stat /tmp/base-types.ts src/integrations/supabase/types.ts || true
+            fi
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            git diff --stat src/integrations/supabase/types.ts
+            echo "types.ts nao existe em ${BASE_BRANCH} — criando"
           fi
 
       - name: Create branch and commit
@@ -81,6 +101,7 @@ jobs:
         id: commit
         env:
           BASE_BRANCH: ${{ steps.base.outputs.branch }}
+          SCHEMAS_VAL: ${{ steps.schemas.outputs.schemas }}
         run: |
           BRANCH="chore/regen-types-$(date +%Y%m%d-%H%M%S)"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
@@ -89,14 +110,13 @@ jobs:
           # Save generated file, switch to base branch, restore and commit
           cp src/integrations/supabase/types.ts /tmp/generated-types.ts
           git checkout -- src/integrations/supabase/types.ts
-          git fetch origin "${BASE_BRANCH}"
           git checkout "${BASE_BRANCH}"
           git checkout -b "$BRANCH"
           cp /tmp/generated-types.ts src/integrations/supabase/types.ts
           git add src/integrations/supabase/types.ts
           git commit -m "chore(types): regenerate zapp/evo types [gen-types-zapp workflow]
 
-          Schemas: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+          Schemas: ${SCHEMAS_VAL}
           Triggered by: ${{ github.actor }}
           Workflow run: ${{ github.run_id }}"
           git push origin "$BRANCH"
@@ -116,11 +136,9 @@ jobs:
         # Ref: docs/decisions/ADR-CI-001-gen-types-auto-merge.md
         if: steps.diff.outputs.changed == 'true'
         env:
-          # GH_TOKEN_ACTIONS (PAT com repo+workflow) — necessário porque o repo tem
-          # "Allow GitHub Actions to create and approve pull requests" DESABILITADO.
-          # GITHUB_TOKEN recebe apenas createPullRequest=forbidden neste repo.
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
           BASE_BRANCH: ${{ steps.base.outputs.branch }}
+          SCHEMAS_VAL: ${{ steps.schemas.outputs.schemas }}
         run: |
           BRANCH="${{ steps.commit.outputs.branch }}"
           PR_URL=$(gh pr create \
@@ -129,7 +147,7 @@ jobs:
             --title "chore(types): regenerate zapp/evo types [$(date +%Y-%m-%d)]" \
             --body "Geração automática de \`types.ts\` via workflow \`gen-types-zapp\`.
 
-          **Schemas:** \`${{ github.event.inputs.schemas || 'public,zapp,evo' }}\`
+          **Schemas:** \`${SCHEMAS_VAL}\`
           **Triggered by:** \`${{ github.actor }}\`
           **Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
