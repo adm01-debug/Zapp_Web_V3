@@ -1,5 +1,8 @@
+// Endpoint máquina→máquina (MCP server → edge fn): nenhum chamador é
+// browser, então não há ACAO — página web hostil não consegue ler a
+// resposta (fetch cross-origin bloqueado pelo preflight), enquanto
+// curl/MCP passam normal (não fazem preflight).
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "x-mcp-secret, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };

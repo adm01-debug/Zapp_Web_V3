@@ -1,0 +1,136 @@
+name: 🐕 Runner Watchdog
+
+# ============================================================
+# Etapa 46 do PLANO_50_ETAPAS_CONTINUACAO_2026-09-28.
+# Fecha o padrão "detecção sem ação" diagnosticado nas auditorias
+# 22D (wpp2 parado 8,7 dias sob 20 watchdogs; disco a 98% sob 3):
+# se o runner self-hosted `vps-zapp` ficar offline, workflows de
+# deploy/DB ficam em `queued` para sempre e NINGUÉM é alertado —
+# o notify-ci-failure só vê runs vermelhos, nunca runs presas.
+#
+# Estratégia (duas camadas):
+#  1) Fila parada: runs `queued` há > 30 min em workflows que rodam
+#     em vps-zapp → quase certeza de runner morto. Só precisa de
+#     actions:read (GITHUB_TOKEN basta).
+#  2) Estado do runner: GET /actions/runners via GH_TOKEN_ACTIONS
+#     (PAT pode estar expirado — Achado A3 → degrada com warning,
+#     nunca bloqueia a camada 1).
+#
+# Alerta: ALERT_WEBHOOK_URL (n8n warroom-alert), mesmo canal do
+# notify-ci-failure e do deploy-vps.
+# ============================================================
+
+on:
+  schedule:
+    # A cada 30 min — watchdog barato, corre em ubuntu-latest.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: runner-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    name: Detectar runner vps-zapp offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Camada 1 — runs presas em queued > 30 min
+        id: queued
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Workflows que dependem do runner self-hosted da VPS.
+          WATCHED="deploy-vps.yml deploy-vps-selfhosted.yml db-migrate.yml edge-deploy.yml db-guard.yml edge-drift-check.yml e2e-inbox-vps.yml e2e-admin-vps.yml e2e-crm-vps.yml gen-types-zapp.yml"
+          NOW=$(date +%s)
+          STUCK=""
+          for wf in $WATCHED; do
+            RUNS=$(curl -fsS --retry 2 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?status=queued&per_page=10" \
+              | jq -r '.workflow_runs[]? | "\(.id) \(.created_at)"' || true)
+            while IFS=' ' read -r RID CREATED; do
+              [ -n "$RID" ] || continue
+              AGE=$(( NOW - $(date -d "$CREATED" +%s) ))
+              if [ "$AGE" -gt 1800 ]; then
+                STUCK="${STUCK}${wf}#${RID}($(( AGE / 60 ))min) "
+              fi
+            done <<< "$RUNS"
+          done
+          echo "stuck=${STUCK:-none}"
+          echo "stuck=${STUCK}" >> "$GITHUB_OUTPUT"
+
+      - name: Camada 2 — estado do runner via PAT (degrada com warning)
+        id: runners
+        env:
+          PAT: ${{ secrets.GH_TOKEN_ACTIONS }}
+        run: |
+          set -uo pipefail
+          echo "offline=unknown" >> "$GITHUB_OUTPUT"
+          [ -z "${PAT:-}" ] && { echo "::warning::GH_TOKEN_ACTIONS ausente (Achado A3) — camada 2 pulada"; exit 0; }
+          RESP=$(curl -sS --max-time 15 -w '\n%{http_code}' \
+            -H "Authorization: Bearer ${PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runners?per_page=100" || echo -e "\n000")
+          CODE=$(printf '%s\n' "$RESP" | tail -1)
+          if [ "$CODE" != "200" ]; then
+            echo "::warning::Runner API HTTP ${CODE} (PAT expirado? Achado A3) — camada 2 pulada"
+            exit 0
+          fi
+          OFFLINE=$(printf '%s\n' "$RESP" | sed '$d' \
+            | jq -r '.runners[]? | select(.status=="offline") | .name' | tr '\n' ' ')
+          ONLINE=$(printf '%s\n' "$RESP" | sed '$d' \
+            | jq -r '.runners[]? | select(.status=="online") | .name' | wc -l)
+          echo "online=${ONLINE} offline=${OFFLINE:-none}"
+          if [ "$ONLINE" -eq 0 ]; then
+            echo "offline=all" >> "$GITHUB_OUTPUT"
+          else
+            echo "offline=${OFFLINE:-none}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Alertar se runner offline / fila parada
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          STUCK: ${{ steps.queued.outputs.stuck }}
+          OFFLINE: ${{ steps.runners.outputs.offline }}
+        run: |
+          set -euo pipefail
+          PROBLEMS=""
+          [ -n "${STUCK:-}" ] && [ "$STUCK" != "none" ] && PROBLEMS="runs queued >30min: ${STUCK}"
+          [ "${OFFLINE:-none}" != "none" ] && PROBLEMS="${PROBLEMS} + runners offline: ${OFFLINE}"
+          if [ -z "$PROBLEMS" ]; then
+            echo "✅ Runner OK — nenhuma run presa, runners online."
+            {
+              echo "### Runner watchdog — OK"
+              echo ""
+              echo "- Runs queued >30min: nenhuma"
+              echo "- Runners offline: ${OFFLINE:-desconhecido}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          MSG="🐕 RUNNER WATCHDOG: possível runner vps-zapp offline — ${PROBLEMS}. Verificar runners self-hosted e stack github-actions-runner na VPS. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          echo "::error::${MSG}"
+          {
+            echo "### 🐕 Runner watchdog — ALERTA"
+            echo ""
+              echo "- ${PROBLEMS}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
+            PAYLOAD=$(jq -cn --arg text "${MSG}" '{text: $text}')
+            curl -fsS -X POST "$ALERT_WEBHOOK_URL" \
+              -H 'Content-Type: application/json' \
+              -d "$PAYLOAD" || true
+          else
+            curl -fsS --retry 3 --retry-delay 5 -X POST \
+              https://n8n.atomicabr.com.br/webhook/warroom-alert \
+              -H 'Content-Type: application/json' \
+              -d "$(jq -cn --arg text "${MSG}" '{text: $text}')" || true
+          fi
+          exit 1

@@ -6,12 +6,17 @@ name: db-migrate
 # edge-deploy.yml: runner self-hosted da VPS com /var/run/docker.sock;
 # aplica via docker exec supabase_db psql -U postgres (peer local, sem secret).
 #
-# Dispara em push na main que toque supabase/migrations/** e em dispatch
-# manual (dry_run default true — util p/ auditar pendencias sem aplicar).
+# Dispara em push na main que toque supabase/migrations/**, em PR que
+# toque migrations (dry-run forçado — etapa 43 do plano de 100: aplicação
+# fica exclusiva do push na main; PR só lista o plano + valida o arquivo)
+# e em dispatch manual (dry_run default true).
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+  pull_request:
     paths:
       - 'supabase/migrations/**'
   workflow_dispatch:
@@ -23,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: db-migrate
@@ -33,17 +39,37 @@ jobs:
     name: Apply pending migrations (self-hosted DB)
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
+    # Anti-fork: pull_request só roda para branch do próprio repo — o step
+    # abaixo executa no runner self-hosted com docker.sock do banco de
+    # produção (Devin Review SEC).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Resolver aplicador CONFIÁVEL (da main, não do checkout do PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          # Em PR, o checkout é do autor — rodar apply-migrations.sh desse
+          # checkout no host da VPS daria a código de PR acesso ao docker.sock
+          # do banco (leitura de secrets via SQL exfiltraria para o log).
+          # O aplicador roda SEMPRE da origin/main; só as migrations novas
+          # (listadas, nunca executadas em DRY_RUN) vêm do PR.
+          git show origin/main:infra/db-migrate/apply-migrations.sh > /tmp/apply-migrations.sh
+          echo "Aplicador resolvido de origin/main ($(git rev-parse --short origin/main))"
 
       - name: Apply pending migrations
         id: migrate
         env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          # PR = dry-run forçado (etapa 43): nunca aplica fora da main.
+          DRY_RUN: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) && '1' || '0' }}
         run: |
-          bash infra/db-migrate/apply-migrations.sh 2>&1 | tee /tmp/migrate-out.txt
+          SCRIPT=infra/db-migrate/apply-migrations.sh
+          [ "${{ github.event_name }}" = "pull_request" ] && SCRIPT=/tmp/apply-migrations.sh
+          bash "$SCRIPT" 2>&1 | tee /tmp/migrate-out.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Step Summary
@@ -67,3 +93,23 @@ jobs:
           tail -100 /tmp/migrate-out.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "(sem saída)" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comentar plano no PR (dry-run)
+        if: github.event_name == 'pull_request' && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXIT: ${{ steps.migrate.outputs.exit_code }}
+        run: |
+          set -uo pipefail
+          STATUS="✅ dry-run OK"
+          [ "$EXIT" != "0" ] && STATUS="❌ dry-run falhou — corrigir antes do merge (a aplicação real roda no push da main)"
+          {
+            echo "### 🗄️ db-migrate — dry-run do PR"
+            echo ""
+            echo "**${STATUS}**"
+            echo ""
+            echo '```'
+            tail -40 /tmp/migrate-out.txt 2>/dev/null || echo "(sem saída)"
+            echo '```'
+          } > /tmp/pr-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/pr-comment.md || true

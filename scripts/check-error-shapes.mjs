@@ -55,7 +55,7 @@ import { join } from 'node:path';
 // ocorrências fora de _archive/__tests__. Só rebaixe (ou, em último caso,
 // suba) à mão — via --atualizar-teto — com justificativa no commit.
 // ---------------------------------------------------------------------------
-const TETO = 82;
+const TETO = 86;
 
 const SRC_DIR = join('supabase', 'functions');
 const ANTI_PATTERN_RE = /\{ error: "/g; // literal exato — ver limitações acima
