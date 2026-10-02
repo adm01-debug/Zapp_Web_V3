@@ -29,7 +29,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers });
   if (!ACCESS_KEY) return json({ error: "not_configured" }, 503);
   const key = req.headers.get("x-access-key");
-  if (key !== ACCESS_KEY) return json({ error: "unauthorized" }, 401);
+  // Comparação em tempo constante (validação 5-agentes: !== vaza timing do
+  // prefixo — a chave protege a exfiltração de SERVICE_ROLE_KEY/DB_URL).
+  const timingSafeEqual = (a: string, b: string): boolean => {
+    const x = new TextEncoder().encode(a);
+    const y = new TextEncoder().encode(b);
+    if (x.length !== y.length) return false;
+    let diff = 0;
+    for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+    return diff === 0;
+  };
+  if (!timingSafeEqual(key ?? "", ACCESS_KEY)) return json({ error: "unauthorized" }, 401);
 
   const url = new URL(req.url);
   const action = url.searchParams.get("action") || "ping";

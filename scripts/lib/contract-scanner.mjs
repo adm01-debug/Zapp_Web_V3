@@ -56,6 +56,36 @@ export function entryInners(body, mapValue = (inner) => inner) {
     }
     if (c === "/" && body[i + 1] === "/") { while (i < body.length && body[i] !== "\n") i++; continue; }
     if (c === "/" && body[i + 1] === "*") { i += 2; while (i < body.length && !(body[i] === "*" && body[i + 1] === "/")) i++; i += 2; continue; }
+    // Chave sem aspas (foo: {...}): identificador JS válido seguido de ':'.
+    // Sem isso o scanner era cego a contratos declarados sem aspas (achado
+    // MEDIO da validação 5-agentes — bypass silencioso dos guards).
+    if (depth === 0 && /[A-Za-z_$]/.test(c)) {
+      let j = i;
+      while (j < body.length && /[A-Za-z0-9_$]/.test(body[j])) j++;
+      let k = j;
+      while (body[k] === " " || body[k] === "\t" || body[k] === "\n") k++;
+      if (body[k] === ":") {
+        const key = body.slice(i, j);
+        k++;
+        while (body[k] === " " || body[k] === "\t" || body[k] === "\n") k++;
+        if (body[k] === "{") {
+          const openBrace = k;
+          let d = 0;
+          for (; k < body.length; k++) {
+            if (body[k] === "{") d++;
+            else if (body[k] === "}") { d--; if (d === 0) break; }
+          }
+          entries[key] = mapValue(body.slice(openBrace + 1, k));
+          i = k + 1;
+        } else {
+          entries[key] = mapValue(null);
+          i = k;
+        }
+        continue;
+      }
+      i = j;
+      continue;
+    }
     if (c === "{") depth++;
     else if (c === "}") depth--;
     i++;

@@ -104,7 +104,10 @@ jobs:
           set -euo pipefail
           PROBLEMS=""
           [ -n "${STUCK:-}" ] && [ "$STUCK" != "none" ] && PROBLEMS="runs queued >30min: ${STUCK}"
-          [ "${OFFLINE:-none}" != "none" ] && PROBLEMS="${PROBLEMS} + runners offline: ${OFFLINE}"
+          # 'unknown' = camada 2 degradada (PAT ausente/expirado) — não é
+          # problema: tratar como 'none' senão o watchdog alerta+falha a cada
+          # 30min para sempre (validação 5-agentes, achado ALTO).
+          [ "${OFFLINE:-none}" != "none" ] && [ "$OFFLINE" != "unknown" ] && PROBLEMS="${PROBLEMS} + runners offline: ${OFFLINE}"
           if [ -z "$PROBLEMS" ]; then
             echo "✅ Runner OK — nenhuma run presa, runners online."
             {

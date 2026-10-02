@@ -19,8 +19,11 @@ concurrency:
 jobs:
   # Etapas 28 + 43: jobs drift e e39 fundidos (ambos rodavam o mesmo deploy-edge.sh 2×)
   # Removida a instalação do Supabase CLI via curl|sh (não era usada por nenhum step).
+  # Cobre E38 + E39. O name: precisa ser EXATAMENTE 'edge-drift-check' — a
+  # proteção da main exige esse context; sufixo '(E38/E39)' no nome emitia um
+  # check-run que nunca casava e todo PR ficava em 'Expected' (validação 5-agentes).
   drift-and-hash:
-    name: edge-drift-check (E38/E39)
+    name: edge-drift-check
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
     steps:
