@@ -17,88 +17,12 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { extractObjectBody, parseContractsBody } from "./lib/contract-scanner.mjs";
 
 const [basePath, headPath] = process.argv.slice(2);
 
-/** Extrai o conteúdo entre as {} de `export const X = { ... }`. */
-function objectBody(src, exportName) {
-  const start = src.indexOf(`export const ${exportName}`);
-  if (start < 0) throw new Error(`${exportName} não encontrado`);
-  const braceStart = src.indexOf("{", src.indexOf("=", start));
-  let depth = 0, i = braceStart;
-  for (; i < src.length; i++) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") { depth--; if (depth === 0) break; }
-  }
-  return src.slice(braceStart + 1, i);
-}
-
-/** Mapa chave → texto interno do valor {...} de cada entrada de nível 1. */
-function entryInners(body) {
-  const entries = {};
-  let depth = 0, i = 0;
-  while (i < body.length) {
-    const c = body[i];
-    if (c === '"' || c === "'" || c === "`") {
-      const q = c; let str = ""; i++;
-      while (i < body.length && body[i] !== q) {
-        if (body[i] === "\\") { str += body[i + 1]; i += 2; continue; }
-        str += body[i]; i++;
-      }
-      i++;
-      if (depth === 0) {
-        let j = i; while (body[j] === " " || body[j] === "\t") j++;
-        if (body[j] === ":") {
-          j++; while (body[j] === " " || body[j] === "\t" || body[j] === "\n") j++;
-          if (body[j] === "{") {
-            let d = 0, k = j;
-            for (; k < body.length; k++) {
-              if (body[k] === "{") d++;
-              else if (body[k] === "}") { d--; if (d === 0) break; }
-            }
-            entries[str] = body.slice(j + 1, k);
-            i = k + 1;
-          } else {
-            entries[str] = "";
-          }
-        }
-      }
-      continue;
-    }
-    if (c === "/" && body[i + 1] === "/") { while (i < body.length && body[i] !== "\n") i++; continue; }
-    if (c === "/" && body[i + 1] === "*") {
-      i += 2;
-      while (i < body.length && !(body[i] === "*" && body[i + 1] === "/")) i++;
-      i += 2;
-      continue;
-    }
-    if (c === "{") depth++;
-    else if (c === "}") depth--;
-    i++;
-  }
-  return entries;
-}
-
 function parseContracts(filePath) {
-  const src = readFileSync(filePath, "utf8");
-  const entries = entryInners(objectBody(src, "CONTRACTS"));
-  const out = {};
-  for (const [key, inner] of Object.entries(entries)) {
-    const current = inner.match(/\bcurrent:\s*"([^"]+)"/)?.[1] ?? null;
-    const supSrc = inner.match(/\bsupported:\s*\[([^\]]*)\]/)?.[1] ?? "";
-    const supported = [...supSrc.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    const sunset = {};
-    const sunsetSrc = inner.match(/\bsunset:\s*\{([^}]*)\}/)?.[1];
-    if (sunsetSrc) {
-      // parse por chunk: evita regex com backtracking super-linear (S8786)
-      for (const chunk of sunsetSrc.split(",")) {
-        const kv = chunk.match(/^\s*([A-Za-z0-9_]+)\s*:\s*"([^"]+)"\s*$/);
-        if (kv) sunset[kv[1]] = kv[2];
-      }
-    }
-    out[key] = { current, supported, sunset };
-  }
-  return out;
+  return parseContractsBody(extractObjectBody(readFileSync(filePath, "utf8"), "CONTRACTS"));
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
