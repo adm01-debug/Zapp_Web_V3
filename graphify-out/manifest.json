@@ -18180,10 +18180,10 @@
     "semantic_hash": "75880ea10c73a0baf7ee4454bc24348c"
   },
   "supabase/functions/mcp-query/index.ts": {
-    "mtime": 1790937622.2173114,
-    "seen": 1790942992.5070658,
-    "ast_hash": "d8a691d33bb2c1add5486944111ff07b",
-    "semantic_hash": "d8a691d33bb2c1add5486944111ff07b"
+    "mtime": 1790943047.272086,
+    "seen": 1790943283.2569425,
+    "ast_hash": "a964b41fe6237e16a6e9518bdd0cfcf3",
+    "semantic_hash": "a964b41fe6237e16a6e9518bdd0cfcf3"
   },
   "supabase/functions/mcp-server/__tests__/r2-real.test.ts": {
     "mtime": 1790937138.5352864,
@@ -23736,12 +23736,6 @@
     "ast_hash": "086f22ddbee0efe0c68b1c1caf038426",
     "semantic_hash": "086f22ddbee0efe0c68b1c1caf038426"
   },
-  "lighthouserc.json": {
-    "mtime": 1790937575.2966368,
-    "seen": 1790942992.5035312,
-    "ast_hash": "53f1ca25ed2f57779d75316736a3ef3b",
-    "semantic_hash": "53f1ca25ed2f57779d75316736a3ef3b"
-  },
   "ops/snapshots/20260808/VERSION_INDEX.json": {
     "mtime": 1790937138.397286,
     "seen": 1790942992.5035334,
@@ -23759,18 +23753,6 @@
     "seen": 1790942992.5035727,
     "ast_hash": "008f020034a7e2d204e498ccfd2488de",
     "semantic_hash": "008f020034a7e2d204e498ccfd2488de"
-  },
-  "scripts/check-api-contract-guard.mjs": {
-    "mtime": 1790939462.643457,
-    "seen": 1790942992.503579,
-    "ast_hash": "d0e213a4bd3dba973cae99ecc004842e",
-    "semantic_hash": "d0e213a4bd3dba973cae99ecc004842e"
-  },
-  "scripts/check-contract-parity.mjs": {
-    "mtime": 1790939479.6853485,
-    "seen": 1790942992.5035849,
-    "ast_hash": "9329cefcdca7a1320ff3101bd1f79c11",
-    "semantic_hash": "9329cefcdca7a1320ff3101bd1f79c11"
   },
   "scripts/check-contract-sync.mjs": {
     "mtime": 1790937138.400286,
@@ -23791,16 +23773,10 @@
     "semantic_hash": "87985b1f04c075700698a3b8ccff5733"
   },
   "scripts/check-error-shapes.mjs": {
-    "mtime": 1790938773.2318442,
-    "seen": 1790942992.5036185,
-    "ast_hash": "df4be6b4a7bffde808d044c4108ef097",
-    "semantic_hash": "df4be6b4a7bffde808d044c4108ef097"
-  },
-  "scripts/check-invoke-edge-ratchet.mjs": {
-    "mtime": 1790938846.0213745,
-    "seen": 1790942992.5036259,
-    "ast_hash": "0cab8e1ab930a575e51ee3aa74ba7429",
-    "semantic_hash": "0cab8e1ab930a575e51ee3aa74ba7429"
+    "mtime": 1790943047.272086,
+    "seen": 1790943283.1720302,
+    "ast_hash": "24f30b1808d6c54d653afe8a5f384be0",
+    "semantic_hash": "24f30b1808d6c54d653afe8a5f384be0"
   },
   "scripts/check-invoke-migration.mjs": {
     "mtime": 1790937138.4012861,
@@ -23825,12 +23801,6 @@
     "seen": 1790942992.5036335,
     "ast_hash": "a0e114ff9c377d2129f36a8fd2f6f525",
     "semantic_hash": "a0e114ff9c377d2129f36a8fd2f6f525"
-  },
-  "scripts/check-type-escape-ratchet.mjs": {
-    "mtime": 1790938843.4003913,
-    "seen": 1790942992.503642,
-    "ast_hash": "b4b185f6ddb38c571050e1e113cb4dd1",
-    "semantic_hash": "b4b185f6ddb38c571050e1e113cb4dd1"
   },
   "scripts/check-workflow-run-refs.mjs": {
     "mtime": 1790937138.4012861,
@@ -23915,12 +23885,6 @@
     "seen": 1790942992.5037413,
     "ast_hash": "46579090cc23258f5ba8ebc5a2ebe1c9",
     "semantic_hash": "46579090cc23258f5ba8ebc5a2ebe1c9"
-  },
-  "scripts/lib/contract-scanner.mjs": {
-    "mtime": 1790940730.6259866,
-    "seen": 1790942992.5037422,
-    "ast_hash": "54f2b2fc267a3b0e0eba92055ecd90bc",
-    "semantic_hash": "54f2b2fc267a3b0e0eba92055ecd90bc"
   },
   "scripts/lib/registryBuilder.test.ts": {
     "mtime": 1790937138.412286,
@@ -24486,17 +24450,11 @@
     "ast_hash": "33bca23df4b60bf010ddbbc67e593d58",
     "semantic_hash": "33bca23df4b60bf010ddbbc67e593d58"
   },
-  "supabase/functions/migrate-helper/__tests__/hardening.test.ts": {
-    "mtime": 1790938941.7517564,
-    "seen": 1790942992.5070713,
-    "ast_hash": "ca0dba213254685e565c59247eb9e6cc",
-    "semantic_hash": "ca0dba213254685e565c59247eb9e6cc"
-  },
   "supabase/functions/migrate-helper/index.ts": {
-    "mtime": 1790937617.507343,
-    "seen": 1790942992.5070724,
-    "ast_hash": "c095da904c0da372a7fbdb9b2787a526",
-    "semantic_hash": "c095da904c0da372a7fbdb9b2787a526"
+    "mtime": 1790943047.272086,
+    "seen": 1790943283.257065,
+    "ast_hash": "56580bf3c4f70a5bb90531e113b1cfe4",
+    "semantic_hash": "56580bf3c4f70a5bb90531e113b1cfe4"
   },
   "supabase/functions/voice-changer/__tests__/contract.test.ts": {
     "mtime": 1790937138.5382862,
