@@ -63,6 +63,24 @@ export function entryInners(body, mapValue = (inner) => inner) {
   return entries;
 }
 
+/** Remove comentários // e /** *\/ preservando strings. */
+export function stripComments(src) {
+  let out = "", i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const q = c; out += c; i++;
+      while (i < src.length && src[i] !== q) { if (src[i] === "\\") { out += src.slice(i, i + 2); i += 2; continue; } out += src[i]; i++; }
+      if (i < src.length) { out += src[i]; i++; }
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "/") { while (i < src.length && src[i] !== "\n") i++; continue; }
+    if (c === "/" && src[i + 1] === "*") { i += 2; while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++; i += 2; continue; }
+    out += c; i++;
+  }
+  return out;
+}
+
 /** CONTRACTS (contract-versions.ts) → { key: { current, supported, sunset } } */
 export function parseContractsBody(body) {
   const entries = entryInners(body);
@@ -74,8 +92,9 @@ export function parseContractsBody(body) {
     const sunset = {};
     const sunsetSrc = inner.match(/\bsunset:\s*\{([^}]*)\}/)?.[1];
     if (sunsetSrc) {
-      // parse por chunk: evita regex com backtracking super-linear (S8786)
-      for (const chunk of sunsetSrc.split(",")) {
+      // parse por chunk: sem regex com backtracking (S8786); comentários
+      // antes/entre entradas são removidos antes do split (Devin Review)
+      for (const chunk of stripComments(sunsetSrc).split(",")) {
         const kv = chunk.match(/^\s*([A-Za-z0-9_]+)\s*:\s*"([^"]+)"\s*$/);
         if (kv) sunset[kv[1]] = kv[2];
       }
