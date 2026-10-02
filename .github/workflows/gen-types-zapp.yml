@@ -65,6 +65,31 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.sha }}
 
+      - name: Seed base branch types.ts
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
+        run: |
+          git fetch origin "${BASE_BRANCH}"
+          if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > src/integrations/supabase/types.ts 2>/dev/null; then
+            echo "Seeded types.ts from origin/${BASE_BRANCH}"
+          else
+            echo "types.ts not found in origin/${BASE_BRANCH} — will generate from scratch"
+          fi
+
+      - name: Validate META_URL connectivity
+        env:
+          META_URL: ${{ secrets.SUPABASE_META_URL }}
+          META_TOKEN: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if ! curl -fsS --max-time 15 --connect-timeout 5 \
+            -H "Authorization: Bearer ${META_TOKEN}" \
+            "${META_URL}/generators/typescript?included_schemas=public" \
+            -o /dev/null; then
+            echo "::error::META_URL inacessível: verifique que o runner vps-zapp está na mesma rede overlay que supabase_meta (AtomicaBRNet)."
+            exit 1
+          fi
+          echo "META_URL conectividade OK"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -142,10 +167,13 @@ jobs:
           > Auto-merge via squash — exceção documentada ao fluxo 'merge é ato humano'
           > (HERMES.md). Arquivo gerado, sem lógica de negócio. Ver ADR-CI-001.")
           echo "PR created: $PR_URL"
-          REQUIRED=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" \
-            --jq '.contexts | length' 2>/dev/null || echo "0")
-          if [ "${REQUIRED}" = "0" ]; then
-            echo "::warning::branch protection sem required checks — auto-merge desabilitado (ADR-CI-001)"
+          # Auto-merge squash — requer >= 2 required checks (ADR-CI-001 full-CI prerequisite)
+          PROTECTION=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" 2>/dev/null || echo '{"contexts":[]}')
+          REQUIRED=$(echo "${PROTECTION}" | jq -r '.contexts | length' 2>/dev/null || echo "0")
+          CONTEXTS=$(echo "${PROTECTION}" | jq -r '.contexts | join(", ")' 2>/dev/null || echo "")
+          echo "Required checks (${REQUIRED}): ${CONTEXTS:-none}"
+          if [ "${REQUIRED}" -lt 2 ]; then
+            echo "::warning::branch protection com ${REQUIRED} required check(s) — insuficiente para garantir full CI antes do merge (ADR-CI-001)"
             echo "PR aberto para revisão manual: $PR_URL"
           else
             gh pr merge "$BRANCH" --squash --auto --delete-branch
