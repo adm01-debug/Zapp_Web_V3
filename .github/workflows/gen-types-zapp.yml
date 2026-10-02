@@ -22,21 +22,85 @@ permissions:
 
 jobs:
   regen-types:
-    runs-on: ubuntu-latest
+    # SECURITY: job-level guard redundante com environment: types-generation.
+    # Ambos vivem no YAML (atacante com write pode remover), mas a mitigação
+    # estrutural exige runner group restrito a main no nível org (GitHub Settings →
+    # Actions → Runner Groups → vps-zapp → "Only allow specific branches: main").
+    # Essa configuração está fora do alcance de qualquer YAML e é o único limite
+    # inviolável. Documentado em docs/decisions/ADR-CI-002-vps-runner-boundary.md
+    if: github.ref == 'refs/heads/main'
+    runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 10
+    environment: types-generation
     permissions:
       contents: write
       pull-requests: write
 
     steps:
+      - name: Validate dispatch ref
+        run: |
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            echo "::error::Workflow deve ser disparado de main (ref atual: ${{ github.ref_name }}). Use --ref main."
+            exit 1
+          fi
+
+      - name: Validate and set base branch
+        id: base
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch || 'main' }}
+        run: |
+          if ! printf '%s' "${INPUT_BRANCH}" | grep -qE '^[a-zA-Z0-9/_.-]+$'; then
+            echo "::error::Branch name inválido: ${INPUT_BRANCH}"
+            exit 1
+          fi
+          echo "branch=${INPUT_BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Validate and set schemas
+        id: schemas
+        env:
+          INPUT_SCHEMAS: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+        run: |
+          if ! printf '%s' "${INPUT_SCHEMAS}" | grep -qE '^[a-zA-Z0-9_]+(,[a-zA-Z0-9_]+)*$'; then
+            echo "::error::Schemas inválidos: ${INPUT_SCHEMAS}. Use identificadores separados por vírgula."
+            exit 1
+          fi
+          echo "schemas=${INPUT_SCHEMAS}" >> $GITHUB_OUTPUT
+
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.sha }}
+
+      - name: Seed base branch types.ts
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
+        run: |
+          git fetch origin "refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+          if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > /tmp/seed-types.ts 2>/dev/null; then
+            cp /tmp/seed-types.ts src/integrations/supabase/types.ts
+            echo "Seeded types.ts from origin/${BASE_BRANCH}"
+          else
+            echo "types.ts not found in origin/${BASE_BRANCH} — will generate from scratch"
+          fi
+
+      - name: Validate META_URL connectivity
+        env:
+          META_URL: ${{ secrets.SUPABASE_META_URL }}
+          META_TOKEN: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if ! curl -fsS --max-time 15 --connect-timeout 5 \
+            -H "Authorization: Bearer ${META_TOKEN}" \
+            -H "apikey: ${META_TOKEN}" \
+            "${META_URL}/generators/typescript?included_schemas=public" \
+            -o /dev/null; then
+            echo "::error::META_URL inacessível: verifique que o runner vps-zapp está na mesma rede overlay que supabase_meta (AtomicaBRNet)."
+            exit 1
+          fi
+          echo "META_URL conectividade OK"
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 
@@ -44,74 +108,98 @@ jobs:
         env:
           META_URL: ${{ secrets.SUPABASE_META_URL }}
           META_TOKEN: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SCHEMAS: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+          SCHEMAS: ${{ steps.schemas.outputs.schemas }}
         run: node scripts/gen-types-zapp.mjs
 
-      - name: Check diff
+      - name: Check diff against base branch
         id: diff
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
         run: |
-          if git diff --quiet src/integrations/supabase/types.ts; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "types.ts sem mudancas — schema em sync"
+          git fetch origin "refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+          if git show "origin/${BASE_BRANCH}:src/integrations/supabase/types.ts" > /tmp/base-types.ts 2>/dev/null; then
+            if diff -q /tmp/base-types.ts src/integrations/supabase/types.ts > /dev/null 2>&1; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "types.ts sem mudancas — schema em sync com ${BASE_BRANCH}"
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+              diff --stat /tmp/base-types.ts src/integrations/supabase/types.ts || true
+            fi
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            git diff --stat src/integrations/supabase/types.ts
+            echo "types.ts nao existe em ${BASE_BRANCH} — criando"
           fi
 
       - name: Create branch and commit
         if: steps.diff.outputs.changed == 'true'
         id: commit
+        env:
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
+          SCHEMAS_VAL: ${{ steps.schemas.outputs.schemas }}
         run: |
           BRANCH="chore/regen-types-$(date +%Y%m%d-%H%M%S)"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
+          cp src/integrations/supabase/types.ts /tmp/generated-types.ts
+          git checkout -- src/integrations/supabase/types.ts
+          git checkout -b "$BRANCH" "origin/${BASE_BRANCH}"
+          cp /tmp/generated-types.ts src/integrations/supabase/types.ts
           git add src/integrations/supabase/types.ts
           git commit -m "chore(types): regenerate zapp/evo types [gen-types-zapp workflow]
 
-          Schemas: ${{ github.event.inputs.schemas || 'public,zapp,evo' }}
+          Schemas: ${SCHEMAS_VAL}
           Triggered by: ${{ github.actor }}
           Workflow run: ${{ github.run_id }}"
           git push origin "$BRANCH"
 
       - name: Create PR and auto-merge
-        # DECISÃO DE AUTO-MERGE (etapa 93, 2026-09-27):
-        # types.ts é gerado 100% pelo schema — não é código de negócio escrito à mão.
-        # HERMES.md define "merge é ato humano" para código de produto, edge functions,
-        # migrations e mudanças de infraestrutura. types.ts é exceção documentada:
-        #   - Arquivo gerado via query ao banco (nenhuma lógica introduzida pelo workflow)
-        #   - PR toca apenas src/integrations/supabase/types.ts (arquivos gerados)
-        #   - CI completo roda antes de auto-merge (required checks via branch protection)
-        #   - Disparado manualmente por humano (workflow_dispatch) — não assíncrono
-        # Condições para revogar a exceção: se branch protection não exigir CI antes do
-        # merge OU se o arquivo começar a conter lógica manual — então trocar por PR draft
-        # sem --auto e aguardar aprovação humana.
+        # DECISÃO DE AUTO-MERGE (etapa 93, 2026-09-27): types.ts é exceção documentada
         # Ref: docs/decisions/ADR-CI-001-gen-types-auto-merge.md
         if: steps.diff.outputs.changed == 'true'
         env:
-          # GH_TOKEN_ACTIONS (PAT com repo+workflow) — necessário porque o repo tem
-          # "Allow GitHub Actions to create and approve pull requests" DESABILITADO.
-          # GITHUB_TOKEN recebe apenas createPullRequest=forbidden neste repo.
           GH_TOKEN: ${{ secrets.GH_TOKEN_ACTIONS }}
+          BASE_BRANCH: ${{ steps.base.outputs.branch }}
+          SCHEMAS_VAL: ${{ steps.schemas.outputs.schemas }}
         run: |
           BRANCH="${{ steps.commit.outputs.branch }}"
           PR_URL=$(gh pr create \
-            --base "${{ github.event.inputs.branch || 'main' }}" \
+            --base "${BASE_BRANCH}" \
             --head "$BRANCH" \
             --title "chore(types): regenerate zapp/evo types [$(date +%Y-%m-%d)]" \
             --body "Geração automática de \`types.ts\` via workflow \`gen-types-zapp\`.
 
-          **Schemas:** \`${{ github.event.inputs.schemas || 'public,zapp,evo' }}\`
+          **Schemas:** \`${SCHEMAS_VAL}\`
           **Triggered by:** \`${{ github.actor }}\`
           **Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
           > Auto-merge via squash — exceção documentada ao fluxo 'merge é ato humano'
           > (HERMES.md). Arquivo gerado, sem lógica de negócio. Ver ADR-CI-001.")
           echo "PR created: $PR_URL"
-          # Auto-merge squash — requer required checks ativados na branch protection
-          gh pr merge "$BRANCH" --squash --auto --delete-branch
-          echo "Auto-merge requested (squash)"
+          # Auto-merge squash — ADR-CI-001: verificar presença dos checks canônicos
+          # definidos em branch-protection-sentinel.yml (não apenas count >= 2, pois
+          # 2 checks leves seriam suficientes para liberar merge sem full-CI).
+          EXPECTED_CHECKS='["edge-auth-smoke","edge-drift-check","Edge guard checks","DB Invariants","Migration Uniqueness Gate","schema-drift-guard","PR Size Gate","Analyze (javascript-typescript)","🔍 Secret Scan (gitleaks)","Verify security_invoker on all views"]'
+          PROTECTION=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" 2>/dev/null || echo '{"contexts":[]}')
+          ACTUAL_CONTEXTS=$(echo "${PROTECTION}" | jq -r '.contexts[]' 2>/dev/null || true)
+          echo "Required checks configurados:"
+          echo "${ACTUAL_CONTEXTS}" | sed 's/^/  - /'
+          MISSING_COUNT=0
+          MISSING_LIST=""
+          while IFS= read -r expected; do
+            if ! printf '%s\n' "${ACTUAL_CONTEXTS}" | grep -Fxq "${expected}"; then
+              MISSING_COUNT=$((MISSING_COUNT + 1))
+              MISSING_LIST="${MISSING_LIST}\n  - ${expected}"
+            fi
+          done < <(echo "${EXPECTED_CHECKS}" | jq -r '.[]')
+          if [ "${MISSING_COUNT}" -gt 0 ]; then
+            echo "::warning::${MISSING_COUNT} required check(s) canônico(s) ausente(s) da branch protection (ADR-CI-001):"
+            printf '%b\n' "${MISSING_LIST}"
+            echo "PR aberto para revisão manual: $PR_URL"
+          else
+            gh pr merge "$BRANCH" --squash --auto --delete-branch
+            echo "Auto-merge requested (squash) — todos os checks canônicos presentes"
+          fi
 
       - name: No changes
         if: steps.diff.outputs.changed == 'false'
