@@ -10,12 +10,12 @@
 ### Gatilhos Primários
 
 | Arquivo | `name:` | Gatilho | Runner | Bloqueia merge? | Dono/Runbook |
-|---------|---------|---------|--------|----------------|---|
+|---------|---------|---------|--------|-----------------|---|
 | `action-pin-check.yml` | action-pin-check | PR | ubuntu-latest | ✅ sim | CI / `docs/ops/RUNBOOK-CI.md` |
 | `ai-agent-pr-policy.yml` | AI Agent PR Policy | push, dispatch | ubuntu-latest | ❌ advisory | CI |
 | `branch-protection-sentinel.yml` | Branch Protection Sentinel | PR | vps-zapp | ❌ (schedule suspenso) | Segurança |
 | `bundle-secret-guard.yml` | Bundle Secret Guard | `workflow_run` deploy, cron diário | vps-zapp | ❌ advisory | Segurança |
-| `check-multiplix-guards.yml` | DB Guard — Multiplix RLS & Realtime PII | PR | ubuntu-latest | ✅ sim | DB |
+| `check-multiplix-guards.yml` | DB Guard — Multiplex RLS & Realtime PII | PR | ubuntu-latest | ✅ sim | DB |
 | `check-realtime-dead-channels.yml` | Guard — Realtime Dead Channels | PR | ubuntu-latest | ✅ sim | DB |
 | `ci-slo-metrics.yml` | CI SLO Metrics | cron seg 08:00 | ubuntu-latest | ❌ informativo | CI |
 | `ci-workflows-lint.yml` | Workflow Lint (actionlint) | PR | ubuntu-latest | ✅ sim | CI |
@@ -78,7 +78,7 @@
 ## Crons Ativos
 
 | Horário UTC | Workflow | Frequência | Suspensão |
-|-------------|----------|-----------|----------|
+|-------------|---------|------------|-----------|
 | 03:00 seg–sex | Flaky Test Detector | diário (dias úteis) | — |
 | 04:00 dom | Schema Snapshot | semanal | — |
 | 06:00 diário | Edge Auth Smoke | diário | — |
@@ -103,11 +103,11 @@
 ## Referências `workflow_run` (gatilhos encadeados)
 
 | Consumidor | Escuta | Propósito |
-|-----------|--------|----------|
+|-----------|--------|-------|
 | `bundle-secret-guard.yml` | `"🚀 Build & Deploy — ZAPP web v3"` | Valida bundle pós-deploy |
 | `notify-ci-failure.yml` | `"CI/CD Pipeline"`, `"E2E CRM (VPS)"`, `"E2E Inbox (VPS)"`, `"E2E Nightly Full"`, `"Quality Gate"`, `"🚀 Build & Deploy — ZAPP web v3"`, `"edge-deploy"`, `"Migration Drift Guard"` | Alerta Warroom em falha |
 
-> ⚠️ `name:` do workflow referenciado deve ser **exatamente** igual ao campo `name:` do YAML.
+> ⚠️ `name:` do workflow referenciado deve ser ***exatamente*** igual ao campo `name:` do YAML.
 > Emoji em `name:` é permitido **apenas** se não há `workflow_run` apontando para ele SEM emoji.
 > Gate: `ci-workflows-lint.yml` → `scripts/check-workflow-run-refs.mjs` valida esses nomes a cada PR.
 
@@ -116,7 +116,7 @@
 ## Runners
 
 | Pool | Labels | Jobs típicos | Acesso a |
-|------|--------|-------------|----------|
+|------|--------|-------------|-------|
 | `ubuntu-latest` | — | Build, typecheck, lint, análise estática | GitHub hosted |
 | `vps-zapp` | `[Linux, X64, vps-zapp]` | Deploy, DB, Edge, E2E | Docker Swarm, Supabase local, Evolution API |
 | `vps-zapp` + playwright | `[Linux, X64, vps-zapp, playwright]` | E2E com browser | idem + Playwright |
@@ -149,6 +149,20 @@ Em ordem de criticidade operacional:
 20. `health-score-anti-drift.yml` — drift de health score
 21. `e2e-crm-vps.yml`, `e2e-inbox-vps.yml` — E2E funcional
 22. `security-invoker-gate.yml` — security_invoker em views
+
+---
+
+## Workflows Fantasma / Desativados
+
+Workflows registrados no GitHub Actions mas cujos arquivos YAML **nunca chegaram à `main`** — YAML ausente (404 no content API, `list_commits = []`). Eram inativados de fato (não disparáveis) e foram desativados via API em 2026-10-02 para limpar o listing.
+
+| Arquivo | ID | Nome | Criado em | Desativado em | Causa |
+|---|---|---|---|---|---|
+| `type-escape-ratchet.yml` | 373016701 | 🐀 Type Escape Ratchet | 2026-10-02T07:50:58 | 2026-10-02 | Branch squash-mergeada sem incluir o arquivo |
+| `lighthouse-ci.yml` | 373016702 | 🔦 Lighthouse CI | 2026-10-02T07:50:58 | 2026-10-02 | Branch squash-mergeada sem incluir o arquivo |
+| `api-contract-guard.yml` | 373016703 | api-contract-guard | 2026-10-02T07:50:58 | 2026-10-02 | Branch squash-mergeada sem incluir o arquivo |
+
+> Os 3 foram criados no mesmo batch (mesmo timestamp), provavelmente durante a sessão de PR #1631. O squash-merge incluiu outros arquivos mas não esses YAMLs. O registro no GitHub Actions persiste mesmo sem o arquivo na `main`. **Não recriar** sem implementação real e chamador declarado no mesmo commit.
 
 ---
 
