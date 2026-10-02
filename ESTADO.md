@@ -193,6 +193,7 @@ Verificar se ha trigger SQL, chamada externa ou se o agendamento foi perdido.
 - `mcp-query`
 - `mcp-server`
 - `metrics`
+- `migrate-helper` — temporária p/ credential recovery (reintroduzida 2026-09-10/11 após remoção do PR #666). Auditoria 22D (2026-10-02): chave agora via env `MIGRATE_HELPER_ACCESS_KEY` (fail-closed 503), sem CORS `*`. **Remover do volume + rotacionar service_role quando não precisar mais** — a chave antiga `recover2026v3key9x` está no histórico do git (comprometida).
 - `public-api`
 - `status`
 

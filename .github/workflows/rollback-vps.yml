@@ -1,0 +1,239 @@
+name: ⏪ Rollback — ZAPP web v3
+
+# ============================================================
+# Etapa 36 do PLANO_50_ETAPAS_CONTINUACAO_2026-09-28.
+# Rollback de produção SEM rebuild: redeploya uma imagem já
+# publicada no GHCR (production-<sha12>) via o mesmo caminho do
+# deploy-vps.yml (compose versionado + Portainer PUT + gate de
+# anon + verificação de convergência do Swarm).
+#
+# Por que um workflow separado e não o image_tag do deploy-vps:
+# o input image_tag do deploy-vps SÓ renomeia a imagem recém-
+# buildada — ele sempre builda. Um rollback não pode depender de
+# um build de 10+ min quando produção está quebrada.
+#
+# Alvo de tempo: < 5 min fim-a-fim (critério de 10/10 da dimensão
+# Operacionalidade da auditoria 22D).
+#
+# Uso: Actions → "⏪ Rollback" → image_tag=production-<sha12>
+# As tags protegidas estão em infra/ghcr-protected-tags.txt.
+# ============================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag da imagem GHCR a restaurar (ex.: production-57b05d295af8)"
+        required: true
+        type: string
+      confirm:
+        description: "Digite ROLLBACK para confirmar (ação toca produção)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Mesmo grupo do deploy-vps: rollback nunca corre paralelo a um deploy.
+  group: deploy-vps-v3
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/zapp-web-v3/zapp-web
+
+jobs:
+  rollback:
+    name: Rollback para imagem existente
+    runs-on: [Linux, X64, vps-zapp]
+    timeout-minutes: 15
+    steps:
+      - name: "0/6 — Confirmação explícita + secrets"
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          PORTAINER_API_TOKEN: ${{ secrets.PORTAINER_API_TOKEN }}
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ROLLBACK" ]; then
+            echo "::error::Digite exatamente ROLLBACK no campo confirm — abortado."
+            exit 1
+          fi
+          missing=""
+          [ -z "${PORTAINER_API_TOKEN}" ] && missing="$missing PORTAINER_API_TOKEN"
+          [ -z "${PORTAINER_URL}" ]        && missing="$missing PORTAINER_URL"
+          [ -n "$missing" ] && { echo "::error::Secrets ausentes:${missing}"; exit 1; }
+          echo "Confirmação OK. Secrets presentes."
+
+      - name: "1/6 — Validar tag + resolver digest da imagem alvo"
+        id: target
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          case "$IMAGE_TAG" in
+            production-*|rollback-*)
+              ;;
+            *)
+              echo "::error::IMAGE_TAG_INVALID — esperado production-<sha12> ou rollback-<desc> (recebido: ${IMAGE_TAG})"
+              exit 1
+              ;;
+          esac
+          FULL="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+          echo "Resolvendo ${FULL}"
+          # pull + RepoDigests: não depende de buildx/imagetools no runner
+          if ! docker pull "${FULL}" >/dev/null 2>&1; then
+            echo "::error::IMAGE_NOT_FOUND — ${FULL} não existe no GHCR (tag já expirou pela retenção?). Tags protegidas: infra/ghcr-protected-tags.txt"
+            exit 1
+          fi
+          DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' "${FULL}" 2>/dev/null \
+            | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p' || true)
+          if [ -z "$DIGEST" ]; then
+            echo "::error::DIGEST_NAO_RESOLVIDO para ${FULL}"
+            exit 1
+          fi
+          CANONICAL="${FULL}@${DIGEST}"
+          echo "Alvo canônico: ${CANONICAL}"
+          echo "canonical_image=${CANONICAL}" >> "$GITHUB_OUTPUT"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: "2/6 — Gate de anon do bundle aceita pelo Kong (mesmo do deploy)"
+        env:
+          ZAPP_IMAGE: ${{ steps.target.outputs.canonical_image }}
+          KONG_URL: https://supabase.atomicabr.com.br
+        run: |
+          set -euo pipefail
+          echo "Gate: extraindo bundle de ${ZAPP_IMAGE}"
+          docker pull "${ZAPP_IMAGE}" >/dev/null
+          docker rm -f gate-zapp 2>/dev/null || true
+          docker create --name gate-zapp "${ZAPP_IMAGE}" >/dev/null
+          rm -rf /tmp/gate-assets && mkdir -p /tmp/gate-assets
+          docker cp gate-zapp:/usr/share/nginx/html/assets/. /tmp/gate-assets/ 2>/dev/null || true
+          docker rm -f gate-zapp >/dev/null 2>&1 || true
+          ANON=""
+          for f in /tmp/gate-assets/index-*.js; do
+            [ -f "$f" ] || continue
+            for J in $(grep -oE 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' "$f" | sort -u); do
+              ROLE=$(node -e "try{const p=Buffer.from(process.argv[1].split('.')[1].replace(/-/g,'+').replace(/_/g,'/'),'base64').toString();process.stdout.write(String((JSON.parse(p)||{}).role||''))}catch(e){}" "$J" 2>/dev/null || true)
+              if [ "$ROLE" = "service_role" ] || [ "$ROLE" = "service" ]; then
+                echo "::error::SERVICE_ROLE_IN_BUNDLE — $f embute role=$ROLE. Rollback abortado."
+                exit 1
+              fi
+              [ "$ROLE" = "anon" ] && ANON="$J"
+            done
+          done
+          if [ -z "$ANON" ]; then echo "::error::ANON_NAO_ENCONTRADA no bundle (fail-closed)"; exit 1; fi
+          CODE=000
+          for try in 1 2; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${KONG_URL}/auth/v1/settings" -H "apikey: $ANON" || echo 000)
+            [ "$CODE" = "200" ] && break
+            sleep 3
+          done
+          if [ "$CODE" != "200" ]; then
+            echo "::error::ANON_REJEITADA_PELO_KONG (${CODE}) — a imagem alvo traz anon de outro ambiente. Rollback abortado; prod inalterada."
+            exit 1
+          fi
+          echo "Gate OK — anon aceita pelo Kong (200)."
+
+      - name: "3/6 — Checkout (compose versionado)"
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /infra/docker-compose-zapp-web.yml
+          sparse-checkout-cone-mode: false
+
+      - name: "4/6 — Deploy da imagem alvo via Portainer API"
+        env:
+          PORTAINER_API_TOKEN: ${{ secrets.PORTAINER_API_TOKEN }}
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          ZAPP_IMAGE: ${{ steps.target.outputs.canonical_image }}
+        run: |
+          set -euo pipefail
+          echo "Rollback para: ${ZAPP_IMAGE}"
+          cp infra/docker-compose-zapp-web.yml /tmp/compose.yml
+          sed -i "s|\${ZAPP_IMAGE}|${ZAPP_IMAGE}|g" /tmp/compose.yml
+          echo "Image no compose: $(grep 'image:' /tmp/compose.yml | head -1 | xargs)"
+          STACK_CONTENT=$(cat /tmp/compose.yml | jq -Rs .)
+          PAYLOAD="{\"pullImage\":true,\"prune\":false,\"stackFileContent\":${STACK_CONTENT}}"
+          HTTP=$(curl -s -o /tmp/pr.json -w "%{http_code}" \
+            -X PUT "${PORTAINER_URL}/api/stacks/157?endpointId=1" \
+            -H "X-API-Key: ${PORTAINER_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+          echo "Portainer HTTP: ${HTTP}"
+          cat /tmp/pr.json | head -c 400 || true
+          [ "${HTTP}" = "200" ] || { echo "::error::Rollback falhou HTTP ${HTTP}"; exit 1; }
+          echo "Aguardando 45s rollout (start_period=30s + margem)..."
+          sleep 45
+
+      - name: "5/6 — Convergência verificada (Swarm × digest do rollback)"
+        env:
+          EXPECTED_DIGEST: ${{ steps.target.outputs.digest }}
+        run: |
+          set -euo pipefail
+          SVC="zapp-web-prod_web"
+          DEADLINE=$((SECONDS + 300))
+          IMG="?"; REPL="0/1"
+          while :; do
+            STATUS=$(docker service inspect "$SVC" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}' 2>/dev/null || echo "inspect_fail")
+            REPL=$(docker service ls --filter "name=${SVC}" --format '{{.Replicas}}' 2>/dev/null | head -1 || echo "0/1")
+            IMG=$(docker service inspect "$SVC" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "?")
+            echo "estado=${STATUS} replicas=${REPL:-?} image=${IMG}"
+            case "$STATUS" in
+              rollback_completed|rollback_paused|paused)
+                echo "::error::CONVERGENCE_FAIL — UpdateStatus=${STATUS}"; exit 1 ;;
+            esac
+            SPEC_DIGEST=$(printf '%s\n' "$IMG" | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p')
+            REPL_OK=$(echo "${REPL:-0/1}" | awk -F/ '{print ($1==$2 && $2!="0") ? "1" : "0"}')
+            if { [ "$STATUS" = "completed" ] || [ "$STATUS" = "none" ]; } \
+              && [ "$SPEC_DIGEST" = "$EXPECTED_DIGEST" ] \
+              && [ "$REPL_OK" = "1" ]; then
+              break
+            fi
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "::error::CONVERGENCE_TIMEOUT — rollback não convergiu em 300s (estado=${STATUS} image=${IMG} replicas=${REPL})"; exit 1
+            fi
+            sleep 15
+          done
+          echo "✅ Convergência verificada: ${SVC} @ ${IMG}"
+
+      - name: "6/6 — Health check + notificação"
+        if: always()
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          RESULT: ${{ job.status }}
+        run: |
+          HC=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            https://zapp.atomicabr.com.br/auth || echo 000)
+          echo "Health /auth: ${HC}"
+          case "${HC}" in
+            200|301|302) echo "App OK" ;;
+            *) echo "::warning::POST_ROLLBACK_HC=${HC} — verificar serviço manualmente" ;;
+          esac
+          MSG="⏪ ROLLBACK ${RESULT}: zapp-web → ${IMAGE_TAG} (health=${HC}) — run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} por ${GITHUB_ACTOR}"
+          {
+            echo "### Rollback ${RESULT}"
+            echo ""
+            echo "- Imagem: \`${IMAGE_TAG}\`"
+            echo "- Digest: \`${{ steps.target.outputs.digest }}\`"
+            echo "- Health /auth: \`${HC}\`"
+            echo "- Autor: ${GITHUB_ACTOR}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$ALERT_WEBHOOK_URL" ]; then
+            PAYLOAD=$(jq -cn --arg text "${MSG}" '{text: $text}')
+            curl -fsS -X POST "$ALERT_WEBHOOK_URL" \
+              -H 'Content-Type: application/json' \
+              -d "$PAYLOAD" || true
+          fi
+
+      - name: "🧹 Limpar sparse-checkout (runner persistente)"
+        if: always()
+        run: |
+          git sparse-checkout disable || true
+          git config --local --unset core.sparseCheckout 2>/dev/null || true
+          git config --local --unset core.sparseCheckoutConeMode 2>/dev/null || true

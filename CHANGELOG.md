@@ -1,5 +1,24 @@
 # 📜 Changelog — ZAPP WEB
 
+## [2.6.0] - 2026-10-02 — Auditoria 22D (rodada 2) — operação e segurança
+
+### CI/CD e operação
+- `rollback-vps.yml` (novo): rollback de produção sem rebuild — redeploya qualquer imagem `production-<sha12>` do GHCR via Portainer com gate de anon + convergência do Swarm + health check (<5 min)
+- `runner-watchdog.yml` (novo): detecta runner `vps-zapp` offline (runs `queued` >30 min) e alerta no warroom — fecha o padrão "detecção sem ação" (wpp2 8,7 dias parado)
+- `scorecard.yml` (novo): OpenSSF Scorecard semanal publicando SARIF na aba Security
+- `lighthouse-ci.yml` + `lighthouserc.json` (novo): mede performance/a11y/best-practices/SEO do bundle do PR (asserts em warn até baseline estabilizar)
+- `ci-metrics.yml` (novo): relatório semanal de taxa de sucesso/duração por workflow → PR com `docs/CI_METRICS.md`
+- `api-contract-guard.yml` + `scripts/check-api-contract-guard.mjs` (novo): diff base→head de `CONTRACTS` bloqueia remoção de `supported` sem sunset vencido, contrato-fantasma e sunset adiantado
+- `type-escape-ratchet.yml` + `scripts/check-type-escape-ratchet.mjs` (novo): congela os 197 `as unknown as` — PR não pode aumentar a contagem
+- `.github/actions/setup-zapp` (novo): composite padronizado Bun+cache para jobs em `ubuntu-latest`
+- `db-migrate.yml`: dry-run automático em PR que toca `supabase/migrations/**` com comentário do plano (etapa 43)
+- `e2e-nightly-full.yml`: guard de secrets E2E (etapa 18) + reuse de browsers em `/opt/pw-browsers` no runner VPS (etapa 25)
+- `dependency-review.yml`: bloco `concurrency` (era o único workflow sem)
+
+### Segurança
+- `migrate-helper`: chave hardcoded `recover2026v3key9x` (commitada no git = comprometida) substituída por `MIGRATE_HELPER_ACCESS_KEY` fail-closed (503 sem secret); CORS `*` removido
+- `mcp-query`: `Access-Control-Allow-Origin: *` removido — endpoint máquina→máquina, nunca chamado por browser
+
 ## [2.5.1] - 2026-09-06 — Execução auditoria 22D (continuação)
 
 ### Qualidade e manutenibilidade

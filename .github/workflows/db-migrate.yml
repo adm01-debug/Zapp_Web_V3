@@ -6,12 +6,17 @@ name: db-migrate
 # edge-deploy.yml: runner self-hosted da VPS com /var/run/docker.sock;
 # aplica via docker exec supabase_db psql -U postgres (peer local, sem secret).
 #
-# Dispara em push na main que toque supabase/migrations/** e em dispatch
-# manual (dry_run default true — util p/ auditar pendencias sem aplicar).
+# Dispara em push na main que toque supabase/migrations/**, em PR que
+# toque migrations (dry-run forçado — etapa 43 do plano de 100: aplicação
+# fica exclusiva do push na main; PR só lista o plano + valida o arquivo)
+# e em dispatch manual (dry_run default true).
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+  pull_request:
     paths:
       - 'supabase/migrations/**'
   workflow_dispatch:
@@ -23,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: db-migrate
@@ -41,7 +47,8 @@ jobs:
       - name: Apply pending migrations
         id: migrate
         env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          # PR = dry-run forçado (etapa 43): nunca aplica fora da main.
+          DRY_RUN: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) && '1' || '0' }}
         run: |
           bash infra/db-migrate/apply-migrations.sh 2>&1 | tee /tmp/migrate-out.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
@@ -67,3 +74,23 @@ jobs:
           tail -100 /tmp/migrate-out.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "(sem saída)" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comentar plano no PR (dry-run)
+        if: github.event_name == 'pull_request' && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXIT: ${{ steps.migrate.outputs.exit_code }}
+        run: |
+          set -uo pipefail
+          STATUS="✅ dry-run OK"
+          [ "$EXIT" != "0" ] && STATUS="❌ dry-run falhou — corrigir antes do merge (a aplicação real roda no push da main)"
+          {
+            echo "### 🗄️ db-migrate — dry-run do PR"
+            echo ""
+            echo "**${STATUS}**"
+            echo ""
+            echo '```'
+            tail -40 /tmp/migrate-out.txt 2>/dev/null || echo "(sem saída)"
+            echo '```'
+          } > /tmp/pr-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/pr-comment.md || true

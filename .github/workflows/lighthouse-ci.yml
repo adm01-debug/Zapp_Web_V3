@@ -1,0 +1,61 @@
+name: 🔦 Lighthouse CI
+
+# ============================================================
+# Etapa 45 do PLANO_50_ETAPAS_CONTINUACAO_2026-09-28.
+# Mede performance/acessibilidade/best-practices/SEO do bundle
+# estático em cada PR que toca o frontend — o mesmo critério que
+# a auditoria 22D mede para a dimensão Performance.
+#
+# Asserts em nível "warn" por ora: o baseline do app ainda não é
+# conhecido — bloquear PR em nível "error" sem baseline quebraria
+# merges legítimos. Quando os números estabilizarem, promover para
+# "error" nos budgets em lighthouserc.json.
+# ============================================================
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vite.config.*"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/lighthouse-ci.yml"
+      - "lighthouserc.json"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lighthouse:
+    name: Lighthouse no bundle do PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-zapp
+        with:
+          install-args: --frozen-lockfile --ignore-scripts
+
+      - name: Build estático (envs fake — mesmo padrão do ci.yml)
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake
+          VITE_APP_URL: https://zapp.example.com
+        run: bun run build
+
+      - name: Lighthouse no dist/
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12
+        with:
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          runs: 1
+          configPath: ./lighthouserc.json

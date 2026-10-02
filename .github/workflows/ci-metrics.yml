@@ -1,0 +1,82 @@
+name: 📊 CI Metrics
+
+# ============================================================
+# Etapa 47 do PLANO_50_ETAPAS_CONTINUACAO_2026-09-28.
+# Fecha o gap "métricas de CI inexistentes" da auditoria 22D:
+# sem números de taxa de sucesso/duração por workflow, não dá
+# para saber se o CI está saudável ou degradando.
+#
+# Semanal: coleta os últimos 30 runs concluídos de cada
+# workflow-chave via API, gera docs/CI_METRICS.md e abre/atualiza
+# um PR com o relatório (Joaquim mergeia quando quiser publicar).
+# ============================================================
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: ci-metrics
+  cancel-in-progress: false
+
+jobs:
+  metrics:
+    name: Gerar relatório de métricas de CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Coletar estatísticas dos workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WORKFLOWS="ci.yml deploy-vps.yml db-migrate.yml edge-deploy.yml db-guard.yml edge-drift-check.yml deno-contract-tests.yml vitest.yml e2e-inbox-vps.yml dependency-review.yml"
+          {
+            echo "# Métricas de CI — Zapp_Web_V3"
+            echo ""
+            echo "_Gerado automaticamente por ci-metrics.yml em $(date -u '+%Y-%m-%d %H:%M UTC'). Últimos 30 runs concluídos por workflow._"
+            echo ""
+            echo "| Workflow | Runs | Sucesso | Falha | Cancelado | Taxa de sucesso | Duração média |"
+            echo "|---|---|---|---|---|---|---|"
+          } > docs/CI_METRICS.md
+          for wf in $WORKFLOWS; do
+            JSON=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?status=completed&per_page=30" 2>/dev/null || echo '{}')
+            TOTAL=$(echo "$JSON" | jq '.workflow_runs | length')
+            if [ -z "$TOTAL" ] || [ "$TOTAL" = "0" ]; then continue; fi
+            SUCC=$(echo "$JSON" | jq '[.workflow_runs[] | select(.conclusion=="success")] | length')
+            FAIL=$(echo "$JSON" | jq '[.workflow_runs[] | select(.conclusion=="failure")] | length')
+            CANC=$(echo "$JSON" | jq '[.workflow_runs[] | select(.conclusion=="cancelled")] | length')
+            RATE=$(awk "BEGIN{printf \"%.0f\", (${SUCC}/${TOTAL})*100}")
+            AVG_SEC=$(echo "$JSON" | jq -r '
+              [.workflow_runs[] |
+                ((.updated_at | sub("\\.[0-9]+Z$";"Z") | fromdateiso8601) -
+                 (.created_at  | sub("\\.[0-9]+Z$";"Z") | fromdateiso8601))]
+              | if length>0 then (add/length|floor) else 0 end')
+            AVG=$(awk "BEGIN{m=int(${AVG_SEC}/60); s=${AVG_SEC}%60; printf \"%dm%02ds\", m, s}")
+            echo "| ${wf} | ${TOTAL} | ${SUCC} | ${FAIL} | ${CANC} | ${RATE}% | ${AVG} |" >> docs/CI_METRICS.md
+          done
+          {
+            echo ""
+            echo "> Taxa de sucesso baixa ou duração crescente = investigar antes"
+            echo "> de virar incidente (padrão detectar-sem-agir que este relatório fecha)."
+          } >> docs/CI_METRICS.md
+          cat docs/CI_METRICS.md
+
+      - name: Abrir/atualizar PR com o relatório
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          commit-message: "docs(ci): métricas semanais de CI"
+          title: "📊 Métricas de CI — relatório semanal"
+          body: |
+            Relatório semanal automático de saúde do CI (etapa 47 do plano de 100).
+            Mergear para publicar `docs/CI_METRICS.md` atualizado.
+          branch: chore/ci-metrics
+          delete-branch: true
