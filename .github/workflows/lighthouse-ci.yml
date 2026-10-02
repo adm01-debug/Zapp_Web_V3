@@ -48,8 +48,10 @@ jobs:
       - name: Build estático (envs fake — mesmo padrão do ci.yml)
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake
-          VITE_APP_URL: https://zapp.example.com
+          VITE_SUPABASE_ANON_KEY: test-anon-key
+          VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
+          VITE_EXTERNAL_SUPABASE_URL: https://example.supabase.co
+          VITE_EXTERNAL_SUPABASE_ANON_KEY: test-anon-key
         run: bun run build
 
       - name: Lighthouse no dist/

@@ -64,7 +64,8 @@ jobs:
             echo "PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers" >> "$GITHUB_ENV"
             echo "Usando browsers pré-instalados em /opt/pw-browsers"
           else
-            bunx playwright install --with-deps chromium
+            # versão pinada — mesma major de @playwright/test no package.json
+            bunx playwright@1.61.1 install --with-deps chromium
           fi
       - name: Run full E2E suite
         if: steps.secrets.outputs.skip != 'true'
