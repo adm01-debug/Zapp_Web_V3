@@ -22,6 +22,30 @@ export function extractObjectBody(src, exportName) {
 }
 
 /**
+ * Retorna o índice do `}` que fecha o `{` em `openBrace`, pulando strings,
+ * template literals e comentários. Sem isso o contador ingênuo encerrava o
+ * valor no primeiro `}` dentro de literal/comentário — os contratos
+ * seguintes sumiam da varredura (achado do Devin Review). Retorna -1 se
+ * não houver fechamento.
+ */
+function matchBrace(body, openBrace) {
+  let d = 0;
+  for (let k = openBrace; k < body.length; k++) {
+    const c = body[k];
+    if (c === '"' || c === "'" || c === "`") {
+      const q = c; k++;
+      while (k < body.length && body[k] !== q) { if (body[k] === "\\") { k += 2; continue; } k++; }
+      continue;
+    }
+    if (c === "/" && body[k + 1] === "/") { while (k < body.length && body[k] !== "\n") k++; continue; }
+    if (c === "/" && body[k + 1] === "*") { k += 2; while (k < body.length && !(body[k] === "*" && body[k + 1] === "/")) k++; k += 2; continue; }
+    if (c === "{") d++;
+    else if (c === "}") { d--; if (d === 0) return k; }
+  }
+  return -1;
+}
+
+/**
  * Mapa chave → valor de cada entrada de nível 1 do body {...}.
  * `mapValue(inner)` recebe o texto interno do valor {...} e define o
  * valor armazenado; default: o próprio texto (ou "" para valor não-objeto).
@@ -40,13 +64,9 @@ export function entryInners(body, mapValue = (inner) => inner) {
         if (body[j] === ":") {
           j++; while (body[j] === " " || body[j] === "\t" || body[j] === "\n") j++;
           if (body[j] === "{") {
-            let d = 0, k = j;
-            for (; k < body.length; k++) {
-              if (body[k] === "{") d++;
-              else if (body[k] === "}") { d--; if (d === 0) break; }
-            }
-            entries[str] = mapValue(body.slice(j + 1, k));
-            i = k + 1;
+            const k = matchBrace(body, j);
+            entries[str] = mapValue(k < 0 ? body.slice(j + 1) : body.slice(j + 1, k));
+            i = k < 0 ? body.length : k + 1;
           } else {
             entries[str] = mapValue(null);
           }
@@ -56,6 +76,32 @@ export function entryInners(body, mapValue = (inner) => inner) {
     }
     if (c === "/" && body[i + 1] === "/") { while (i < body.length && body[i] !== "\n") i++; continue; }
     if (c === "/" && body[i + 1] === "*") { i += 2; while (i < body.length && !(body[i] === "*" && body[i + 1] === "/")) i++; i += 2; continue; }
+    // Chave sem aspas (foo: {...}): identificador JS válido seguido de ':'.
+    // Sem isso o scanner era cego a contratos declarados sem aspas (achado
+    // MEDIO da validação 5-agentes — bypass silencioso dos guards).
+    if (depth === 0 && /[A-Za-z_$]/.test(c)) {
+      let j = i;
+      while (j < body.length && /[A-Za-z0-9_$]/.test(body[j])) j++;
+      let k = j;
+      while (body[k] === " " || body[k] === "\t" || body[k] === "\n") k++;
+      if (body[k] === ":") {
+        const key = body.slice(i, j);
+        k++;
+        while (body[k] === " " || body[k] === "\t" || body[k] === "\n") k++;
+        if (body[k] === "{") {
+          const openBrace = k;
+          const close = matchBrace(body, openBrace);
+          entries[key] = mapValue(close < 0 ? body.slice(openBrace + 1) : body.slice(openBrace + 1, close));
+          i = close < 0 ? body.length : close + 1;
+        } else {
+          entries[key] = mapValue(null);
+          i = k;
+        }
+        continue;
+      }
+      i = j;
+      continue;
+    }
     if (c === "{") depth++;
     else if (c === "}") depth--;
     i++;

@@ -34,7 +34,9 @@ Deno.test("Hardening: 503 not_configured vem ANTES da verificação da chave", (
 });
 
 Deno.test("Hardening: sem x-access-key correto → 401 unauthorized", () => {
-  assertMatch(SOURCE, /key !== ACCESS_KEY\) return json\(\{ error: "unauthorized" \}, 401\)/);
+  // timingSafeEqual em vez de !== — comparação em tempo constante (achado
+  // da validação 5-agentes: !== vaza timing do prefixo da chave)
+  assertMatch(SOURCE, /timingSafeEqual\(key \?\? "", ACCESS_KEY\)\) return json\(\{ error: "unauthorized" \}, 401\)/);
 });
 
 Deno.test("Hardening: CORS sem wildcard — sem Access-Control-Allow-Origin: *", () => {

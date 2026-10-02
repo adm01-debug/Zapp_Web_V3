@@ -1,60 +1,76 @@
 # Configuração de Branch Protection — main
 
-## Status atual
+## Status atual (verificado ao vivo em 2026-10-02)
 
-Branch protection ativo em `main` com `enforcement_level: "everyone"`.
+Branch protection ativo em `main` — `strict: false`, `enforce_admins: false`, sem
+reviews obrigatórias, sem restrictions.
 
-## Required Status Checks recomendados (E18)
+## Required Status Checks — 15 contexts vigentes
 
-Para garantir que todos os gates de qualidade passem antes do merge, configurar os seguintes
-checks como **obrigatórios** no GitHub:
-
-### Como configurar
-
-GitHub → Settings → Branches → Branch protection rules → main → Edit
-
-Adicionar em **"Require status checks to pass before merging"** → "Search for status checks":
+A proteção exige exatamente estes nomes de check-run (o nome emitido pelo job
+precisa ser idêntico ao context — divergência = "Expected" eterno e merge só
+com bypass, vide incidentes de 2026-10-02):
 
 ```
-ci / lockfile           ← verifica bun.lock consistente
-ci / quality            ← ESLint + TypeScript
-ci / test               ← 2088 testes unitários (Vitest)
-ci / build              ← vite build sem erros
-quality-gate / quality-gate   ← gate geral de qualidade
+Verify Lockfile                              ← ci.yml (required-merge-gate)
+Build                                        ← ci.yml
+Unit tests                                   ← ci.yml
+Quality diagnostics                          ← ci.yml
+Gates TypeScript (hospedado, bloqueante)     ← ci.yml
+Contract gate (front↔DB, bloqueante em PR)   ← ci.yml
+Security audit                               ← ci.yml
+edge-auth-smoke                              ← edge-auth-smoke.yml
+Edge guard checks                            ← edge-guard.yml
+DB Invariants                                ← db-invariants.yml
+Migration Uniqueness Gate                    ← migration-uniqueness-gate.yml
+schema-drift-guard                           ← schema-drift-guard.yml
+PR Size Gate                                 ← pr-size-gate.yml
+Analyze (javascript-typescript)              ← codeql.yml
+🔍 Secret Scan (gitleaks)                    ← security.yml
 ```
 
-Checks adicionais recomendados (quando workflows de segurança estiverem estáveis):
+### Contexts removidos em 2026-10-02 (não re-adicionar)
 
-```
-Secret Scan (gitleaks) / gitleaks          ← E6
-Branch Protection Sentinel / check-quality ← E17
-```
+- **`edge-drift-check`** — era exigido, mas o job emitia `edge-drift-check (E38/E39)`
+  (sufixo no `name:`), check que nunca casava → todo PR travado. O job agora emite
+  o nome exato; re-exigir o context só faz sentido depois de observar o check
+  reportando verde num PR real.
+- **`Verify security_invoker on all views`** — o workflow é path-filtered
+  (`supabase/migrations|functions|src/integrations/supabase`); PRs fora desses
+  paths nunca reportam o check → "Expected" eterno. Não é possível exigir check
+  de workflow path-filtered.
 
-### Configuração atual (via script)
+### Contexts mortos históricos (removidos no incidente anterior)
+
+`🔍 Lint & TypeCheck`, `🏗️ Build`, `🧪 Unit Tests`, `🔒 Security Audit` —
+nomes de uma era anterior do ci.yml. **Regra:** o context exigido precisa casar
+com o `name:` do job, não com `workflow / job` nem com nome de workflow.
+
+## Como reconfigurar (API)
 
 ```bash
-# Via GitHub CLI (gh auth login necessário)
-gh api repos/adm01-debug/zapp-web-v3/branches/main/protection \
+gh api repos/adm01-debug/Zapp_Web_V3/branches/main/protection \
   --method PUT \
-  --field required_status_checks='{"strict":true,"contexts":["ci / lockfile","ci / quality","ci / test","ci / build","quality-gate / quality-gate"]}' \
-  --field enforce_admins=true \
-  --field required_pull_request_reviews='{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1}' \
+  --field required_status_checks='{"strict":false,"contexts":[<15 contexts acima>]}' \
+  --field enforce_admins=false \
+  --field required_pull_request_reviews=null \
   --field restrictions=null \
   --field allow_force_pushes=false \
   --field allow_deletions=false
 ```
 
-### Verificação diária
+## Verificação
 
-O workflow `branch-protection-sentinel.yml` roda via cron diário às 06h UTC
-e emite warnings se a proteção foi alterada inesperadamente.
+`branch-protection-sentinel.yml` compara `EXPECTED_CONTEXTS` (sincronizado com
+os 15 acima em 2026-10-02) contra a proteção real — hoje roda apenas em
+workflow_dispatch (schedule suspenso por falta de `BRANCH_PROT_PAT` com escopo).
 
 ## Matriz de gates por tipo de mudança
 
-| Tipo de mudança | Gates obrigatórios |
+| Tipo de mudança | Gates que disparam |
 |---|---|
-| Código TypeScript | ci/quality, ci/test, ci/build |
-| Migrations SQL | migration-uniqueness, ci/build |
-| Edge Functions (Deno) | deno-contract-tests, ci/build |
-| Workflows CI | (somente syntax check automático) |
-| Docs | (nenhum — aprovação manual suficiente) |
+| Código TypeScript (src/**) | Build, Unit tests, Quality diagnostics, Contract Guards, Type Escape Ratchet |
+| Migrations SQL | db-migrate (dry-run), Migration Uniqueness Gate, Verify security_invoker, lint-migrations |
+| Edge Functions (supabase/functions/**) | Contract Guards, api-contract-guard, edge-auth-smoke, Type Escape Ratchet |
+| Workflows CI | actionlint (local/CI) |
+| Docs/artefatos | Gates de sempre (Build, Unit tests...) — docs passam normal |

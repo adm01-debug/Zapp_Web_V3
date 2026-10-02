@@ -76,7 +76,10 @@ jobs:
         if: always()
         run: |
           EXIT="${{ steps.migrate.outputs.exit_code }}"
-          DRY="${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}"
+          # DRY precisa espelhar a expressão do step migrate: PR também é
+          # dry-run forçado (antes só dispatch marcava, e o summary imprimia
+          # 'Migrations aplicadas' num dry-run — validação 5-agentes).
+          DRY="${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) && '1' || '0' }}"
           echo "## db-migrate" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "$DRY" = "1" ]; then
@@ -93,6 +96,13 @@ jobs:
           tail -100 /tmp/migrate-out.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "(sem saída)" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          # Propaga o exit_code do aplicador: sem isso o step migrate saía
+          # sempre 0 (PIPESTATUS só ia para outputs) e apply quebrado na main
+          # ou dry-run falho no PR ficavam verdes (validação 5-agentes).
+          if [ "${EXIT:-1}" != "0" ]; then
+            echo "::error::db-migrate falhou (exit ${EXIT:-?}) — ver Step Summary"
+            exit 1
+          fi
 
       - name: Comentar plano no PR (dry-run)
         if: github.event_name == 'pull_request' && always()

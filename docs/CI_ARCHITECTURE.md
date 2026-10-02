@@ -5,7 +5,7 @@
 
 ---
 
-## Mapa de Workflows (61 arquivos)
+## Mapa de Workflows (68 arquivos)
 
 ### Gatilhos Primários
 
@@ -17,9 +17,11 @@
 | `bundle-secret-guard.yml` | Bundle Secret Guard | `workflow_run` deploy, cron diário | vps-zapp | ❌ advisory | Segurança |
 | `check-multiplix-guards.yml` | DB Guard — Multiplex RLS & Realtime PII | PR | ubuntu-latest | ✅ sim | DB |
 | `check-realtime-dead-channels.yml` | Guard — Realtime Dead Channels | PR | ubuntu-latest | ✅ sim | DB |
+| `ci-metrics.yml` | 📊 CI Metrics | cron seg 07:00, dispatch | ubuntu-latest | ❌ informativo (abre PR de relatório) | CI |
 | `ci-slo-metrics.yml` | CI SLO Metrics | cron seg 08:00 | ubuntu-latest | ❌ informativo | CI |
 | `ci-workflows-lint.yml` | Workflow Lint (actionlint) | PR | ubuntu-latest | ✅ sim | CI |
 | `ci.yml` | CI/CD Pipeline | push (main/develop), PR | ubuntu-latest | ✅ sim (PR) | CI / `docs/ops/RUNBOOK-CI.md` |
+| `api-contract-guard.yml` | api-contract-guard | PR (paths contract/edge) | ubuntu-latest | ✅ sim | Edge |
 | `cleanup-e2e-data.yml` | Cleanup E2E data (REST) | dispatch | vps-zapp | ❌ manual | QA |
 | `codeql.yml` | CodeQL | push, PR, cron seg 09:00 | ubuntu-latest | ❌ advisory | Segurança |
 | `contract-guards.yml` | Contract Guards | PR | ubuntu-latest | ✅ sim | DB |
@@ -47,6 +49,7 @@
 | `flaky-test-detector.yml` | Flaky Test Detector | cron seg–sex 03:00 | ubuntu-latest | ❌ informativo | QA |
 | `gen-types-zapp.yml` | Regenerate Supabase types | dispatch | vps-zapp | ❌ manual | DB |
 | `health-score-anti-drift.yml` | health-score-anti-drift | PR | vps-zapp | ✅ sim | DB |
+| `lighthouse-ci.yml` | 🔦 Lighthouse CI | PR (paths src/public/build) | ubuntu-latest | ❌ advisory | Front |
 | `measure-invariants.yml` | Desacoplamento — Score de Invariantes | PR, dispatch | vps-zapp | ❌ advisory | Arquitetura |
 | `migration-drift-guard.yml` | Migration Drift Guard | cron seg 07:05, PR, push | vps-zapp | ❌ warn-only | DB / `docs/ops/RUNBOOK-CI.md` |
 | `migration-lint.yml` | Migration Lint | push, PR | vps-zapp | ❌ warn-only (exit 0) | DB |
@@ -60,6 +63,9 @@
 | `pr-size-gate.yml` | PR Size Gate | PR | ubuntu-latest | ❌ advisory | CI |
 | `quality-gate.yml` | Quality Gate | push, PR | ubuntu-latest | ✅ sim (PR) | CI / `docs/ops/RUNBOOK-CI.md` |
 | `ratchet-tighten.yml` | ratchet-tighten | push (main) | ubuntu-latest | ❌ pós-merge | Arquitetura |
+| `rollback-vps.yml` | ⏪ Rollback — ZAPP web v3 | dispatch (confirmação ROLLBACK) | vps-zapp | ❌ manual | Infra / `docs/ops/RUNBOOK-CI.md` |
+| `runner-watchdog.yml` | 🐕 Runner Watchdog | cron */30min, dispatch | ubuntu-latest | ❌ informativo | Infra |
+| `scorecard.yml` | 🛡️ OSSF Scorecard | cron seg 06:00, push (paths workflows/) | ubuntu-latest | ❌ advisory | Segurança |
 | `regression-test-gate.yml` | E46 — Regression Test Gate | PR | ubuntu-latest | ✅ sim | QA |
 | `schedule-health.yml` | Schedule Health Monitor | cron seg 07:00, dispatch | ubuntu-latest | ❌ informativo | CI |
 | `schema-drift.yml` | schema-drift-guard | PR, push, dispatch | vps-zapp | ✅ sim (PR) | DB |
@@ -69,6 +75,7 @@
 | `security.yml` | Security & Compliance | push, PR, cron seg 06:00 | ubuntu-latest | ✅ sim | Segurança |
 | `seed-e2e-contacts.yml` | Seed E2E contacts (REST) | dispatch | vps-zapp | ❌ manual | QA |
 | `seed-e2e-user.yml` | Seed E2E user (REST) | dispatch | vps-zapp | ❌ manual | QA |
+| `type-escape-ratchet.yml` | 🐀 Type Escape Ratchet | PR (paths src/functions/baseline) | ubuntu-latest | ✅ sim | Arquitetura |
 | `typesafe-pr-gate.yml` | TypeSafe PR Gate | PR | ubuntu-latest | ✅ sim | Front |
 | `validate-e2e-user.yml` | Validate E2E user (REST) | dispatch | vps-zapp | ❌ manual | QA |
 | `zapp-schema-drift-gate.yml` | zapp-schema-drift-gate | cron 09:10 diário, dispatch | vps-zapp | ❌ advisory | DB |
@@ -154,15 +161,12 @@ Em ordem de criticidade operacional:
 
 ## Workflows Fantasma / Desativados
 
-Workflows registrados no GitHub Actions mas cujos arquivos YAML **nunca chegaram à `main`** — YAML ausente (404 no content API, `list_commits = []`). Eram inativados de fato (não disparáveis) e foram desativados via API em 2026-10-02 para limpar o listing.
-
-| Arquivo | ID | Nome | Criado em | Desativado em | Causa |
-|---|---|---|---|---|---|
-| `type-escape-ratchet.yml` | 373016701 | 🐀 Type Escape Ratchet | 2026-10-02T07:50:58 | 2026-10-02 | Branch squash-mergeada sem incluir o arquivo |
-| `lighthouse-ci.yml` | 373016702 | 🔦 Lighthouse CI | 2026-10-02T07:50:58 | 2026-10-02 | Branch squash-mergeada sem incluir o arquivo |
-| `api-contract-guard.yml` | 373016703 | api-contract-guard | 2026-10-02T07:50:58 | 2026-10-02 | Branch squash-mergeada sem incluir o arquivo |
-
-> Os 3 foram criados no mesmo batch (mesmo timestamp), provavelmente durante a sessão de PR #1631. O squash-merge incluiu outros arquivos mas não esses YAMLs. O registro no GitHub Actions persiste mesmo sem o arquivo na `main`. **Não recriar** sem implementação real e chamador declarado no mesmo commit.
+**Resolvido em 2026-10-02 (PR #1633):** os 3 workflows que estavam registrados
+no GitHub Actions sem arquivo na `main` (`type-escape-ratchet.yml`,
+`lighthouse-ci.yml`, `api-contract-guard.yml` — registros criados num batch de
+PR anterior cujo squash-merge não incluiu os YAMLs) foram mergeados e agora
+rodam normalmente — estão no mapa de gatilhos acima. Os registros-fantasma
+antigos foram desativados via API para limpar o listing.
 
 ---
 

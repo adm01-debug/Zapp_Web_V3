@@ -2,11 +2,17 @@ name: Contract Guards
 
 on:
   pull_request:
+    # src/** e supabase/functions/**: o invoke-edge-ratchet conta
+    # functions.invoke() em TODO src/ — sem esses globs um PR que adiciona
+    # chamada direta em src/pages/X.tsx não dispara o gate (bypass, achado
+    # ALTO da validação 5-agentes). contract-versions.ts entra via
+    # supabase/functions/**.
     paths:
+      - "src/**"
+      - "supabase/functions/**"
       - "scripts/check-*.mjs"
+      - "scripts/lib/contract-scanner.mjs"
       - "src/shared/criticalPayloadSchemas.ts"
-      - "supabase/functions/_shared/contract-schemas*.ts"
-      - "supabase/functions/_shared/schemas.ts"
       - "src/lib/invokeEdge.ts"
       - ".github/workflows/contract-guards.yml"
   # 2026-09-27: schedule suspenso — ratchet de error-shapes excede o teto — reabilitar apos rodar: node scripts/check-error-shapes.mjs --atualizar-teto
