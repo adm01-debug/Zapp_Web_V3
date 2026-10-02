@@ -90,7 +90,11 @@ function parseContracts(filePath) {
     const sunset = {};
     const sunsetSrc = inner.match(/\bsunset:\s*\{([^}]*)\}/)?.[1];
     if (sunsetSrc) {
-      for (const m of sunsetSrc.matchAll(/(\w+):\s*"([^"]+)"/g)) sunset[m[1]] = m[2];
+      // parse por chunk: evita regex com backtracking super-linear (S8786)
+      for (const chunk of sunsetSrc.split(",")) {
+        const kv = chunk.match(/^\s*([A-Za-z0-9_]+)\s*:\s*"([^"]+)"\s*$/);
+        if (kv) sunset[kv[1]] = kv[2];
+      }
     }
     out[key] = { current, supported, sunset };
   }
@@ -121,9 +125,13 @@ for (const [key, b] of Object.entries(base)) {
   }
   for (const v of b.supported ?? []) {
     if (!(h.supported ?? []).includes(v)) {
+      // Remoção é SEMPRE breaking (Devin Review): o contrato aceita payloads
+      // sem versão explícita autodetectados pelo formato — o sunset só barra
+      // requisições que pedem a versão explicitamente. Clientes legados de
+      // webhook que não mandam x-contract-version quebram mesmo após o sunset.
       const sunset = b.sunset?.[v];
       if (sunset && sunset <= today) {
-        infos.push(`| \`${key}\` | versão \`${v}\` removida após sunset (${sunset}) |`);
+        errors.push(`| \`${key}\` | versão \`${v}\` removida de \`supported\` mesmo com sunset vencido (${sunset}) — payloads legados sem versão explícita ainda dependem dela |`);
       } else {
         errors.push(`| \`${key}\` | versão \`${v}\` removida de \`supported\` sem sunset vencido (breaking para clientes legados) |`);
       }

@@ -38,7 +38,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          WORKFLOWS="ci.yml deploy-vps.yml db-migrate.yml edge-deploy.yml db-guard.yml edge-drift-check.yml deno-contract-tests.yml vitest.yml e2e-inbox-vps.yml dependency-review.yml"
+          WORKFLOWS="ci.yml deploy-vps.yml db-migrate.yml edge-deploy.yml db-guard.yml edge-drift-check.yml deno-contract-tests.yml e2e-inbox-vps.yml dependency-review.yml"
           {
             echo "# Métricas de CI — Zapp_Web_V3"
             echo ""

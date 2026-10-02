@@ -24,12 +24,57 @@ import { readFileSync } from "node:fs";
 const VERSIONS = "supabase/functions/_shared/contract-versions.ts";
 const SCHEMAS = "supabase/functions/_shared/contract-schemas.ts";
 
+/** Mapa chave → texto interno do valor {...} de cada entrada de nível 1. */
+function entryInners(body) {
+  const entries = {};
+  let depth = 0, i = 0;
+  while (i < body.length) {
+    const c = body[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const q = c; let str = ""; i++;
+      while (i < body.length && body[i] !== q) { if (body[i] === "\\") { str += body[i + 1]; i += 2; continue; } str += body[i]; i++; }
+      i++;
+      if (depth === 0) {
+        let j = i; while (body[j] === " " || body[j] === "\t") j++;
+        if (body[j] === ":") {
+          j++; while (body[j] === " " || body[j] === "\t" || body[j] === "\n") j++;
+          if (body[j] === "{") {
+            let d = 0, k = j;
+            for (; k < body.length; k++) {
+              if (body[k] === "{") d++;
+              else if (body[k] === "}") { d--; if (d === 0) break; }
+            }
+            entries[str] = body.slice(j + 1, k);
+            i = k + 1;
+          } else {
+            entries[str] = "";
+          }
+        }
+      }
+      continue;
+    }
+    if (c === "/" && body[i + 1] === "/") { while (i < body.length && body[i] !== "\n") i++; continue; }
+    if (c === "/" && body[i + 1] === "*") { i += 2; while (i < body.length && !(body[i] === "*" && body[i + 1] === "/")) i++; i += 2; continue; }
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    i++;
+  }
+  return entries;
+}
+
+/** CONTRACTS → { key: { current, supported } } — parser estrutural, sem eval. */
 function parseContracts() {
   const src = readFileSync(VERSIONS, "utf8");
-  const m = src.match(/export const CONTRACTS[^=]*=\s*(\{[\s\S]*?\n\};)/);
-  if (!m) throw new Error(`CONTRACTS não encontrado em ${VERSIONS}`);
-  // Literal JS puro (sem imports) — eval local seguro.
-  return new Function(`return ${m[1].replace(/;\s*$/, "")}`)();
+  const body = extractObjectBody(src, "CONTRACTS");
+  const entries = entryInners(body);
+  const out = {};
+  for (const [key, inner] of Object.entries(entries)) {
+    const current = inner.match(/\bcurrent:\s*"([^"]+)"/)?.[1] ?? null;
+    const supSrc = inner.match(/\bsupported:\s*\[([^\]]*)\]/)?.[1] ?? "";
+    const supported = [...supSrc.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    out[key] = { current, supported };
+  }
+  return out;
 }
 
 /** Extrai o bloco {...} de uma `export const X = {...}` e retorna o body. */

@@ -72,16 +72,30 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Proveniência: só tags production-<sha12> cujo sha12 resolve para um
+          # commit real do repo (as builds do deploy-vps). Rejeita qualquer tag
+          # arbitrária que alguém tenha empurrado ao GHCR fora do fluxo.
           case "$IMAGE_TAG" in
-            production-*|rollback-*)
+            production-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
               ;;
             *)
-              echo "::error::IMAGE_TAG_INVALID — esperado production-<sha12> ou rollback-<desc> (recebido: ${IMAGE_TAG})"
+              echo "::error::IMAGE_TAG_INVALID — esperado production-<sha12> (recebido: ${IMAGE_TAG})"
               exit 1
               ;;
           esac
+          SHA12="${IMAGE_TAG#production-}"
+          HTTP=$(curl -s -o /tmp/commit-sha12.json -w "%{http_code}" --max-time 15 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${SHA12}" || echo 000)
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::TAG_SEM_PROVENIENCIA — ${SHA12} não é commit do repo (HTTP ${HTTP}); tag não veio de uma release do deploy-vps."
+            exit 1
+          fi
+          echo "Proveniência OK: ${IMAGE_TAG} ← commit ${SHA12} existe no repo"
           FULL="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
           echo "Resolvendo ${FULL}"
           # pull + RepoDigests: não depende de buildx/imagetools no runner
@@ -189,9 +203,19 @@ jobs:
             esac
             SPEC_DIGEST=$(printf '%s\n' "$IMG" | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p')
             REPL_OK=$(echo "${REPL:-0/1}" | awk -F/ '{print ($1==$2 && $2!="0") ? "1" : "0"}')
+            # Digest por TAREFA (não só da spec): durante rollout start-first
+            # réplicas antigas ainda atendem com a spec nova — conferir a
+            # imagem efetivamente em execução, mesmo gate do deploy-vps.
+            TASKS_OK=0
+            RUNNING=$(docker service ps "$SVC" --filter "desired-state=running" \
+              --format '{{.Image}}' 2>/dev/null | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p' || true)
+            if [ -n "$RUNNING" ] && ! printf '%s\n' "$RUNNING" | grep -vxc "$EXPECTED_DIGEST" >/dev/null 2>&1; then
+              TASKS_OK=1
+            fi
             if { [ "$STATUS" = "completed" ] || [ "$STATUS" = "none" ]; } \
               && [ "$SPEC_DIGEST" = "$EXPECTED_DIGEST" ] \
-              && [ "$REPL_OK" = "1" ]; then
+              && [ "$REPL_OK" = "1" ] \
+              && [ "$TASKS_OK" = "1" ]; then
               break
             fi
             if [ "$SECONDS" -ge "$DEADLINE" ]; then

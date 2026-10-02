@@ -104,7 +104,7 @@ jobs:
           set -euo pipefail
           PROBLEMS=""
           [ -n "${STUCK:-}" ] && [ "$STUCK" != "none" ] && PROBLEMS="runs queued >30min: ${STUCK}"
-          [ "${OFFLINE:-none}" = "all" ] && PROBLEMS="${PROBLEMS} + TODOS os runners offline"
+          [ "${OFFLINE:-none}" != "none" ] && PROBLEMS="${PROBLEMS} + runners offline: ${OFFLINE}"
           if [ -z "$PROBLEMS" ]; then
             echo "✅ Runner OK — nenhuma run presa, runners online."
             {
