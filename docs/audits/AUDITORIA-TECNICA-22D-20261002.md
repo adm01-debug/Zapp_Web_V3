@@ -35,6 +35,10 @@
 | `dependency-review.yml` — `concurrency` (era o único sem) | CI/CD | diff |
 | `migrate-helper` — chave env fail-closed (503), sem CORS `*` | Segurança | diff |
 | `mcp-query` — remoção de `Access-Control-Allow-Origin: *` | Segurança | diff |
+| `check-contract-parity.mjs` — gate de paridade CONTRACTS↔CONTRACT_SCHEMAS (122↔122) | Validação | script criado p/ CI que já o chamava |
+| `check-invoke-edge-ratchet.mjs` — teto 129 de `functions.invoke` diretos | Manutenibilidade | script criado p/ CI que já o chamava |
+| `scripts/lib/contract-scanner.mjs` — scanner estrutural compartilhado (sem eval) | Qualidade | novo módulo |
+| Hardening pós-Devin-Review: rollback confere digest por TAREFA + tag exige commit real do repo; db-migrate roda aplicador da main em PR; watchdog alerta runner individual offline | CI/Segurança | diff |
 
 ## Scorecard
 
