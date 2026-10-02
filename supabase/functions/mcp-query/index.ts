@@ -69,9 +69,12 @@ Deno.serve(async (req) => {
   }
   const url = Deno.env.get("SUPABASE_URL")!;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  // 'limit' dentro de string literal não conta — strip antes de testar
-  const sqlNoStrings = sql.replace(/'[^']*'/g, "''");
-  const finalSql = /\blimit\b/i.test(sqlNoStrings) ? sql : `${sql} LIMIT ${limit}`;
+  // 'limit' dentro de string literal não conta — strip antes de testar;
+  // o terminador final sai antes de compor finalSql (senão o LIMIT ia
+  // para DEPOIS do ';' — query válida quebrava, achado do Devin Review)
+  const sqlTrimmed = sql.trim().replace(/;+\s*$/, "");
+  const sqlNoStrings = sqlTrimmed.replace(/'[^']*'/g, "''");
+  const finalSql = /\blimit\b/i.test(sqlNoStrings) ? sqlTrimmed : `${sqlTrimmed} LIMIT ${limit}`;
   const res = await fetch(`${url}/rest/v1/rpc/exec_sql`, {
     method: "POST",
     headers: {
