@@ -7,6 +7,1684 @@ export type Json =
   | Json[]
 
 export type Database = {
+  bpm: {
+    Tables: {
+      bpm_activity_log: {
+        Row: {
+          action: string
+          card_id: string | null
+          changes: Json | null
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string
+          flow_id: string | null
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          register_id: string | null
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          card_id?: string | null
+          changes?: Json | null
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type: string
+          flow_id?: string | null
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          register_id?: string | null
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          card_id?: string | null
+          changes?: Json | null
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          flow_id?: string | null
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          register_id?: string | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      bpm_automation_actions: {
+        Row: {
+          action_config: Json
+          action_order: number
+          action_type: Database["zapp"]["Enums"]["bpm_action_type"]
+          agent_id: string | null
+          automation_id: string
+          created_at: string | null
+          id: string
+          mcp_server_id: string | null
+          webhook_id: string | null
+        }
+        Insert: {
+          action_config?: Json
+          action_order?: number
+          action_type: Database["zapp"]["Enums"]["bpm_action_type"]
+          agent_id?: string | null
+          automation_id: string
+          created_at?: string | null
+          id?: string
+          mcp_server_id?: string | null
+          webhook_id?: string | null
+        }
+        Update: {
+          action_config?: Json
+          action_order?: number
+          action_type?: Database["zapp"]["Enums"]["bpm_action_type"]
+          agent_id?: string | null
+          automation_id?: string
+          created_at?: string | null
+          id?: string
+          mcp_server_id?: string | null
+          webhook_id?: string | null
+        }
+        Relationships: []
+      }
+      bpm_automation_conditions: {
+        Row: {
+          automation_id: string
+          compare_value: string | null
+          compare_values: Json | null
+          condition_order: number
+          created_at: string | null
+          field_id: string | null
+          field_path: string | null
+          id: string
+          logic_operator: string | null
+          operator: string
+        }
+        Insert: {
+          automation_id: string
+          compare_value?: string | null
+          compare_values?: Json | null
+          condition_order?: number
+          created_at?: string | null
+          field_id?: string | null
+          field_path?: string | null
+          id?: string
+          logic_operator?: string | null
+          operator: string
+        }
+        Update: {
+          automation_id?: string
+          compare_value?: string | null
+          compare_values?: Json | null
+          condition_order?: number
+          created_at?: string | null
+          field_id?: string | null
+          field_path?: string | null
+          id?: string
+          logic_operator?: string | null
+          operator?: string
+        }
+        Relationships: []
+      }
+      bpm_automation_executions: {
+        Row: {
+          actions_executed: number | null
+          actions_total: number | null
+          automation_id: string
+          card_id: string | null
+          completed_at: string | null
+          error: string | null
+          execution_time_ms: number | null
+          id: string
+          result: Json | null
+          started_at: string | null
+          status: string
+          trigger_data: Json | null
+        }
+        Insert: {
+          actions_executed?: number | null
+          actions_total?: number | null
+          automation_id: string
+          card_id?: string | null
+          completed_at?: string | null
+          error?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          trigger_data?: Json | null
+        }
+        Update: {
+          actions_executed?: number | null
+          actions_total?: number | null
+          automation_id?: string
+          card_id?: string | null
+          completed_at?: string | null
+          error?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          trigger_data?: Json | null
+        }
+        Relationships: []
+      }
+      bpm_automations: {
+        Row: {
+          conditions: Json | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          execution_count: number | null
+          flow_id: string
+          id: string
+          is_active: boolean | null
+          last_executed_at: string | null
+          name: string
+          trigger_config: Json
+          trigger_type: Database["zapp"]["Enums"]["bpm_trigger_type"]
+          updated_at: string | null
+        }
+        Insert: {
+          conditions?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          execution_count?: number | null
+          flow_id: string
+          id?: string
+          is_active?: boolean | null
+          last_executed_at?: string | null
+          name: string
+          trigger_config?: Json
+          trigger_type: Database["zapp"]["Enums"]["bpm_trigger_type"]
+          updated_at?: string | null
+        }
+        Update: {
+          conditions?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          execution_count?: number | null
+          flow_id?: string
+          id?: string
+          is_active?: boolean | null
+          last_executed_at?: string | null
+          name?: string
+          trigger_config?: Json
+          trigger_type?: Database["zapp"]["Enums"]["bpm_trigger_type"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_card_answer_fields: {
+        Row: {
+          card_answer_id: string
+          created_at: string | null
+          field_id: string
+          id: string
+          updated_at: string | null
+          value: string | null
+          value_bool: boolean | null
+          value_date: string | null
+          value_json: Json | null
+          value_numeric: number | null
+        }
+        Insert: {
+          card_answer_id: string
+          created_at?: string | null
+          field_id: string
+          id?: string
+          updated_at?: string | null
+          value?: string | null
+          value_bool?: boolean | null
+          value_date?: string | null
+          value_json?: Json | null
+          value_numeric?: number | null
+        }
+        Update: {
+          card_answer_id?: string
+          created_at?: string | null
+          field_id?: string
+          id?: string
+          updated_at?: string | null
+          value?: string | null
+          value_bool?: boolean | null
+          value_date?: string | null
+          value_json?: Json | null
+          value_numeric?: number | null
+        }
+        Relationships: []
+      }
+      bpm_card_answers: {
+        Row: {
+          answered_by: string | null
+          card_id: string
+          created_at: string | null
+          deleted_at: string | null
+          flow_step_id: string
+          form_id: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          answered_by?: string | null
+          card_id: string
+          created_at?: string | null
+          deleted_at?: string | null
+          flow_step_id: string
+          form_id: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          answered_by?: string | null
+          card_id?: string
+          created_at?: string | null
+          deleted_at?: string | null
+          flow_step_id?: string
+          form_id?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_card_attachments: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      bpm_card_checklist_items: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          checklist_id: string
+          created_at: string | null
+          id: string
+          is_checked: boolean | null
+          sort_order: number
+          title: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_id: string
+          created_at?: string | null
+          id?: string
+          is_checked?: boolean | null
+          sort_order?: number
+          title: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checklist_id?: string
+          created_at?: string | null
+          id?: string
+          is_checked?: boolean | null
+          sort_order?: number
+          title?: string
+        }
+        Relationships: []
+      }
+      bpm_card_checklists: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          sort_order: number
+          title: string
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          sort_order?: number
+          title?: string
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          sort_order?: number
+          title?: string
+        }
+        Relationships: []
+      }
+      bpm_card_comments: {
+        Row: {
+          card_id: string
+          content: string
+          content_html: string | null
+          created_at: string | null
+          deleted_at: string | null
+          id: string
+          mentions: string[] | null
+          parent_id: string | null
+          search_vector: unknown
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          card_id: string
+          content: string
+          content_html?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string
+          mentions?: string[] | null
+          parent_id?: string | null
+          search_vector?: unknown
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          card_id?: string
+          content?: string
+          content_html?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          id?: string
+          mentions?: string[] | null
+          parent_id?: string | null
+          search_vector?: unknown
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bpm_card_email_attachments: {
+        Row: {
+          created_at: string | null
+          email_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+        }
+        Relationships: []
+      }
+      bpm_card_emails: {
+        Row: {
+          bcc_addresses: string[] | null
+          body_html: string | null
+          body_text: string | null
+          card_id: string
+          cc_addresses: string[] | null
+          created_at: string | null
+          direction: string
+          email_config_id: string | null
+          from_address: string
+          has_attachments: boolean | null
+          id: string
+          in_reply_to: string | null
+          is_read: boolean | null
+          message_id: string | null
+          metadata: Json | null
+          received_at: string | null
+          sent_at: string | null
+          sent_by: string | null
+          subject: string | null
+          to_addresses: string[]
+        }
+        Insert: {
+          bcc_addresses?: string[] | null
+          body_html?: string | null
+          body_text?: string | null
+          card_id: string
+          cc_addresses?: string[] | null
+          created_at?: string | null
+          direction: string
+          email_config_id?: string | null
+          from_address: string
+          has_attachments?: boolean | null
+          id?: string
+          in_reply_to?: string | null
+          is_read?: boolean | null
+          message_id?: string | null
+          metadata?: Json | null
+          received_at?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          subject?: string | null
+          to_addresses?: string[]
+        }
+        Update: {
+          bcc_addresses?: string[] | null
+          body_html?: string | null
+          body_text?: string | null
+          card_id?: string
+          cc_addresses?: string[] | null
+          created_at?: string | null
+          direction?: string
+          email_config_id?: string | null
+          from_address?: string
+          has_attachments?: boolean | null
+          id?: string
+          in_reply_to?: string | null
+          is_read?: boolean | null
+          message_id?: string | null
+          metadata?: Json | null
+          received_at?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          subject?: string | null
+          to_addresses?: string[]
+        }
+        Relationships: []
+      }
+      bpm_card_labels: {
+        Row: {
+          card_id: string
+          label_id: string
+        }
+        Insert: {
+          card_id: string
+          label_id: string
+        }
+        Update: {
+          card_id?: string
+          label_id?: string
+        }
+        Relationships: []
+      }
+      bpm_card_movements: {
+        Row: {
+          card_id: string
+          from_step_id: string | null
+          id: string
+          metadata: Json | null
+          moved_at: string | null
+          moved_by: string | null
+          reason: string | null
+          to_step_id: string
+        }
+        Insert: {
+          card_id: string
+          from_step_id?: string | null
+          id?: string
+          metadata?: Json | null
+          moved_at?: string | null
+          moved_by?: string | null
+          reason?: string | null
+          to_step_id: string
+        }
+        Update: {
+          card_id?: string
+          from_step_id?: string | null
+          id?: string
+          metadata?: Json | null
+          moved_at?: string | null
+          moved_by?: string | null
+          reason?: string | null
+          to_step_id?: string
+        }
+        Relationships: []
+      }
+      bpm_card_recurrences: {
+        Row: {
+          base_date: string
+          behavior: string
+          card_id: string
+          created_at: string | null
+          created_by: string | null
+          current_occurrences: number | null
+          day_of_month: number | null
+          day_of_week: number | null
+          end_date: string | null
+          frequency: Database["zapp"]["Enums"]["bpm_recurrence_freq"]
+          id: string
+          interval_value: number | null
+          is_active: boolean | null
+          last_executed_at: string | null
+          max_occurrences: number | null
+          next_execution_at: string | null
+        }
+        Insert: {
+          base_date: string
+          behavior?: string
+          card_id: string
+          created_at?: string | null
+          created_by?: string | null
+          current_occurrences?: number | null
+          day_of_month?: number | null
+          day_of_week?: number | null
+          end_date?: string | null
+          frequency: Database["zapp"]["Enums"]["bpm_recurrence_freq"]
+          id?: string
+          interval_value?: number | null
+          is_active?: boolean | null
+          last_executed_at?: string | null
+          max_occurrences?: number | null
+          next_execution_at?: string | null
+        }
+        Update: {
+          base_date?: string
+          behavior?: string
+          card_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          current_occurrences?: number | null
+          day_of_month?: number | null
+          day_of_week?: number | null
+          end_date?: string | null
+          frequency?: Database["zapp"]["Enums"]["bpm_recurrence_freq"]
+          id?: string
+          interval_value?: number | null
+          is_active?: boolean | null
+          last_executed_at?: string | null
+          max_occurrences?: number | null
+          next_execution_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_card_subtasks: {
+        Row: {
+          assignee_id: string | null
+          card_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string | null
+          created_by: string | null
+          due_date: string | null
+          id: string
+          is_completed: boolean | null
+          sort_order: number
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          assignee_id?: string | null
+          card_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          due_date?: string | null
+          id?: string
+          is_completed?: boolean | null
+          sort_order?: number
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          assignee_id?: string | null
+          card_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          due_date?: string | null
+          id?: string
+          is_completed?: boolean | null
+          sort_order?: number
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_card_time_entries: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          description: string | null
+          duration_minutes: number | null
+          ended_at: string | null
+          id: string
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          ended_at?: string | null
+          id?: string
+          started_at: string
+          user_id: string
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bpm_card_watchers: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          user_id: string
+          watch_type: string | null
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          user_id: string
+          watch_type?: string | null
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          user_id?: string
+          watch_type?: string | null
+        }
+        Relationships: []
+      }
+      bpm_cards: {
+        Row: {
+          assignee_id: string | null
+          card_number: number
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          current_step_id: string
+          deleted_at: string | null
+          due_date: string | null
+          flow_id: string
+          id: string
+          metadata: Json | null
+          origin: string | null
+          priority: number | null
+          recurrence_config: Json | null
+          search_vector: unknown
+          status: Database["zapp"]["Enums"]["bpm_card_status"] | null
+          title: string | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          assignee_id?: string | null
+          card_number?: number
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_step_id: string
+          deleted_at?: string | null
+          due_date?: string | null
+          flow_id: string
+          id?: string
+          metadata?: Json | null
+          origin?: string | null
+          priority?: number | null
+          recurrence_config?: Json | null
+          search_vector?: unknown
+          status?: Database["zapp"]["Enums"]["bpm_card_status"] | null
+          title?: string | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          assignee_id?: string | null
+          card_number?: number
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          current_step_id?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          flow_id?: string
+          id?: string
+          metadata?: Json | null
+          origin?: string | null
+          priority?: number | null
+          recurrence_config?: Json | null
+          search_vector?: unknown
+          status?: Database["zapp"]["Enums"]["bpm_card_status"] | null
+          title?: string | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      bpm_connections: {
+        Row: {
+          connection_config: Json | null
+          created_at: string | null
+          id: string
+          source_id: string
+          source_type: string
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          connection_config?: Json | null
+          created_at?: string | null
+          id?: string
+          source_id: string
+          source_type: string
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          connection_config?: Json | null
+          created_at?: string | null
+          id?: string
+          source_id?: string
+          source_type?: string
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: []
+      }
+      bpm_dashboard_elements: {
+        Row: {
+          config: Json
+          created_at: string | null
+          element_order: number
+          element_type: string
+          flow_id: string
+          id: string
+          size_h: number | null
+          size_w: number | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          config?: Json
+          created_at?: string | null
+          element_order?: number
+          element_type?: string
+          flow_id: string
+          id?: string
+          size_h?: number | null
+          size_w?: number | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          element_order?: number
+          element_type?: string
+          flow_id?: string
+          id?: string
+          size_h?: number | null
+          size_w?: number | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_email_configs: {
+        Row: {
+          created_at: string | null
+          from_email: string
+          from_name: string
+          id: string
+          is_verified: boolean | null
+          name: string
+          smtp_host: string
+          smtp_pass_credential_id: string | null
+          smtp_port: number
+          smtp_user: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          from_email: string
+          from_name: string
+          id?: string
+          is_verified?: boolean | null
+          name: string
+          smtp_host: string
+          smtp_pass_credential_id?: string | null
+          smtp_port?: number
+          smtp_user: string
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          from_email?: string
+          from_name?: string
+          id?: string
+          is_verified?: boolean | null
+          name?: string
+          smtp_host?: string
+          smtp_pass_credential_id?: string | null
+          smtp_port?: number
+          smtp_user?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      bpm_flow_steps: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          deleted_at: string | null
+          description: string | null
+          flow_id: string
+          id: string
+          is_final: boolean | null
+          is_initial: boolean | null
+          name: string
+          settings: Json | null
+          sla_hours: number | null
+          step_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          flow_id: string
+          id?: string
+          is_final?: boolean | null
+          is_initial?: boolean | null
+          name: string
+          settings?: Json | null
+          sla_hours?: number | null
+          step_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          flow_id?: string
+          id?: string
+          is_final?: boolean | null
+          is_initial?: boolean | null
+          name?: string
+          settings?: Json | null
+          sla_hours?: number | null
+          step_order?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_flow_template_installs: {
+        Row: {
+          created_at: string | null
+          flow_id: string | null
+          id: string
+          installed_by: string | null
+          template_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          flow_id?: string | null
+          id?: string
+          installed_by?: string | null
+          template_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          flow_id?: string | null
+          id?: string
+          installed_by?: string | null
+          template_id?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      bpm_flow_templates: {
+        Row: {
+          category: string
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          definition: Json
+          description: string | null
+          icon: string | null
+          id: string
+          install_count: number | null
+          is_featured: boolean | null
+          is_public: boolean | null
+          name: string
+          preview_image_url: string | null
+          rating: number | null
+          tags: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          definition?: Json
+          description?: string | null
+          icon?: string | null
+          id?: string
+          install_count?: number | null
+          is_featured?: boolean | null
+          is_public?: boolean | null
+          name: string
+          preview_image_url?: string | null
+          rating?: number | null
+          tags?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          definition?: Json
+          description?: string | null
+          icon?: string | null
+          id?: string
+          install_count?: number | null
+          is_featured?: boolean | null
+          is_public?: boolean | null
+          name?: string
+          preview_image_url?: string | null
+          rating?: number | null
+          tags?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_flows: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          default_view: Database["zapp"]["Enums"]["bpm_view_type"] | null
+          deleted_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          settings: Json | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          default_view?: Database["zapp"]["Enums"]["bpm_view_type"] | null
+          deleted_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          settings?: Json | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          default_view?: Database["zapp"]["Enums"]["bpm_view_type"] | null
+          deleted_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          settings?: Json | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      bpm_form_fields: {
+        Row: {
+          autocomplete_rules: Json | null
+          conditional_rules: Json | null
+          config: Json | null
+          created_at: string | null
+          default_value: string | null
+          deleted_at: string | null
+          field_hash: string
+          field_order: number
+          field_type: Database["zapp"]["Enums"]["bpm_field_type"]
+          form_id: string
+          help_text: string | null
+          id: string
+          is_required: boolean | null
+          label: string
+          options: Json | null
+          placeholder: string | null
+          updated_at: string | null
+          validation_rules: Json | null
+        }
+        Insert: {
+          autocomplete_rules?: Json | null
+          conditional_rules?: Json | null
+          config?: Json | null
+          created_at?: string | null
+          default_value?: string | null
+          deleted_at?: string | null
+          field_hash: string
+          field_order?: number
+          field_type: Database["zapp"]["Enums"]["bpm_field_type"]
+          form_id: string
+          help_text?: string | null
+          id?: string
+          is_required?: boolean | null
+          label: string
+          options?: Json | null
+          placeholder?: string | null
+          updated_at?: string | null
+          validation_rules?: Json | null
+        }
+        Update: {
+          autocomplete_rules?: Json | null
+          conditional_rules?: Json | null
+          config?: Json | null
+          created_at?: string | null
+          default_value?: string | null
+          deleted_at?: string | null
+          field_hash?: string
+          field_order?: number
+          field_type?: Database["zapp"]["Enums"]["bpm_field_type"]
+          form_id?: string
+          help_text?: string | null
+          id?: string
+          is_required?: boolean | null
+          label?: string
+          options?: Json | null
+          placeholder?: string | null
+          updated_at?: string | null
+          validation_rules?: Json | null
+        }
+        Relationships: []
+      }
+      bpm_forms: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          flow_id: string
+          flow_step_id: string | null
+          id: string
+          is_public: boolean | null
+          name: string
+          settings: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          flow_id: string
+          flow_step_id?: string | null
+          id?: string
+          is_public?: boolean | null
+          name: string
+          settings?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          flow_id?: string
+          flow_step_id?: string | null
+          id?: string
+          is_public?: boolean | null
+          name?: string
+          settings?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_labels: {
+        Row: {
+          color: string
+          created_at: string | null
+          flow_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string | null
+          flow_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string | null
+          flow_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      bpm_notification_preferences: {
+        Row: {
+          channels: Json | null
+          created_at: string | null
+          digest_frequency: string | null
+          flow_id: string | null
+          id: string
+          notify_automation_error: boolean | null
+          notify_card_assigned: boolean | null
+          notify_card_moved: boolean | null
+          notify_comment_mention: boolean | null
+          notify_comment_reply: boolean | null
+          notify_due_date: boolean | null
+          notify_email_received: boolean | null
+          notify_form_submission: boolean | null
+          notify_subtask_completed: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          channels?: Json | null
+          created_at?: string | null
+          digest_frequency?: string | null
+          flow_id?: string | null
+          id?: string
+          notify_automation_error?: boolean | null
+          notify_card_assigned?: boolean | null
+          notify_card_moved?: boolean | null
+          notify_comment_mention?: boolean | null
+          notify_comment_reply?: boolean | null
+          notify_due_date?: boolean | null
+          notify_email_received?: boolean | null
+          notify_form_submission?: boolean | null
+          notify_subtask_completed?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          channels?: Json | null
+          created_at?: string | null
+          digest_frequency?: string | null
+          flow_id?: string | null
+          id?: string
+          notify_automation_error?: boolean | null
+          notify_card_assigned?: boolean | null
+          notify_card_moved?: boolean | null
+          notify_comment_mention?: boolean | null
+          notify_comment_reply?: boolean | null
+          notify_due_date?: boolean | null
+          notify_email_received?: boolean | null
+          notify_form_submission?: boolean | null
+          notify_subtask_completed?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bpm_public_form_submissions: {
+        Row: {
+          card_id: string | null
+          created_at: string | null
+          flow_id: string
+          form_id: string
+          id: string
+          processed_at: string | null
+          processed_by: string | null
+          share_id: string | null
+          status: string | null
+          submitted_data: Json
+          submitter_email: string | null
+          submitter_ip: string | null
+          submitter_name: string | null
+          submitter_phone: string | null
+        }
+        Insert: {
+          card_id?: string | null
+          created_at?: string | null
+          flow_id: string
+          form_id: string
+          id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          share_id?: string | null
+          status?: string | null
+          submitted_data?: Json
+          submitter_email?: string | null
+          submitter_ip?: string | null
+          submitter_name?: string | null
+          submitter_phone?: string | null
+        }
+        Update: {
+          card_id?: string | null
+          created_at?: string | null
+          flow_id?: string
+          form_id?: string
+          id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          share_id?: string | null
+          status?: string | null
+          submitted_data?: Json
+          submitter_email?: string | null
+          submitter_ip?: string | null
+          submitter_name?: string | null
+          submitter_phone?: string | null
+        }
+        Relationships: []
+      }
+      bpm_public_share_access: {
+        Row: {
+          accessed_at: string | null
+          id: string
+          ip_address: string | null
+          referrer: string | null
+          share_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          accessed_at?: string | null
+          id?: string
+          ip_address?: string | null
+          referrer?: string | null
+          share_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          accessed_at?: string | null
+          id?: string
+          ip_address?: string | null
+          referrer?: string | null
+          share_id?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
+      bpm_public_shares: {
+        Row: {
+          allowed_actions: Json | null
+          branding: Json | null
+          created_at: string | null
+          created_by: string | null
+          entity_id: string
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          max_views: number | null
+          password_hash: string | null
+          share_token: string
+          share_type: string
+          updated_at: string | null
+          view_count: number | null
+        }
+        Insert: {
+          allowed_actions?: Json | null
+          branding?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          entity_id: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_views?: number | null
+          password_hash?: string | null
+          share_token?: string
+          share_type: string
+          updated_at?: string | null
+          view_count?: number | null
+        }
+        Update: {
+          allowed_actions?: Json | null
+          branding?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          entity_id?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_views?: number | null
+          password_hash?: string | null
+          share_token?: string
+          share_type?: string
+          updated_at?: string | null
+          view_count?: number | null
+        }
+        Relationships: []
+      }
+      bpm_register_fields: {
+        Row: {
+          config: Json | null
+          created_at: string | null
+          deleted_at: string | null
+          field_hash: string
+          field_order: number
+          field_type: Database["zapp"]["Enums"]["bpm_field_type"]
+          id: string
+          is_required: boolean | null
+          label: string
+          options: Json | null
+          register_id: string
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string | null
+          deleted_at?: string | null
+          field_hash: string
+          field_order?: number
+          field_type: Database["zapp"]["Enums"]["bpm_field_type"]
+          id?: string
+          is_required?: boolean | null
+          label: string
+          options?: Json | null
+          register_id: string
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string | null
+          deleted_at?: string | null
+          field_hash?: string
+          field_order?: number
+          field_type?: Database["zapp"]["Enums"]["bpm_field_type"]
+          id?: string
+          is_required?: boolean | null
+          label?: string
+          options?: Json | null
+          register_id?: string
+        }
+        Relationships: []
+      }
+      bpm_register_records: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          register_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          register_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          register_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bpm_register_values: {
+        Row: {
+          created_at: string | null
+          field_id: string
+          id: string
+          record_id: string
+          updated_at: string | null
+          value: string | null
+          value_json: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_id: string
+          id?: string
+          record_id: string
+          updated_at?: string | null
+          value?: string | null
+          value_json?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          field_id?: string
+          id?: string
+          record_id?: string
+          updated_at?: string | null
+          value?: string | null
+          value_json?: Json | null
+        }
+        Relationships: []
+      }
+      bpm_registers: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          max_records: number | null
+          name: string
+          settings: Json | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          max_records?: number | null
+          name: string
+          settings?: Json | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          max_records?: number | null
+          name?: string
+          settings?: Json | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      bpm_saved_views: {
+        Row: {
+          color_coding: Json | null
+          column_widths: Json | null
+          created_at: string | null
+          created_by: string | null
+          filters: Json | null
+          flow_id: string
+          group_by: string | null
+          id: string
+          is_default: boolean | null
+          is_shared: boolean | null
+          name: string
+          row_contrast: string | null
+          row_height: string | null
+          sort_config: Json | null
+          updated_at: string | null
+          view_type: Database["zapp"]["Enums"]["bpm_view_type"]
+          visible_columns: Json | null
+        }
+        Insert: {
+          color_coding?: Json | null
+          column_widths?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          filters?: Json | null
+          flow_id: string
+          group_by?: string | null
+          id?: string
+          is_default?: boolean | null
+          is_shared?: boolean | null
+          name: string
+          row_contrast?: string | null
+          row_height?: string | null
+          sort_config?: Json | null
+          updated_at?: string | null
+          view_type?: Database["zapp"]["Enums"]["bpm_view_type"]
+          visible_columns?: Json | null
+        }
+        Update: {
+          color_coding?: Json | null
+          column_widths?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          filters?: Json | null
+          flow_id?: string
+          group_by?: string | null
+          id?: string
+          is_default?: boolean | null
+          is_shared?: boolean | null
+          name?: string
+          row_contrast?: string | null
+          row_height?: string | null
+          sort_config?: Json | null
+          updated_at?: string | null
+          view_type?: Database["zapp"]["Enums"]["bpm_view_type"]
+          visible_columns?: Json | null
+        }
+        Relationships: []
+      }
+      bpm_sla_records: {
+        Row: {
+          breached_at: string | null
+          card_id: string
+          created_at: string | null
+          deadline_at: string
+          entered_at: string
+          exited_at: string | null
+          id: string
+          is_breached: boolean | null
+          sla_hours: number
+          step_id: string
+          time_in_step_minutes: number | null
+        }
+        Insert: {
+          breached_at?: string | null
+          card_id: string
+          created_at?: string | null
+          deadline_at: string
+          entered_at?: string
+          exited_at?: string | null
+          id?: string
+          is_breached?: boolean | null
+          sla_hours: number
+          step_id: string
+          time_in_step_minutes?: number | null
+        }
+        Update: {
+          breached_at?: string | null
+          card_id?: string
+          created_at?: string | null
+          deadline_at?: string
+          entered_at?: string
+          exited_at?: string | null
+          id?: string
+          is_breached?: boolean | null
+          sla_hours?: number
+          step_id?: string
+          time_in_step_minutes?: number | null
+        }
+        Relationships: []
+      }
+      bpm_user_favorites: {
+        Row: {
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   evo: {
     Tables: {
       _dead_idx_usage_audit_20260820: {
@@ -1958,7 +3636,7 @@ export type Database = {
           id: string
           instance_name: string | null
           notes: string | null
-          pipeline_status: "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+          pipeline_status: Database["public"]["Enums"]["evolution_pipeline_status"]
           probe_latency_ms: number | null
           probe_status: string | null
           queue_failed_24h: number | null
@@ -1986,7 +3664,7 @@ export type Database = {
           id?: string
           instance_name?: string | null
           notes?: string | null
-          pipeline_status: "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+          pipeline_status: Database["public"]["Enums"]["evolution_pipeline_status"]
           probe_latency_ms?: number | null
           probe_status?: string | null
           queue_failed_24h?: number | null
@@ -2014,7 +3692,7 @@ export type Database = {
           id?: string
           instance_name?: string | null
           notes?: string | null
-          pipeline_status?: "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+          pipeline_status?: Database["public"]["Enums"]["evolution_pipeline_status"]
           probe_latency_ms?: number | null
           probe_status?: string | null
           queue_failed_24h?: number | null
@@ -4693,7 +6371,7 @@ export type Database = {
           checked_at: string | null
           doc_coverage_pct: number | null
           gap_sync_status:
-            | "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+            | Database["public"]["Enums"]["evolution_pipeline_status"]
             | null
           media_classified_pct: number | null
           mirror_coverage: number | null
@@ -4945,7 +6623,7 @@ export type Database = {
           gap_sync_checked_at: string | null
           gap_sync_min: number | null
           gap_sync_status:
-            | "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+            | Database["public"]["Enums"]["evolution_pipeline_status"]
             | null
           ipwatch_hits_24h: number | null
           last_ingest_at: string | null
@@ -52024,7 +53702,7 @@ export type Database = {
           gap_inbound_min: number | null
           id: string | null
           pipeline_status:
-            | "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+            | Database["public"]["Enums"]["evolution_pipeline_status"]
             | null
           queue_failed_24h: number | null
           queue_pending_now: number | null
@@ -52045,7 +53723,7 @@ export type Database = {
           gap_inbound_min?: number | null
           id?: string | null
           pipeline_status?:
-            | "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+            | Database["public"]["Enums"]["evolution_pipeline_status"]
             | null
           queue_failed_24h?: number | null
           queue_pending_now?: number | null
@@ -52066,7 +53744,7 @@ export type Database = {
           gap_inbound_min?: number | null
           id?: string | null
           pipeline_status?:
-            | "healthy" | "warning" | "degraded_webhook" | "degraded_sender" | "critical_alerts" | "critical"
+            | Database["public"]["Enums"]["evolution_pipeline_status"]
             | null
           queue_failed_24h?: number | null
           queue_pending_now?: number | null
