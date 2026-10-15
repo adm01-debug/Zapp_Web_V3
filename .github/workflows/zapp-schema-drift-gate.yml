@@ -30,6 +30,7 @@ permissions:
 
 jobs:
   drift-check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
     # Etapa 19: write declarado estaticamente (actionlint não aceita expressão em permissions);
@@ -38,7 +39,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 

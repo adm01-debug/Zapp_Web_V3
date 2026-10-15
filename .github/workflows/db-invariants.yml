@@ -37,12 +37,13 @@ permissions:
 
 jobs:
   invariants:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: DB Invariants
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0

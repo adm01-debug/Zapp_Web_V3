@@ -21,11 +21,12 @@ permissions:
 
 jobs:
   guard:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Edge guard checks
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 

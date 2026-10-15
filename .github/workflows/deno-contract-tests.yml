@@ -46,7 +46,7 @@ jobs:
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - id: check
         run: |
           set -euo pipefail
@@ -90,7 +90,7 @@ jobs:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 

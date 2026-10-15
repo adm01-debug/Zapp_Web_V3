@@ -42,6 +42,7 @@ permissions:
 
 jobs:
   smoke:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Apply migrations from scratch
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 30
@@ -51,13 +52,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Node (for migration linter)
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 

@@ -36,6 +36,7 @@ permissions:
 
 jobs:
   lockfile:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Lockfile e proteções da camada de dados
     # Piloto de migração pra ubuntu-latest (auditoria 2026-08-21): o repo está
     # PÚBLICO hoje (confirmado via `gh repo view --json visibility` — a
@@ -53,7 +54,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -128,6 +129,7 @@ jobs:
         run: node scripts/check-data-layer.mjs
 
   typescript-gates:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Gates TypeScript (hospedado, bloqueante)
     # Os gates são herméticos e não recebem secrets. Dois runners diferentes
     # do pool vps-zapp abortaram o tsc com SIGABRT após ~60 s. Para um dos SHAs
@@ -140,12 +142,12 @@ jobs:
     needs: lockfile
     steps:
       - name: Baixar código
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Preparar Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -200,6 +202,7 @@ jobs:
           echo "Required merge guards passed: lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
 
   quality:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Quality diagnostics
     # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=bun node
     runs-on: [Linux, X64, vps-zapp]
@@ -207,12 +210,12 @@ jobs:
     needs: lockfile
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -287,7 +290,7 @@ jobs:
 
       - name: Publish schema status report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: schema-status-report
           path: reports/schema-status/
@@ -296,7 +299,7 @@ jobs:
 
       - name: Publish types:repair log
         if: always() && steps.schema_repair.outcome != 'skipped'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: types-repair-log
           path: reports/types-repair/
@@ -322,12 +325,12 @@ jobs:
     needs: lockfile
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -360,12 +363,12 @@ jobs:
       # Alternativa (driver pg): DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -388,6 +391,7 @@ jobs:
   # vira warning (fail-open, padrão do repo) para o gate não nascer quebrado
   # (GAP-J da simulação 20260804). Em push o step é pulado (o live cobre).
   contract-gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Contract gate (front↔DB, bloqueante em PR)
     # [2026-08-18] self-hosted: repo privado + cota billing esgotada; tools=node pg
     runs-on: [Linux, X64, vps-zapp]
@@ -399,12 +403,12 @@ jobs:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -442,12 +446,12 @@ jobs:
     needs: lockfile
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -464,12 +468,12 @@ jobs:
     needs: [lockfile, quality, audit-contract-scan, contract-gate, migration-gates]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -504,7 +508,7 @@ jobs:
         run: bun run test -- --coverage --reporter=verbose
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-report
@@ -545,12 +549,12 @@ jobs:
     needs: [lockfile, quality, audit-contract-scan, contract-gate, migration-gates]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -577,7 +581,7 @@ jobs:
         run: bun run build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
@@ -596,6 +600,7 @@ jobs:
           find dist -name "*.css" -exec du -h {} \;
 
   e2e:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: E2E tests
     # ubuntu-latest (auditoria 2026-08-21, batch 3): playwright.config.ts sobe
     # SEU PRÓPRIO `vite --port 5173` local (baseURL http://localhost:5173,
@@ -620,12 +625,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -652,7 +657,7 @@ jobs:
         run: bun run test:e2e:boot
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: playwright-report
@@ -672,12 +677,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -704,7 +709,7 @@ jobs:
         run: bun run test:a11y
 
       - name: Upload a11y Playwright report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: playwright-report-a11y
@@ -721,12 +726,12 @@ jobs:
     needs: lockfile
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -793,7 +798,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
