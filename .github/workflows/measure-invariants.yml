@@ -30,6 +30,7 @@ permissions:
 
 jobs:
   measure-invariants:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: 'Medir Score de Desacoplamento (I1-I9)'
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
@@ -37,10 +38,10 @@ jobs:
 
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: 'Setup Node.js 20'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
 
@@ -69,7 +70,7 @@ jobs:
 
       - name: 'Publicar artifact decouple-score.json'
         if: env.AUDIT_STATUS == 'MEASURED'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: decouple-score
           path: decouple-score.json

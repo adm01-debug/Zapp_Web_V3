@@ -33,11 +33,12 @@ permissions:
 
 jobs:
   anti-drift:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Health score anti-drift (F3)
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

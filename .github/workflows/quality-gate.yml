@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   quality-gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Todos os passos deste gate são herméticos: usam credenciais de teste e
     # não acessam a VPS nem o banco real. Executá-los no runner hospedado
     # evita a contenção do pool vps-zapp, que causou timeouts falsos no E2E
@@ -30,13 +31,13 @@ jobs:
       VITE_EXTERNAL_SUPABASE_URL: https://example.supabase.co
       VITE_EXTERNAL_SUPABASE_ANON_KEY: test-anon-key
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 

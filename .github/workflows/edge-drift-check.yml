@@ -23,11 +23,12 @@ jobs:
   # proteção da main exige esse context; sufixo '(E38/E39)' no nome emitia um
   # check-run que nunca casava e todo PR ficava em 'Expected' (validação 5-agentes).
   drift-and-hash:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: edge-drift-check
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Verificar vars de ambiente
         id: env_check
