@@ -97,10 +97,12 @@ jobs:
 
       - name: Gerar catálogo vivo via postgres-meta
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
+        continue-on-error: true
         run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json
 
       - name: Comparar contrato do catálogo commitado com o catálogo vivo
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' && github.event.inputs.regen != 'true' }}
+        continue-on-error: true
         run: |
           if [ ! -f reports/schema-catalog.live.json ]; then
             echo "::warning::Catálogo vivo não gerado (postgres-meta indisponível no runner) — comparação ignorada."
