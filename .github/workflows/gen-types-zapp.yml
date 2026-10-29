@@ -179,7 +179,7 @@ jobs:
           # Auto-merge squash — ADR-CI-001: verificar presença dos checks canônicos
           # definidos em branch-protection-sentinel.yml (não apenas count >= 2, pois
           # 2 checks leves seriam suficientes para liberar merge sem full-CI).
-          EXPECTED_CHECKS='["edge-auth-smoke","edge-drift-check","Edge guard checks","DB Invariants","Migration Uniqueness Gate","schema-drift-guard","PR Size Gate","Analyze (javascript-typescript)","🔍 Secret Scan (gitleaks)","Verify security_invoker on all views"]'
+          EXPECTED_CHECKS='["Verify Lockfile","Build","Unit tests","Quality diagnostics","Gates TypeScript (hospedado, bloqueante)","Contract gate (front↔DB, bloqueante em PR)","Security audit","edge-auth-smoke","Edge guard checks","DB Invariants","Migration Uniqueness Gate","schema-drift-guard","PR Size Gate","Analyze (javascript-typescript)","🔍 Secret Scan (gitleaks)","edge-drift-check","Verify security_invoker on all views"]'
           PROTECTION=$(gh api "repos/$GITHUB_REPOSITORY/branches/${BASE_BRANCH}/protection/required_status_checks" 2>/dev/null || echo '{"contexts":[]}')
           ACTUAL_CONTEXTS=$(echo "${PROTECTION}" | jq -r '.contexts[]' 2>/dev/null || true)
           echo "Required checks configurados:"
