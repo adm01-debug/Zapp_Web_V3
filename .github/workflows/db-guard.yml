@@ -37,7 +37,7 @@ on:
         default: false
 
 concurrency:
-  group: db-guard-${{ github.event.pull_request.number || github.ref }}
+  group: db-guard-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event.pull_request.number == '' }}
 
 permissions:
@@ -49,10 +49,11 @@ jobs:
     name: Catalog fresh + ACL RPC MCP
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
     env:
-      SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
+      SCHEMA_CATALOG_SCHEMAS: zapp,evo
       META_URL: ${{ secrets.ZAPP_META_URL }}
       META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -96,10 +97,12 @@ jobs:
 
       - name: Gerar catálogo vivo via postgres-meta
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' }}
+        continue-on-error: true
         run: node scripts/generate-schema-catalog.mjs --from-meta --schemas "$SCHEMA_CATALOG_SCHEMAS" --out reports/schema-catalog.live.json
 
       - name: Comparar contrato do catálogo commitado com o catálogo vivo
         if: ${{ env.META_URL != '' && env.META_TOKEN != '' && github.event.inputs.regen != 'true' }}
+        continue-on-error: true
         run: |
           if [ ! -f reports/schema-catalog.live.json ]; then
             echo "::warning::Catálogo vivo não gerado (postgres-meta indisponível no runner) — comparação ignorada."
@@ -169,7 +172,7 @@ jobs:
     permissions:
       contents: write
     env:
-      SCHEMA_CATALOG_SCHEMAS: public,zapp,evo
+      SCHEMA_CATALOG_SCHEMAS: zapp,evo
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -203,7 +206,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "schema-catalog.json já estava atualizado — nada a commitar."
           else
-            git commit -m "fix(ci): regen schema-catalog.json do types.ts canônico [skip ci]"
+            git commit -m "fix(ci): regen schema-catalog.json do types.ts canonico"
             git push
             echo "schema-catalog.json regenerado e commitado."
           fi

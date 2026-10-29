@@ -45,6 +45,7 @@ jobs:
     name: Apply migrations from scratch
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
 
     # Conexão ao postgres via docker exec (evita problema de rede bridge entre containers)

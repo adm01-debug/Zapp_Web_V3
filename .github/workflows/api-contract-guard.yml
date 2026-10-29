@@ -1,0 +1,57 @@
+name: api-contract-guard
+
+# ============================================================
+# Etapa 54 do PLANO_50_ETAPAS_CONTINUACAO_2026-09-28.
+# Diff-based guard sobre CONTRACTS (_shared/contract-versions.ts):
+# bloqueia breaking changes silenciosas em versões de contrato
+# (remoção de `supported` antes do sunset, contrato-fantasma,
+# sunset adiantado). Complementa os invariantes estáticos do
+# contract-registry-integrity.test.ts — que verificam consistência
+# interna, mas não a evolução base→head.
+# ============================================================
+
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/_shared/contract-versions.ts"
+      - "supabase/functions/_shared/contract-schemas*.ts"
+      - "supabase/functions/_shared/edge-contract-schemas.ts"
+      - "supabase/functions/**/index.ts"
+      - "scripts/check-api-contract-guard.mjs"
+      - ".github/workflows/api-contract-guard.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: Contract evolution diff (base → head)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Extrair CONTRACTS da base
+        run: |
+          git show "origin/${{ github.base_ref || 'main' }}:supabase/functions/_shared/contract-versions.ts" \
+            > /tmp/contract-versions-base.ts 2>/dev/null || cp supabase/functions/_shared/contract-versions.ts /tmp/contract-versions-base.ts
+
+      # bash roda com -e no Actions: exit != 0 do node já falha o job
+      # (vermelho no PR); o summary roda com always() e mostra a tabela.
+      - name: Rodar guard (diff base → head)
+        run: |
+          node scripts/check-api-contract-guard.mjs \
+            /tmp/contract-versions-base.ts \
+            supabase/functions/_shared/contract-versions.ts | tee /tmp/guard.md
+
+      - name: Resumo no Step Summary
+        if: always()
+        run: cat /tmp/guard.md >> "$GITHUB_STEP_SUMMARY" || true
