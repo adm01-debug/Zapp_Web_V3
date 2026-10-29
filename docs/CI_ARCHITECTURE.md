@@ -5,20 +5,23 @@
 
 ---
 
-## Mapa de Workflows (59 arquivos)
+## Mapa de Workflows (68 arquivos)
 
 ### Gatilhos Primários
 
 | Arquivo | `name:` | Gatilho | Runner | Bloqueia merge? | Dono/Runbook |
-|---------|---------|---------|--------|----------------|--------------|
+|---------|---------|---------|--------|-----------------|---|
 | `action-pin-check.yml` | action-pin-check | PR | ubuntu-latest | ✅ sim | CI / `docs/ops/RUNBOOK-CI.md` |
 | `ai-agent-pr-policy.yml` | AI Agent PR Policy | push, dispatch | ubuntu-latest | ❌ advisory | CI |
 | `branch-protection-sentinel.yml` | Branch Protection Sentinel | PR | vps-zapp | ❌ (schedule suspenso) | Segurança |
 | `bundle-secret-guard.yml` | Bundle Secret Guard | `workflow_run` deploy, cron diário | vps-zapp | ❌ advisory | Segurança |
-| `check-multiplix-guards.yml` | DB Guard — Multiplix RLS & Realtime PII | PR | ubuntu-latest | ✅ sim | DB |
+| `check-multiplix-guards.yml` | DB Guard — Multiplex RLS & Realtime PII | PR | ubuntu-latest | ✅ sim | DB |
 | `check-realtime-dead-channels.yml` | Guard — Realtime Dead Channels | PR | ubuntu-latest | ✅ sim | DB |
+| `ci-metrics.yml` | 📊 CI Metrics | cron seg 07:00, dispatch | ubuntu-latest | ❌ informativo (abre PR de relatório) | CI |
+| `ci-slo-metrics.yml` | CI SLO Metrics | cron seg 08:00 | ubuntu-latest | ❌ informativo | CI |
 | `ci-workflows-lint.yml` | Workflow Lint (actionlint) | PR | ubuntu-latest | ✅ sim | CI |
 | `ci.yml` | CI/CD Pipeline | push (main/develop), PR | ubuntu-latest | ✅ sim (PR) | CI / `docs/ops/RUNBOOK-CI.md` |
+| `api-contract-guard.yml` | api-contract-guard | PR (paths contract/edge) | ubuntu-latest | ✅ sim | Edge |
 | `cleanup-e2e-data.yml` | Cleanup E2E data (REST) | dispatch | vps-zapp | ❌ manual | QA |
 | `codeql.yml` | CodeQL | push, PR, cron seg 09:00 | ubuntu-latest | ❌ advisory | Segurança |
 | `contract-guards.yml` | Contract Guards | PR | ubuntu-latest | ✅ sim | DB |
@@ -27,6 +30,7 @@
 | `db-migrate.yml` | db-migrate | push (main, paths migrations/) | vps-zapp | ❌ pós-merge | DB / `docs/ops/RUNBOOK-CI.md` |
 | `db-reference-integrity.yml` | DB Reference Integrity | cron diário 08:00, push, dispatch | vps-zapp | ❌ advisory | DB |
 | `decouple-guard.yml` | Decouple Guard | PR | ubuntu-latest | ✅ sim | Arquitetura |
+| `dependency-review.yml` | dependency-review | PR | ubuntu-latest | ❌ advisory | Segurança |
 | `deno-contract-tests.yml` | 🦕 Deno Contract Tests | push (main) | ubuntu-latest | ❌ pós-merge | Edge |
 | `deploy-vps-selfhosted.yml` | 🚀 Deploy VPS [DRAFT] | **desabilitado** | vps-zapp | — | Infra |
 | `deploy-vps.yml` | 🚀 Build & Deploy — ZAPP web v3 | push (main) | ubuntu-latest + vps-zapp | ❌ pós-merge | Infra / `docs/ops/RUNBOOK-CI.md` |
@@ -43,11 +47,12 @@
 | `edge-schema-parity.yml` | Edge Schema Parity | PR, push, dispatch | ubuntu-latest | ✅ sim (PR) | Edge |
 | `evo-ddl-gate.yml` | evo-ddl-gate | PR | ubuntu-latest | ✅ sim | DB |
 | `flaky-test-detector.yml` | Flaky Test Detector | cron seg–sex 03:00 | ubuntu-latest | ❌ informativo | QA |
-| `gen-types-zapp.yml` | Regenerate Supabase types | dispatch | ubuntu-latest | ❌ manual | DB |
+| `gen-types-zapp.yml` | Regenerate Supabase types | dispatch | vps-zapp | ❌ manual | DB |
 | `health-score-anti-drift.yml` | health-score-anti-drift | PR | vps-zapp | ✅ sim | DB |
+| `lighthouse-ci.yml` | 🔦 Lighthouse CI | PR (paths src/public/build) | ubuntu-latest | ❌ advisory | Front |
 | `measure-invariants.yml` | Desacoplamento — Score de Invariantes | PR, dispatch | vps-zapp | ❌ advisory | Arquitetura |
 | `migration-drift-guard.yml` | Migration Drift Guard | cron seg 07:05, PR, push | vps-zapp | ❌ warn-only | DB / `docs/ops/RUNBOOK-CI.md` |
-| `migration-lint.yml` | Migration Lint | push, PR | vps-zapp | ✅ sim | DB |
+| `migration-lint.yml` | Migration Lint | push, PR | vps-zapp | ❌ warn-only (exit 0) | DB |
 | `migration-smoke-test.yml` | Migration Smoke Test | PR | vps-zapp | ✅ sim | DB |
 | `migration-tests.yml` | 🦕 Migration Tests | push (main) | ubuntu-latest | ❌ pós-merge | DB |
 | `migration-uniqueness.yml` | Migration Uniqueness Gate | PR, push | ubuntu-latest | ✅ sim | DB |
@@ -58,6 +63,9 @@
 | `pr-size-gate.yml` | PR Size Gate | PR | ubuntu-latest | ❌ advisory | CI |
 | `quality-gate.yml` | Quality Gate | push, PR | ubuntu-latest | ✅ sim (PR) | CI / `docs/ops/RUNBOOK-CI.md` |
 | `ratchet-tighten.yml` | ratchet-tighten | push (main) | ubuntu-latest | ❌ pós-merge | Arquitetura |
+| `rollback-vps.yml` | ⏪ Rollback — ZAPP web v3 | dispatch (confirmação ROLLBACK) | vps-zapp | ❌ manual | Infra / `docs/ops/RUNBOOK-CI.md` |
+| `runner-watchdog.yml` | 🐕 Runner Watchdog | cron */30min, dispatch | ubuntu-latest | ❌ informativo | Infra |
+| `scorecard.yml` | 🛡️ OSSF Scorecard | cron seg 06:00, push (paths workflows/) | ubuntu-latest | ❌ advisory | Segurança |
 | `regression-test-gate.yml` | E46 — Regression Test Gate | PR | ubuntu-latest | ✅ sim | QA |
 | `schedule-health.yml` | Schedule Health Monitor | cron seg 07:00, dispatch | ubuntu-latest | ❌ informativo | CI |
 | `schema-drift.yml` | schema-drift-guard | PR, push, dispatch | vps-zapp | ✅ sim (PR) | DB |
@@ -67,6 +75,7 @@
 | `security.yml` | Security & Compliance | push, PR, cron seg 06:00 | ubuntu-latest | ✅ sim | Segurança |
 | `seed-e2e-contacts.yml` | Seed E2E contacts (REST) | dispatch | vps-zapp | ❌ manual | QA |
 | `seed-e2e-user.yml` | Seed E2E user (REST) | dispatch | vps-zapp | ❌ manual | QA |
+| `type-escape-ratchet.yml` | 🐀 Type Escape Ratchet | PR (paths src/functions/baseline) | ubuntu-latest | ✅ sim | Arquitetura |
 | `typesafe-pr-gate.yml` | TypeSafe PR Gate | PR | ubuntu-latest | ✅ sim | Front |
 | `validate-e2e-user.yml` | Validate E2E user (REST) | dispatch | vps-zapp | ❌ manual | QA |
 | `zapp-schema-drift-gate.yml` | zapp-schema-drift-gate | cron 09:10 diário, dispatch | vps-zapp | ❌ advisory | DB |
@@ -76,7 +85,7 @@
 ## Crons Ativos
 
 | Horário UTC | Workflow | Frequência | Suspensão |
-|-------------|----------|-----------|-----------|
+|-------------|---------|------------|-----------|
 | 03:00 seg–sex | Flaky Test Detector | diário (dias úteis) | — |
 | 04:00 dom | Schema Snapshot | semanal | — |
 | 06:00 diário | Edge Auth Smoke | diário | — |
@@ -85,13 +94,14 @@
 | 07:00 seg | Schedule Health Monitor | semanal | — |
 | 07:05 seg | Migration Drift Guard | semanal | — |
 | 08:00 diário | DB Reference Integrity | diário | — |
+| 08:00 seg | CI SLO Metrics | semanal | — |
 | 08:00 seg | Security Invoker Gate | semanal | — |
 | 08:17 diário | Bundle Secret Guard | diário | — |
 | 09:00 seg | CodeQL | semanal | — |
 | 09:10 diário | Zapp Schema Drift Gate | diário | — |
 | 09:00 seg | Cleanup E2E data | semanal | **suspenso** |
 
-> Conflitos conhecidos: seg 06:00–09:10 UTC concentra 6 crons (5 semanais + 1 diário).
+> Conflitos conhecidos: seg 06:00–09:10 UTC concentra 7 crons (6 semanais + 1 diário).
 > Se o pool `vps-zapp` estiver com 1 runner disponível, backlog pode atrasar alertas.
 > Etapa 95 do plano propõe re-espalhamento.
 
@@ -100,11 +110,11 @@
 ## Referências `workflow_run` (gatilhos encadeados)
 
 | Consumidor | Escuta | Propósito |
-|-----------|--------|-----------|
+|-----------|--------|-------|
 | `bundle-secret-guard.yml` | `"🚀 Build & Deploy — ZAPP web v3"` | Valida bundle pós-deploy |
 | `notify-ci-failure.yml` | `"CI/CD Pipeline"`, `"E2E CRM (VPS)"`, `"E2E Inbox (VPS)"`, `"E2E Nightly Full"`, `"Quality Gate"`, `"🚀 Build & Deploy — ZAPP web v3"`, `"edge-deploy"`, `"Migration Drift Guard"` | Alerta Warroom em falha |
 
-> ⚠️ `name:` do workflow referenciado deve ser **exatamente** igual ao campo `name:` do YAML.
+> ⚠️ `name:` do workflow referenciado deve ser ***exatamente*** igual ao campo `name:` do YAML.
 > Emoji em `name:` é permitido **apenas** se não há `workflow_run` apontando para ele SEM emoji.
 > Gate: `ci-workflows-lint.yml` → `scripts/check-workflow-run-refs.mjs` valida esses nomes a cada PR.
 
@@ -113,7 +123,7 @@
 ## Runners
 
 | Pool | Labels | Jobs típicos | Acesso a |
-|------|--------|-------------|----------|
+|------|--------|-------------|-------|
 | `ubuntu-latest` | — | Build, typecheck, lint, análise estática | GitHub hosted |
 | `vps-zapp` | `[Linux, X64, vps-zapp]` | Deploy, DB, Edge, E2E | Docker Swarm, Supabase local, Evolution API |
 | `vps-zapp` + playwright | `[Linux, X64, vps-zapp, playwright]` | E2E com browser | idem + Playwright |
@@ -131,22 +141,32 @@ Em ordem de criticidade operacional:
 5. `action-pin-check.yml` — supply chain (SHA pins)
 6. `ci-workflows-lint.yml` — actionlint + workflow_run refs
 7. `migration-uniqueness.yml` — evita colisão de timestamp de migration
-8. `migration-lint.yml` — DDL boas práticas
-9. `migration-smoke-test.yml` — migration aplica sem erro
-10. `edge-env-completeness.yml` — secrets de edge declarados
-11. `edge-schema-parity.yml` — schema das edge functions bate com DB
-12. `schema-drift.yml` — schema-drift-guard
-13. `decouple-guard.yml` — fronteira zapp × evo
-14. `contract-guards.yml` — RPC/tabela existe no banco
-15. `regression-test-gate.yml` — testes de regressão obrigatórios para fix:
-16. `evo-ddl-gate.yml` — proíbe DDL no schema evo via PR
-17. `check-multiplix-guards.yml` — RLS + Realtime PII
-18. `check-realtime-dead-channels.yml` — canais Realtime válidos
-19. `edge-guard.yml` — edge functions compilam
-20. `edge-parse-gate.yml` — parse estático de edge functions
-21. `health-score-anti-drift.yml` — drift de health score
-22. `e2e-crm-vps.yml`, `e2e-inbox-vps.yml` — E2E funcional
-23. `security-invoker-gate.yml` — security_invoker em views
+8. `migration-smoke-test.yml` — migration aplica sem erro
+9. `edge-env-completeness.yml` — secrets de edge declarados
+10. `edge-schema-parity.yml` — schema das edge functions bate com DB
+11. `schema-drift.yml` — schema-drift-guard
+12. `decouple-guard.yml` — fronteira zapp × evo
+13. `contract-guards.yml` — RPC/tabela existe no banco
+14. `regression-test-gate.yml` — testes de regressão obrigatórios para fix:
+15. `evo-ddl-gate.yml` — proíbe DDL no schema evo via PR
+16. `check-multiplix-guards.yml` — RLS + Realtime PII
+17. `check-realtime-dead-channels.yml` — canais Realtime válidos
+18. `edge-guard.yml` — edge functions compilam
+19. `edge-parse-gate.yml` — parse estático de edge functions
+20. `health-score-anti-drift.yml` — drift de health score
+21. `e2e-crm-vps.yml`, `e2e-inbox-vps.yml` — E2E funcional
+22. `security-invoker-gate.yml` — security_invoker em views
+
+---
+
+## Workflows Fantasma / Desativados
+
+**Resolvido em 2026-10-02 (PR #1633):** os 3 workflows que estavam registrados
+no GitHub Actions sem arquivo na `main` (`type-escape-ratchet.yml`,
+`lighthouse-ci.yml`, `api-contract-guard.yml` — registros criados num batch de
+PR anterior cujo squash-merge não incluiu os YAMLs) foram mergeados e agora
+rodam normalmente — estão no mapa de gatilhos acima. Os registros-fantasma
+antigos foram desativados via API para limpar o listing.
 
 ---
 

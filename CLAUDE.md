@@ -231,10 +231,9 @@ ou de ligar algo intencionalmente desligado.
 | **A** | `404 PGRST205` em `sales`/`carriers`/`customers`/`suppliers`/`company_rfm_scores` | CRM 360 consulta tabelas que não existem no banco (resquício do CRM "external") |
 | **B** | `500` em `POST /functions/v1/promogifts-catalog` | No projeto PromoGifts, `anon` só tem SELECT em `products(id,is_active,is_deleted)` e nada em `suppliers` → `42501` vira 500 genérico |
 | **C** | `404` em `/assets/index-<buildId>.js` + reload adiado | Caminho `SW_UPDATED` não repassa o `entry` do `version.json`; fallback deriva o nome do asset do timestamp |
-| **D** | WARN `safeClient` de `sla_delivery_rules`/`contact_tags`/`messages` a cada ~180ms | Rajada de remount/cancelamento no painel de contato — gatilho ainda **não** confirmado (exige instrumentação) |
-
 > Histórico completo de bugs resolvidos em `docs/CHANGELOG_SESSIONS.md`.
 > **BUG-C (fechado 2026-09-03):** FK `workflow_history.workflowId → workflow_entity.id` tem `ON DELETE CASCADE` — orphans impossíveis por design. Verificado ao vivo: 0 linhas órfãs. Backup `bkp_workflow_history_20260809` (13 linhas) contém linhas válidas (workflow_exists=true), não órfãs. Falso positivo encerrado.
+> **BUG-D (fechado 2026-09-29):** `selectedConversation` em `useRealtimeInbox.ts` recriava referência a cada evento Realtime → cascata de remount → WARNs `safeClient` a ~180ms. Fix: `useRef` cacheando por `contact.id` — PR #1623 mergeado.
 
 ---
 

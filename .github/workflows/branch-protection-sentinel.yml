@@ -151,7 +151,13 @@ jobs:
           # Array explícito: nomes multi-palavra ("Edge guard checks", "DB Invariants",
           # "🔍 Secret Scan (gitleaks)") quebravam com word-splitting do loop antigo
           # (VAL-05-02 — falso positivo permanente). Expandir por item preserva o nome.
-          EXPECTED_CONTEXTS=( "edge-auth-smoke" "edge-drift-check" "Edge guard checks" "DB Invariants" "Migration Uniqueness Gate" "schema-drift-guard" "PR Size Gate" "Analyze (javascript-typescript)" "🔍 Secret Scan (gitleaks)" "Verify security_invoker on all views" )
+          # Sincronizado com a proteção real de main (2026-10-02, validação
+          # 5-agentes): os 15 contexts que de fato reportam em todo PR.
+          # 'edge-drift-check' só volta aqui se o contexto for re-exigido na
+          # proteção (o job agora emite o nome exato); 'Verify security_invoker
+          # on all views' é path-filtered — exigi-lo travaria PRs que não
+          # tocam supabase/**.
+          EXPECTED_CONTEXTS=( "Verify Lockfile" "Build" "Unit tests" "Quality diagnostics" "Gates TypeScript (hospedado, bloqueante)" "Contract gate (front↔DB, bloqueante em PR)" "Security audit" "edge-auth-smoke" "Edge guard checks" "DB Invariants" "Migration Uniqueness Gate" "schema-drift-guard" "PR Size Gate" "Analyze (javascript-typescript)" "🔍 Secret Scan (gitleaks)" )
           ACTUAL_CONTEXTS=$(echo "$PROT" | jq -r '.required_status_checks.contexts[]')
           MISSING=""
           for ctx in "${EXPECTED_CONTEXTS[@]}"; do
