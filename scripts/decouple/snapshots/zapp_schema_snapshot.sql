@@ -6102,7 +6102,17 @@ BEGIN
   -- caller anula a RLS do mesmo jeito que uma view sem security_invoker — a funcao
   -- roda como dona e devolve linha que o chamador nao poderia ler direto.
   -- Medido 28/09/2026: qualquer `authenticated` colhia contato/telefone por aqui.
-  IF NOT zapp.is_admin_or_supervisor() THEN
+  -- Guarda simetrica (revisao pos-auditoria, 28/09/2026): funcao SECURITY DEFINER nao
+  -- pode servir de bypass da RLS. Aceita (1) chamador de servico pelo claim do JWT
+  -- (auth.role() = 'service_role', que e como o PostgREST serve service_role),
+  -- (2) conexao direta/psql e as roles de leitura/BI pelo session_user, e (3) admin ou
+  -- supervisor por auth.uid(). Sem nenhum dos tres, recusa - e nao bloqueia cron/edge
+  -- por engano, que era a assimetria medida na auditoria.
+  IF NOT (
+    COALESCE(auth.role(), '') = 'service_role'
+    OR session_user IN ('postgres','supabase_admin','service_role','metabase_reader','dyad_reader','om_reader')
+    OR zapp.is_admin_or_supervisor()
+  ) THEN
     RAISE EXCEPTION 'forbidden: app member required';
   END IF;
   RETURN QUERY SELECT c.id,COALESCE(c.full_name,c.push_name)::text,c.phone_number::text,COALESCE(c.lead_score,0),COALESCE(c.total_messages,0)::bigint,c.last_message_at FROM evolution_contacts c WHERE c.deleted_at IS NULL ORDER BY c.lead_score DESC NULLS LAST, c.total_messages DESC NULLS LAST LIMIT p_limit; END; $$;
@@ -6470,10 +6480,18 @@ BEGIN
   -- usuario logado vem do JWT (`auth.uid()`), e os leitores de BI/servico entram pelo
   -- `session_user` deles (conexao direta ao Postgres, sem JWT). Chamador desconhecido
   -- sem uid e barrado em vez de herdar os privilegios do dono.
-  IF auth.uid() IS NULL
-     AND session_user NOT IN ('postgres','supabase_admin','service_role',
-                              'metabase_reader','dyad_reader','om_reader') THEN
-    RAISE EXCEPTION 'unauthenticated';
+  -- Guarda simetrica (revisao pos-auditoria, 28/09/2026): funcao SECURITY DEFINER nao
+  -- pode servir de bypass da RLS. Aceita (1) chamador de servico pelo claim do JWT
+  -- (auth.role() = 'service_role', que e como o PostgREST serve service_role),
+  -- (2) conexao direta/psql e as roles de leitura/BI pelo session_user, e (3) admin ou
+  -- supervisor por auth.uid(). Sem nenhum dos tres, recusa - e nao bloqueia cron/edge
+  -- por engano, que era a assimetria medida na auditoria.
+  IF NOT (
+    COALESCE(auth.role(), '') = 'service_role'
+    OR session_user IN ('postgres','supabase_admin','service_role','metabase_reader','dyad_reader','om_reader')
+    OR zapp.is_admin_or_supervisor()
+  ) THEN
+    RAISE EXCEPTION 'forbidden: app member required';
   END IF;
 
   RETURN QUERY
@@ -23891,7 +23909,17 @@ BEGIN
   -- caller anula a RLS do mesmo jeito que uma view sem security_invoker — a funcao
   -- roda como dona e devolve linha que o chamador nao poderia ler direto.
   -- Medido 28/09/2026: qualquer `authenticated` colhia contato/telefone por aqui.
-  IF NOT zapp.is_admin_or_supervisor() THEN
+  -- Guarda simetrica (revisao pos-auditoria, 28/09/2026): funcao SECURITY DEFINER nao
+  -- pode servir de bypass da RLS. Aceita (1) chamador de servico pelo claim do JWT
+  -- (auth.role() = 'service_role', que e como o PostgREST serve service_role),
+  -- (2) conexao direta/psql e as roles de leitura/BI pelo session_user, e (3) admin ou
+  -- supervisor por auth.uid(). Sem nenhum dos tres, recusa - e nao bloqueia cron/edge
+  -- por engano, que era a assimetria medida na auditoria.
+  IF NOT (
+    COALESCE(auth.role(), '') = 'service_role'
+    OR session_user IN ('postgres','supabase_admin','service_role','metabase_reader','dyad_reader','om_reader')
+    OR zapp.is_admin_or_supervisor()
+  ) THEN
     RAISE EXCEPTION 'forbidden: app member required';
   END IF;
   SELECT
