@@ -23,6 +23,7 @@ jobs:
     name: Verify security_invoker on all views
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     env:
       META_URL: ${{ secrets.ZAPP_META_URL }}
       META_TOKEN: ${{ secrets.ZAPP_META_TOKEN }}

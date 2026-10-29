@@ -33,6 +33,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 15
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Etapa 19: write declarado estaticamente (actionlint não aceita expressão em permissions);
     # escrita real só ocorre no step de commit, que tem if: regen == 'true' como guarda.
     permissions:
