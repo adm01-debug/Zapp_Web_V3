@@ -1,0 +1,38 @@
+name: 🐀 Type Escape Ratchet
+
+# ============================================================
+# Ratchet de `as unknown as` — auditoria 22D (dimensão Tipagem).
+# 197 ocorrências congeladas em scripts/type-escape-baseline.txt:
+# nenhum PR pode aumentar a contagem; quem remover casts baixa a
+# baseline no mesmo commit (o próprio script imprime o comando).
+# ============================================================
+
+on:
+  pull_request:
+    paths:
+      - "src/**/*.ts"
+      - "src/**/*.tsx"
+      - "supabase/functions/**/*.ts"
+      - "scripts/check-type-escape-ratchet.mjs"
+      - "scripts/type-escape-baseline.txt"
+      - ".github/workflows/type-escape-ratchet.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ratchet:
+    name: as unknown as não pode crescer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Ratchet
+        run: node scripts/check-type-escape-ratchet.mjs

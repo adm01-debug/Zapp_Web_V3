@@ -6,6 +6,16 @@
 
 ---
 
+## Sessão 2026-09-29 — Bug D fechado
+
+### Bug corrigido
+
+| Bug | Causa raiz | Fix |
+|-----|-----------|-----|
+| **D — WARN `safeClient` a ~180ms** (`sla_delivery_rules`/`contact_tags`/`messages`) | `selectedConversation` em `useRealtimeInbox.ts` recriava referência a cada evento Realtime mesmo sem mudança de conversa → `useFallbackContact` re-executava → janela nula de `resolvedSelectedConversation` → `ChatPanel`/`ContactDetailsResponsive` desmontavam → hooks com `AbortSignal` abortavam queries em voo | `useRef` cacheando objeto por `contact.id`; retorna referência cacheada quando o id não muda. PR #1623 mergeado (commit `dbc9e02`). |
+
+---
+
 ## Sessão 2026-07-17 (tarde) — Meta 10/10
 
 ### Melhorias Executadas
