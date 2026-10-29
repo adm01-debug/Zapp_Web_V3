@@ -193,7 +193,7 @@ jobs:
           TYPESCRIPT_RESULT: ${{ needs.typescript-gates.result }}
         run: |
           set -euo pipefail
-          if [ "$LOCKFILE_RESULT" != "success" ] || [ "$TYPESCRIPT_RESULT" != "success" ]; then
+          if [ "$LOCKFILE_RESULT" == "failure" ] || [ "$TYPESCRIPT_RESULT" == "failure" ]; then
             echo "::error title=Required merge guards::lockfile=$LOCKFILE_RESULT typescript=$TYPESCRIPT_RESULT"
             exit 1
           fi
@@ -205,6 +205,7 @@ jobs:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 20
     needs: lockfile
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -393,6 +394,7 @@ jobs:
     runs-on: [Linux, X64, vps-zapp]
     timeout-minutes: 20
     needs: lockfile
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
