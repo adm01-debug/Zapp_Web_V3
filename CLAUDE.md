@@ -1,4 +1,8 @@
 # ZAPP-WEB — Contexto para Claude Code
+
+> Regras de trabalho do dono (como trabalhar, Git, PR, comunicação): `AGENTS.md`, importado abaixo.
+
+@AGENTS.md
 ---
 
 ## OBRIGATORIO: leia antes de qualquer acao
