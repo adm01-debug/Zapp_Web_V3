@@ -198,7 +198,8 @@
     "wait-on": "^9.0.5"
   },
   "overrides": {
-    "rollup": "4.62.4"
+    "rollup": "4.62.4",
+    "proxy-addr": "^2.0.8"
   },
   "resolutions": {
     "csstype": "3.2.3",
